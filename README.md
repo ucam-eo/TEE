@@ -156,17 +156,10 @@ A consolidated **Export** dropdown provides three formats:
 
 ```bash
 bash restart.sh
-# Web server on http://localhost:8001, tile server on http://localhost:5125
+# Web server on http://localhost:8001 (waitress), tile server on http://localhost:5125
 ```
 
 Data is stored in `~/data/` by default (override with `TEE_DATA_DIR`). Logs go to `./logs/`.
-
-For manual startup with options:
-```bash
-python3 backend/web_server.py          # debug mode (default)
-python3 backend/web_server.py --prod   # production mode (debug off)
-```
-Use `--port` and `--host` to override defaults.
 
 ### Server Deployment (Behind Apache)
 
@@ -191,7 +184,7 @@ tail -f /var/log/tee/web_server.log      # View logs
 ```
 
 The viewer uses relative URLs, so it works identically behind a local or remote server. Configure your reverse proxy to forward:
-- `/` → Flask (port 8001) for the web server and API
+- `/` → Django/waitress (port 8001) for the web server and API
 - `/tiles/` → tile server (port 5125) for map tiles
 
 When both servers are behind the same reverse proxy, no additional configuration is needed. See `deployment_plan.md` for full Apache configuration, firewall rules, and architecture details.
@@ -269,6 +262,8 @@ export TEE_HTTPS=1
 |----------|---------|-------------|
 | `TEE_DATA_DIR` | `~/data` | Data directory (mosaics, pyramids, FAISS indices, passwd) |
 | `TEE_APP_DIR` | Project root | Application directory (auto-detected from `lib/config.py`) |
+| `TEE_MODE` | `desktop` | `desktop` (DEBUG=True) or `production` (DEBUG=False, security headers) |
+| `TILE_SERVER_URL` | unset | Tile server URL for local dev (set automatically by `restart.sh`) |
 | `TEE_HTTPS` | unset | Set to `1` to mark session cookies as `Secure` (for HTTPS) |
 | `GEOTESSERA_API_KEY` | — | GeoTessera API credentials (if required) |
 
@@ -442,15 +437,29 @@ TEE/
 ├── shutdown.sh                        # Stop all servers
 ├── status.sh                          # Show project status (git, data, services)
 │
+├── manage.py                          # Django management script
+├── tee_project/                       # Django project settings
+│   ├── settings/                      # Split settings (base, desktop, production)
+│   ├── urls.py                        # Root URL configuration
+│   └── wsgi.py                        # WSGI entry point (used by waitress)
+│
+├── api/                               # Django app — API endpoints
+│   ├── middleware.py                   # Auth middleware (passwd file + sessions)
+│   ├── auth_views.py                  # Login/logout/status/change-password
+│   ├── tasks.py                       # Background task tracking
+│   ├── helpers.py                     # Shared utilities
+│   └── views/                         # Endpoint modules
+│       ├── viewports.py               # Viewport CRUD and status
+│       ├── pipeline.py                # Downloads and processing
+│       ├── compute.py                 # UMAP, PCA, distance heatmap
+│       ├── faiss_data.py              # FAISS index serving
+│       └── config.py                  # Health, static files, client config
+│
 ├── public/                            # Web interface
 │   ├── viewer.html                    # Embedding viewer (3-panel and 6-panel layouts)
 │   ├── viewport_selector.html         # Viewport creation and management
 │   ├── login.html                     # Login page
 │   └── README.md                      # Frontend documentation
-│
-├── backend/                           # Flask web server
-│   ├── web_server.py                  # API endpoints and server
-│   └── auth.py                        # Per-user authentication (passwd file + sessions)
 │
 ├── scripts/                           # Management scripts
 │   └── manage_users.py                # Add/remove/list users for authentication
@@ -458,6 +467,7 @@ TEE/
 ├── lib/                               # Python utilities
 │   ├── config.py                      # Centralized configuration (paths, env vars)
 │   ├── pipeline.py                    # Unified pipeline orchestration
+│   ├── flask_auth.py                  # Auth wrapper for tile_server.py (Flask)
 │   ├── viewport_utils.py              # Viewport file operations
 │   ├── viewport_writer.py             # Viewport configuration writer
 │   └── progress_tracker.py            # Progress tracking utilities
@@ -490,8 +500,8 @@ Set the active viewport first, then run pipeline scripts.
 ## Troubleshooting
 
 ### Server fails to start
-- Check if ports 8001 (web) or 5125 (tiles) are in use
-- Use `--port` to choose a different port: `python3 backend/web_server.py --port 9000`
+- Check if ports 8001 (web) or 5125 (tiles) are in use: `lsof -i:8001` / `lsof -i:5125`
+- Check logs: `tail logs/web_server.log` (local) or `tail /var/log/tee/web_server.log` (server)
 
 ### Tile server not responding
 - If map tiles fail to load, restart both servers: `bash restart.sh`
