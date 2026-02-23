@@ -18,7 +18,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 from lib.config import DATA_DIR, PYRAMIDS_DIR
 from lib.viewport_utils import validate_viewport_name
-from backend.auth import init_auth
+from lib.flask_auth import init_auth
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)

@@ -1,0 +1,144 @@
+"""
+DemoModeMiddleware - ports backend/auth.py's _require_auth() hook to Django.
+
+Uses DATA_DIR/passwd file with bcrypt-hashed passwords and mtime caching.
+If no passwd file exists: open access (backwards compatible).
+If passwd file exists + user not in session: block writes (401 JSON), allow reads.
+"""
+
+import logging
+
+from django.http import JsonResponse, HttpResponseRedirect
+
+from lib.config import DATA_DIR
+
+logger = logging.getLogger(__name__)
+
+# Module state (same pattern as backend/auth.py)
+_passwd_file = DATA_DIR / 'passwd'
+_passwd_mtime = 0
+_passwd_users = {}  # username -> bcrypt_hash
+
+
+def _load_passwd():
+    """Reload passwd file if it has changed (mtime check)."""
+    global _passwd_mtime, _passwd_users
+
+    if not _passwd_file.exists():
+        _passwd_users = {}
+        _passwd_mtime = 0
+        return
+
+    try:
+        mtime = _passwd_file.stat().st_mtime
+    except OSError:
+        _passwd_users = {}
+        _passwd_mtime = 0
+        return
+
+    if mtime == _passwd_mtime:
+        return  # no change
+
+    users = {}
+    try:
+        for line in _passwd_file.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if ':' not in line:
+                continue
+            username, hashed = line.split(':', 1)
+            username = username.strip()
+            hashed = hashed.strip()
+            if username and hashed:
+                users[username] = hashed
+    except OSError as e:
+        logger.error(f"Error reading passwd file: {e}")
+        return
+
+    _passwd_users = users
+    _passwd_mtime = mtime
+    logger.info(f"Loaded {len(users)} user(s) from passwd file")
+
+
+def auth_enabled():
+    """Return True if passwd file exists and has at least one user."""
+    _load_passwd()
+    return len(_passwd_users) > 0
+
+
+def check_credentials(username, password):
+    """Verify username/password against the passwd file."""
+    import bcrypt
+    _load_passwd()
+    hashed = _passwd_users.get(username)
+    if hashed is None:
+        return False
+    try:
+        return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+    except Exception:
+        return False
+
+
+# Paths that never require authentication
+PUBLIC_PATHS = {
+    '/health',
+    '/api/auth/login',
+    '/api/auth/logout',
+    '/api/auth/status',
+    '/api/auth/change-password',
+    '/login.html',
+}
+
+# Endpoints that require login (write/destructive operations)
+WRITE_ENDPOINTS = {
+    '/api/viewports/create',
+    '/api/viewports/delete',
+    '/api/downloads/embeddings',
+    '/api/downloads/process',
+}
+
+
+def _is_public_path(path):
+    """Check if the request path is public (no auth required)."""
+    return path in PUBLIC_PATHS
+
+
+def _is_write_endpoint(path):
+    """Check if the request path is a write/destructive endpoint requiring login."""
+    if path in WRITE_ENDPOINTS:
+        return True
+    # Match /api/viewports/<name>/cancel-processing
+    if path.startswith('/api/viewports/') and path.endswith('/cancel-processing'):
+        return True
+    return False
+
+
+class DemoModeMiddleware:
+    """Enforce authentication when enabled.
+
+    Strategy: allow unauthenticated read access (demo mode),
+    but require login for write/destructive operations.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if not auth_enabled():
+            return self.get_response(request)  # no passwd file -> open access
+
+        if _is_public_path(request.path):
+            return self.get_response(request)  # public endpoint
+
+        if request.session.get('user'):
+            return self.get_response(request)  # logged in
+
+        # Not authenticated - block write endpoints, allow reads (demo mode)
+        if _is_write_endpoint(request.path):
+            if request.path.startswith('/api/'):
+                return JsonResponse({'error': 'Authentication required'}, status=401)
+            else:
+                return HttpResponseRedirect('/login.html')
+
+        return self.get_response(request)

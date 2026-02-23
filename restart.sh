@@ -2,7 +2,7 @@
 ##
 # Restart TEE Services (Web Server + Tile Server)
 #
-# Uses Flask's built-in threaded server (no gunicorn needed).
+# Uses Django + waitress for the web server, Flask for the tile server.
 # Auto-detects: if 'tee' system user exists, runs as tee (server mode).
 # Otherwise runs as the current user (local development).
 ##
@@ -36,9 +36,9 @@ mkdir -p "$LOG_DIR"
 echo "Shutting down existing services..."
 
 # Kill any existing TEE processes
-pkill -f "python.*backend/web_server.py" 2>/dev/null || true
+pkill -f "python.*manage.py.*runserver" 2>/dev/null || true
+pkill -f "python.*waitress.*tee_project" 2>/dev/null || true
 pkill -f "python.*tile_server.py" 2>/dev/null || true
-pkill -f "gunicorn.*backend.web_server" 2>/dev/null || true
 pkill -f "gunicorn.*tile_server" 2>/dev/null || true
 lsof -ti:8001 2>/dev/null | xargs kill -9 2>/dev/null || true
 lsof -ti:5125 2>/dev/null | xargs kill -9 2>/dev/null || true
@@ -56,11 +56,11 @@ echo "  Web server on $HOST:8001"
 # In local mode, tell the viewer where the tile server is (no Apache proxy)
 # In server mode, Apache proxies /tiles to port 5125
 if [ "$MODE" = "local" ]; then
-    TILE_ARG="--tile-server http://localhost:5125"
-else
-    TILE_ARG=""
+    export TILE_SERVER_URL="http://localhost:5125"
 fi
-$RUN $PYTHON "$SCRIPT_DIR/backend/web_server.py" --prod --host "$HOST" --port 8001 $TILE_ARG \
+export TEE_MODE=production
+$RUN env TEE_MODE=production TILE_SERVER_URL="${TILE_SERVER_URL:-}" \
+    $PYTHON -m waitress --host="$HOST" --port=8001 tee_project.wsgi:application \
     >> "$LOG_DIR/web_server.log" 2>&1 &
 WEB_PID=$!
 

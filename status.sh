@@ -42,7 +42,7 @@ echo ""
 
 # Services
 echo "Services:"
-if pgrep -f "python.*backend/web_server.py" >/dev/null 2>&1; then
+if pgrep -f "python.*waitress.*tee_project\|python.*manage.py.*runserver" >/dev/null 2>&1; then
     echo "  Web server:  running"
 else
     echo "  Web server:  stopped"

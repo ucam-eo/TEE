@@ -7,8 +7,8 @@ echo "Shutting down TEE services..."
 
 STOPPED=false
 
-for pattern in "python.*backend/web_server.py" "python.*tile_server.py" \
-               "gunicorn.*backend.web_server" "gunicorn.*tile_server"; do
+for pattern in "python.*manage.py.*runserver" "python.*waitress.*tee_project" \
+               "python.*tile_server.py" "gunicorn.*tile_server"; do
     if pkill -f "$pattern" 2>/dev/null; then
         echo "  Stopped: $pattern"
         STOPPED=true

@@ -44,4 +44,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8001/health || exit 1
 
 # Run the web server
-CMD ["python3", "backend/web_server.py", "--prod", "--host", "0.0.0.0", "--port", "8001"]
+ENV TEE_MODE=production
+CMD ["python3", "-m", "waitress", "--host=0.0.0.0", "--port=8001", "tee_project.wsgi:application"]

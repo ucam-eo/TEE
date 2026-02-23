@@ -43,6 +43,16 @@ chown -R tee:tee "$SCRIPT_DIR/viewports"
 mkdir -p /var/log/tee
 chown tee:tee /var/log/tee
 
+# Ensure Django session dir and secret key are owned by tee
+DATA_DIR="/home/tee/data"
+if [ -d "$DATA_DIR/.django_sessions" ]; then
+    chown -R tee:tee "$DATA_DIR/.django_sessions"
+fi
+if [ -f "$DATA_DIR/.django_secret_key" ]; then
+    chown tee:tee "$DATA_DIR/.django_secret_key"
+    chmod 600 "$DATA_DIR/.django_secret_key"
+fi
+
 # --- 4. Remove old systemd services ---
 echo "[4/7] Cleaning up old systemd services..."
 for svc in tessera-web tessera-tiles; do
@@ -61,6 +71,10 @@ if [ ! -d "$SCRIPT_DIR/venv" ]; then
     python3 -m venv "$SCRIPT_DIR/venv"
 fi
 "$SCRIPT_DIR/venv/bin/pip" install -q -r "$SCRIPT_DIR/requirements.txt"
+
+# Validate Django configuration
+echo "  Running Django system check..."
+sudo -u tee env TEE_MODE=production "$SCRIPT_DIR/venv/bin/python3" "$SCRIPT_DIR/manage.py" check --deploy 2>&1 | sed 's/^/  /'
 
 # --- 6. Auto-start on reboot ---
 echo "[6/7] Setting up auto-start..."

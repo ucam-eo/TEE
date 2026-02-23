@@ -10,6 +10,7 @@
 services:
   web:
     build: .
+    command: ["python3", "-m", "waitress", "--host=0.0.0.0", "--port=8001", "tee_project.wsgi:application"]
     ports:
       - "8001:8001"
     volumes:
@@ -18,6 +19,7 @@ services:
     environment:
       - TEE_DATA_DIR=/data
       - TEE_APP_DIR=/app
+      - TEE_MODE=production
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
