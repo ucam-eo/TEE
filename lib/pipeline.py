@@ -620,12 +620,21 @@ class PipelineRunner:
             effective_umap_year = umap_year
             if not effective_umap_year and years_str:
                 effective_umap_year = years_str.split(',')[0].strip()
+            if not effective_umap_year:
+                # No year specified — pick the first year that has FAISS data
+                faiss_vp_dir = FAISS_DIR / viewport_name
+                if faiss_vp_dir.exists():
+                    year_dirs = sorted(d.name for d in faiss_vp_dir.iterdir()
+                                       if d.is_dir() and (d / 'all_embeddings.npy').exists())
+                    if year_dirs:
+                        effective_umap_year = year_dirs[0]
+                        logger.info(f"[PIPELINE] Auto-selected year {effective_umap_year} for UMAP")
             if effective_umap_year:
                 self.update_progress('umap', 0, "Computing UMAP projection...")
                 success, error = self.stage_5_compute_umap(viewport_name, effective_umap_year)
                 self.update_progress('umap', 100, "UMAP complete")
             else:
-                logger.warning(f"[PIPELINE] ⚠️  Stage 5 skipped - no year specified for UMAP")
+                logger.warning(f"[PIPELINE] ⚠️  Stage 5 skipped - no FAISS data found for UMAP")
         else:
             logger.info(f"[PIPELINE] Stage 5 skipped (compute_umap=False)")
 
