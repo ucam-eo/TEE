@@ -36,7 +36,6 @@ mkdir -p "$LOG_DIR"
 echo "Shutting down existing services..."
 
 # Kill any existing TEE processes
-pkill -f "python.*manage.py.*runserver" 2>/dev/null || true
 pkill -f "python.*waitress.*tee_project" 2>/dev/null || true
 pkill -f "python.*tile_server.py" 2>/dev/null || true
 pkill -f "gunicorn.*tile_server" 2>/dev/null || true
@@ -57,15 +56,13 @@ $RUN $PYTHON "$SCRIPT_DIR/tile_server.py" --prod --host "$HOST" --port 5125 \
     >> "$LOG_DIR/tile_server.log" 2>&1 &
 TILE_PID=$!
 
-# Start web server
+# Start web server (waitress in both modes for concurrency)
 echo "  Web server on $HOST:8001"
 if [ "$MODE" = "local" ]; then
-    # Local mode: runserver with tile server URL (no Apache proxy)
     TILE_SERVER_URL="http://localhost:5125" \
-        $PYTHON "$SCRIPT_DIR/manage.py" runserver "$HOST:8001" \
+        $PYTHON -m waitress --host="$HOST" --port=8001 --threads=4 tee_project.wsgi:application \
         >> "$LOG_DIR/web_server.log" 2>&1 &
 else
-    # Server mode: waitress + production settings (Apache proxies /tiles to 5125)
     $RUN env TEE_MODE=production TILE_SERVER_URL="${TILE_SERVER_URL:-}" \
         $PYTHON -m waitress --host="$HOST" --port=8001 tee_project.wsgi:application \
         >> "$LOG_DIR/web_server.log" 2>&1 &
