@@ -51,24 +51,26 @@ else
     HOST="0.0.0.0"
 fi
 
-# Start web server
-echo "  Web server on $HOST:8001"
-# In local mode, tell the viewer where the tile server is (no Apache proxy)
-# In server mode, Apache proxies /tiles to port 5125
-if [ "$MODE" = "local" ]; then
-    export TILE_SERVER_URL="http://localhost:5125"
-fi
-export TEE_MODE=production
-$RUN env TEE_MODE=production TILE_SERVER_URL="${TILE_SERVER_URL:-}" \
-    $PYTHON -m waitress --host="$HOST" --port=8001 tee_project.wsgi:application \
-    >> "$LOG_DIR/web_server.log" 2>&1 &
-WEB_PID=$!
-
-# Start tile server
+# Start tile server first (web server may need it immediately)
 echo "  Tile server on $HOST:5125"
 $RUN $PYTHON "$SCRIPT_DIR/tile_server.py" --prod --host "$HOST" --port 5125 \
     >> "$LOG_DIR/tile_server.log" 2>&1 &
 TILE_PID=$!
+
+# Start web server
+echo "  Web server on $HOST:8001"
+if [ "$MODE" = "local" ]; then
+    # Local mode: runserver with tile server URL (no Apache proxy)
+    TILE_SERVER_URL="http://localhost:5125" \
+        $PYTHON "$SCRIPT_DIR/manage.py" runserver "$HOST:8001" \
+        >> "$LOG_DIR/web_server.log" 2>&1 &
+else
+    # Server mode: waitress + production settings (Apache proxies /tiles to 5125)
+    $RUN env TEE_MODE=production TILE_SERVER_URL="${TILE_SERVER_URL:-}" \
+        $PYTHON -m waitress --host="$HOST" --port=8001 tee_project.wsgi:application \
+        >> "$LOG_DIR/web_server.log" 2>&1 &
+fi
+WEB_PID=$!
 
 sleep 2
 
