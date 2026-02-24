@@ -1,6 +1,6 @@
 # TEE: Tessera Embeddings Explorer
 
-**Version 2.0.2** | [Docker Hub](https://hub.docker.com/r/sk818/tee)
+**Version 2.2.0** | [Docker Hub](https://hub.docker.com/r/sk818/tee)
 
 A system for downloading, processing, and visualizing Sentinel-2 satellite embeddings (2017-2025) with an interactive web interface.
 
@@ -90,8 +90,8 @@ A consolidated **Export** dropdown provides three formats:
 
 2. **Pull and run from Docker Hub (easiest):**
    ```bash
-   docker pull sk818/tee:2.0.2
-   docker run -p 8001:8001 -v ~/tee_data:/data sk818/tee:2.0.2
+   docker pull sk818/tee:2.2.0
+   docker run -p 8001:8001 -v ~/tee_data:/data sk818/tee:2.2.0
    ```
 
    **Or build from source:**
@@ -132,7 +132,7 @@ A consolidated **Export** dropdown provides three formats:
    ```bash
    bash restart.sh
    ```
-   Web server on http://localhost:8001, tile server on http://localhost:5125.
+   Web server on http://localhost:8001 (serves both API and tiles).
 
 5. **Create a viewport:** Open http://localhost:8001, click "+ Create New Viewport", search for a location or click the map, select years, and click Create.
 
@@ -147,7 +147,7 @@ A consolidated **Export** dropdown provides three formats:
 | Data | `~/data/` | `/home/tee/data/` |
 | Logs | `./logs/` | `/var/log/tee/` |
 | Binding | `0.0.0.0` (direct access) | `127.0.0.1` (Apache proxies) |
-| Tiles | Viewer talks to `:5125` directly | Apache proxies `/tiles` to `:5125` |
+| Tiles | Served on `:8001` (same process) | Apache proxies everything to `:8001` |
 | HTTPS | N/A | Apache handles TLS; set `TEE_HTTPS=1` |
 
 `restart.sh` auto-detects the environment: if a `tee` system user exists, services run as `tee` with server settings; otherwise they run as the current user in local mode. No code changes needed between server and laptop.
@@ -156,7 +156,7 @@ A consolidated **Export** dropdown provides three formats:
 
 ```bash
 bash restart.sh
-# Web server on http://localhost:8001 (waitress), tile server on http://localhost:5125
+# Web server on http://localhost:8001 (waitress — serves API, tiles, and static files)
 ```
 
 Data is stored in `~/data/` by default (override with `TEE_DATA_DIR`). Logs go to `./logs/`.
@@ -183,11 +183,7 @@ bash status.sh                           # Check status
 tail -f /var/log/tee/web_server.log      # View logs
 ```
 
-The viewer uses relative URLs, so it works identically behind a local or remote server. Configure your reverse proxy to forward:
-- `/` → Django/waitress (port 8001) for the web server and API
-- `/tiles/` → tile server (port 5125) for map tiles
-
-When both servers are behind the same reverse proxy, no additional configuration is needed. See `deployment_plan.md` for full Apache configuration, firewall rules, and architecture details.
+The viewer uses relative URLs, so it works identically behind a local or remote server. Configure your reverse proxy to forward all traffic to Django/waitress on port 8001 — API, tiles, and static files are all served from a single process.
 
 ## Authentication & User Management
 
@@ -263,7 +259,6 @@ export TEE_HTTPS=1
 | `TEE_DATA_DIR` | `~/data` | Data directory (mosaics, pyramids, FAISS indices, passwd) |
 | `TEE_APP_DIR` | Project root | Application directory (auto-detected from `lib/config.py`) |
 | `TEE_MODE` | `desktop` | `desktop` (DEBUG=True) or `production` (DEBUG=False, security headers) |
-| `TILE_SERVER_URL` | unset | Tile server URL for local dev (set automatically by `restart.sh`) |
 | `TEE_HTTPS` | unset | Set to `1` to mark session cookies as `Secure` (for HTTPS) |
 | `GEOTESSERA_API_KEY` | — | GeoTessera API credentials (if required) |
 
@@ -452,6 +447,7 @@ TEE/
 │       ├── viewports.py               # Viewport CRUD and status
 │       ├── pipeline.py                # Downloads and processing
 │       ├── compute.py                 # UMAP, PCA, distance heatmap
+│       ├── tiles.py                   # Tile serving with LRU cache and ETag support
 │       ├── faiss_data.py              # FAISS index serving
 │       └── config.py                  # Health, static files, client config
 │
@@ -467,7 +463,6 @@ TEE/
 ├── lib/                               # Python utilities
 │   ├── config.py                      # Centralized configuration (paths, env vars)
 │   ├── pipeline.py                    # Unified pipeline orchestration
-│   ├── flask_auth.py                  # Auth wrapper for tile_server.py (Flask)
 │   ├── viewport_utils.py              # Viewport file operations
 │   ├── viewport_writer.py             # Viewport configuration writer
 │   └── progress_tracker.py            # Progress tracking utilities
@@ -481,8 +476,7 @@ TEE/
 ├── create_faiss_index.py              # Build similarity search indices
 ├── compute_umap.py                    # Compute UMAP projection
 ├── compute_pca.py                     # Compute PCA projection
-├── setup_viewport.py                  # Orchestrate full workflow
-└── tile_server.py                     # Tile server for map visualization
+└── setup_viewport.py                  # Orchestrate full workflow
 ```
 
 ## Development
@@ -500,11 +494,11 @@ Set the active viewport first, then run pipeline scripts.
 ## Troubleshooting
 
 ### Server fails to start
-- Check if ports 8001 (web) or 5125 (tiles) are in use: `lsof -i:8001` / `lsof -i:5125`
+- Check if port 8001 is in use: `lsof -i:8001`
 - Check logs: `tail logs/web_server.log` (local) or `tail /var/log/tee/web_server.log` (server)
 
 ### Tile server not responding
-- If map tiles fail to load, restart both servers: `bash restart.sh`
+- If map tiles fail to load, restart the server: `bash restart.sh`
 
 ### Disk space not reclaimed after deleting a viewport
 - Cancelling or deleting a viewport now automatically cleans up cached embeddings tiles in `~/data/embeddings/`
