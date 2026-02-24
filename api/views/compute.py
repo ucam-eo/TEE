@@ -3,6 +3,7 @@
 import json
 import time
 import logging
+import subprocess
 from datetime import datetime, timezone
 
 import numpy as np
@@ -10,7 +11,7 @@ from django.http import JsonResponse
 
 from lib.viewport_utils import validate_viewport_name
 from lib.config import PROGRESS_DIR
-from api.helpers import FAISS_INDICES_DIR, parse_json_body
+from api.helpers import FAISS_INDICES_DIR, VENV_PYTHON, PROJECT_ROOT, parse_json_body
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,45 @@ def compute_pca(request, viewport_name):
     return _compute_projection(request, viewport_name, 'pca_coords.npy', 'PCA')
 
 
+def _is_progress_fresh(progress_file, max_age_seconds=60):
+    """Check if a progress file exists, is non-terminal, and was updated recently."""
+    if not progress_file.exists():
+        return False
+    try:
+        with open(progress_file) as f:
+            progress = json.load(f)
+        if progress.get('status') in ('complete', 'error'):
+            return False
+        last_update = progress.get('last_update', '')
+        if not last_update:
+            return False
+        updated_at = datetime.fromisoformat(last_update)
+        return (datetime.now(timezone.utc) - updated_at).total_seconds() < max_age_seconds
+    except (ValueError, TypeError, json.JSONDecodeError, IOError):
+        return False
+
+
+def _trigger_computation(viewport_name, year, script_name):
+    """Trigger a background computation (PCA or UMAP) if not already running."""
+    sub_label = script_name.replace('compute_', '').replace('.py', '')
+    operation_id = f"{viewport_name}_{sub_label}"
+    progress_file = PROGRESS_DIR / f"{operation_id}_progress.json"
+
+    # Don't re-trigger if already running
+    if _is_progress_fresh(progress_file):
+        return operation_id
+
+    logger.info(f"[{sub_label.upper()}] Triggering {script_name} for {viewport_name}/{year}")
+    subprocess.Popen(
+        [str(VENV_PYTHON), str(PROJECT_ROOT / script_name), viewport_name, str(year)],
+        cwd=str(PROJECT_ROOT),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True
+    )
+    return operation_id
+
+
 def _projection_status(request, viewport_name, coords_filename, label):
     """Shared logic for umap-status and pca-status endpoints."""
     try:
@@ -125,50 +165,27 @@ def _projection_status(request, viewport_name, coords_filename, label):
         if coords_file.exists():
             return JsonResponse({'exists': True, 'computing': False})
 
-        # Check the script-specific progress file (e.g. viewport_pca or viewport_umap)
-        # to avoid showing unrelated pipeline stage messages
         sub_label = label.lower()  # 'pca' or 'umap'
         sub_operation_id = f"{viewport_name}_{sub_label}"
         sub_progress_file = PROGRESS_DIR / f"{sub_operation_id}_progress.json"
 
-        # Also check the pipeline progress file for overall pipeline status
-        pipeline_id = f"{viewport_name}_pipeline"
-        pipeline_file = PROGRESS_DIR / f"{pipeline_id}_progress.json"
+        # If computation is already running (fresh progress file), report it
+        if _is_progress_fresh(sub_progress_file):
+            return JsonResponse({'exists': False, 'computing': True, 'operation_id': sub_operation_id})
 
-        # Prefer script-specific progress if it exists and is fresh (updated within 60s)
-        if sub_progress_file.exists():
-            with open(sub_progress_file) as f:
-                progress = json.load(f)
-            last_update = progress.get('last_update', '')
-            if last_update and progress.get('status') not in ('complete', 'error'):
-                try:
-                    updated_at = datetime.fromisoformat(last_update)
-                    age_seconds = (datetime.now(timezone.utc) - updated_at).total_seconds()
-                    if age_seconds < 60:
-                        return JsonResponse({'exists': False, 'computing': True, 'operation_id': sub_operation_id})
-                except (ValueError, TypeError):
-                    pass
+        # If embeddings exist, trigger computation immediately — don't wait for pipeline
+        embeddings_file = faiss_dir / 'all_embeddings.npy'
+        if embeddings_file.exists():
+            script = 'compute_pca.py' if sub_label == 'pca' else 'compute_umap.py'
+            operation_id = _trigger_computation(viewport_name, year, script)
+            return JsonResponse({'exists': False, 'computing': True, 'operation_id': operation_id})
 
-        # Fall back to pipeline progress (but only if it's fresh — not stale from a previous run)
-        if pipeline_file.exists():
-            with open(pipeline_file) as f:
-                progress = json.load(f)
-            if progress.get('status') in ('in_progress', 'processing', 'starting', 'downloading'):
-                last_update = progress.get('last_update', '')
-                if last_update:
-                    try:
-                        updated_at = datetime.fromisoformat(last_update)
-                        age_seconds = (datetime.now(timezone.utc) - updated_at).total_seconds()
-                        if age_seconds < 60:
-                            return JsonResponse({'exists': False, 'computing': True, 'operation_id': pipeline_id})
-                    except (ValueError, TypeError):
-                        pass
-
+        # Embeddings don't exist yet — waiting for FAISS stage
         return JsonResponse({
             'exists': False,
             'computing': False,
             'waiting': True,
-            'message': f'Waiting for pipeline to compute {label}...'
+            'message': f'Waiting for embeddings (FAISS indexing)...'
         })
 
     except Exception as e:
