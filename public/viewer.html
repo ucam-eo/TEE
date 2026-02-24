@@ -3472,13 +3472,15 @@
 
             // Check tile server health
             fetch(`${TILE_SERVER}/tiles/health`)
-                .then(resp => resp.json())
+                .then(resp => {
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    return resp.json();
+                })
                 .then(data => {
                     console.log('Tile server status:', data);
                 })
                 .catch(err => {
                     console.warn('Tile server not responding:', err);
-                    alert(`Warning: Tile server not responding (${TILE_SERVER}). Run restart.sh if local.`);
                 });
         };
 
