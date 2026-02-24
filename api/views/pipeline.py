@@ -338,7 +338,7 @@ def operations_progress(request, operation_id):
                         with open(sub_file, 'r') as f:
                             sub_data = json.load(f)
                         if sub_data.get('status') not in ('complete', 'error'):
-                            for key in ('current_file', 'current_value', 'total_value'):
+                            for key in ('current_file', 'current_value', 'total_value', 'percent'):
                                 if sub_data.get(key):
                                     progress_data[key] = sub_data[key]
                             if sub_data.get('message'):
