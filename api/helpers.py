@@ -185,6 +185,12 @@ def get_viewport_data_size(viewport_name, active_viewport_name):
         for mosaic_file in MOSAICS_DIR.glob(f'{viewport_name}_*.tif'):
             if mosaic_file.is_file():
                 total_size += mosaic_file.stat().st_size
+        # RGB mosaics live in mosaics/rgb/
+        rgb_dir = MOSAICS_DIR / 'rgb'
+        if rgb_dir.exists():
+            for rgb_file in rgb_dir.glob(f'{viewport_name}_*.tif'):
+                if rgb_file.is_file():
+                    total_size += rgb_file.stat().st_size
 
     faiss_dir = FAISS_INDICES_DIR / viewport_name
     if faiss_dir.exists():
