@@ -1,10 +1,20 @@
 """Static file serving, health check, and client config endpoints."""
 
 import mimetypes
+import subprocess
 
 from django.http import JsonResponse, FileResponse, Http404
 
 from lib.config import DATA_DIR, APP_DIR
+
+# Compute git version once at startup
+try:
+    _VERSION = subprocess.check_output(
+        ['git', 'describe', '--tags', '--always'],
+        cwd=str(APP_DIR), stderr=subprocess.DEVNULL
+    ).decode().strip()
+except Exception:
+    _VERSION = 'unknown'
 
 PUBLIC_DIR = APP_DIR / 'public'
 
@@ -38,6 +48,7 @@ def health(request):
     return JsonResponse({
         'status': 'healthy',
         'service': 'TEE',
+        'version': _VERSION,
         'data_dir': str(DATA_DIR)
     })
 
