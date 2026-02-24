@@ -150,9 +150,18 @@ class PipelineRunner:
                     _active_pipelines[self.viewport_name] = {'cancelled': False}
                 _active_pipelines[self.viewport_name]['process'] = proc
 
-            # Wait for completion or timeout, checking cancellation periodically
+            # Use event-based wait instead of polling to avoid CPU spinning
+            done_event = threading.Event()
+
+            def wait_for_proc():
+                proc.wait()
+                done_event.set()
+
+            waiter = threading.Thread(target=wait_for_proc, daemon=True)
+            waiter.start()
+
             start_time = time.time()
-            while proc.poll() is None:
+            while not done_event.wait(timeout=1.0):
                 # Check if cancelled
                 if self.viewport_name and is_pipeline_cancelled(self.viewport_name):
                     try:
@@ -177,8 +186,6 @@ class PipelineRunner:
                     stderr_thread.join(timeout=2)
                     logger.error(f"[PIPELINE]   Timed out after {timeout}s")
                     raise subprocess.TimeoutExpired(cmd, timeout)
-
-                time.sleep(0.5)  # Check every 500ms
 
             # Process finished — wait for reader threads to drain remaining output
             stdout_thread.join(timeout=5)

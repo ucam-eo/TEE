@@ -98,9 +98,7 @@ def create_rgb_from_embeddings(year, viewport_id=None, bounds=None):
         else:
             window = None
 
-        pca_image = np.zeros((N_COMPONENTS, clipped_height, clipped_width), dtype=np.float32)
-        for i in range(N_COMPONENTS):
-            pca_image[i] = src.read(i+1, window=window)  # Bands are 1-indexed
+        pca_image = src.read([1, 2, 3], window=window).astype(np.float32)
 
         print(f"  Using first {N_COMPONENTS} bands directly as RGB")
 

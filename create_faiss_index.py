@@ -12,6 +12,7 @@ Enables queries like: "Find all pixels similar to embedding X with similarity > 
 import sys
 import numpy as np
 import rasterio
+from rasterio import windows as rasterio_windows
 from pathlib import Path
 import json
 import logging
@@ -127,25 +128,27 @@ def create_faiss_index_for_year(viewport_id, bounds, year):
             sampled_embeddings = []
             sampled_coords = []
 
-            # Only sample within clipped bounds
-            for y in range(pixel_min_y, pixel_max_y, SAMPLING_FACTOR):
-                for x in range(pixel_min_x, pixel_max_x, SAMPLING_FACTOR):
-                    # Read 128 bands at this pixel (3×3 window to ensure data)
-                    from rasterio import windows as rasterio_windows
-                    window = rasterio_windows.Window(
-                        max(0, x - 1), max(0, y - 1), 3, 3
-                    )
-                    data = src.read(window=window)  # (128, 3, 3)
-
-                    # Extract center pixel
-                    center_x = min(1, x - max(0, x - 1))
-                    center_y = min(1, y - max(0, y - 1))
-                    embedding = data[:, center_y, center_x]  # (128,)
-                    sampled_embeddings.append(embedding)
-                    sampled_coords.append((x, y))
+            # Read full viewport in chunks, then subsample in-memory (much faster than per-pixel reads)
+            sample_chunk_size = 256
+            for y_start in range(pixel_min_y, pixel_max_y, sample_chunk_size):
+                y_end = min(y_start + sample_chunk_size, pixel_max_y)
+                window = rasterio_windows.Window(pixel_min_x, y_start, clipped_width, y_end - y_start)
+                chunk_data = src.read(window=window)  # (128, chunk_h, clipped_w)
+                # Sample every SAMPLING_FACTOR pixel within this chunk
+                y_offset = y_start - pixel_min_y
+                y_sample_start = (-y_offset) % SAMPLING_FACTOR  # align to global grid
+                x_sample_start = 0
+                sampled = chunk_data[:, y_sample_start::SAMPLING_FACTOR, x_sample_start::SAMPLING_FACTOR]
+                if sampled.size > 0:
+                    sampled_embeddings.append(sampled.reshape(EMBEDDING_DIM, -1).T)
+                    ys = np.arange(y_start + y_sample_start, y_end, SAMPLING_FACTOR)
+                    xs = np.arange(pixel_min_x, pixel_max_x, SAMPLING_FACTOR)
+                    yy, xx = np.meshgrid(ys, xs, indexing='ij')
+                    sampled_coords.append(np.column_stack([xx.ravel(), yy.ravel()])[:sampled.shape[2] * sampled.shape[1]])
 
             # Keep as float32 (no conversion to uint8 - embeddings are already float32 in GeoTIFF)
-            sampled_embeddings = np.array(sampled_embeddings, dtype=np.float32)
+            sampled_embeddings = np.vstack(sampled_embeddings).astype(np.float32) if sampled_embeddings else np.empty((0, EMBEDDING_DIM), dtype=np.float32)
+            sampled_coords = np.vstack(sampled_coords) if sampled_coords else np.empty((0, 2), dtype=np.int32)
             logger.info(f"   ✓ Sampled {len(sampled_embeddings):,} pixels")
             progress.update("processing", f"Sampled {len(sampled_embeddings):,} pixels", current_file="embeddings_sampled")
 
@@ -189,7 +192,6 @@ def create_faiss_index_for_year(viewport_id, bounds, year):
                               current_value=y_start - pixel_min_y, total_value=clipped_height, current_file="all_embeddings")
 
                 # Read all bands for this chunk (clipped to viewport width)
-                from rasterio import windows as rasterio_windows
                 window = rasterio_windows.Window(pixel_min_x, y_start, clipped_width, y_end - y_start)
                 chunk_data = src.read(window=window)  # (128, chunk_height, clipped_width)
 
@@ -198,10 +200,11 @@ def create_faiss_index_for_year(viewport_id, bounds, year):
                 chunk_embeddings = chunk_data.transpose(1, 2, 0).reshape(-1, EMBEDDING_DIM)
                 all_embeddings.append(chunk_embeddings)
 
-                # Generate pixel coordinates (relative to clipped region)
-                for y in range(y_start, y_end):
-                    for x in range(pixel_min_x, pixel_max_x):
-                        pixel_coords.append((x, y))
+                # Generate pixel coordinates vectorized with meshgrid
+                ys = np.arange(y_start, y_end)
+                xs = np.arange(pixel_min_x, pixel_max_x)
+                yy, xx = np.meshgrid(ys, xs, indexing='ij')
+                pixel_coords.append(np.column_stack([xx.ravel(), yy.ravel()]))
 
             # Keep as float32 (no conversion to uint8 - embeddings are already float32 in GeoTIFF)
             all_embeddings = np.vstack(all_embeddings).astype(np.float32)
@@ -223,7 +226,7 @@ def create_faiss_index_for_year(viewport_id, bounds, year):
             logger.info(f"     Size: {embeddings_size_mb:.1f} MB")
 
             # Save pixel coordinates (x, y) as numpy array for quick lookup
-            coords_array = np.array(pixel_coords, dtype=np.int32)
+            coords_array = np.vstack(pixel_coords).astype(np.int32) if pixel_coords else np.empty((0, 2), dtype=np.int32)
             coords_file = output_dir / "pixel_coords.npy"
             np.save(coords_file, coords_array)
 

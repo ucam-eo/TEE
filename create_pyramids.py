@@ -25,7 +25,7 @@ import numpy as np
 import rasterio
 from rasterio.enums import Resampling
 from pathlib import Path
-from PIL import Image
+from scipy.ndimage import zoom
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -70,14 +70,8 @@ def create_rgb_from_tessera(input_file, output_file, upscale_factor=3):
             new_height = src.height * upscale_factor
             new_width = src.width * upscale_factor
 
-            # Use PIL nearest-neighbor upscaling to preserve crisp pixel boundaries
-            upscaled_bands = []
-            for i in range(3):
-                img = Image.fromarray(rgb_array[i], mode='L')
-                img_upscaled = img.resize((new_width, new_height), Image.NEAREST)
-                upscaled_bands.append(np.array(img_upscaled))
-
-            rgb_array = np.stack(upscaled_bands, axis=0)
+            # Vectorized nearest-neighbor upscaling (pixel repetition)
+            rgb_array = np.repeat(np.repeat(rgb_array, upscale_factor, axis=1), upscale_factor, axis=2)
 
             # Update transform for new resolution
             transform = src.transform * src.transform.scale(
@@ -122,7 +116,6 @@ def create_pyramid_level(input_file, output_file, scale_factor, target_width, ta
                      for crisp 10m embedding boundaries.
     """
     resampling_method = Resampling.nearest if use_nearest else Resampling.lanczos
-    resize_filter = Image.NEAREST if use_nearest else Image.LANCZOS
 
     with rasterio.open(input_file) as src:
         original_height = src.height
@@ -138,14 +131,13 @@ def create_pyramid_level(input_file, output_file, scale_factor, target_width, ta
             resampling=resampling_method
         )
 
-        # Step 2: Upsample back to target size (rectangular, maintaining aspect ratio)
-        upsampled_bands = []
-        for i in range(downsampled_data.shape[0]):
-            img = Image.fromarray(downsampled_data[i], mode='L')
-            img_upsampled = img.resize((target_width, target_height), resize_filter)
-            upsampled_bands.append(np.array(img_upsampled))
-
-        final_data = np.stack(upsampled_bands, axis=0)
+        # Step 2: Upsample back to target size using scipy.ndimage.zoom (all bands at once)
+        scale_y = target_height / downsampled_data.shape[1]
+        scale_x = target_width / downsampled_data.shape[2]
+        if use_nearest:
+            final_data = zoom(downsampled_data, (1, scale_y, scale_x), order=0)
+        else:
+            final_data = zoom(downsampled_data, (1, scale_y, scale_x), order=4).clip(0, 255).astype(downsampled_data.dtype)
 
         # Update transform to reflect the effective resolution change
         # Output is target_width×target_height, each pixel represents a larger area
@@ -182,14 +174,8 @@ def upscale_image(source_file, output_file, upscale_factor=3):
         new_height = src.height * upscale_factor
         new_width = src.width * upscale_factor
 
-        # Upscale each band using PIL's nearest-neighbor for crisp boundaries
-        upscaled_bands = []
-        for i in range(data.shape[0]):
-            img = Image.fromarray(data[i], mode='L' if data.shape[0] == 1 else 'L')
-            img_upscaled = img.resize((new_width, new_height), Image.NEAREST)
-            upscaled_bands.append(np.array(img_upscaled))
-
-        upscaled_data = np.stack(upscaled_bands, axis=0)
+        # Vectorized nearest-neighbor upscaling (pixel repetition)
+        upscaled_data = np.repeat(np.repeat(data, upscale_factor, axis=1), upscale_factor, axis=2)
 
         # Update transform
         transform = src.transform * src.transform.scale(

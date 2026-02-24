@@ -206,7 +206,15 @@ def download_embeddings():
                                current_file=output_file.name, current_value=cumulative_bytes_done, total_value=total_estimated_bytes)
 
                 # Define progress callback with byte-based tracking (cumulative across all years)
+                # Throttle to at most every 0.5s to reduce disk I/O
+                import time as _time
+                _last_progress_write = [0]
+
                 def on_geotessera_progress(current, total, status, year=year, year_idx=year_idx, cumulative=cumulative_bytes_done, total_mb=total_download_mb):
+                    now = _time.monotonic()
+                    if now - _last_progress_write[0] < 0.5:
+                        return
+                    _last_progress_write[0] = now
                     # Estimate bytes based on tile progress (current/total * total_bytes)
                     if total > 0:
                         year_bytes = int((current / total) * total_download_bytes)
@@ -248,9 +256,8 @@ def download_embeddings():
                     transform=mosaic_transform,
                     compress='lzw'
                 ) as dst:
-                    # Write each band (no progress update to avoid bar jumping)
-                    for band in range(bands):
-                        dst.write(mosaic_array[:, :, band], band + 1)
+                    # Write all bands at once (single I/O operation)
+                    dst.write(mosaic_array.transpose(2, 0, 1))  # (H, W, 128) → (128, H, W)
 
                 # Validate the saved file
                 print(f"   Validating TIFF file...")
