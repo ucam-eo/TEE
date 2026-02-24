@@ -22,6 +22,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'api.middleware.TileShortcircuitMiddleware',   # first — skip everything else for tiles
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

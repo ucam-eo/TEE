@@ -114,6 +114,26 @@ def _is_write_endpoint(path):
     return False
 
 
+class TileShortcircuitMiddleware:
+    """Skip all other middleware for tile/bounds requests.
+
+    Tiles are anonymous read-only — no need for session, CORS, security,
+    or DemoMode processing.  Must be first in MIDDLEWARE.
+    Resolves the URL and calls the view directly, bypassing the chain.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        path = request.path
+        if path.startswith('/tiles/') or path.startswith('/bounds/'):
+            from django.urls import resolve
+            match = resolve(path)
+            return match.func(request, *match.args, **match.kwargs)
+        return self.get_response(request)
+
+
 class DemoModeMiddleware:
     """Enforce authentication when enabled.
 

@@ -1354,7 +1354,9 @@
                 maxZoom: 18,
                 maxNativeZoom: 17,
                 minZoom: 6,
-                tileSize: 256
+                tileSize: 256,
+                keepBuffer: 5,
+                updateWhenZooming: false
             }).addTo(maps.embedding);
 
             // Clip embedding map to viewport bounds
@@ -1456,7 +1458,9 @@
                 opacity: 1.0,
                 maxZoom: 18,
                 maxNativeZoom: 17,
-                tileSize: 256
+                tileSize: 256,
+                keepBuffer: 5,
+                updateWhenZooming: false
             }).addTo(maps.embedding2);
 
             if (viewportBounds) {
@@ -1559,7 +1563,9 @@
                         `${TILE_SERVER}/tiles/${currentViewportName}/${currentEmbeddingYear}/{z}/{x}/{y}.png`,
                         {
                             tileSize: 256,
-                            bounds: viewportBounds
+                            bounds: viewportBounds,
+                            keepBuffer: 5,
+                            updateWhenZooming: false
                         }
                     );
                     embeddingLayer.addTo(maps.embedding);
@@ -1586,7 +1592,9 @@
                 `${TILE_SERVER}/tiles/${currentViewportName}/${currentEmbeddingYear}/{z}/{x}/{y}.png`,
                 {
                     tileSize: 256,
-                    bounds: viewportBounds
+                    bounds: viewportBounds,
+                    keepBuffer: 5,
+                    updateWhenZooming: false
                 }
             );
 
@@ -1691,7 +1699,9 @@
                         `${TILE_SERVER}/tiles/${currentViewportName}/${currentEmbeddingYear2}/{z}/{x}/{y}.png`,
                         {
                             tileSize: 256,
-                            bounds: viewportBounds
+                            bounds: viewportBounds,
+                            keepBuffer: 5,
+                            updateWhenZooming: false
                         }
                     );
                     window.embedding2Layer.addTo(maps.embedding2);
@@ -1716,7 +1726,9 @@
                 `${TILE_SERVER}/tiles/${currentViewportName}/${currentEmbeddingYear2}/{z}/{x}/{y}.png`,
                 {
                     tileSize: 256,
-                    bounds: viewportBounds
+                    bounds: viewportBounds,
+                    keepBuffer: 5,
+                    updateWhenZooming: false
                 }
             );
 
@@ -3459,7 +3471,7 @@
             await loadHeatmap();            // Panel 5: Distance heatmap
 
             // Check tile server health
-            fetch(`${TILE_SERVER}/health`)
+            fetch(`${TILE_SERVER}/tiles/health`)
                 .then(resp => resp.json())
                 .then(data => {
                     console.log('Tile server status:', data);
