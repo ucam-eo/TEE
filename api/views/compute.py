@@ -3,7 +3,7 @@
 import json
 import time
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import numpy as np
 from django.http import JsonResponse
@@ -143,7 +143,7 @@ def _projection_status(request, viewport_name, coords_filename, label):
             if last_update and progress.get('status') not in ('complete', 'error'):
                 try:
                     updated_at = datetime.fromisoformat(last_update)
-                    age_seconds = (datetime.now() - updated_at).total_seconds()
+                    age_seconds = (datetime.now(timezone.utc) - updated_at).total_seconds()
                     if age_seconds < 60:
                         return JsonResponse({'exists': False, 'computing': True, 'operation_id': sub_operation_id})
                 except (ValueError, TypeError):
@@ -158,7 +158,7 @@ def _projection_status(request, viewport_name, coords_filename, label):
                 if last_update:
                     try:
                         updated_at = datetime.fromisoformat(last_update)
-                        age_seconds = (datetime.now() - updated_at).total_seconds()
+                        age_seconds = (datetime.now(timezone.utc) - updated_at).total_seconds()
                         if age_seconds < 60:
                             return JsonResponse({'exists': False, 'computing': True, 'operation_id': pipeline_id})
                     except (ValueError, TypeError):

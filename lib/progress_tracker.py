@@ -6,7 +6,7 @@ Writes progress JSON to PROGRESS_DIR/<operation_id>.json for frontend polling.
 
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 from lib.config import PROGRESS_DIR
 
@@ -23,7 +23,7 @@ class ProgressTracker:
         """
         self.operation_id = operation_id
         self.progress_file = PROGRESS_DIR / f"{operation_id}_progress.json"
-        self.start_time = datetime.now().isoformat()
+        self.start_time = datetime.now(timezone.utc).isoformat()
 
     def update(self, status: str, message: str = "", current_value: int = 0,
                total_value: int = 0, current_file: str = ""):
@@ -50,7 +50,7 @@ class ProgressTracker:
             "percent": percent,
             "current_file": current_file,
             "start_time": self.start_time,
-            "last_update": datetime.now().isoformat()
+            "last_update": datetime.now(timezone.utc).isoformat()
         }
 
         # Write to JSON file

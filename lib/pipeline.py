@@ -14,7 +14,7 @@ from pathlib import Path
 import time
 
 from lib.progress_tracker import ProgressTracker
-from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, FAISS_DIR
+from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, FAISS_DIR, PROGRESS_DIR
 
 logger = logging.getLogger(__name__)
 
