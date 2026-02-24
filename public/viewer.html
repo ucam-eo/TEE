@@ -452,7 +452,7 @@
         <button id="loginBtn" style="display:none; margin-left:auto; background:#667eea; color:white; padding:6px 14px; border:none; border-radius:4px; cursor:pointer; font-size:12px; font-weight:600;" onclick="window.location.href='/login.html'">Login</button>
 
         <!-- Similarity Search Controls -->
-        <div style="display: flex; gap: 10px; align-items: center; margin-left: 20px; border-left: 1px solid #444; padding-left: 20px;">
+        <div id="similarity-controls" style="display: none; gap: 10px; align-items: center; margin-left: 20px; border-left: 1px solid #444; padding-left: 20px;">
             <label style="margin: 0;">Similarity:</label>
             <input
                 type="range"
@@ -769,6 +769,281 @@
 
         // Local FAISS data for client-side similarity search
         let faissLocal = null;  // {embeddings: Float32Array, coords: Int32Array, metadata: Object, pixelLookup: Map, numVectors: number, dim: number, viewport: string, year: string}
+
+        // ===== DECLARATIVE PANEL DEPENDENCY SYSTEM =====
+        // Single source of truth for viewport readiness, polled from /api/viewports/{name}/is-ready
+        let viewportStatus = {
+            has_embeddings: false,
+            has_pyramids: false,
+            has_faiss: false,
+            has_pca: false,
+            has_umap: false,
+            years_available: [],
+            // Client-side flags
+            faiss_downloaded: false,
+            pca_loaded: false,
+            umap_loaded: false
+        };
+
+        let pollTimerId = null;
+        const POLL_FAST = 2000;   // 2s while server still computing
+        const POLL_SLOW = 30000;  // 30s when all server work is done
+
+        // Dependency registry — each entry declares when a panel/element is ready
+        const dependencyRegistry = [
+            {
+                id: 'panel3-tiles',
+                test: (s) => s.has_pyramids && s.years_available.length > 0,
+                onReady: (s) => {
+                    console.log('[DEP] panel3-tiles: creating tile layer');
+                    const yearToUse = applyYearSelector(
+                        'embedding-year-selector', s.years_available, currentEmbeddingYear,
+                        (year) => switchEmbeddingYear(parseInt(year))
+                    );
+                    currentEmbeddingYear = String(yearToUse);
+                    refreshEmbeddingTileLayer('embedding', currentEmbeddingYear);
+                },
+                satisfied: false
+            },
+            {
+                id: 'panel6-tiles',
+                test: (s) => s.has_pyramids && s.years_available.length > 0,
+                onReady: (s) => {
+                    console.log('[DEP] panel6-tiles: creating tile layer');
+                    const yearToUse = applyYearSelector(
+                        'embedding-year-selector-2', s.years_available, currentEmbeddingYear2,
+                        (year) => switchEmbeddingYear2(year)
+                    );
+                    currentEmbeddingYear2 = String(yearToUse);
+                    refreshEmbeddingTileLayer('embedding2', currentEmbeddingYear2);
+                },
+                satisfied: false
+            },
+            {
+                id: 'year-selectors',
+                test: (s) => s.years_available.length > 1,
+                onReady: (s) => {
+                    console.log('[DEP] year-selectors: multiple years available, showing selectors');
+                    applyYearSelector(
+                        'embedding-year-selector', s.years_available, currentEmbeddingYear,
+                        (year) => switchEmbeddingYear(parseInt(year))
+                    );
+                    applyYearSelector(
+                        'embedding-year-selector-2', s.years_available, currentEmbeddingYear2,
+                        (year) => switchEmbeddingYear2(year)
+                    );
+                },
+                onNotReady: () => {
+                    document.getElementById('embedding-year-selector').style.display = 'none';
+                    document.getElementById('embedding-year-selector-2').style.display = 'none';
+                },
+                satisfied: false
+            },
+            {
+                id: 'faiss-download',
+                test: (s) => s.has_faiss && !s.faiss_downloaded,
+                onReady: async (s) => {
+                    const year = currentEmbeddingYear || s.years_available[0];
+                    console.log(`[DEP] faiss-download: downloading FAISS data for ${currentViewportName}/${year}`);
+                    try {
+                        await downloadFaissData(currentViewportName, year);
+                        viewportStatus.faiss_downloaded = true;
+                        evaluateDependencies();
+                    } catch (e) {
+                        console.error('[DEP] faiss-download failed:', e);
+                    }
+                },
+                satisfied: false
+            },
+            {
+                id: 'label-controls',
+                test: (s) => s.faiss_downloaded,
+                onReady: () => {
+                    console.log('[DEP] label-controls: FAISS ready, showing controls');
+                    document.getElementById('similarity-controls').style.display = 'flex';
+                    document.getElementById('label-controls-bar').style.display = 'flex';
+                    if (savedLabels.length > 0) {
+                        recomputeLabelPixels();
+                    }
+                },
+                onNotReady: () => {
+                    document.getElementById('similarity-controls').style.display = 'none';
+                    document.getElementById('label-controls-bar').style.display = 'none';
+                },
+                satisfied: false
+            },
+            {
+                id: 'panel4-pca',
+                test: (s) => s.has_pca && !s.pca_loaded && currentDimReduction === 'pca',
+                onReady: async () => {
+                    console.log('[DEP] panel4-pca: loading PCA visualization');
+                    await loadDimReduction('pca');
+                    viewportStatus.pca_loaded = true;
+                },
+                satisfied: false
+            },
+            {
+                id: 'panel4-umap',
+                test: (s) => s.has_umap && !s.umap_loaded && currentDimReduction === 'umap',
+                onReady: async () => {
+                    console.log('[DEP] panel4-umap: loading UMAP visualization');
+                    await loadDimReduction('umap');
+                    viewportStatus.umap_loaded = true;
+                },
+                satisfied: false
+            },
+            {
+                id: 'panel5-heatmap',
+                test: (s) => s.years_available.length >= 2 && currentEmbeddingYear !== currentEmbeddingYear2,
+                onReady: () => {
+                    console.log('[DEP] panel5-heatmap: loading distance heatmap');
+                    loadHeatmap();
+                },
+                satisfied: false
+            }
+        ];
+
+        // Compare two status snapshots for changes (server-side flags only)
+        function hasStatusChanged(current, incoming) {
+            return current.has_embeddings !== (incoming.has_embeddings || false) ||
+                   current.has_pyramids !== (incoming.has_pyramids || false) ||
+                   current.has_faiss !== (incoming.has_faiss || false) ||
+                   current.has_pca !== (incoming.has_pca || false) ||
+                   current.has_umap !== (incoming.has_umap || false) ||
+                   JSON.stringify(current.years_available) !== JSON.stringify(incoming.years_available || []);
+        }
+
+        // Evaluate all dependencies, fire callbacks on false→true / true→false transitions
+        let _evaluating = false;
+        let _reevaluateQueued = false;
+
+        function evaluateDependencies() {
+            if (_evaluating) {
+                _reevaluateQueued = true;
+                return;
+            }
+            _evaluating = true;
+
+            for (const dep of dependencyRegistry) {
+                const nowSatisfied = dep.test(viewportStatus);
+                if (nowSatisfied && !dep.satisfied) {
+                    console.log(`[DEP] ${dep.id}: ready`);
+                    dep.satisfied = true;
+                    if (dep.onReady) dep.onReady(viewportStatus);
+                } else if (!nowSatisfied && dep.satisfied) {
+                    console.log(`[DEP] ${dep.id}: not ready`);
+                    dep.satisfied = false;
+                    if (dep.onNotReady) dep.onNotReady();
+                }
+            }
+
+            _evaluating = false;
+            if (_reevaluateQueued) {
+                _reevaluateQueued = false;
+                evaluateDependencies();
+            }
+        }
+
+        // Poll /api/viewports/{name}/is-ready and update viewportStatus
+        async function pollViewportStatus() {
+            if (!currentViewportName) return;
+
+            try {
+                const resp = await fetch(`/api/viewports/${currentViewportName}/is-ready`);
+                const incoming = await resp.json();
+
+                const changed = hasStatusChanged(viewportStatus, incoming);
+
+                // Update server-side flags (preserve client-side flags)
+                viewportStatus.has_embeddings = incoming.has_embeddings || false;
+                viewportStatus.has_pyramids = incoming.has_pyramids || false;
+                viewportStatus.has_faiss = incoming.has_faiss || false;
+                viewportStatus.has_pca = incoming.has_pca || false;
+                viewportStatus.has_umap = incoming.has_umap || false;
+                viewportStatus.years_available = incoming.years_available || [];
+
+                if (changed) {
+                    console.log('[DEP] Status changed:', JSON.stringify({
+                        pyramids: viewportStatus.has_pyramids,
+                        faiss: viewportStatus.has_faiss,
+                        pca: viewportStatus.has_pca,
+                        umap: viewportStatus.has_umap,
+                        years: viewportStatus.years_available
+                    }));
+                    evaluateDependencies();
+                }
+            } catch (e) {
+                console.warn('[DEP] Poll failed:', e);
+            }
+
+            // Schedule next poll — fast while server still computing, slow when done
+            const serverBusy = !viewportStatus.has_pyramids || !viewportStatus.has_faiss || !viewportStatus.has_pca;
+            const interval = serverBusy ? POLL_FAST : POLL_SLOW;
+            pollTimerId = setTimeout(pollViewportStatus, interval);
+        }
+
+        function startPoller() {
+            console.log('[DEP] Starting dependency poller');
+            pollViewportStatus();
+        }
+
+        function stopPoller() {
+            if (pollTimerId) {
+                clearTimeout(pollTimerId);
+                pollTimerId = null;
+            }
+        }
+
+        // Shared helper: populate a year dropdown, preserve user selection, show/hide by count
+        function applyYearSelector(selectorId, years, currentYear, onChange) {
+            const selector = document.getElementById(selectorId);
+            if (!selector) return currentYear;
+
+            // Preserve user selection if still valid
+            const yearToUse = years.includes(parseInt(currentYear)) || years.includes(String(currentYear))
+                ? String(currentYear)
+                : (years.includes(2024) || years.includes('2024') ? '2024' : String(years[0]));
+
+            // Populate dropdown
+            selector.innerHTML = '';
+            years.forEach(year => {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                if (String(year) === yearToUse) option.selected = true;
+                selector.appendChild(option);
+            });
+
+            // Show/hide based on count
+            selector.style.display = years.length > 1 ? 'inline-block' : 'none';
+
+            // Replace element to remove stale listeners, then attach new one
+            const clone = selector.cloneNode(true);
+            selector.parentNode.replaceChild(clone, selector);
+            clone.addEventListener('change', (e) => onChange(e.target.value));
+
+            return yearToUse;
+        }
+
+        // Shared helper: remove old tile layer, create new pixelated layer, invalidateSize
+        function refreshEmbeddingTileLayer(panelName, year) {
+            const layerKey = panelName === 'embedding' ? 'embeddingLayer' : 'embedding2Layer';
+            if (window[layerKey] && maps[panelName]) {
+                maps[panelName].removeLayer(window[layerKey]);
+            }
+            window[layerKey] = L.pixelatedTileLayer(
+                `${TILE_SERVER}/tiles/${currentViewportName}/${year}/{z}/{x}/{y}.png`,
+                {
+                    tileSize: 256,
+                    bounds: viewportBounds,
+                    keepBuffer: 5,
+                    updateWhenZooming: false
+                }
+            );
+            window[layerKey].addTo(maps[panelName]);
+            maps[panelName].invalidateSize();
+        }
+        // ===== END DEPENDENCY SYSTEM =====
 
         // Satellite tile sources for Panel 2
         const satelliteSources = {
@@ -1525,67 +1800,6 @@
             return embeddingLayer;
         }
 
-        // Load available years and populate dropdown
-        async function loadAvailableYears() {
-            try {
-                const response = await fetch(`/api/viewports/${currentViewportName}/available-years`);
-                const data = await response.json();
-
-                if (data.success && data.years && data.years.length > 0) {
-                    // Set current year to first available year (or 2024 if available)
-                    const yearToUse = data.years.includes(2024) ? 2024 : data.years[0];
-                    currentEmbeddingYear = yearToUse.toString();
-                    console.log(`✓ Available years: ${data.years.join(', ')}, using: ${yearToUse}`);
-
-                    if (data.years.length > 1) {
-                        // Show selector if more than 1 year available
-                        const yearSelector = document.getElementById('embedding-year-selector');
-                        yearSelector.style.display = 'inline-block';
-                        yearSelector.innerHTML = '';
-
-                        // Populate dropdown (newest first)
-                        data.years.forEach(year => {
-                            const option = document.createElement('option');
-                            option.value = year;
-                            option.textContent = year;
-                            if (year === yearToUse) option.selected = true;
-                            yearSelector.appendChild(option);
-                        });
-
-                        // Add change listener
-                        yearSelector.addEventListener('change', (e) => {
-                            switchEmbeddingYear(parseInt(e.target.value));
-                        });
-                    } else {
-                        // Hide selector if only 1 year
-                        const yearSelector = document.getElementById('embedding-year-selector');
-                        yearSelector.style.display = 'none';
-                    }
-
-                    // Reload embedding layer with correct year
-                    if (window.embeddingLayer) {
-                        maps.embedding.removeLayer(window.embeddingLayer);
-                    }
-                    window.embeddingLayer = L.pixelatedTileLayer(
-                        `${TILE_SERVER}/tiles/${currentViewportName}/${currentEmbeddingYear}/{z}/{x}/{y}.png`,
-                        {
-                            tileSize: 256,
-                            bounds: viewportBounds,
-                            keepBuffer: 5,
-                            updateWhenZooming: false
-                        }
-                    );
-                    window.embeddingLayer.addTo(maps.embedding);
-                    // Force Leaflet to recalculate container size (may have changed from restorePanelMode)
-                    maps.embedding.invalidateSize();
-                } else {
-                    console.warn('No available years found');
-                }
-            } catch (error) {
-                console.error('Error loading available years:', error);
-            }
-        }
-
         // Switch to different embedding year
         async function switchEmbeddingYear(year) {
             console.log(`📅 Switching to year ${year}`);
@@ -1610,13 +1824,19 @@
             window.embeddingLayer.addTo(maps.embedding);
             console.log(`✓ Switched to year ${year}`);
 
+            // Mark FAISS as needing re-download for new year
+            viewportStatus.faiss_downloaded = false;
+
             // Always reload FAISS data for the new year (needed for similarity search)
             if (faissLocal && faissLocal.year !== String(year)) {
                 try {
                     await downloadFaissData(currentViewportName, year);
+                    viewportStatus.faiss_downloaded = true;
                 } catch (e) {
                     console.error(`[FAISS] Failed to load data for year ${year}:`, e);
                 }
+            } else {
+                viewportStatus.faiss_downloaded = true;
             }
 
             // Update labels (re-compute with new year's embeddings)
@@ -1635,9 +1855,8 @@
             // Update heatmap (compares Panel 3 and Panel 6)
             loadHeatmap();
 
-            // Note: UMAP is NOT reloaded on year switch. It's a projection of
-            // embeddings from one year, computed once on page load. Recomputing
-            // on every year switch would be wasteful (~30s each time).
+            // Re-evaluate dependencies (label-controls visibility, heatmap)
+            evaluateDependencies();
         }
 
         // Refresh all saved labels for a new year
@@ -1671,56 +1890,6 @@
             updateOverlay();
         }
 
-        // Load available years for Panel 6 (second year selector)
-        async function loadAvailableYears2() {
-            try {
-                const response = await fetch(`/api/viewports/${currentViewportName}/available-years`);
-                const data = await response.json();
-
-                if (data.success && data.years && data.years.length > 0) {
-                    const yearToUse = data.years.includes(2024) ? 2024 : data.years[0];
-                    currentEmbeddingYear2 = yearToUse.toString();
-                    console.log(`✓ Panel 6 available years: ${data.years.join(', ')}, using: ${yearToUse}`);
-
-                    if (data.years.length > 1) {
-                        const yearSelector = document.getElementById('embedding-year-selector-2');
-                        yearSelector.style.display = 'inline-block';
-                        yearSelector.innerHTML = '';
-
-                        data.years.forEach(year => {
-                            const option = document.createElement('option');
-                            option.value = year;
-                            option.textContent = year;
-                            if (year === yearToUse) option.selected = true;
-                            yearSelector.appendChild(option);
-                        });
-
-                        yearSelector.addEventListener('change', (e) => {
-                            switchEmbeddingYear2(e.target.value);
-                        });
-                    }
-
-                    // Reload embedding layer with correct year
-                    if (window.embedding2Layer) {
-                        maps.embedding2.removeLayer(window.embedding2Layer);
-                    }
-                    window.embedding2Layer = L.pixelatedTileLayer(
-                        `${TILE_SERVER}/tiles/${currentViewportName}/${currentEmbeddingYear2}/{z}/{x}/{y}.png`,
-                        {
-                            tileSize: 256,
-                            bounds: viewportBounds,
-                            keepBuffer: 5,
-                            updateWhenZooming: false
-                        }
-                    );
-                    window.embedding2Layer.addTo(maps.embedding2);
-                    maps.embedding2.invalidateSize();
-                }
-            } catch (error) {
-                console.error('Error loading available years for Panel 6:', error);
-            }
-        }
-
         // Switch Panel 6 to different year
         function switchEmbeddingYear2(year) {
             console.log(`📅 Switching Panel 6 to year ${year}`);
@@ -1747,6 +1916,9 @@
 
             // Update heatmap (compares Panel 3 and Panel 6)
             loadHeatmap();
+
+            // Re-evaluate dependencies
+            evaluateDependencies();
         }
 
         // Synchronize all maps - any panel can trigger sync to all others
@@ -2942,10 +3114,9 @@
                             clearInterval(progressPollInterval);
                             progressPollInterval = null;
 
-                            // Refresh year selectors and FAISS status — new data may be available
-                            loadAvailableYears();
-                            loadAvailableYears2();
-                            startFAISSPolling();
+                            // Force immediate dependency poll — new data may be available
+                            if (pollTimerId) clearTimeout(pollTimerId);
+                            pollViewportStatus();
                         }
                     }
                 } catch (error) {
@@ -3384,45 +3555,6 @@
 
         // ===== END UMAP AND HEATMAP FUNCTIONS =====
 
-        // Poll for FAISS index and show labeling controls when available
-        function startFAISSPolling() {
-            const checkFAISS = async () => {
-                try {
-                    const response = await fetch(`/api/viewports/${currentViewportName}/available-years`);
-                    const data = await response.json();
-                    if (data.success && data.years && data.years.length > 0) {
-                        // Check if FAISS index exists for any year
-                        const faissCheckResp = await fetch(`/api/viewports/${currentViewportName}/is-ready`);
-                        const faissStatus = await faissCheckResp.json();
-                        if (faissStatus.has_faiss) {
-                            // FAISS ready on server — download data for client-side search
-                            const year = currentEmbeddingYear || data.years[0];
-                            console.log(`[FAISS-LOCAL] Server FAISS ready, downloading data for ${currentViewportName}/${year}...`);
-                            try {
-                                await downloadFaissData(currentViewportName, year);
-                            } catch (e) {
-                                console.error('[FAISS-LOCAL] Download failed:', e);
-                            }
-                            // Show labeling controls after local data is cached
-                            document.getElementById('label-controls-bar').style.display = 'flex';
-                            console.log('[ADVANCED VIEWER] Local FAISS data ready - labeling enabled');
-                            // Recompute labels now that local data is available
-                            if (savedLabels.length > 0) {
-                                await recomputeLabelPixels();
-                            }
-                            return; // Stop polling
-                        }
-                    }
-                    // FAISS not ready yet, poll again
-                    setTimeout(checkFAISS, 2000);
-                } catch (error) {
-                    // Poll again on error
-                    setTimeout(checkFAISS, 2000);
-                }
-            };
-            checkFAISS();
-        }
-
         // Initialize
         window.onload = async function() {
             // Fetch tile server URL from backend config
@@ -3439,11 +3571,6 @@
 
             // Load viewport info first (determines map center/zoom)
             await updateMapViewport();
-
-            // Check if any background operations are still running (silently, no progress bar)
-            if (currentViewportName) {
-                checkOperationStatusSilently(currentViewportName);
-            }
 
             // Then create maps with correct viewport
             createMaps();
@@ -3462,14 +3589,9 @@
                 }
             }, 100);
 
-            await loadAvailableYears();  // Panel 3: Load year selector
-            await loadAvailableYears2(); // Panel 6: Load second year selector
             loadLabels();
             await loadSavedLabels();  // Load label definitions from localStorage, recompute pixels from FAISS
             updateThresholdDisplay();  // Initialize threshold display
-
-            // Poll for FAISS index and show labeling controls when ready
-            startFAISSPolling();
 
             // Set up dimensionality reduction selector (PCA/UMAP)
             const dimSelector = document.getElementById('dim-reduction-selector');
@@ -3477,13 +3599,18 @@
                 dimSelector.addEventListener('change', async (e) => {
                     currentDimReduction = e.target.value;
                     console.log(`[DimReduction] Switching to ${currentDimReduction.toUpperCase()}`);
-                    await loadDimReduction(currentDimReduction);
+                    // Reset loaded flag so dependency system re-triggers
+                    if (currentDimReduction === 'pca') {
+                        viewportStatus.pca_loaded = false;
+                    } else {
+                        viewportStatus.umap_loaded = false;
+                    }
+                    evaluateDependencies();
                 });
             }
 
-            // Initialize new panels (default to PCA for speed)
-            await loadDimReduction('pca');  // Panel 4: PCA visualization (fast)
-            await loadHeatmap();            // Panel 5: Distance heatmap
+            // Start unified dependency poller (replaces individual init calls)
+            startPoller();
 
             // Check tile server health
             fetch(`${TILE_SERVER}/tiles/health`)
@@ -3491,12 +3618,8 @@
                     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                     return resp.json();
                 })
-                .then(data => {
-                    console.log('Tile server status:', data);
-                })
-                .catch(err => {
-                    console.warn('Tile server not responding:', err);
-                });
+                .then(data => console.log('Tile server status:', data))
+                .catch(err => console.warn('Tile server not responding:', err));
         };
 
         // Handle window resize - invalidate all Leaflet maps and Three.js scene
@@ -3541,29 +3664,6 @@
                 } catch (error) {
                     // Operation not found or error checking - continue to next operation
                 }
-            }
-        }
-
-        // Check operation status silently (no progress bar, just logging)
-        async function checkOperationStatusSilently(viewportId) {
-            try {
-                const response = await fetch(`/api/operations/pipeline-status/${viewportId}`);
-                const result = await response.json();
-
-                if (result.success) {
-                    if (result.status === 'success') {
-                        console.log(`[STATUS] ✓ ${viewportId} pipeline completed successfully`);
-                        // Clear any stale processing message
-                        hideProgressModal();
-                    } else if (result.status === 'failed') {
-                        console.error(`[STATUS] ✗ ${viewportId} pipeline failed: ${result.error}`);
-                        hideProgressModal();
-                    } else if (result.status === 'in_progress') {
-                        console.log(`[STATUS] ⏳ ${viewportId} still processing: ${result.current_stage}`);
-                    }
-                }
-            } catch (error) {
-                // Silent fail - operation might not exist yet
             }
         }
 

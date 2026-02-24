@@ -2446,10 +2446,6 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             }
         }
 
-        // Close add-year modal on overlay click
-        document.getElementById('addYearModal').addEventListener('click', function(e) {
-            if (e.target === this) closeAddYearModal();
-        });
     </script>
 
     <!-- Add Year Modal -->
@@ -2463,5 +2459,11 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             </div>
         </div>
     </div>
+    <script>
+        // Close add-year modal on overlay click (must be after the element)
+        document.getElementById('addYearModal').addEventListener('click', function(e) {
+            if (e.target === this) closeAddYearModal();
+        });
+    </script>
 </body>
 </html>
