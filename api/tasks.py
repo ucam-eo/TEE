@@ -5,6 +5,7 @@ import subprocess
 import threading
 
 from lib.pipeline import PipelineRunner
+from lib.progress_tracker import ProgressTracker
 from lib.viewport_writer import set_active_viewport
 from api.helpers import VENV_PYTHON, PROJECT_ROOT
 
@@ -61,6 +62,11 @@ def trigger_data_download_and_processing(viewport_name, years=None):
     # Mark as starting BEFORE spawning thread so concurrent is-ready requests see it
     with tasks_lock:
         tasks[operation_id] = {'status': 'starting', 'current_stage': 'initialization', 'error': None}
+
+    # Write a fresh pipeline progress file immediately so the frontend doesn't
+    # read a stale file from a previous run (which would show wrong elapsed time)
+    progress = ProgressTracker(f"{viewport_name}_pipeline")
+    progress.update("starting", "Starting pipeline...", 0, 100)
 
     thread = threading.Thread(target=download_and_process, daemon=True)
     thread.start()

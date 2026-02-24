@@ -3,6 +3,7 @@
 import json
 import time
 import logging
+from datetime import datetime
 
 import numpy as np
 from django.http import JsonResponse
@@ -120,17 +121,48 @@ def _projection_status(request, viewport_name, coords_filename, label):
         year = request.GET.get('year', '2024')
         faiss_dir = FAISS_INDICES_DIR / viewport_name / str(year)
         coords_file = faiss_dir / coords_filename
-        operation_id = f"{viewport_name}_pipeline"
-        progress_file = PROGRESS_DIR / f"{operation_id}_progress.json"
 
         if coords_file.exists():
             return JsonResponse({'exists': True, 'computing': False})
 
-        if progress_file.exists():
-            with open(progress_file) as f:
+        # Check the script-specific progress file (e.g. viewport_pca or viewport_umap)
+        # to avoid showing unrelated pipeline stage messages
+        sub_label = label.lower()  # 'pca' or 'umap'
+        sub_operation_id = f"{viewport_name}_{sub_label}"
+        sub_progress_file = PROGRESS_DIR / f"{sub_operation_id}_progress.json"
+
+        # Also check the pipeline progress file for overall pipeline status
+        pipeline_id = f"{viewport_name}_pipeline"
+        pipeline_file = PROGRESS_DIR / f"{pipeline_id}_progress.json"
+
+        # Prefer script-specific progress if it exists and is fresh (updated within 60s)
+        if sub_progress_file.exists():
+            with open(sub_progress_file) as f:
+                progress = json.load(f)
+            last_update = progress.get('last_update', '')
+            if last_update and progress.get('status') not in ('complete', 'error'):
+                try:
+                    updated_at = datetime.fromisoformat(last_update)
+                    age_seconds = (datetime.now() - updated_at).total_seconds()
+                    if age_seconds < 60:
+                        return JsonResponse({'exists': False, 'computing': True, 'operation_id': sub_operation_id})
+                except (ValueError, TypeError):
+                    pass
+
+        # Fall back to pipeline progress (but only if it's fresh — not stale from a previous run)
+        if pipeline_file.exists():
+            with open(pipeline_file) as f:
                 progress = json.load(f)
             if progress.get('status') in ('in_progress', 'processing', 'starting', 'downloading'):
-                return JsonResponse({'exists': False, 'computing': True, 'operation_id': operation_id})
+                last_update = progress.get('last_update', '')
+                if last_update:
+                    try:
+                        updated_at = datetime.fromisoformat(last_update)
+                        age_seconds = (datetime.now() - updated_at).total_seconds()
+                        if age_seconds < 60:
+                            return JsonResponse({'exists': False, 'computing': True, 'operation_id': pipeline_id})
+                    except (ValueError, TypeError):
+                        pass
 
         return JsonResponse({
             'exists': False,
