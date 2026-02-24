@@ -40,24 +40,28 @@ def _get_transparent_png():
 
 
 def _get_reader(viewport, map_id, zoom_level):
-    """Get or create a reader path for a specific viewport, map, and zoom level."""
+    """Get or create a reader path for a specific viewport, map, and zoom level.
+    Returns (tif_path_str, mtime) tuple, or None if file doesn't exist.
+    mtime is included so _render_tile cache auto-invalidates when file changes."""
     pyramid_level = max(0, min(5, (14 - zoom_level) // 2))
     key = f"{viewport}_{map_id}_{pyramid_level}"
 
-    if key not in _readers:
-        viewport_pyramids_dir = PYRAMIDS_BASE_DIR / viewport
+    viewport_pyramids_dir = PYRAMIDS_BASE_DIR / viewport
+    if map_id == 'satellite':
+        tif_path = viewport_pyramids_dir / 'satellite' / f'level_{pyramid_level}.tif'
+    elif map_id == 'rgb':
+        tif_path = viewport_pyramids_dir / 'rgb' / '2024' / f'level_{pyramid_level}.tif'
+    else:
+        tif_path = viewport_pyramids_dir / map_id / f'level_{pyramid_level}.tif'
 
-        if map_id == 'satellite':
-            tif_path = viewport_pyramids_dir / 'satellite' / f'level_{pyramid_level}.tif'
-        elif map_id == 'rgb':
-            tif_path = viewport_pyramids_dir / 'rgb' / '2024' / f'level_{pyramid_level}.tif'
-        else:
-            tif_path = viewport_pyramids_dir / map_id / f'level_{pyramid_level}.tif'
-
-        if tif_path.exists():
-            _readers[key] = str(tif_path)
-        else:
-            return None
+    try:
+        mtime = int(tif_path.stat().st_mtime)
+    except FileNotFoundError:
+        _readers.pop(key, None)  # Clear stale cache entry
+        return None
+    cached = _readers.get(key)
+    if not cached or cached[1] != mtime:
+        _readers[key] = (str(tif_path), mtime)
 
     return _readers[key]
 
@@ -87,8 +91,8 @@ def _transparent_tile():
 
 
 @functools.lru_cache(maxsize=2048)
-def _render_tile(tif_path, z, x, y):
-    """Render a single tile to PNG bytes.  Cached — deterministic since GeoTIFFs are static."""
+def _render_tile(tif_path, z, x, y, _mtime=0):
+    """Render a single tile to PNG bytes.  Cached by (path, coords, mtime)."""
     TILE_SIZE = 256
     bbox = _tile_to_bbox(x, y, z)
 
@@ -154,18 +158,20 @@ def get_tile(request, viewport, map_id, z, x, y):
         return HttpResponse("Invalid map_id", status=400)
 
     try:
-        tif_path = _get_reader(viewport, map_id, z)
+        reader_info = _get_reader(viewport, map_id, z)
 
-        if not tif_path:
+        if not reader_info:
             return _transparent_tile()
 
-        # ETag / 304 support
-        etag = hashlib.md5(f"{tif_path}:{z}:{x}:{y}".encode()).hexdigest()
+        tif_path, mtime = reader_info
+
+        # ETag / 304 support (includes mtime so stale cache is busted)
+        etag = hashlib.md5(f"{tif_path}:{mtime}:{z}:{x}:{y}".encode()).hexdigest()
         if request.META.get('HTTP_IF_NONE_MATCH') == etag:
             return HttpResponse(status=304)
 
         try:
-            png_bytes = _render_tile(tif_path, z, x, y)
+            png_bytes = _render_tile(tif_path, z, x, y, _mtime=mtime)
             if png_bytes is None:
                 return _transparent_tile()
             resp = _tile_response(png_bytes)

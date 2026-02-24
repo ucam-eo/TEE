@@ -499,13 +499,6 @@
             <input type="file" id="import-labels-file" accept=".json" style="display: none;">
         </div>
 
-        <!-- Status button (always visible, independent of FAISS readiness) -->
-        <div style="display: flex; align-items: center; margin-left: 20px; border-left: 1px solid #444; padding-left: 20px;">
-            <button id="status-btn" style="padding: 8px 12px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;">
-                ℹ️ Status
-            </button>
-        </div>
-
         <!-- Panel Layout Selector -->
         <div style="display: flex; gap: 10px; align-items: center; margin-left: 20px; border-left: 1px solid #444; padding-left: 20px;">
             <label style="margin: 0; font-size: 13px;">Layout:</label>
@@ -517,6 +510,11 @@
 
         <!-- Lat/Lon Coordinates -->
         <div id="header-coords" style="margin-left: auto; font-family: monospace; font-size: 13px; color: #aaa; white-space: nowrap;"></div>
+
+        <!-- Status button (always visible) -->
+        <button id="status-btn" style="padding: 8px 12px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;">
+            ℹ️ Status
+        </button>
 
         <!-- Help Button -->
         <button id="help-btn" style="padding: 8px 12px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap; margin-left: 10px;">? Help</button>
@@ -2646,6 +2644,16 @@
                 // Resize Three.js scene (Panel 4)
                 if (umapCanvasLayer && umapCanvasLayer.resize) {
                     umapCanvasLayer.resize();
+                }
+                // Force-refresh tile layers for panels that were hidden (display:none)
+                // GridLayer won't have loaded tiles while invisible
+                if (numPanels === '6' || numPanels === 6) {
+                    if (window.embedding2Layer && maps.embedding2) {
+                        refreshEmbeddingTileLayer('embedding2', currentEmbeddingYear2);
+                    }
+                    if (heatmapCanvasLayer && typeof loadHeatmap === 'function') {
+                        loadHeatmap();
+                    }
                 }
             }, 350);  // Wait for CSS transition
 
