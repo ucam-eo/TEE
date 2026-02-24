@@ -1932,7 +1932,7 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
 
             // Additional status message
             if (status === 'error') {
-                document.getElementById('processingMessage').textContent = 'Error occurred - check logs';
+                document.getElementById('processingMessage').textContent = message || 'Error occurred - check logs';
                 document.getElementById('processingMessage').style.color = '#d32f2f';
             } else if (status === 'complete') {
                 document.getElementById('processingMessage').textContent = 'Processing complete!';
@@ -1987,6 +1987,14 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
                             if (progress.success && progress.status !== 'not_started') {
                                 updateSidebarProgress(viewportName, progress);
                                 console.log(`[PROGRESS] ${viewportName}: ${progress.percent}% - ${progress.message}`);
+
+                                // Stop polling if pipeline errored
+                                if (progress.status === 'error') {
+                                    console.log(`[WAIT] ✗ Pipeline error for ${viewportName}: ${progress.message}`);
+                                    clearInterval(pollInterval);
+                                    resolve(false);
+                                    return;
+                                }
                             } else {
                                 // No pipeline progress yet, show is-ready message
                                 updateSidebarProgress(viewportName, {
