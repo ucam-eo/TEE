@@ -2,7 +2,6 @@
 
 import mimetypes
 
-from django.conf import settings
 from django.http import JsonResponse, FileResponse, Http404
 
 from lib.config import DATA_DIR, APP_DIR
@@ -44,9 +43,5 @@ def health(request):
 
 
 def get_config(request):
-    """Return client configuration including tile server URL."""
-    config = {}
-    tile_server = settings.TEE_TILE_SERVER_URL
-    if tile_server:
-        config['tile_server'] = tile_server
-    return JsonResponse(config)
+    """Return client configuration."""
+    return JsonResponse({})

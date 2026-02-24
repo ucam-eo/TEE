@@ -51,10 +51,6 @@ STATIC_URL = '/static/'
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
-# TEE-specific settings
-import os
-TEE_TILE_SERVER_URL = os.environ.get('TILE_SERVER_URL')
-
 # Logging
 LOGGING = {
     'version': 1,

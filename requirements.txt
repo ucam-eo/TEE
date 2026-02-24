@@ -10,10 +10,6 @@ django>=4.2
 django-cors-headers>=4.0.0
 waitress>=3.0.0
 
-# Tile server still uses Flask
-flask>=3.0.0
-flask-cors>=4.0.0
-
 # Geospatial processing
 geotessera>=0.7.0
 numpy>=1.24.0

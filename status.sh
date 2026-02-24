@@ -47,9 +47,4 @@ if pgrep -f "python.*waitress.*tee_project\|python.*manage.py.*runserver" >/dev/
 else
     echo "  Web server:  stopped"
 fi
-if pgrep -f "python.*tile_server.py" >/dev/null 2>&1; then
-    echo "  Tile server: running"
-else
-    echo "  Tile server: stopped"
-fi
 echo ""
