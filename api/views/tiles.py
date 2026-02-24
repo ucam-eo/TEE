@@ -82,8 +82,8 @@ def _tile_response(png_bytes, cache_max_age=86400):
 
 
 def _transparent_tile():
-    """Return a cached transparent 256x256 PNG."""
-    return _tile_response(_get_transparent_png())
+    """Return a cached transparent 256x256 PNG (not cached by browser — data may appear later)."""
+    return _tile_response(_get_transparent_png(), cache_max_age=0)
 
 
 @functools.lru_cache(maxsize=2048)

@@ -1563,10 +1563,10 @@
                     }
 
                     // Reload embedding layer with correct year
-                    if (embeddingLayer) {
-                        maps.embedding.removeLayer(embeddingLayer);
+                    if (window.embeddingLayer) {
+                        maps.embedding.removeLayer(window.embeddingLayer);
                     }
-                    embeddingLayer = L.pixelatedTileLayer(
+                    window.embeddingLayer = L.pixelatedTileLayer(
                         `${TILE_SERVER}/tiles/${currentViewportName}/${currentEmbeddingYear}/{z}/{x}/{y}.png`,
                         {
                             tileSize: 256,
@@ -1575,7 +1575,9 @@
                             updateWhenZooming: false
                         }
                     );
-                    embeddingLayer.addTo(maps.embedding);
+                    window.embeddingLayer.addTo(maps.embedding);
+                    // Force Leaflet to recalculate container size (may have changed from restorePanelMode)
+                    maps.embedding.invalidateSize();
                 } else {
                     console.warn('No available years found');
                 }
@@ -1712,6 +1714,7 @@
                         }
                     );
                     window.embedding2Layer.addTo(maps.embedding2);
+                    maps.embedding2.invalidateSize();
                 }
             } catch (error) {
                 console.error('Error loading available years for Panel 6:', error);
