@@ -13,7 +13,6 @@ import traceback
 import threading
 import time as _time
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -268,41 +267,29 @@ def download_embeddings():
         progress.error(f"GeoTessera connection failed: {e}")
         sys.exit(1)
 
-    # Track progress across all years (thread-safe)
+    # Track progress across all years
     total_years = len(list(YEARS))
     total_estimated_bytes = est_bytes * total_years
-    cumulative_bytes = [0]  # Mutable container for thread-safe updates
-    progress_lock = threading.Lock()
+    cumulative_bytes = [0]
+    progress_lock = threading.Lock()  # kept for download_single_year signature
 
     successful_years = []
 
-    # Download years in parallel
-    workers = min(MAX_CONCURRENT_DOWNLOADS, total_years)
-    print(f"\nDownloading {total_years} year(s) with {workers} parallel worker(s)...")
+    # Download years sequentially (GeoTessera client is not thread-safe)
+    print(f"\nDownloading {total_years} year(s)...")
 
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = {}
-        for year in YEARS:
-            output_file = MOSAICS_DIR / f"{viewport_id}_embeddings_{year}.tif"
-            future = executor.submit(
-                download_single_year,
+    for year in YEARS:
+        output_file = MOSAICS_DIR / f"{viewport_id}_embeddings_{year}.tif"
+        try:
+            yr, success, size_mb = download_single_year(
                 tessera, year, BBOX, viewport_id, output_file, est_bytes, est_mb,
                 progress, progress_lock, cumulative_bytes, total_estimated_bytes, total_years
             )
-            futures[future] = year
-
-        for future in as_completed(futures):
-            year = futures[future]
-            try:
-                yr, success, size_mb = future.result()
-                if success:
-                    successful_years.append(yr)
-            except Exception as e:
-                print(f"   [{year}] ⚠️  Unexpected error: {type(e).__name__}: {e}")
-                traceback.print_exc(file=sys.stderr)
-
-    # Sort for consistent output
-    successful_years.sort()
+            if success:
+                successful_years.append(yr)
+        except Exception as e:
+            print(f"   [{year}] ⚠️  Unexpected error: {type(e).__name__}: {e}")
+            traceback.print_exc(file=sys.stderr)
 
     print("\n" + "=" * 60)
     print("Download complete!")
