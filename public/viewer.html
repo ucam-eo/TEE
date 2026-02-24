@@ -2941,6 +2941,11 @@
                             // Clear interval
                             clearInterval(progressPollInterval);
                             progressPollInterval = null;
+
+                            // Refresh year selectors and FAISS status — new data may be available
+                            loadAvailableYears();
+                            loadAvailableYears2();
+                            startFAISSPolling();
                         }
                     }
                 } catch (error) {
