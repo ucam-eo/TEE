@@ -143,12 +143,17 @@ def download_single_year(tessera, year, BBOX, viewport_id, output_file, est_byte
             return
         _last_write[0] = now
         if total > 0:
-            year_bytes = int((current / total) * total_download_bytes)
-            year_mb_done = year_bytes / (1024 * 1024)
             with progress_lock:
-                overall_bytes = cumulative_bytes[0] + year_bytes
-                progress.update("downloading",
-                               f"{_year}: {status} ({year_mb_done:.1f} / {_total_mb:.1f} MB)",
+                if total_download_bytes > 0:
+                    year_bytes = int((current / total) * total_download_bytes)
+                    year_mb_done = year_bytes / (1024 * 1024)
+                    overall_bytes = cumulative_bytes[0] + year_bytes
+                    msg = f"{_year}: {status} ({year_mb_done:.1f} / {_total_mb:.1f} MB)"
+                else:
+                    # Tiles already cached, just processing
+                    overall_bytes = cumulative_bytes[0] + int((current / total) * est_bytes)
+                    msg = f"{_year}: {status}"
+                progress.update("downloading", msg,
                                current_value=overall_bytes,
                                total_value=total_estimated_bytes,
                                current_file=output_file.name)
