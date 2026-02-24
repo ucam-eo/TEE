@@ -585,7 +585,7 @@ def is_ready(request, viewport_name):
             'has_faiss': has_faiss,
             'has_pca': has_pca,
             'has_umap': has_umap,
-            'years_available': years_available
+            'years_available': sorted(years_available)
         })
 
     except Exception as e:

@@ -646,4 +646,14 @@ class PipelineRunner:
         logger.info(f"{'=' * 70}\n")
 
         self.progress.complete(f"Pipeline complete for {viewport_name}")
+
+        # Clean up per-stage progress files (subprocess temp files)
+        for stage in ('download', 'rgb', 'pyramids', 'faiss', 'pca', 'umap'):
+            stage_file = PROGRESS_DIR / f"{viewport_name}_{stage}_progress.json"
+            try:
+                if stage_file.exists():
+                    stage_file.unlink()
+            except OSError:
+                pass
+
         return True, None
