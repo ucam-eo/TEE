@@ -487,6 +487,9 @@
                     <button id="export-labels-json-btn">Labels (JSON)</button>
                     <button id="export-labels-geojson-btn">Labels (GeoJSON)</button>
                     <button id="export-map-btn">Map (JPG)</button>
+                    <label style="display:flex; align-items:center; gap:5px; padding:6px 12px; font-size:12px; color:#ccc; border-top:1px solid #444; margin-top:4px; cursor:pointer;">
+                        <input type="checkbox" id="export-hide-locations"> Hide label locations
+                    </label>
                 </div>
             </div>
             <span id="unsaved-labels-warning" style="display: none; background: #ff9800; color: #000; padding: 4px 10px; border-radius: 3px; font-weight: 700; font-size: 12px; white-space: nowrap; animation: pulse-warning 1.5s ease-in-out 3;">⚠ Unsaved labels — export to avoid losing work</span>
@@ -3876,11 +3879,15 @@
                 alert('No labels to export.');
                 return;
             }
+            const hideLocations = document.getElementById('export-hide-locations').checked;
             const data = {
                 viewport: currentViewportName,
                 year: currentEmbeddingYear,
                 labels: savedLabels.map(l => {
                     const {pixels, visible, ...meta} = l;
+                    if (hideLocations) {
+                        delete meta.source_pixel;
+                    }
                     return meta;
                 })
             };
@@ -3901,6 +3908,10 @@
         function exportSavedLabelsGeoJSON() {
             if (savedLabels.length === 0) {
                 alert('No labels to export.');
+                return;
+            }
+            if (document.getElementById('export-hide-locations').checked) {
+                alert('GeoJSON export requires locations. Uncheck "Hide label locations" to use this format.');
                 return;
             }
             if (!maps.rgb) {
