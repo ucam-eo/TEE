@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TEE User Guide</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 24px;
+            background: #fafafa;
+        }
+        h1 {
+            font-size: 28px;
+            margin-bottom: 6px;
+            color: #1a1a2e;
+        }
+        h1 + p { color: #666; margin-bottom: 32px; }
+        h2 {
+            font-size: 20px;
+            margin-top: 36px;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #667eea;
+            color: #1a1a2e;
+        }
+        h3 {
+            font-size: 16px;
+            margin-top: 20px;
+            margin-bottom: 8px;
+            color: #444;
+        }
+        p { margin-bottom: 12px; }
+        ol, ul { margin-bottom: 12px; padding-left: 24px; }
+        li { margin-bottom: 6px; }
+        ul ul { margin-top: 4px; margin-bottom: 4px; }
+        strong { color: #1a1a2e; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+        th, td {
+            text-align: left;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+        }
+        th { background: #f0f0f5; font-weight: 600; }
+        tr:nth-child(even) { background: #f9f9fc; }
+        code {
+            background: #eef;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 13px;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .back-link:hover { text-decoration: underline; }
+        .note {
+            background: #e8f4f8;
+            border-left: 3px solid #667eea;
+            padding: 10px 14px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<a class="back-link" href="/">&larr; Back to Viewport Manager</a>
+
+<h1>TEE User Guide</h1>
+<p>A guide to using the Tessera Embeddings Explorer web interface.</p>
+
+<h2>Creating a Viewport</h2>
+
+<p>A <strong>viewport</strong> is a 5km &times; 5km geographic area for which TEE downloads and processes Sentinel-2 embeddings.</p>
+
+<ol>
+    <li>Open the <strong>Viewport Manager</strong> (the home page)</li>
+    <li>Click <strong>+ Create New Viewport</strong></li>
+    <li>Choose a location using one of three methods:
+        <ul>
+            <li><strong>Search</strong> &mdash; type a place name (e.g. "Cambridge") or coordinates (e.g. "52.2, 0.12") in the search bar</li>
+            <li><strong>Click the map</strong> &mdash; a 5km preview box follows the cursor; click to lock it in place</li>
+            <li><strong>Reposition</strong> &mdash; after clicking, click again to move the box</li>
+        </ul>
+    </li>
+    <li>Enter a <strong>viewport name</strong> and select which <strong>years</strong> to process (2017&ndash;2025)</li>
+    <li>Click <strong>Create</strong> &mdash; processing runs in the background with a progress bar</li>
+    <li>The viewer opens automatically when processing completes</li>
+</ol>
+
+<p><strong>Deleting a viewport:</strong> Click the trash icon next to any viewport in the list. All associated data (mosaics, pyramids, FAISS indices) is cleaned up automatically.</p>
+
+<h2>The Viewer</h2>
+
+<h3>3-Panel Layout (Default)</h3>
+
+<table>
+    <tr><th>Panel</th><th>Content</th></tr>
+    <tr><td><strong>OSM</strong></td><td>OpenStreetMap geographic reference</td></tr>
+    <tr><td><strong>Satellite</strong></td><td>Esri or Google satellite imagery (toggle in header)</td></tr>
+    <tr><td><strong>Embeddings</strong></td><td>Tessera embedding visualization with year selector</td></tr>
+</table>
+
+<p>All three panels are synchronized &mdash; panning or zooming one pans/zooms all.</p>
+
+<h3>6-Panel Layout (Advanced)</h3>
+
+<p>Click the <strong>3/6 Panel</strong> toggle in the header to switch to the advanced layout:</p>
+
+<table>
+    <tr><th>Panel</th><th>Content</th></tr>
+    <tr><td>1. <strong>OSM</strong></td><td>OpenStreetMap reference</td></tr>
+    <tr><td>2. <strong>Satellite</strong></td><td>Satellite imagery with label painting</td></tr>
+    <tr><td>3. <strong>Embeddings Y1</strong></td><td>First year's embeddings with similarity search</td></tr>
+    <tr><td>4. <strong>UMAP / PCA</strong></td><td>Dimensionality reduction visualization</td></tr>
+    <tr><td>5. <strong>Heatmap</strong></td><td>Temporal distance heatmap (Y1 vs Y2)</td></tr>
+    <tr><td>6. <strong>Embeddings Y2</strong></td><td>Second year's embeddings for comparison</td></tr>
+</table>
+
+<h3>Switching Years</h3>
+
+<p>Use the <strong>year dropdown</strong> above the embedding panels to switch between processed years. In the 6-panel layout, Y1 and Y2 can be set to different years for temporal comparison.</p>
+
+<h2>Similarity Search</h2>
+
+<p><strong>Double-click</strong> anywhere on the map to trigger a similarity search. TEE extracts the 128-dimensional embedding at that pixel and finds all similar locations across the viewport. All computation runs <strong>locally in your browser</strong> &mdash; no data is sent to the server.</p>
+
+<h3>How to Use</h3>
+
+<ol>
+    <li><strong>Double-click any pixel</strong> on any map panel &mdash; similar locations are highlighted across all panels as colored dots</li>
+    <li>Adjust the <strong>similarity slider</strong> to control how similar a match must be (lower = more strict)</li>
+    <li>Click <strong>Save as Label</strong> to name and color-code the current search results</li>
+</ol>
+
+<div class="note">
+    The first time you run a search for a viewport+year, FAISS data (~20&ndash;50MB) is downloaded and cached in your browser's IndexedDB. Subsequent searches are instant.
+</div>
+
+<h3>Single-Click</h3>
+
+<p>A <strong>single click</strong> on any panel places a synchronized marker across all panels, useful for cross-referencing a location between OSM, satellite, and embedding views without triggering a search.</p>
+
+<h2>Labels</h2>
+
+<p>Labels are named, colored collections of similar pixels found through similarity search.</p>
+
+<h3>Managing Labels</h3>
+
+<ul>
+    <li><strong>Save</strong> &mdash; after a similarity search, click "Save as Label", choose a name and color</li>
+    <li><strong>Toggle visibility</strong> &mdash; click a label name to show/hide it</li>
+    <li><strong>Delete</strong> &mdash; click the X next to a label</li>
+    <li><strong>Labels persist</strong> across page reloads (stored in browser localStorage)</li>
+</ul>
+
+<h3>Cross-Year Timeline</h3>
+
+<p>Click <strong>Timeline</strong> on any saved label to see how its coverage changes across all available years:</p>
+
+<ul>
+    <li>A bar chart shows pixel counts per year</li>
+    <li>A percentage change summary compares the first and last years</li>
+    <li>Each year's FAISS data is loaded automatically from cache (or downloaded in background)</li>
+</ul>
+
+<h3>Importing and Exporting Labels</h3>
+
+<p>Labels are portable &mdash; they use embedding distance rather than coordinates, so they work across different viewports.</p>
+
+<ul>
+    <li><strong>Import</strong> &mdash; use the Import button to load a previously exported JSON file</li>
+    <li><strong>Export</strong> &mdash; see Export Options below</li>
+</ul>
+
+<h2>Export Options</h2>
+
+<p>The <strong>Export</strong> dropdown in the header provides three formats:</p>
+
+<table>
+    <tr><th>Format</th><th>Description</th></tr>
+    <tr><td><strong>Labels (JSON)</strong></td><td>Compact metadata for re-importing into TEE</td></tr>
+    <tr><td><strong>Labels (GeoJSON)</strong></td><td>FeatureCollection with 10m polygons per pixel, compatible with QGIS and other GIS tools. Properties include label name, color, distance, and threshold.</td></tr>
+    <tr><td><strong>Map (JPG)</strong></td><td>High-resolution satellite image with label overlays and legend, rendered at zoom level 18</td></tr>
+</table>
+
+<h2>UMAP / PCA Visualization (Panel 4)</h2>
+
+<p>In the 6-panel layout, Panel 4 shows a 2D projection of the embedding space:</p>
+
+<ul>
+    <li><strong>PCA</strong> &mdash; fast, available immediately</li>
+    <li><strong>UMAP</strong> &mdash; richer structure, auto-computed on first load (~1&ndash;2 min)</li>
+    <li>Points are colored using satellite RGB values</li>
+    <li>Single-click a point to place a marker on all map panels; double-click to trigger a similarity search from that point</li>
+    <li>Toggle between PCA and UMAP using the dropdown</li>
+    <li>Right-click drag to rotate the 3D view</li>
+</ul>
+
+<h2>Heatmap (Panel 5)</h2>
+
+<p>The temporal distance heatmap shows pixel-by-pixel embedding differences between Y1 and Y2:</p>
+
+<ul>
+    <li>Bright areas indicate large changes between the two years</li>
+    <li>Dark areas indicate stability</li>
+    <li>Useful for detecting land use change, deforestation, construction, etc.</li>
+</ul>
+
+<h2>Mouse Controls</h2>
+
+<table>
+    <tr><th>Action</th><th>Control</th></tr>
+    <tr><td>Pan</td><td>Click and drag</td></tr>
+    <tr><td>Zoom</td><td>Scroll wheel, or +/&minus; buttons</td></tr>
+    <tr><td>Place marker</td><td>Single-click on any panel</td></tr>
+    <tr><td>Similarity search</td><td>Double-click on any panel</td></tr>
+    <tr><td>Adjust similarity</td><td>Drag the similarity slider</td></tr>
+    <tr><td>Rotate (PCA/UMAP)</td><td>Right-click drag</td></tr>
+</table>
+
+<h2>Tips</h2>
+
+<ul>
+    <li><strong>Processing time</strong> is roughly the same whether you select 1 year or 8 years &mdash; all years download and process in parallel</li>
+    <li><strong>Features appear incrementally</strong> &mdash; the viewer becomes usable as soon as pyramids are built, even before FAISS indexing completes</li>
+    <li><strong>Privacy</strong> &mdash; all similarity search and labeling runs locally in your browser. Only tile images are fetched from the server</li>
+    <li><strong>Storage</strong> &mdash; each viewport uses ~5GB depending on the number of years processed</li>
+</ul>
+
+</body>
+</html>
