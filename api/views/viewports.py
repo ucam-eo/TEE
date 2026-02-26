@@ -58,18 +58,23 @@ def list_viewports(request):
                 viewport['name'] = viewport_name
                 viewport['is_active'] = (viewport_name == active_name)
                 viewport['data_size_mb'] = get_viewport_data_size(viewport_name, active_name)
-                viewport['years_available'] = _get_pyramid_years(viewport_name)
+                all_pyramid_years = _get_pyramid_years(viewport_name)
                 config_file = VIEWPORTS_DIR / f"{viewport_name}_config.json"
                 if config_file.exists():
                     with open(config_file) as cf:
                         cfg = json.load(cf)
-                    viewport['years_configured'] = sorted(cfg.get('years') or [], reverse=True)
+                    years_configured = sorted(cfg.get('years') or [], reverse=True)
+                    viewport['years_configured'] = years_configured
                     viewport['private'] = cfg.get('private', False)
                     viewport['created_by'] = cfg.get('created_by')
+                    # Only show pyramid years the user actually requested
+                    configured_set = {int(y) for y in years_configured}
+                    viewport['years_available'] = [y for y in all_pyramid_years if y in configured_set]
                 else:
                     viewport['years_configured'] = []
                     viewport['private'] = False
                     viewport['created_by'] = None
+                    viewport['years_available'] = all_pyramid_years
                 viewport_data.append(viewport)
             except Exception as e:
                 logger.warning(f"Error reading viewport {viewport_name}: {e}")
@@ -555,6 +560,11 @@ def is_ready(request, viewport_name):
                     years_requested = [str(y) for y in config.get('years', [])]
             except Exception:
                 pass
+        # Only show years the user actually requested (if config exists)
+        if years_requested:
+            years_available = [y for y in years_available if y in years_requested]
+            has_pyramids = len(years_available) > 0
+            is_ready_flag = has_pyramids
         years_processing = sorted(set(years_requested) - set(years_available))
 
         if is_ready_flag:
