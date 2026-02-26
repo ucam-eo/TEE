@@ -511,46 +511,7 @@ def is_ready(request, viewport_name):
     except ValueError as e:
         return JsonResponse({'ready': False, 'message': str(e)}, status=400)
     try:
-        # Check FAISS
-        has_faiss = False
-        faiss_dir = FAISS_INDICES_DIR / viewport_name
-        if faiss_dir.exists():
-            for year_dir in faiss_dir.glob("*"):
-                if year_dir.is_dir() and (year_dir / "embeddings.index").exists():
-                    has_faiss = True
-                    break
-
-        embedding_files = list(MOSAICS_DIR.glob(f"{viewport_name}_embeddings_*.tif"))
-        has_mosaics = len(embedding_files) > 0
-        has_embeddings = has_faiss or has_mosaics
-
-        pyramid_dir = PYRAMIDS_DIR / viewport_name
-        has_pyramids = False
-        years_available = []
-        if pyramid_dir.exists():
-            for year_dir in pyramid_dir.glob("*"):
-                if year_dir.is_dir() and year_dir.name not in ['satellite', 'rgb']:
-                    if (year_dir / "level_0.tif").exists():
-                        has_pyramids = True
-                        years_available.append(year_dir.name)
-
-        has_pca = False
-        if faiss_dir.exists():
-            for year_dir in faiss_dir.glob("*"):
-                if year_dir.is_dir() and (year_dir / 'pca_coords.npy').exists():
-                    has_pca = True
-                    break
-
-        has_umap = False
-        if faiss_dir.exists():
-            for year_dir in faiss_dir.glob("*"):
-                if year_dir.is_dir() and (year_dir / 'umap_coords.npy').exists():
-                    has_umap = True
-                    break
-
-        is_ready_flag = has_pyramids
-
-        # Read config to find requested years
+        # Read config to find requested years (needed for filtering below)
         years_requested = []
         config_file = VIEWPORTS_DIR / f"{viewport_name}_config.json"
         if config_file.exists():
@@ -560,11 +521,52 @@ def is_ready(request, viewport_name):
                     years_requested = [str(y) for y in config.get('years', [])]
             except Exception:
                 pass
-        # Only show years the user actually requested (if config exists)
-        if years_requested:
-            years_available = [y for y in years_available if y in years_requested]
-            has_pyramids = len(years_available) > 0
-            is_ready_flag = has_pyramids
+        requested_set = set(years_requested) if years_requested else None
+
+        def _year_matches(year_dir_name):
+            """True if this year was requested (or no config exists)."""
+            return requested_set is None or year_dir_name in requested_set
+
+        # Check FAISS — only for requested years
+        has_faiss = False
+        faiss_dir = FAISS_INDICES_DIR / viewport_name
+        if faiss_dir.exists():
+            for year_dir in faiss_dir.glob("*"):
+                if year_dir.is_dir() and _year_matches(year_dir.name) and (year_dir / "embeddings.index").exists():
+                    has_faiss = True
+                    break
+
+        embedding_files = list(MOSAICS_DIR.glob(f"{viewport_name}_embeddings_*.tif"))
+        has_mosaics = len(embedding_files) > 0
+        has_embeddings = has_faiss or has_mosaics
+
+        # Check pyramids — only for requested years
+        pyramid_dir = PYRAMIDS_DIR / viewport_name
+        has_pyramids = False
+        years_available = []
+        if pyramid_dir.exists():
+            for year_dir in pyramid_dir.glob("*"):
+                if year_dir.is_dir() and year_dir.name not in ['satellite', 'rgb']:
+                    if _year_matches(year_dir.name) and (year_dir / "level_0.tif").exists():
+                        has_pyramids = True
+                        years_available.append(year_dir.name)
+
+        # Check PCA/UMAP — only for requested years
+        has_pca = False
+        if faiss_dir.exists():
+            for year_dir in faiss_dir.glob("*"):
+                if year_dir.is_dir() and _year_matches(year_dir.name) and (year_dir / 'pca_coords.npy').exists():
+                    has_pca = True
+                    break
+
+        has_umap = False
+        if faiss_dir.exists():
+            for year_dir in faiss_dir.glob("*"):
+                if year_dir.is_dir() and _year_matches(year_dir.name) and (year_dir / 'umap_coords.npy').exists():
+                    has_umap = True
+                    break
+
+        is_ready_flag = has_pyramids
         years_processing = sorted(set(years_requested) - set(years_available))
 
         if is_ready_flag:
