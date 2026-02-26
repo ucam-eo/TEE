@@ -2332,8 +2332,26 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
 
                 if (data.success) {
                     closeAddYearModal();
-                    alert(`Adding year(s) ${newYears.join(', ')} to ${viewportName}. Processing will continue in the background.`);
                     loadViewports();
+
+                    // Show processing progress for the new pipeline
+                    document.getElementById('processingSection').style.display = 'block';
+                    document.getElementById('cancelProcessingBtn').style.display = 'inline-block';
+                    startProgressPolling(viewportName);
+
+                    // Update status display to show processing
+                    const statusEl = document.getElementById('dataStatusMessage');
+                    const statusText = document.getElementById('dataStatusText');
+                    statusEl.style.background = '#fff3cd';
+                    statusEl.style.color = '#856404';
+                    statusText.textContent = `Adding year(s) ${newYears.join(', ')}...`;
+                    statusEl.style.display = 'block';
+
+                    // Disable viewer button while processing
+                    const viewerBtn = document.getElementById('quickViewerBtn');
+                    viewerBtn.disabled = true;
+                    viewerBtn.style.opacity = '0.5';
+                    viewerBtn.style.cursor = 'not-allowed';
                 } else {
                     alert(`Error: ${data.error}`);
                 }
