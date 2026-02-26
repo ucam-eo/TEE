@@ -33,13 +33,21 @@
             left: 0;
             right: 0;
             background: #2a2a2a;
-            padding: 12px 20px;
+            padding: 8px 12px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.5);
             z-index: 1000;
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            gap: 10px 15px;
+            gap: 6px;
+        }
+        .toolbar-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.07);
+            padding: 5px 10px;
+            border-radius: 20px;
         }
 
 
@@ -426,49 +434,26 @@
 </head>
 <body>
     <div id="controls">
-        <!-- Back to Viewports -->
-        <button style="background: #6c757d; color: white; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;" onclick="window.location.href = '/'">← Back</button>
-
-        <!-- Status button -->
-        <button id="status-btn" style="padding: 8px 12px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;">
-            ℹ️ Status
-        </button>
-
-        <!-- Panel Layout Selector -->
-        <div style="display: flex; gap: 10px; align-items: center;">
-            <select id="panel-layout-select" onchange="setPanelLayout(this.value)" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 13px; cursor: pointer;">
+        <!-- Navigation group -->
+        <div class="toolbar-group">
+            <button style="background: #6c757d; color: white; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 13px;" onclick="window.location.href = '/'">← Back</button>
+            <button id="status-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;">ℹ️ Status</button>
+            <select id="panel-layout-select" onchange="setPanelLayout(this.value)" style="padding: 5px 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 13px; cursor: pointer;">
                 <option value="3">3 Panels</option>
                 <option value="6">6 Panels</option>
             </select>
+            <button id="help-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;">? Help</button>
         </div>
 
-        <!-- Help Button -->
-        <button id="help-btn" style="padding: 8px 12px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;">? Help</button>
-
-        <!-- Divider -->
-        <div style="border-left: 1px solid #444; height: 24px; margin: 0 5px;"></div>
-
-        <!-- Similarity Search Controls (always visible, greyed out when FAISS not ready) -->
-        <div id="similarity-controls" style="display: flex; gap: 10px; align-items: center; opacity: 0.4;">
-            <label style="margin: 0;">Similarity:</label>
-            <input
-                type="range"
-                id="similarity-threshold"
-                min="0"
-                max="35"
-                value="12"
-                style="width: 120px; cursor: pointer;"
-                oninput="updateThresholdDisplay()"
-                disabled
-            />
-            <span id="threshold-display" style="background: #333; padding: 4px 8px; border-radius: 3px; font-size: 13px; min-width: 40px; text-align: center;">12.00</span>
+        <!-- Similarity group (greyed out when FAISS not ready) -->
+        <div id="similarity-controls" class="toolbar-group" style="opacity: 0.4;">
+            <label style="margin: 0; font-size: 13px;">Similarity:</label>
+            <input type="range" id="similarity-threshold" min="0" max="35" value="12" style="width: 120px; cursor: pointer;" oninput="updateThresholdDisplay()" disabled />
+            <span id="threshold-display" style="background: rgba(0,0,0,0.3); padding: 3px 7px; border-radius: 3px; font-size: 13px; min-width: 36px; text-align: center;">12.00</span>
         </div>
 
-        <!-- Divider -->
-        <div style="border-left: 1px solid #444; height: 24px; margin: 0 5px;"></div>
-
-        <!-- Label Controls (always visible, greyed out when FAISS not ready) -->
-        <div id="label-controls-bar" style="display: flex; gap: 10px; align-items: center; opacity: 0.4;">
+        <!-- Label controls group (greyed out when FAISS not ready) -->
+        <div id="label-controls-bar" class="toolbar-group" style="opacity: 0.4;">
             <div style="color: white; background: #333; padding: 4px 8px; border-radius: 3px; font-weight: 600; font-size: 13px;">Labels: <span id="label-count">0</span></div>
             <button id="labels-toggle-btn" style="padding: 8px 12px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;" disabled>
                 📋 View Labels
