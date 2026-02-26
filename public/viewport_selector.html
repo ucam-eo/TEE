@@ -2346,12 +2346,6 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
                     statusEl.style.color = '#856404';
                     statusText.textContent = `Adding year(s) ${newYears.join(', ')}...`;
                     statusEl.style.display = 'block';
-
-                    // Disable viewer button while processing
-                    const viewerBtn = document.getElementById('quickViewerBtn');
-                    viewerBtn.disabled = true;
-                    viewerBtn.style.opacity = '0.5';
-                    viewerBtn.style.cursor = 'not-allowed';
                 } else {
                     alert(`Error: ${data.error}`);
                 }
