@@ -5,6 +5,7 @@ Single source of truth for: Download → RGB → Pyramids → FAISS → UMAP
 Used by both web_server.py and setup_viewport.py
 """
 
+import json
 import subprocess
 import logging
 import signal
@@ -79,6 +80,7 @@ class PipelineRunner:
         self.progress = None  # Unified pipeline progress tracker
         self.viewport_name = None  # Set when running pipeline
         self._last_percent = 0  # Track last reported percent for monotonicity
+        self._active_stage = None  # (stage_name, viewport_name) during subprocess runs
 
     def update_progress(self, stage: str, stage_percent: int, message: str):
         """Update unified pipeline progress (monotonically increasing).
@@ -98,6 +100,26 @@ class PipelineRunner:
         overall_percent = max(overall_percent, self._last_percent)
         self._last_percent = overall_percent
         self.progress.update("processing", message, overall_percent, 100)
+
+    def _poll_substage_progress(self):
+        """Read the active sub-operation's progress file and forward to pipeline."""
+        if not self._active_stage:
+            return
+        stage_name, viewport_name = self._active_stage
+        sub_file = PROGRESS_DIR / f"{viewport_name}_{stage_name}_progress.json"
+        if not sub_file.exists():
+            return
+        try:
+            with open(sub_file) as f:
+                sub_data = json.load(f)
+            if sub_data.get('status') in ('complete', 'error'):
+                return
+            sub_percent = sub_data.get('percent', 0)
+            sub_message = sub_data.get('message', '')
+            if sub_percent > 0:
+                self.update_progress(stage_name, sub_percent, sub_message)
+        except (ValueError, IOError, OSError):
+            pass
 
     def _stream_pipe(self, pipe, label, lines_out):
         """Read lines from a pipe, log them, and collect into lines_out."""
@@ -162,6 +184,9 @@ class PipelineRunner:
 
             start_time = time.time()
             while not done_event.wait(timeout=1.0):
+                # Forward sub-operation progress to pipeline
+                self._poll_substage_progress()
+
                 # Check if cancelled
                 if self.viewport_name and is_pipeline_cancelled(self.viewport_name):
                     try:
@@ -563,7 +588,9 @@ class PipelineRunner:
         # Stage 1: Download embeddings (all years in parallel)
         # This single call downloads all requested years in parallel
         self.update_progress('download', 0, "Downloading embeddings...")
+        self._active_stage = ('download', viewport_name)
         success, error = self.stage_1_download_embeddings(viewport_name, years_str or "")
+        self._active_stage = None
         if not success:
             self.progress.error(f"Download failed: {error}")
             return False, error
@@ -575,7 +602,9 @@ class PipelineRunner:
         if check_cancelled():
             return False, "Cancelled by user"
         self.update_progress('rgb', 0, "Creating RGB visualizations...")
+        self._active_stage = ('rgb', viewport_name)
         success, error = self.stage_2_create_rgb(viewport_name)
+        self._active_stage = None
         if not success:
             self.progress.error(f"RGB creation failed: {error}")
             return False, error
@@ -588,7 +617,9 @@ class PipelineRunner:
         if check_cancelled():
             return False, "Cancelled by user"
         self.update_progress('pyramids', 0, "Creating tile pyramids...")
+        self._active_stage = ('pyramids', viewport_name)
         success, error = self.stage_3_create_pyramids(viewport_name)
+        self._active_stage = None
         if not success:
             self.progress.error(f"Pyramid creation failed: {error}")
             return False, error
@@ -601,7 +632,9 @@ class PipelineRunner:
         if check_cancelled():
             return False, "Cancelled by user"
         self.update_progress('faiss', 0, "Building FAISS index...")
+        self._active_stage = ('faiss', viewport_name)
         success, error = self.stage_4_create_faiss(viewport_name)
+        self._active_stage = None
         if not success:
             self.progress.error(f"FAISS creation failed: {error}")
             return False, error
@@ -614,7 +647,9 @@ class PipelineRunner:
         if check_cancelled():
             return False, "Cancelled by user"
         self.update_progress('pca', 0, "Computing PCA for visualization...")
+        self._active_stage = ('pca', viewport_name)
         success, error = self.stage_4b_compute_pca(viewport_name)
+        self._active_stage = None
         if check_cancelled():
             return False, "Cancelled by user"
         self.update_progress('pca', 100, "PCA ready")
@@ -638,7 +673,9 @@ class PipelineRunner:
                         logger.info(f"[PIPELINE] Auto-selected year {effective_umap_year} for UMAP")
             if effective_umap_year:
                 self.update_progress('umap', 0, "Computing UMAP projection...")
+                self._active_stage = ('umap', viewport_name)
                 success, error = self.stage_5_compute_umap(viewport_name, effective_umap_year)
+                self._active_stage = None
                 self.update_progress('umap', 100, "UMAP complete")
             else:
                 logger.warning(f"[PIPELINE] ⚠️  Stage 5 skipped - no FAISS data found for UMAP")

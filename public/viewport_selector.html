@@ -1575,59 +1575,44 @@
                 message: 'Checking progress...'
             });
 
-            // Poll every 2 seconds
+            // Poll pipeline progress every 2 seconds.
+            // Progress bar is driven solely by the pipeline percent (single source
+            // of truth).  The is-ready check only controls viewer button / status
+            // display — it does NOT set the bar to 100%.
             activeProgressPollInterval = setInterval(async () => {
                 try {
-                    // Check if ready
-                    const readyResponse = await fetch(`/api/viewports/${viewportName}/is-ready`);
-                    const readyResult = await readyResponse.json();
+                    const progressResponse = await fetch(`/api/operations/progress/${viewportName}_pipeline`);
+                    const progress = await progressResponse.json();
 
-                    if (readyResult.ready) {
-                        // Viewport is ready - stop polling and update UI
-                        updateSidebarProgress(viewportName, {
-                            percent: 100,
-                            status: 'complete',
-                            message: 'Ready to view!'
-                        });
-                        clearInterval(activeProgressPollInterval);
-                        activeProgressPollInterval = null;
-                        activeProgressViewport = null;
+                    if (progress.success && progress.status !== 'not_started') {
+                        updateSidebarProgress(viewportName, progress);
 
-                        // Update the status display
-                        const statusEl = document.getElementById('dataStatusMessage');
-                        const statusText = document.getElementById('dataStatusText');
-                        statusEl.style.background = '#e8f5e9';
-                        statusEl.style.color = '#2e7d32';
-                        statusText.textContent = readyResult.message;
+                        // Pipeline finished (complete or error) — stop polling
+                        if (progress.status === 'complete') {
+                            clearInterval(activeProgressPollInterval);
+                            activeProgressPollInterval = null;
+                            activeProgressViewport = null;
 
-                        // Enable viewer button
-                        const viewerBtn = document.getElementById('quickViewerBtn');
-                        viewerBtn.disabled = false;
-                        viewerBtn.style.opacity = '1';
-                        viewerBtn.style.cursor = 'pointer';
-                        return;
-                    }
+                            // Update status display
+                            const statusEl = document.getElementById('dataStatusMessage');
+                            const statusText = document.getElementById('dataStatusText');
+                            statusEl.style.background = '#e8f5e9';
+                            statusEl.style.color = '#2e7d32';
+                            statusText.textContent = 'Ready to view!';
 
-                    // Poll pipeline progress
-                    try {
-                        const progressResponse = await fetch(`/api/operations/progress/${viewportName}_pipeline`);
-                        const progress = await progressResponse.json();
-
-                        if (progress.success && progress.status !== 'not_started') {
-                            updateSidebarProgress(viewportName, progress);
-                        } else {
-                            updateSidebarProgress(viewportName, {
-                                percent: 0,
-                                status: 'processing',
-                                message: readyResult.message
-                            });
+                            // Enable viewer button
+                            const viewerBtn = document.getElementById('quickViewerBtn');
+                            viewerBtn.disabled = false;
+                            viewerBtn.style.opacity = '1';
+                            viewerBtn.style.cursor = 'pointer';
+                            return;
                         }
-                    } catch (progressError) {
-                        updateSidebarProgress(viewportName, {
-                            percent: 0,
-                            status: 'processing',
-                            message: readyResult.message
-                        });
+                        if (progress.status === 'error') {
+                            clearInterval(activeProgressPollInterval);
+                            activeProgressPollInterval = null;
+                            activeProgressViewport = null;
+                            return;
+                        }
                     }
                 } catch (error) {
                     console.error('Error polling progress:', error);
@@ -1961,25 +1946,8 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             return new Promise((resolve) => {
                 const pollInterval = setInterval(async () => {
                     try {
-                        // Check if ready
-                        const readyResponse = await fetch(`/api/viewports/${viewportName}/is-ready`);
-                        const readyResult = await readyResponse.json();
-
-                        console.log(`[WAIT] ${viewportName}: ${readyResult.message} (ready: ${readyResult.ready})`);
-
-                        if (readyResult.ready) {
-                            console.log(`[WAIT] ✓ ${viewportName} is ready!`);
-                            updateSidebarProgress(viewportName, {
-                                percent: 100,
-                                status: 'complete',
-                                message: 'Ready to view!'
-                            });
-                            clearInterval(pollInterval);
-                            resolve(true);
-                            return;
-                        }
-
-                        // Poll unified pipeline progress (covers all stages: download → RGB → pyramids → FAISS → UMAP)
+                        // Poll pipeline progress — this is the single source of truth
+                        // for the progress bar.
                         try {
                             const progressResponse = await fetch(`/api/operations/progress/${viewportName}_pipeline`);
                             const progress = await progressResponse.json();
@@ -1988,28 +1956,47 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
                                 updateSidebarProgress(viewportName, progress);
                                 console.log(`[PROGRESS] ${viewportName}: ${progress.percent}% - ${progress.message}`);
 
-                                // Stop polling if pipeline errored
+                                // Pipeline complete — resolve immediately
+                                if (progress.status === 'complete') {
+                                    console.log(`[WAIT] ✓ ${viewportName} pipeline complete!`);
+                                    clearInterval(pollInterval);
+                                    resolve(true);
+                                    return;
+                                }
+
+                                // Pipeline errored — stop
                                 if (progress.status === 'error') {
                                     console.log(`[WAIT] ✗ Pipeline error for ${viewportName}: ${progress.message}`);
                                     clearInterval(pollInterval);
                                     resolve(false);
                                     return;
                                 }
-                            } else {
-                                // No pipeline progress yet, show is-ready message
-                                updateSidebarProgress(viewportName, {
-                                    percent: 0,
-                                    status: 'starting',
-                                    message: readyResult.message
-                                });
                             }
                         } catch (progressError) {
-                            // Progress endpoint not available, just use is-ready message
-                            updateSidebarProgress(viewportName, {
-                                percent: 0,
-                                status: 'processing',
-                                message: readyResult.message
-                            });
+                            // Progress endpoint not available yet — fall through to is-ready check
+                        }
+
+                        // Also check is-ready as a fallback (handles cases where
+                        // pipeline completed but progress file was cleaned up)
+                        try {
+                            const readyResponse = await fetch(`/api/viewports/${viewportName}/is-ready`);
+                            const readyResult = await readyResponse.json();
+                            if (readyResult.ready) {
+                                console.log(`[WAIT] ✓ ${viewportName} is ready (via is-ready check)`);
+                                // Only set 100% if pipeline progress isn't actively reporting
+                                const pResp = await fetch(`/api/operations/progress/${viewportName}_pipeline`);
+                                const pData = await pResp.json();
+                                if (!pData.success || pData.status === 'complete' || pData.status === 'not_started') {
+                                    updateSidebarProgress(viewportName, {
+                                        percent: 100, status: 'complete', message: 'Ready to view!'
+                                    });
+                                }
+                                clearInterval(pollInterval);
+                                resolve(true);
+                                return;
+                            }
+                        } catch (e) {
+                            // is-ready not available — keep polling
                         }
 
                         // Check timeout
