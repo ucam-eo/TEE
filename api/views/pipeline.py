@@ -1,19 +1,14 @@
-"""Pipeline / download endpoints - mechanical translation from Flask."""
+"""Pipeline endpoints — progress reporting and cancellation."""
 
 import re
 import json
 import glob as glob_module
 import logging
-import uuid
-import threading
-import subprocess
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
 
 from django.http import JsonResponse
 
 from lib.viewport_utils import (
-    get_active_viewport,
     validate_viewport_name,
     read_viewport_file,
     get_active_viewport_name,
@@ -23,291 +18,11 @@ from lib.pipeline import cancel_pipeline
 from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, PROGRESS_DIR, VIEWPORTS_DIR
 from api.helpers import (
     FAISS_INDICES_DIR,
-    run_script,
     cleanup_viewport_embeddings,
 )
 from api.tasks import tasks, tasks_lock
 
 logger = logging.getLogger(__name__)
-
-
-def _run_download_process(task_id):
-    """Background task to run downloads and processing in parallel."""
-    import rasterio
-
-    def update_progress(progress, stage):
-        with tasks_lock:
-            if task_id in tasks:
-                tasks[task_id]['progress'] = progress
-                tasks[task_id]['stage'] = stage
-
-    try:
-        update_progress(5, "Checking for existing pyramid data...")
-
-        viewport = get_active_viewport()
-        viewport_name = viewport['viewport_id']
-        bounds = viewport['bounds']
-        BOUNDS_TOLERANCE = 0.0001
-
-        pyramids_dir = PYRAMIDS_DIR / '2024'
-        pyramid_metadata = pyramids_dir / 'pyramid_metadata.json'
-
-        if pyramid_metadata.exists():
-            try:
-                with open(pyramid_metadata) as f:
-                    metadata = json.load(f)
-                    cached_bounds = metadata.get('bounds', {})
-
-                    if (abs(cached_bounds.get('minLon', 0) - bounds['minLon']) < BOUNDS_TOLERANCE and
-                        abs(cached_bounds.get('minLat', 0) - bounds['minLat']) < BOUNDS_TOLERANCE and
-                        abs(cached_bounds.get('maxLon', 0) - bounds['maxLon']) < BOUNDS_TOLERANCE and
-                        abs(cached_bounds.get('maxLat', 0) - bounds['maxLat']) < BOUNDS_TOLERANCE):
-
-                        logger.info(f"Pyramid data already exists for viewport - skipping downloads")
-                        update_progress(100, "Pyramid data already cached!")
-
-                        with tasks_lock:
-                            if task_id in tasks:
-                                tasks[task_id]['completed'] = True
-                        return
-            except Exception as e:
-                logger.warning(f"Could not read pyramid metadata: {e}")
-
-        update_progress(8, "Checking for existing mosaic files...")
-
-        embeddings_mosaic = MOSAICS_DIR / f'{viewport_name}_embeddings_2024.tif'
-
-        skip_downloads = False
-        if embeddings_mosaic.exists():
-            try:
-                with rasterio.open(embeddings_mosaic) as src:
-                    cached_bounds = src.bounds
-
-                    viewport_contained = (
-                        cached_bounds.left <= bounds['minLon'] + BOUNDS_TOLERANCE and
-                        cached_bounds.bottom <= bounds['minLat'] + BOUNDS_TOLERANCE and
-                        cached_bounds.right >= bounds['maxLon'] - BOUNDS_TOLERANCE and
-                        cached_bounds.top >= bounds['maxLat'] - BOUNDS_TOLERANCE
-                    )
-
-                    if viewport_contained:
-                        logger.info(f"Embeddings mosaic already exists and contains viewport - skipping downloads")
-                        skip_downloads = True
-                        update_progress(45, "Embeddings mosaic found - skipping downloads, creating pyramids...")
-            except Exception as e:
-                logger.warning(f"Could not check mosaic bounds: {e}")
-
-        if not skip_downloads:
-            update_progress(5, "Downloading TESSERA embeddings...")
-
-            executor = ThreadPoolExecutor(max_workers=1)
-
-            def download_embeddings():
-                try:
-                    update_progress(10, "Downloading embeddings_2024.tif (TESSERA)...")
-                    result = run_script('download_embeddings.py', timeout=600)
-                    if result.returncode == 0:
-                        update_progress(30, "Embeddings downloaded")
-                    return result.returncode == 0
-                except Exception as e:
-                    logger.error(f"Embeddings download error: {e}")
-                    update_progress(30, "Embeddings download failed")
-                    return False
-
-            update_progress(10, "Starting embeddings download...")
-            embeddings_future = executor.submit(download_embeddings)
-            embeddings_ok = embeddings_future.result()
-
-            if not embeddings_ok:
-                raise Exception("Embeddings download failed")
-            update_progress(50, "Downloads complete. Creating pyramids...")
-
-        update_progress(55, "Creating pyramids and FAISS index in parallel...")
-
-        executor = ThreadPoolExecutor(max_workers=2)
-
-        def create_pyramids():
-            try:
-                update_progress(60, "Creating pyramid tiles...")
-                result = run_script('create_pyramids.py', timeout=1200)
-                if result.returncode != 0:
-                    logger.warning(f"Pyramid creation returned non-zero: {result.stderr}")
-                return result.returncode == 0
-            except Exception as e:
-                logger.error(f"Pyramid creation error: {e}")
-                return False
-
-        def create_faiss_index():
-            try:
-                faiss_dir = FAISS_INDICES_DIR / viewport_name
-                metadata_file = faiss_dir / 'metadata.json'
-
-                if faiss_dir.exists() and metadata_file.exists():
-                    try:
-                        with open(metadata_file) as f:
-                            metadata = json.load(f)
-                            cached_bounds = metadata.get('viewport_bounds', [])
-
-                            bounds_list = [bounds['minLon'], bounds['minLat'],
-                                         bounds['maxLon'], bounds['maxLat']]
-                            BOUNDS_TOLERANCE_LOCAL = 0.0001
-
-                            if (len(cached_bounds) == 4 and
-                                abs(cached_bounds[0] - bounds_list[0]) < BOUNDS_TOLERANCE_LOCAL and
-                                abs(cached_bounds[1] - bounds_list[1]) < BOUNDS_TOLERANCE_LOCAL and
-                                abs(cached_bounds[2] - bounds_list[2]) < BOUNDS_TOLERANCE_LOCAL and
-                                abs(cached_bounds[3] - bounds_list[3]) < BOUNDS_TOLERANCE_LOCAL):
-
-                                logger.info(f"FAISS index already exists for viewport - skipping creation")
-                                return True
-                    except Exception as e:
-                        logger.warning(f"Could not validate FAISS metadata: {e}")
-
-                update_progress(65, "Creating FAISS index for similarity search...")
-                result = run_script('create_faiss_index.py', timeout=600)
-                if result.returncode == 0:
-                    update_progress(75, "FAISS index created")
-                else:
-                    logger.warning(f"FAISS index creation returned non-zero: {result.stderr}")
-                    update_progress(75, "FAISS index creation skipped")
-                return True
-            except Exception as e:
-                logger.error(f"FAISS index creation error: {e}")
-                logger.warning("Continuing without FAISS index (non-blocking)")
-                return True
-
-        pyramids_future = executor.submit(create_pyramids)
-        faiss_future = executor.submit(create_faiss_index)
-
-        pyramids_ok = pyramids_future.result()
-        faiss_ok = faiss_future.result()
-
-        if not pyramids_ok:
-            logger.warning("Pyramid creation may have failed")
-
-        update_progress(90, "Finalizing...")
-        update_progress(100, "Complete! All data ready")
-
-        with tasks_lock:
-            if task_id in tasks:
-                tasks[task_id]['completed'] = True
-
-        logger.info(f"Download process {task_id} completed successfully")
-
-    except Exception as e:
-        logger.error(f"Download process {task_id} error: {e}")
-        with tasks_lock:
-            if task_id in tasks:
-                tasks[task_id]['error'] = str(e)
-                tasks[task_id]['completed'] = True
-
-
-def download_embeddings(request):
-    """Download embeddings for the current viewport."""
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-    try:
-        viewport = get_active_viewport()
-        logger.info(f"Downloading embeddings for viewport: {viewport['viewport_id']}")
-
-        result = run_script('download_embeddings.py', timeout=600)
-
-        if result.returncode == 0:
-            logger.info("Embeddings download completed successfully")
-            return JsonResponse({
-                'success': True,
-                'message': 'Embeddings downloaded successfully',
-                'viewport': viewport['viewport_id']
-            })
-        else:
-            error_msg = result.stderr or result.stdout
-            logger.error(f"Embeddings download failed: {error_msg}")
-            return JsonResponse({
-                'success': False,
-                'error': f'Download failed: {error_msg}'
-            }, status=400)
-
-    except subprocess.TimeoutExpired:
-        logger.error("Embeddings download timeout")
-        return JsonResponse({'success': False, 'error': 'Download timeout'}, status=408)
-    except Exception as e:
-        logger.error(f"Error downloading embeddings: {e}")
-        return JsonResponse({'success': False, 'error': str(e)}, status=400)
-
-
-def downloads_process(request):
-    """Start parallel downloads and processing."""
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-    try:
-        task_id = str(uuid.uuid4())
-
-        with tasks_lock:
-            tasks[task_id] = {
-                'progress': 0,
-                'stage': 'Initializing...',
-                'completed': False,
-                'error': None
-            }
-
-        thread = threading.Thread(target=_run_download_process, args=(task_id,))
-        thread.daemon = True
-        thread.start()
-
-        return JsonResponse({
-            'success': True,
-            'task_id': task_id,
-            'message': 'Download process started'
-        })
-
-    except Exception as e:
-        logger.error(f"Error starting download process: {e}")
-        return JsonResponse({'success': False, 'error': str(e)}, status=400)
-
-
-def downloads_progress(request, task_id):
-    """Get progress of a download task."""
-    try:
-        with tasks_lock:
-            if task_id not in tasks:
-                return JsonResponse({'success': False, 'error': 'Task not found'}, status=404)
-            task = tasks[task_id]
-
-        response = {
-            'success': True,
-            'progress': task['progress'],
-            'stage': task['stage'],
-            'completed': task['completed'],
-            'error': task['error']
-        }
-
-        try:
-            viewport = get_active_viewport()
-            viewport_name = viewport['viewport_id']
-
-            progress_file = PROGRESS_DIR / f"{viewport_name}_pipeline_progress.json"
-            if progress_file.exists():
-                try:
-                    with open(progress_file, 'r') as f:
-                        op_progress = json.load(f)
-                        if op_progress.get('message'):
-                            response['detailed_message'] = op_progress['message']
-                        if op_progress.get('current_file'):
-                            response['current_file'] = op_progress['current_file']
-                        if op_progress.get('current_value'):
-                            response['current_value'] = op_progress['current_value']
-                        if op_progress.get('total_value'):
-                            response['total_value'] = op_progress['total_value']
-                except (json.JSONDecodeError, IOError):
-                    pass
-        except Exception:
-            pass
-
-        return JsonResponse(response)
-
-    except Exception as e:
-        logger.error(f"Error getting progress: {e}")
-        return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 
 def operations_progress(request, operation_id):
@@ -329,6 +44,8 @@ def operations_progress(request, operation_id):
             progress_data = json.load(f)
 
         # For pipeline operations, merge detail from the active sub-operation
+        # Keep the pipeline's overall percent (computed from stage ranges) but
+        # pull in granular detail (current_file, message, bytes) from the sub-op.
         if operation_id.endswith('_pipeline'):
             viewport_name = operation_id.rsplit('_pipeline', 1)[0]
             for sub_op in ('download', 'pyramids', 'faiss', 'umap', 'pca', 'rgb'):
@@ -338,7 +55,9 @@ def operations_progress(request, operation_id):
                         with open(sub_file, 'r') as f:
                             sub_data = json.load(f)
                         if sub_data.get('status') not in ('complete', 'error'):
-                            for key in ('current_file', 'current_value', 'total_value', 'percent'):
+                            # Merge detail fields but NOT percent — pipeline
+                            # percent is the authoritative overall progress
+                            for key in ('current_file', 'current_value', 'total_value'):
                                 if sub_data.get(key):
                                     progress_data[key] = sub_data[key]
                             if sub_data.get('message'):
