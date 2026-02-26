@@ -545,9 +545,25 @@ def is_ready(request, viewport_name):
 
         is_ready_flag = has_pyramids
 
+        # Read config to find requested years
+        years_requested = []
+        config_file = VIEWPORTS_DIR / f"{viewport_name}_config.json"
+        if config_file.exists():
+            try:
+                with open(config_file) as f:
+                    config = json.load(f)
+                    years_requested = [str(y) for y in config.get('years', [])]
+            except Exception:
+                pass
+        years_processing = sorted(set(years_requested) - set(years_available))
+
         if is_ready_flag:
-            year_count = len(years_available)
-            message = f"Ready to view ({year_count} year{'s' if year_count != 1 else ''})"
+            available_str = ', '.join(sorted(years_available))
+            if years_processing:
+                processing_str = ', '.join(years_processing)
+                message = f"Ready ({available_str}) — processing: {processing_str}"
+            else:
+                message = f"Ready to view ({available_str})"
         else:
             operation_id = f"{viewport_name}_full_pipeline"
             pipeline_running = False
@@ -560,16 +576,7 @@ def is_ready(request, viewport_name):
 
             if not pipeline_running and not pipeline_failed:
                 logger.info(f"[is-ready] Pipeline not running for '{viewport_name}' but data incomplete - re-triggering pipeline")
-                config_file = VIEWPORTS_DIR / f"{viewport_name}_config.json"
-                saved_years = None
-                if config_file.exists():
-                    try:
-                        with open(config_file) as f:
-                            config = json.load(f)
-                            saved_years = config.get('years')
-                            logger.info(f"[is-ready] Loaded saved years from config: {saved_years}")
-                    except Exception as e:
-                        logger.warning(f"[is-ready] Could not read config file: {e}")
+                saved_years = [int(y) for y in years_requested] if years_requested else None
                 trigger_data_download_and_processing(viewport_name, years=saved_years)
                 message = "Restarting pipeline..."
             elif not has_embeddings:
@@ -585,7 +592,8 @@ def is_ready(request, viewport_name):
             'has_faiss': has_faiss,
             'has_pca': has_pca,
             'has_umap': has_umap,
-            'years_available': sorted(years_available)
+            'years_available': sorted(years_available),
+            'years_processing': years_processing,
         })
 
     except Exception as e:
