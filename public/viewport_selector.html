@@ -1819,7 +1819,7 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             list.innerHTML = viewports.map(vp => {
                 const isActive = vp.is_active ? 'active' : '';
                 const bounds = vp.bounds;
-                const coordsText = `${bounds.minLon.toFixed(4)}°, ${bounds.minLat.toFixed(4)}°`;
+                const coordsText = `${bounds.minLat.toFixed(4)}°, ${bounds.minLon.toFixed(4)}°`;
                 const dataSize = vp.data_size_mb || 0;
                 const sizeText = dataSize > 1000
                     ? `${(dataSize / 1024).toFixed(1)} GB`
