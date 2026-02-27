@@ -103,7 +103,7 @@
     <li>The viewer opens automatically when processing completes</li>
 </ol>
 
-<p><strong>Deleting a viewport:</strong> Click the trash icon next to any viewport in the list. All associated data (mosaics, pyramids, FAISS indices) is cleaned up automatically.</p>
+<p><strong>Deleting a viewport:</strong> Click the trash icon next to any viewport in the list. All associated data (mosaics, pyramids, vectors) is cleaned up automatically.</p>
 
 <h2>The Viewer</h2>
 
@@ -149,7 +149,7 @@
 </ol>
 
 <div class="note">
-    The first time you run a search for a viewport+year, FAISS data (~20&ndash;50MB) is downloaded and cached in your browser's IndexedDB. Subsequent searches are instant.
+    The first time you run a search for a viewport+year, Vector data (~20&ndash;50MB) is downloaded and cached in your browser's IndexedDB. Subsequent searches are instant.
 </div>
 
 <h3>Single-Click</h3>
@@ -176,7 +176,7 @@
 <ul>
     <li>A bar chart shows pixel counts per year</li>
     <li>A percentage change summary compares the first and last years</li>
-    <li>Each year's FAISS data is loaded automatically from cache (or downloaded in background)</li>
+    <li>Each year's vector data is loaded automatically from cache (or downloaded in background)</li>
 </ul>
 
 <h3>Importing and Exporting Labels</h3>
@@ -238,7 +238,7 @@
 
 <ul>
     <li><strong>Processing time</strong> is roughly the same whether you select 1 year or 8 years &mdash; all years download and process in parallel</li>
-    <li><strong>Features appear incrementally</strong> &mdash; the viewer becomes usable as soon as pyramids are built, even before FAISS indexing completes</li>
+    <li><strong>Features appear incrementally</strong> &mdash; the viewer becomes usable as soon as pyramids are built, even before vector extraction completes</li>
     <li><strong>Privacy</strong> &mdash; all similarity search and labeling runs locally in your browser. Only tile images are fetched from the server</li>
     <li><strong>Storage</strong> &mdash; each viewport uses ~5GB depending on the number of years processed</li>
 </ul>

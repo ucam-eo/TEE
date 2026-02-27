@@ -4,7 +4,7 @@ from .views.viewports import (list_viewports, current_viewport, switch_viewport,
     create_viewport, delete_viewport, add_years, available_years, is_ready)
 from .views.pipeline import (
     operations_progress, pipeline_status, cancel_processing)
-from .views.faiss_data import serve_faiss_data
+from .views.vector_data import serve_vector_data
 from .views.compute import compute_umap, compute_pca, umap_status, pca_status, distance_heatmap
 from .views.config import get_config
 
@@ -27,8 +27,8 @@ urlpatterns = [
     # Pipeline
     path('operations/progress/<str:operation_id>', operations_progress),
     path('operations/pipeline-status/<str:viewport_name>', pipeline_status),
-    # FAISS data
-    path('faiss-data/<str:viewport>/<str:year>/<str:filename>', serve_faiss_data),
+    # Vector data
+    path('vector-data/<str:viewport>/<str:year>/<str:filename>', serve_vector_data),
     # Compute
     path('viewports/<str:viewport_name>/compute-umap', compute_umap),
     path('viewports/<str:viewport_name>/compute-pca', compute_pca),

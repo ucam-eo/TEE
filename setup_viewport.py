@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Complete viewport data processing workflow using shared pipeline.
-Download embeddings → Create RGB → Create pyramids → Create FAISS → Compute UMAP
+Download embeddings → Create RGB → Create pyramids → Extract Vectors → Compute UMAP
 
 Usage:
     python3 setup_viewport.py --years 2022,2023,2024 --umap-year 2024
@@ -29,7 +29,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Complete viewport setup: download embeddings → RGB → pyramids → FAISS → UMAP'
+        description='Complete viewport setup: download embeddings → RGB → pyramids → vectors → UMAP'
     )
     parser.add_argument(
         '--years',
@@ -83,7 +83,7 @@ def main():
     logger.info(f"   Viewport: {viewport_name}")
     logger.info(f"   Years downloaded: {args.years}")
     logger.info(f"   Pyramids: Created for web viewing")
-    logger.info(f"   FAISS indexes: Created for each year")
+    logger.info(f"   Vectors: Extracted for each year")
     logger.info(f"   UMAP: Computed for {umap_year}")
     logger.info(f"\n🚀 Next steps:")
     logger.info(f"   1. Run: bash restart.sh")

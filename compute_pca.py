@@ -18,12 +18,10 @@ import logging
 sys.path.insert(0, str(Path(__file__).parent))
 
 from lib.progress_tracker import ProgressTracker
-from lib.config import DATA_DIR, FAISS_DIR
+from lib.config import DATA_DIR, VECTORS_DIR
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
-
-FAISS_INDICES_DIR = FAISS_DIR
 
 
 def compute_pca(viewport_name, year):
@@ -39,16 +37,16 @@ def compute_pca(viewport_name, year):
         progress.error("scikit-learn not installed")
         return False
 
-    faiss_dir = FAISS_INDICES_DIR / viewport_name / str(year)
-    embeddings_file = faiss_dir / "all_embeddings.npy"
+    vector_dir = VECTORS_DIR / viewport_name / str(year)
+    embeddings_file = vector_dir / "all_embeddings.npy"
 
-    # PCA needs embeddings (created by FAISS indexing stage)
+    # PCA needs embeddings (created by vector extraction stage)
     if not embeddings_file.exists():
         logger.error(f"❌ Embeddings not available yet: {embeddings_file}")
-        progress.error(f"Embeddings not available yet (FAISS indexing may still be in progress)")
+        progress.error(f"Embeddings not available yet (vector extraction may still be in progress)")
         return False
 
-    pca_file = faiss_dir / "pca_coords.npy"
+    pca_file = vector_dir / "pca_coords.npy"
     if pca_file.exists():
         logger.info(f"✓ Already computed: {pca_file}")
         progress.complete(f"PCA already exists for {viewport_name}/{year}")

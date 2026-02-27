@@ -11,20 +11,21 @@ from django.http import JsonResponse
 
 from lib.viewport_utils import validate_viewport_name
 from lib.config import PROGRESS_DIR, MOSAICS_DIR
-from api.helpers import FAISS_INDICES_DIR, VENV_PYTHON, PROJECT_ROOT, parse_json_body
+from lib.config import VECTORS_DIR
+from api.helpers import VENV_PYTHON, PROJECT_ROOT, parse_json_body
 
 logger = logging.getLogger(__name__)
 
 
-def _load_projection(faiss_dir, coords_filename):
+def _load_projection(vector_dir, coords_filename):
     """Load projection coordinates and compute geo coords.
 
     Returns (coords, lons, lats) on success, or raises on failure.
     """
-    coords = np.load(str(faiss_dir / coords_filename))
-    pixel_coords = np.load(str(faiss_dir / 'pixel_coords.npy'))
+    coords = np.load(str(vector_dir / coords_filename))
+    pixel_coords = np.load(str(vector_dir / 'pixel_coords.npy'))
 
-    with open(faiss_dir / 'metadata.json') as f:
+    with open(vector_dir / 'metadata.json') as f:
         metadata = json.load(f)
 
     gt = metadata['geotransform']
@@ -65,14 +66,14 @@ def _compute_projection(request, viewport_name, coords_filename, label):
             return err
         year = data.get('year', 2024)
 
-        faiss_dir = FAISS_INDICES_DIR / viewport_name / str(year)
-        if not faiss_dir.exists():
+        vector_dir = VECTORS_DIR / viewport_name / str(year)
+        if not vector_dir.exists():
             return JsonResponse({
                 'success': False,
-                'error': f'FAISS index not found for {viewport_name} ({year})'
+                'error': f'Vector data not found for {viewport_name} ({year})'
             }, status=404)
 
-        coords_file = faiss_dir / coords_filename
+        coords_file = vector_dir / coords_filename
         if not coords_file.exists():
             return JsonResponse({
                 'success': False,
@@ -80,7 +81,7 @@ def _compute_projection(request, viewport_name, coords_filename, label):
             }, status=404)
 
         try:
-            coords, lons, lats = _load_projection(faiss_dir, coords_filename)
+            coords, lons, lats = _load_projection(vector_dir, coords_filename)
         except Exception as e:
             logger.error(f"[{label}] Error loading data: {e}")
             return JsonResponse({
@@ -159,8 +160,8 @@ def _projection_status(request, viewport_name, coords_filename, label):
         return JsonResponse({'error': str(e)}, status=400)
     try:
         year = request.GET.get('year', '2024')
-        faiss_dir = FAISS_INDICES_DIR / viewport_name / str(year)
-        coords_file = faiss_dir / coords_filename
+        vector_dir = VECTORS_DIR / viewport_name / str(year)
+        coords_file = vector_dir / coords_filename
 
         if coords_file.exists():
             return JsonResponse({'exists': True, 'computing': False})
@@ -174,18 +175,18 @@ def _projection_status(request, viewport_name, coords_filename, label):
             return JsonResponse({'exists': False, 'computing': True, 'operation_id': sub_operation_id})
 
         # If embeddings exist, trigger computation immediately — don't wait for pipeline
-        embeddings_file = faiss_dir / 'all_embeddings.npy'
+        embeddings_file = vector_dir / 'all_embeddings.npy'
         if embeddings_file.exists():
             script = 'compute_pca.py' if sub_label == 'pca' else 'compute_umap.py'
             operation_id = _trigger_computation(viewport_name, year, script)
             return JsonResponse({'exists': False, 'computing': True, 'operation_id': operation_id})
 
-        # Embeddings don't exist yet — waiting for FAISS stage
+        # Embeddings don't exist yet — waiting for vectors stage
         return JsonResponse({
             'exists': False,
             'computing': False,
             'waiting': True,
-            'message': f'Waiting for embeddings (FAISS indexing)...'
+            'message': f'Waiting for embeddings (vector extraction)...'
         })
 
     except Exception as e:
@@ -228,25 +229,25 @@ def distance_heatmap(request):
         start_time = time.time()
         logger.info(f"[HEATMAP] Computing distance between {year1} and {year2} for {viewport_id}...")
 
-        faiss_dir1 = FAISS_INDICES_DIR / viewport_id / str(year1)
-        faiss_dir2 = FAISS_INDICES_DIR / viewport_id / str(year2)
+        vector_dir1 = VECTORS_DIR / viewport_id / str(year1)
+        vector_dir2 = VECTORS_DIR / viewport_id / str(year2)
 
-        for faiss_dir in [faiss_dir1, faiss_dir2]:
-            if not faiss_dir.exists():
+        for vdir in [vector_dir1, vector_dir2]:
+            if not vdir.exists():
                 return JsonResponse({
                     'success': False,
-                    'error': f'FAISS index not found: {faiss_dir}'
+                    'error': f'Vector data not found: {vdir}'
                 }, status=404)
 
         try:
-            all_emb1 = np.load(str(faiss_dir1 / 'all_embeddings.npy'))
-            pixel_coords1 = np.load(str(faiss_dir1 / 'pixel_coords.npy'))
-            with open(faiss_dir1 / 'metadata.json') as f:
+            all_emb1 = np.load(str(vector_dir1 / 'all_embeddings.npy'))
+            pixel_coords1 = np.load(str(vector_dir1 / 'pixel_coords.npy'))
+            with open(vector_dir1 / 'metadata.json') as f:
                 metadata1 = json.load(f)
 
-            all_emb2 = np.load(str(faiss_dir2 / 'all_embeddings.npy'))
-            pixel_coords2 = np.load(str(faiss_dir2 / 'pixel_coords.npy'))
-            with open(faiss_dir2 / 'metadata.json') as f:
+            all_emb2 = np.load(str(vector_dir2 / 'all_embeddings.npy'))
+            pixel_coords2 = np.load(str(vector_dir2 / 'pixel_coords.npy'))
+            with open(vector_dir2 / 'metadata.json') as f:
                 metadata2 = json.load(f)
 
             load_time = time.time()
@@ -261,7 +262,7 @@ def distance_heatmap(request):
             lats2 = gt2['f'] + gt2['d'] * pixel_coords2[:, 0] + gt2['e'] * pixel_coords2[:, 1]
 
         except Exception as e:
-            logger.error(f"[HEATMAP] Error loading FAISS data: {e}", exc_info=True)
+            logger.error(f"[HEATMAP] Error loading vector data: {e}", exc_info=True)
             return JsonResponse({
                 'success': False,
                 'error': f'Error loading embeddings: {str(e)}'

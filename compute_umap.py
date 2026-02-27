@@ -15,12 +15,10 @@ import logging
 sys.path.insert(0, str(Path(__file__).parent))
 
 from lib.progress_tracker import ProgressTracker
-from lib.config import DATA_DIR, FAISS_DIR
+from lib.config import DATA_DIR, VECTORS_DIR
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
-
-FAISS_INDICES_DIR = FAISS_DIR
 
 
 def compute_umap(viewport_name, year):
@@ -36,20 +34,20 @@ def compute_umap(viewport_name, year):
         progress.error("UMAP not installed")
         return False
 
-    faiss_dir = FAISS_INDICES_DIR / viewport_name / str(year)
+    vector_dir = VECTORS_DIR / viewport_name / str(year)
 
-    if not faiss_dir.exists():
-        logger.error(f"❌ FAISS index not found: {faiss_dir}")
-        progress.error(f"FAISS index not found: {faiss_dir}")
+    if not vector_dir.exists():
+        logger.error(f"❌ Vector data not found: {vector_dir}")
+        progress.error(f"Vector data not found: {vector_dir}")
         return False
 
-    embeddings_file = faiss_dir / "all_embeddings.npy"
+    embeddings_file = vector_dir / "all_embeddings.npy"
     if not embeddings_file.exists():
         logger.error(f"❌ Embeddings not found: {embeddings_file}")
         progress.error(f"Embeddings not found: {embeddings_file}")
         return False
 
-    umap_file = faiss_dir / "umap_coords.npy"
+    umap_file = vector_dir / "umap_coords.npy"
     if umap_file.exists():
         logger.info(f"✓ Already computed: {umap_file}")
         progress.complete(f"UMAP already exists for {viewport_name}/{year}")

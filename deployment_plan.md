@@ -21,7 +21,7 @@ Internet (Port 443)
 | OS + Apache | ~350 MB | Ubuntu + reverse proxy |
 | Flask web server | ~120 MB | Single process, threaded |
 | Flask tile server | ~80 MB | Single process, stateless |
-| Pipeline subprocess | ~300 MB | Peak during UMAP; stages run sequentially |
+| Pipeline subprocess | ~300 MB | Peak during UMAP; stages run sequentially    |
 | **Total peak** | **~850 MB** | Safe for 2GB+ VM |
 
 ## Directory Layout
@@ -38,7 +38,7 @@ Internet (Port 443)
 /home/tee/data/             # Data (auto-created), owned by tee
   mosaics/
   pyramids/
-  faiss_indices/
+  vectors/
   embeddings/
   progress/
   passwd                    # Auth credentials
@@ -230,7 +230,7 @@ sudo ufw enable
 Flask's built-in threaded server is sufficient for TEE because:
 
 - **1-2 concurrent users** — this is a research tool, not a high-traffic service
-- **CPU-heavy work runs as subprocesses** — pipeline stages (download, FAISS, UMAP) are already memory-isolated via `subprocess.Popen`
+- **CPU-heavy work runs as subprocesses** — pipeline stages (download, vectors, UMAP) are already memory-isolated via `subprocess.Popen`
 - **Apache handles the hard parts** — TLS, HTTP/2, caching, compression
 - **Memory matters** — gunicorn with 4 workers uses ~800MB idle; Flask uses ~120MB
 - **No worker recycling** — gunicorn's `max_requests` can kill workers mid-pipeline

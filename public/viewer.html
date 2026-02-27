@@ -445,14 +445,14 @@
             <button id="help-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;">? Help</button>
         </div>
 
-        <!-- Similarity group (greyed out when FAISS not ready) -->
+        <!-- Similarity group (greyed out when vectors not ready) -->
         <div id="similarity-controls" class="toolbar-group" style="opacity: 0.4;">
             <label style="margin: 0; font-size: 13px;">Similarity:</label>
             <input type="range" id="similarity-threshold" min="0" max="35" value="12" style="width: 120px; cursor: pointer;" oninput="updateThresholdDisplay()" disabled />
             <span id="threshold-display" style="background: rgba(0,0,0,0.3); padding: 3px 7px; border-radius: 3px; font-size: 13px; min-width: 36px; text-align: center;">12.00</span>
         </div>
 
-        <!-- Label controls group (greyed out when FAISS not ready) -->
+        <!-- Label controls group (greyed out when vectors not ready) -->
         <div id="label-controls-bar" class="toolbar-group" style="opacity: 0.4;">
             <div style="color: white; background: #333; padding: 4px 8px; border-radius: 3px; font-weight: 600; font-size: 13px;">Labels: <span id="label-count">0</span></div>
             <button id="labels-toggle-btn" style="padding: 8px 12px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;" disabled>
@@ -744,20 +744,20 @@
         let heatmapCanvasLayer = null;        // Distance heatmap layer
         let explorerCanvasLayer2 = null;      // Explorer viz for Panel 6
 
-        // Local FAISS data for client-side similarity search
-        let faissLocal = null;  // {embeddings: Float32Array, coords: Int32Array, metadata: Object, pixelLookup: Map, numVectors: number, dim: number, viewport: string, year: string}
+        // Local vector data for client-side similarity search
+        let localVectors = null;  // {embeddings: Float32Array, coords: Int32Array, metadata: Object, pixelLookup: Map, numVectors: number, dim: number, viewport: string, year: string}
 
         // ===== DECLARATIVE PANEL DEPENDENCY SYSTEM =====
         // Single source of truth for viewport readiness, polled from /api/viewports/{name}/is-ready
         let viewportStatus = {
             has_embeddings: false,
             has_pyramids: false,
-            has_faiss: false,
+            has_vectors: false,
             has_pca: false,
             has_umap: false,
             years_available: [],
             // Client-side flags
-            faiss_downloaded: false,
+            vectors_downloaded: false,
             pca_loaded: false,
             umap_loaded: false
         };
@@ -825,26 +825,26 @@
                 satisfied: false
             },
             {
-                id: 'faiss-download',
-                test: (s) => s.has_faiss && !s.faiss_downloaded,
+                id: 'vectors-download',
+                test: (s) => s.has_vectors && !s.vectors_downloaded,
                 onReady: async (s) => {
                     const year = currentEmbeddingYear || s.years_available[0];
-                    console.log(`[DEP] faiss-download: downloading FAISS data for ${currentViewportName}/${year}`);
+                    console.log(`[DEP] vectors-download: downloading vector data for ${currentViewportName}/${year}`);
                     try {
-                        await downloadFaissData(currentViewportName, year);
-                        viewportStatus.faiss_downloaded = true;
+                        await downloadVectorData(currentViewportName, year);
+                        viewportStatus.vectors_downloaded = true;
                         evaluateDependencies();
                     } catch (e) {
-                        console.error('[DEP] faiss-download failed:', e);
+                        console.error('[DEP] vectors-download failed:', e);
                     }
                 },
                 satisfied: false
             },
             {
                 id: 'label-controls',
-                test: (s) => s.faiss_downloaded,
+                test: (s) => s.vectors_downloaded,
                 onReady: () => {
-                    console.log('[DEP] label-controls: FAISS ready, enabling controls');
+                    console.log('[DEP] label-controls: vectors ready, enabling controls');
                     document.getElementById('similarity-threshold').disabled = false;
                     document.getElementById('similarity-controls').style.opacity = '1';
                     document.getElementById('label-controls-bar').style.opacity = '1';
@@ -886,9 +886,9 @@
             },
             {
                 id: 'panel5-heatmap',
-                test: (s) => s.has_faiss && s.years_available.length >= 2,
+                test: (s) => s.has_vectors && s.years_available.length >= 2,
                 onReady: () => {
-                    console.log('[DEP] panel5-heatmap: FAISS ready, loading heatmap');
+                    console.log('[DEP] panel5-heatmap: vectors ready, loading heatmap');
                     loadHeatmap();
                 },
                 satisfied: false
@@ -899,7 +899,7 @@
         function hasStatusChanged(current, incoming) {
             return current.has_embeddings !== (incoming.has_embeddings || false) ||
                    current.has_pyramids !== (incoming.has_pyramids || false) ||
-                   current.has_faiss !== (incoming.has_faiss || false) ||
+                   current.has_vectors !== (incoming.has_vectors || false) ||
                    current.has_pca !== (incoming.has_pca || false) ||
                    current.has_umap !== (incoming.has_umap || false) ||
                    JSON.stringify(current.years_available) !== JSON.stringify(incoming.years_available || []);
@@ -949,7 +949,7 @@
                 // Update server-side flags (preserve client-side flags)
                 viewportStatus.has_embeddings = incoming.has_embeddings || false;
                 viewportStatus.has_pyramids = incoming.has_pyramids || false;
-                viewportStatus.has_faiss = incoming.has_faiss || false;
+                viewportStatus.has_vectors = incoming.has_vectors || false;
                 viewportStatus.has_pca = incoming.has_pca || false;
                 viewportStatus.has_umap = incoming.has_umap || false;
                 viewportStatus.years_available = incoming.years_available || [];
@@ -957,7 +957,7 @@
                 if (changed) {
                     console.log('[DEP] Status changed:', JSON.stringify({
                         pyramids: viewportStatus.has_pyramids,
-                        faiss: viewportStatus.has_faiss,
+                        vectors: viewportStatus.has_vectors,
                         pca: viewportStatus.has_pca,
                         umap: viewportStatus.has_umap,
                         years: viewportStatus.years_available
@@ -969,7 +969,7 @@
             }
 
             // Schedule next poll — fast while server still computing, slow when done
-            const serverBusy = !viewportStatus.has_pyramids || !viewportStatus.has_faiss || !viewportStatus.has_pca;
+            const serverBusy = !viewportStatus.has_pyramids || !viewportStatus.has_vectors || !viewportStatus.has_pca;
             const interval = serverBusy ? POLL_FAST : POLL_SLOW;
             pollTimerId = setTimeout(pollViewportStatus, interval);
         }
@@ -1053,16 +1053,16 @@
         let currentSatelliteSource = 'esri';
         let satelliteTileLayer = null;
 
-        // ===== IndexedDB Cache for FAISS Data =====
-        const FaissCache = {
-            DB_NAME: 'tee_faiss_cache',
-            STORE_NAME: 'faiss_data',
+        // ===== IndexedDB Cache for Vector Data =====
+        const VectorCache = {
+            DB_NAME: 'tee_vector_cache',
+            STORE_NAME: 'vector_data',
             _db: null,
 
             async open() {
                 if (this._db) return this._db;
                 return new Promise((resolve, reject) => {
-                    const req = indexedDB.open(this.DB_NAME, 3);
+                    const req = indexedDB.open(this.DB_NAME, 4);
                     req.onupgradeneeded = (e) => {
                         const db = req.result;
                         // Delete old store on upgrade to invalidate stale cache
@@ -1134,9 +1134,9 @@
             return {rawData, dtype, shape, fortranOrder};
         }
 
-        async function downloadFaissData(viewport, year) {
+        async function downloadVectorData(viewport, year) {
             // Check IndexedDB cache first
-            const cached = await FaissCache.get(viewport, year);
+            const cached = await VectorCache.get(viewport, year);
             if (cached) {
                 // Validate cached embeddings aren't all zeros (corrupt data)
                 let hasNonZero = false;
@@ -1144,13 +1144,13 @@
                     if (cached.embeddings[i] !== 0) { hasNonZero = true; break; }
                 }
                 if (hasNonZero) {
-                    console.log(`[FAISS-LOCAL] Cache hit for ${viewport}/${year}`);
+                    console.log(`[VECTORS] Cache hit for ${viewport}/${year}`);
                     const numVectors = cached.embeddings.length / 128;
                     const pixelLookup = new Map();
                     for (let i = 0; i < numVectors; i++) {
                         pixelLookup.set(`${cached.coords[i * 2]},${cached.coords[i * 2 + 1]}`, i);
                     }
-                    faissLocal = {
+                    localVectors = {
                         embeddings: cached.embeddings,
                         coords: cached.coords,
                         metadata: cached.metadata,
@@ -1160,14 +1160,14 @@
                         viewport,
                         year: String(year)
                     };
-                    return faissLocal;
+                    return localVectors;
                 } else {
-                    console.warn(`[FAISS-LOCAL] Cached data for ${viewport}/${year} is all zeros — purging stale cache`);
-                    await FaissCache.delete(viewport, year);
+                    console.warn(`[VECTORS] Cached data for ${viewport}/${year} is all zeros — purging stale cache`);
+                    await VectorCache.delete(viewport, year);
                 }
             }
 
-            console.log(`[FAISS-LOCAL] Downloading FAISS data for ${viewport}/${year}...`);
+            console.log(`[VECTORS] Downloading vector data for ${viewport}/${year}...`);
 
             // Show download progress
             const overlay = document.getElementById('progress-overlay');
@@ -1177,7 +1177,7 @@
             const percent = document.getElementById('progress-percent');
             const status = document.getElementById('progress-status');
             overlay.style.display = 'flex';
-            title.textContent = 'Downloading FAISS Data';
+            title.textContent = 'Downloading Vector Data';
             message.textContent = 'For local similarity search (one-time download)';
             status.textContent = 'Starting download...';
             bar.style.width = '0%';
@@ -1185,7 +1185,7 @@
 
             try {
                 // Fetch metadata first (small)
-                const metaResp = await fetch(`/api/faiss-data/${viewport}/${year}/metadata.json`);
+                const metaResp = await fetch(`/api/vector-data/${viewport}/${year}/metadata.json`);
                 if (!metaResp.ok) throw new Error(`metadata.json: ${metaResp.status}`);
                 const metadata = await metaResp.json();
                 status.textContent = 'Downloading pixel coordinates...';
@@ -1193,7 +1193,7 @@
                 percent.textContent = '5%';
 
                 // Fetch coords
-                const coordsResp = await fetch(`/api/faiss-data/${viewport}/${year}/pixel_coords.npy`);
+                const coordsResp = await fetch(`/api/vector-data/${viewport}/${year}/pixel_coords.npy`);
                 if (!coordsResp.ok) throw new Error(`pixel_coords.npy: ${coordsResp.status}`);
                 const coordsBuf = await coordsResp.arrayBuffer();
                 const coordsParsed = parseNpy(coordsBuf);
@@ -1203,7 +1203,7 @@
                 percent.textContent = '10%';
 
                 // Fetch embeddings with progress tracking (large file)
-                const embResp = await fetch(`/api/faiss-data/${viewport}/${year}/all_embeddings.npy`);
+                const embResp = await fetch(`/api/vector-data/${viewport}/${year}/all_embeddings.npy`);
                 if (!embResp.ok) throw new Error(`all_embeddings.npy: ${embResp.status}`);
                 const contentLength = parseInt(embResp.headers.get('Content-Length') || '0');
                 const reader = embResp.body.getReader();
@@ -1278,7 +1278,7 @@
                     if (embeddingsData[i] !== 0) { hasNonZero = true; break; }
                 }
                 if (!hasNonZero) {
-                    console.error(`[FAISS-LOCAL] Downloaded embeddings for ${viewport}/${year} are all zeros — data is corrupt on server`);
+                    console.error(`[VECTORS] Downloaded embeddings for ${viewport}/${year} are all zeros — data is corrupt on server`);
                     status.textContent = `Error: embeddings for ${year} are corrupt (all zeros)`;
                     throw new Error(`Embeddings for ${year} are all zeros`);
                 }
@@ -1289,7 +1289,7 @@
                 }
 
                 // Store in IndexedDB (without pixelLookup — rebuilt on load)
-                await FaissCache.put(viewport, year, {
+                await VectorCache.put(viewport, year, {
                     embeddings: embeddingsData,
                     coords: coordsData,
                     metadata
@@ -1299,7 +1299,7 @@
                 percent.textContent = '100%';
                 status.textContent = `Ready! ${numVectors.toLocaleString()} vectors loaded.`;
 
-                faissLocal = {
+                localVectors = {
                     embeddings: embeddingsData,
                     coords: coordsData,
                     metadata,
@@ -1310,11 +1310,11 @@
                     year: String(year)
                 };
 
-                console.log(`[FAISS-LOCAL] Downloaded and cached: ${numVectors} vectors for ${viewport}/${year}`);
-                return faissLocal;
+                console.log(`[VECTORS] Downloaded and cached: ${numVectors} vectors for ${viewport}/${year}`);
+                return localVectors;
 
             } catch (error) {
-                console.error('[FAISS-LOCAL] Download failed:', error);
+                console.error('[VECTORS] Download failed:', error);
                 status.textContent = `Download failed: ${error.message}`;
                 throw error;
             } finally {
@@ -1325,35 +1325,35 @@
         // ===== Client-Side Search Functions =====
 
         function localExtract(lat, lon) {
-            if (!faissLocal) return null;
-            const gt = faissLocal.metadata.geotransform;
+            if (!localVectors) return null;
+            const gt = localVectors.metadata.geotransform;
             // Affine transform: c=originX, a=pixelWidth, f=originY, e=pixelHeight(negative)
             const px = Math.trunc((lon - gt.c) / gt.a);
             const py = Math.trunc((lat - gt.f) / gt.e);
 
             // Try exact match first
-            let idx = faissLocal.pixelLookup.get(`${px},${py}`);
+            let idx = localVectors.pixelLookup.get(`${px},${py}`);
             // Try 8-neighborhood if not found
             if (idx === undefined) {
                 const offsets = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
                 for (const [dx, dy] of offsets) {
-                    idx = faissLocal.pixelLookup.get(`${px+dx},${py+dy}`);
+                    idx = localVectors.pixelLookup.get(`${px+dx},${py+dy}`);
                     if (idx !== undefined) break;
                 }
             }
             if (idx === undefined) return null;
 
             // Return 128-dim embedding slice
-            return faissLocal.embeddings.slice(idx * 128, (idx + 1) * 128);
+            return localVectors.embeddings.slice(idx * 128, (idx + 1) * 128);
         }
 
         function localSearchSimilar(embedding, threshold) {
-            if (!faissLocal) return [];
-            const gt = faissLocal.metadata.geotransform;
-            const N = faissLocal.numVectors;
-            const dim = faissLocal.dim;
-            const emb = faissLocal.embeddings;
-            const coords = faissLocal.coords;
+            if (!localVectors) return [];
+            const gt = localVectors.metadata.geotransform;
+            const N = localVectors.numVectors;
+            const dim = localVectors.dim;
+            const emb = localVectors.embeddings;
+            const coords = localVectors.coords;
             const matches = [];
             const threshSq = threshold * threshold;
 
@@ -1378,7 +1378,7 @@
         // ===== Cross-Year Timeline Functions =====
 
         // Union search: single pass counts pixels matching ANY of the searches
-        function searchMultiInFaissData(data, searches) {
+        function searchMultiInVectorData(data, searches) {
             const N = data.numVectors;
             const emb = data.embeddings;
             let count = 0;
@@ -1396,8 +1396,8 @@
             return count;
         }
 
-        async function loadFaissDataOnly(viewport, year) {
-            const cached = await FaissCache.get(viewport, year);
+        async function loadVectorDataOnly(viewport, year) {
+            const cached = await VectorCache.get(viewport, year);
             if (cached) {
                 let hasNonZero = false;
                 for (let i = 0; i < Math.min(1000, cached.embeddings.length); i++) {
@@ -1412,22 +1412,22 @@
                     };
                 }
             }
-            // Not cached — download via downloadFaissData, then restore faissLocal
-            const saved = faissLocal;
+            // Not cached — download via downloadVectorData, then restore localVectors
+            const saved = localVectors;
             try {
-                await downloadFaissData(viewport, year);
+                await downloadVectorData(viewport, year);
                 return {
-                    embeddings: faissLocal.embeddings,
-                    coords: faissLocal.coords,
-                    metadata: faissLocal.metadata,
-                    numVectors: faissLocal.numVectors
+                    embeddings: localVectors.embeddings,
+                    coords: localVectors.coords,
+                    metadata: localVectors.metadata,
+                    numVectors: localVectors.numVectors
                 };
             } finally {
-                faissLocal = saved;
+                localVectors = saved;
             }
         }
 
-        // Extract embedding at a lat/lon from a loaded FAISS data object
+        // Extract embedding at a lat/lon from a loaded vector data object
         function extractFromData(data, lat, lon) {
             const gt = data.metadata.geotransform;
             const px = Math.trunc((lon - gt.c) / gt.a);
@@ -1462,7 +1462,7 @@
             for (let i = 0; i < years.length; i++) {
                 progressEl.textContent = `Loading year ${years[i]} (${i + 1} of ${years.length})...`;
                 await new Promise(r => setTimeout(r, 0));
-                const data = await loadFaissDataOnly(currentViewportName, years[i]);
+                const data = await loadVectorDataOnly(currentViewportName, years[i]);
                 // Re-extract embeddings from THIS year's data at each source pixel
                 const searches = [];
                 for (const l of labelGroup) {
@@ -1471,7 +1471,7 @@
                         searches.push({ embedding: emb, threshSq: l.threshold * l.threshold });
                     }
                 }
-                const count = searches.length > 0 ? searchMultiInFaissData(data, searches) : 0;
+                const count = searches.length > 0 ? searchMultiInVectorData(data, searches) : 0;
                 results.push({ year: years[i], count });
             }
             return results;
@@ -1812,19 +1812,19 @@
             window.embeddingLayer.addTo(maps.embedding);
             console.log(`✓ Switched to year ${year}`);
 
-            // Mark FAISS as needing re-download for new year
-            viewportStatus.faiss_downloaded = false;
+            // Mark vectors as needing re-download for new year
+            viewportStatus.vectors_downloaded = false;
 
-            // Always reload FAISS data for the new year (needed for similarity search)
-            if (faissLocal && faissLocal.year !== String(year)) {
+            // Always reload vector data for the new year (needed for similarity search)
+            if (localVectors && localVectors.year !== String(year)) {
                 try {
-                    await downloadFaissData(currentViewportName, year);
-                    viewportStatus.faiss_downloaded = true;
+                    await downloadVectorData(currentViewportName, year);
+                    viewportStatus.vectors_downloaded = true;
                 } catch (e) {
-                    console.error(`[FAISS] Failed to load data for year ${year}:`, e);
+                    console.error(`[VECTORS] Failed to load data for year ${year}:`, e);
                 }
             } else {
-                viewportStatus.faiss_downloaded = true;
+                viewportStatus.vectors_downloaded = true;
             }
 
             // Update labels (re-compute with new year's embeddings)
@@ -1849,12 +1849,12 @@
 
         // Refresh all saved labels for a new year
         async function refreshLabelsForYear(year) {
-            // Ensure FAISS data is loaded for the target year
-            if (!faissLocal || faissLocal.year !== String(year)) {
+            // Ensure vector data is loaded for the target year
+            if (!localVectors || localVectors.year !== String(year)) {
                 try {
-                    await downloadFaissData(currentViewportName, year);
+                    await downloadVectorData(currentViewportName, year);
                 } catch (e) {
-                    console.error(`[LABEL] Cannot load FAISS data for year ${year}:`, e);
+                    console.error(`[LABEL] Cannot load vector data for year ${year}:`, e);
                     return;
                 }
             }
@@ -2749,8 +2749,8 @@
             showExplorerLoading();
 
             try {
-                if (!faissLocal) {
-                    alert('FAISS data not loaded yet. Please wait for download to complete.');
+                if (!localVectors) {
+                    alert('Vector data not loaded yet. Please wait for download to complete.');
                     return;
                 }
 
@@ -2813,7 +2813,7 @@
 
             const currentThreshold = parseFloat(document.getElementById('threshold-display').textContent);
             // If threshold exceeds cache, re-search locally with wider threshold
-            if (currentThreshold > explorerResults.cacheThreshold && faissLocal) {
+            if (currentThreshold > explorerResults.cacheThreshold && localVectors) {
                 const embedding = explorerResults.sourceEmbedding instanceof Float32Array
                     ? explorerResults.sourceEmbedding
                     : new Float32Array(explorerResults.sourceEmbedding);
@@ -2846,7 +2846,7 @@
                 `;
                 document.getElementById('map-embedding').appendChild(statsEl);
             }
-            const total = faissLocal ? faissLocal.numVectors : 0;
+            const total = localVectors ? localVectors.numVectors : 0;
             const pct = total > 0 ? (matches.length / total * 100).toFixed(1) : '0.0';
             statsEl.textContent = `${matches.length.toLocaleString()} pixels (${pct}%) at threshold ${threshold.toFixed(1)}`;
             statsEl.style.display = 'block';
@@ -3328,9 +3328,9 @@
                 let statusResp = await fetch(`/api/viewports/${currentViewportName}/${dimMethod}-status?year=${currentEmbeddingYear}`);
                 let status = await statusResp.json();
 
-                // If waiting for embeddings (FAISS still running), poll until ready
+                // If waiting for embeddings (vector extraction still running), poll until ready
                 if (status.waiting) {
-                    console.log(`[${methodUpper}] Waiting for embeddings (FAISS indexing in progress)...`);
+                    console.log(`[${methodUpper}] Waiting for embeddings (vector extraction in progress)...`);
                     const umapContainer = document.getElementById('map-umap');
                     umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">⏳ ${status.message || 'Waiting for data...'}</div>`;
 
@@ -3452,8 +3452,8 @@
             if (sel1 && sel1.value) currentEmbeddingYear = sel1.value;
             if (sel2 && sel2.value) currentEmbeddingYear2 = sel2.value;
 
-            // Guard: need FAISS data for both years
-            if (!viewportStatus.has_faiss) {
+            // Guard: need vector data for both years
+            if (!viewportStatus.has_vectors) {
                 waitMsg.style.display = 'block';
                 sameMsg.style.display = 'none';
                 return;
@@ -3590,7 +3590,7 @@
             }, 100);
 
             loadLabels();
-            await loadSavedLabels();  // Load label definitions from localStorage, recompute pixels from FAISS
+            await loadSavedLabels();  // Load label definitions from localStorage, recompute pixels from vectors
             updateThresholdDisplay();  // Initialize threshold display
 
             // Set up dimensionality reduction selector (PCA/UMAP)
@@ -3642,7 +3642,7 @@
 
         // Check for ongoing operations and start polling if found
         async function checkAndPollOperations(viewportId) {
-            const operations = ['embeddings', 'pyramids', 'faiss'];
+            const operations = ['embeddings', 'pyramids', 'vectors'];
 
             for (const op of operations) {
                 const operationId = `${viewportId}_${op}`;
@@ -3655,7 +3655,7 @@
                         const titles = {
                             'embeddings': '📥 Downloading Embeddings',
                             'pyramids': '🔨 Creating Pyramids',
-                            'faiss': '🔍 Building FAISS Index'
+                            'vectors': '🔍 Extracting Vectors'
                         };
                         await pollOperationProgress(operationId, titles[op]);
                         // Poll the next operation after this one completes
@@ -3670,7 +3670,7 @@
         // ===== PERSISTENT LABEL SYSTEM =====
         // Global variables for label management
         let savedLabels = [];  // Array of label objects (stored in localStorage)
-        let currentSearchCache = null;  // Cache of current FAISS search results
+        let currentSearchCache = null;  // Cache of current vector search results
 
         // Persist labels to localStorage (metadata only, no pixel arrays)
         function persistLabels() {
@@ -3681,7 +3681,7 @@
             localStorage.setItem('tee_labels_' + currentViewportName, JSON.stringify(toStore));
         }
 
-        // Load saved labels from localStorage, then recompute pixels from FAISS
+        // Load saved labels from localStorage, then recompute pixels from vectors
         async function loadSavedLabels() {
             try {
                 const raw = localStorage.getItem('tee_labels_' + currentViewportName);
@@ -3697,10 +3697,10 @@
             }
         }
 
-        // Recompute pixel coverage for all labels from FAISS index
+        // Recompute pixel coverage for all labels from vector data
         async function recomputeLabelPixels() {
-            if (!faissLocal) {
-                console.warn('[LABEL] FAISS data not loaded, skipping recompute');
+            if (!localVectors) {
+                console.warn('[LABEL] Vector data not loaded, skipping recompute');
                 return;
             }
             for (const label of savedLabels) {
@@ -4541,7 +4541,7 @@
                     const readyIcon = status.ready ? '✅' : '⏳';
                     const embeddingsIcon = status.has_embeddings ? '✅' : '❌';
                     const pyramidsIcon = status.has_pyramids ? '✅' : '❌';
-                    const faissIcon = status.has_faiss ? '✅' : '❌';
+                    const vectorsIcon = status.has_vectors ? '✅' : '❌';
                     const pcaIcon = status.has_pca ? '✅' : '❌';
                     const umapIcon = status.has_umap ? '✅' : '❌';
                     const years = status.years_available ? status.years_available.join(', ') : 'None';
@@ -4563,7 +4563,7 @@
                             <strong>Pyramids:</strong> ${pyramidsIcon}
                         </div>
                         <div style="margin-bottom: 8px;">
-                            <strong>FAISS Index:</strong> ${faissIcon}
+                            <strong>Vectors:</strong> ${vectorsIcon}
                         </div>
                         <div style="margin-bottom: 8px;">
                             <strong>PCA (Panel 4):</strong> ${pcaIcon}

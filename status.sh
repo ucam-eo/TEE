@@ -29,7 +29,7 @@ if [ -d "$DATA_DIR" ]; then
     echo "  mosaics:       $(du -sh "$DATA_DIR/mosaics" 2>/dev/null | cut -f1 || echo "not found")"
     echo "  embeddings:    $(du -sh "$DATA_DIR/embeddings" 2>/dev/null | cut -f1 || echo "not found")"
     echo "  pyramids:      $(du -sh "$DATA_DIR/pyramids" 2>/dev/null | cut -f1 || echo "not found")"
-    echo "  faiss_indices: $(du -sh "$DATA_DIR/faiss_indices" 2>/dev/null | cut -f1 || echo "not found")"
+    echo "  vectors:       $(du -sh "$DATA_DIR/vectors" 2>/dev/null | cut -f1 || echo "not found")"
 else
     echo "  Data directory not found: $DATA_DIR"
 fi

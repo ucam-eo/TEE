@@ -14,7 +14,7 @@ DATA_DIR = Path(os.environ.get('TEE_DATA_DIR', Path.home() / 'data'))
 # Subdirectories
 MOSAICS_DIR = DATA_DIR / 'mosaics'
 PYRAMIDS_DIR = DATA_DIR / 'pyramids'
-FAISS_DIR = DATA_DIR / 'faiss_indices'
+VECTORS_DIR = DATA_DIR / 'vectors'
 EMBEDDINGS_DIR = DATA_DIR / 'embeddings'
 PROGRESS_DIR = DATA_DIR / 'progress'
 
@@ -25,5 +25,5 @@ VIEWPORTS_DIR = APP_DIR / 'viewports'
 
 def ensure_dirs():
     """Create all required directories if they don't exist."""
-    for d in [DATA_DIR, MOSAICS_DIR, PYRAMIDS_DIR, FAISS_DIR, EMBEDDINGS_DIR, PROGRESS_DIR, VIEWPORTS_DIR]:
+    for d in [DATA_DIR, MOSAICS_DIR, PYRAMIDS_DIR, VECTORS_DIR, EMBEDDINGS_DIR, PROGRESS_DIR, VIEWPORTS_DIR]:
         d.mkdir(parents=True, exist_ok=True)

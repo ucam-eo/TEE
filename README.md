@@ -10,7 +10,7 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 
 - **Downloads** Tessera embeddings from GeoTessera for multiple years
 - **Processes** embeddings into RGB visualizations and pyramid tile structures
-- **Builds** FAISS indices for efficient similarity search
+- **Extracts** vectors for efficient similarity search
 - **Visualizes** embeddings through an interactive web-based viewer
 - **Enables** temporal analysis by switching between years
 
@@ -20,7 +20,7 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - Download embeddings for years 2017-2025 (depending on data availability)
 - Select which years to process during viewport creation
 - Switch between years instantly in the viewer
-- Temporal coherence in similarity search through year-specific FAISS indices
+- Temporal coherence in similarity search through year-specific vector data
 
 ### Interactive Viewer
 - Zoomable, pannable map interface using Leaflet.js
@@ -35,12 +35,12 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - **Click-to-lock preview box** — 5km box follows the mouse, locks on click, repositionable
 - Multi-year processing with progress tracking
 - Automatic navigation to viewer after processing
-- **Full cleanup on cancel/delete** — removes mosaics, pyramids, FAISS indices, and cached embeddings tiles; shared tiles used by other viewports are preserved
+- **Full cleanup on cancel/delete** — removes mosaics, pyramids, vectors, and cached embeddings tiles; shared tiles used by other viewports are preserved
 
 ### Explorer Mode (Client-Side Search)
 - Click pixels on the embedding map to extract embeddings
 - **All similarity search runs locally in the browser** — no queries sent to server
-- FAISS data (embeddings + coordinates) downloaded once and cached in IndexedDB
+- Vector data (embeddings + coordinates) downloaded once and cached in IndexedDB
 - Brute-force L2 search over ~250K vectors completes in ~100-200ms
 - Real-time threshold slider for instant local filtering
 - Labels and search are fully private — only tile images are fetched from the server
@@ -49,7 +49,7 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - **Track how label coverage changes over time** — click "Timeline" on any saved label to see pixel counts across all available years (2017–2025)
 - Uses the label's stored embedding and threshold for consistent comparison
 - Results displayed in a modal with a proportional **bar chart** (colored with the label's color) and a **percentage change summary** (e.g. "33% decrease from 2019 to 2023")
-- Loads each year's FAISS data from IndexedDB cache (or downloads in background) without disrupting the current session
+- Loads each year's vector data from IndexedDB cache (or downloads in background) without disrupting the current session
 - All computation stays client-side — label privacy is preserved
 
 ### Advanced Viewer (6-Panel Layout)
@@ -256,7 +256,7 @@ export TEE_HTTPS=1
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TEE_DATA_DIR` | `~/data` | Data directory (mosaics, pyramids, FAISS indices, passwd) |
+| `TEE_DATA_DIR` | `~/data` | Data directory (mosaics, pyramids, vectors, passwd) |
 | `TEE_APP_DIR` | Project root | Application directory (auto-detected from `lib/config.py`) |
 | `TEE_MODE` | `desktop` | `desktop` (DEBUG=True) or `production` (DEBUG=False, security headers) |
 | `TEE_HTTPS` | unset | Set to `1` to mark session cookies as `Secure` (for HTTPS) |
@@ -281,7 +281,7 @@ The system processes satellite embeddings through five main stages with **parall
 ./venv/bin/python3 setup_viewport.py --years 2023,2024,2025 --umap-year 2024
 ```
 
-This runs the full pipeline: download → RGB → pyramids → FAISS → UMAP.
+This runs the full pipeline: download → RGB → pyramids → vectors → UMAP.
 
 Or use the web interface: `bash restart.sh`, open http://localhost:8001, click "+ Create New Viewport", select years and click Create. Processing runs in the background with status tracking.
 
@@ -311,13 +311,13 @@ python3 create_pyramids.py
 - **Viewer becomes available** once ANY year has pyramids
 - Output: `~/data/pyramids/{viewport}/{year}/`
 
-#### 4. Create FAISS Indices
+#### 4. Extract Vectors
 ```bash
-python3 create_faiss_index.py
+python3 extract_vectors.py
 ```
-- Builds vector similarity search indices for all years
-- **Labeling controls become available** once ANY year has FAISS
-- Output: `~/data/faiss_indices/{viewport}/{year}/`
+- Extracts vectors from embeddings for all years
+- **Labeling controls become available** once ANY year has vectors
+- Output: `~/data/vectors/{viewport}/{year}/`
 
 #### 5. Compute UMAP (Optional)
 ```bash
@@ -326,14 +326,14 @@ python3 compute_umap.py {viewport_name} {year}
 - Computes 2D UMAP projection (~1-2 min for 264K embeddings)
 - Used by the 6-panel layout (Panel 4)
 - **UMAP visualization becomes available** once computed
-- Output: `~/data/faiss_indices/{viewport}/{year}/umap_coords.npy`
+- Output: `~/data/vectors/{viewport}/{year}/umap_coords.npy`
 
 ### Incremental Feature Availability
 
 | Stage | Feature | Available When |
 |-------|---------|-----------------|
 | After Stage 3 (Pyramids) | Basic viewer with maps | ANY year has pyramids |
-| After Stage 4 (FAISS) | Labeling/similarity search | ANY year has FAISS index |
+| After Stage 4 (Vectors) | Labeling/similarity search | ANY year has vectors |
 | After Stage 5 (UMAP) | UMAP visualization (Panel 4) | UMAP computed for any year |
 
 ### Status Tracking
@@ -381,7 +381,7 @@ Content-Type: application/json
 ```
 GET /api/viewports/{viewport_name}/is-ready
 ```
-Returns: `{ready: bool, message: string, has_embeddings: bool, has_pyramids: bool, has_faiss: bool, years_available: [string]}`
+Returns: `{ready: bool, message: string, has_embeddings: bool, has_pyramids: bool, has_vectors: bool, years_available: [string]}`
 
 **Get available years:**
 ```
@@ -448,7 +448,7 @@ TEE/
 │       ├── pipeline.py                # Downloads and processing
 │       ├── compute.py                 # UMAP, PCA, distance heatmap
 │       ├── tiles.py                   # Tile serving with LRU cache and ETag support
-│       ├── faiss_data.py              # FAISS index serving
+│       ├── vector_data.py             # Vector data serving
 │       └── config.py                  # Health, static files, client config
 │
 ├── public/                            # Web interface
@@ -473,7 +473,7 @@ TEE/
 ├── download_embeddings.py             # GeoTessera embedding downloader
 ├── create_rgb_embeddings.py           # Convert embeddings to RGB
 ├── create_pyramids.py                 # Build zoom-level pyramid structure
-├── create_faiss_index.py              # Build similarity search indices
+├── extract_vectors.py                 # Extract vectors for similarity search
 ├── compute_umap.py                    # Compute UMAP projection
 ├── compute_pca.py                     # Compute PCA projection
 └── setup_viewport.py                  # Orchestrate full workflow
@@ -507,18 +507,18 @@ Set the active viewport first, then run pipeline scripts.
 
 ### No data appears in viewer
 - Verify pyramids exist: `ls ~/data/pyramids/{viewport}/{year}/`
-- Check FAISS indices: `ls ~/data/faiss_indices/{viewport}/{year}/`
-- Re-run `create_pyramids.py` or `create_faiss_index.py` as needed
+- Check vectors: `ls ~/data/vectors/{viewport}/{year}/`
+- Re-run `create_pyramids.py` or `extract_vectors.py` as needed
 
 ### Slow similarity search
-- Check FAISS index was created for the selected year
+- Check vectors were extracted for the selected year
 - Reduce similarity threshold for faster results
 - Process fewer years per viewport
 
 ### Year doesn't appear in dropdown
 - Verify embeddings were downloaded: `ls ~/data/mosaics/*_{year}.tif`
 - Confirm pyramids exist for that year
-- Check that FAISS index was built
+- Check that vectors were extracted
 
 ## Performance
 
@@ -533,7 +533,7 @@ Set the active viewport first, then run pipeline scripts.
 | Download embeddings | 5-15 min | All years download in parallel |
 | Create RGB | 2-5 min | All years process in parallel |
 | Build pyramids | 5-10 min | All years process in parallel |
-| Create FAISS index | 5-15 min | All years process in parallel |
+| Extract vectors | 5-15 min | All years process in parallel |
 | **Total** | **17-45 min** | Same time for 1 year or 8 years |
 
 Multiple years are downloaded and processed concurrently — total time is approximately the same whether you request 1 year or 8 years. Features become available incrementally as each stage completes (see [Incremental Feature Availability](#incremental-feature-availability)).
@@ -550,7 +550,6 @@ MIT License - See LICENSE file for details
 ## Related Resources
 
 - [GeoTessera Documentation](https://geotessera.readthedocs.io/)
-- [FAISS Documentation](https://faiss.ai/)
 - [Leaflet.js Map Library](https://leafletjs.com/)
 - [Sentinel-2 Satellite Data](https://sentinel.esa.int/web/sentinel/missions/sentinel-2)
 

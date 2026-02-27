@@ -19,9 +19,6 @@ Pillow>=10.0.0
 # Tile server
 rio-tiler>=6.0.0
 
-# Similarity search
-faiss-cpu>=1.7.0
-
 # Vectorized computations
 scipy>=1.10.0
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Shared pipeline orchestration for viewport data processing.
-Single source of truth for: Download → RGB → Pyramids → FAISS → UMAP
+Single source of truth for: Download → RGB → Pyramids → Vectors → UMAP
 Used by both web_server.py and setup_viewport.py
 """
 
@@ -15,7 +15,7 @@ from pathlib import Path
 import time
 
 from lib.progress_tracker import ProgressTracker
-from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, FAISS_DIR, PROGRESS_DIR
+from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, VECTORS_DIR, PROGRESS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ STAGE_PROGRESS = {
     'download': (0, 50),    # 0-50%: Downloading embeddings (slowest)
     'rgb': (50, 60),        # 50-60%: Creating RGB
     'pyramids': (60, 75),   # 60-75%: Creating pyramids
-    'faiss': (75, 85),      # 75-85%: Creating FAISS index
+    'vectors': (75, 85),    # 75-85%: Extracting vectors
     'pca': (85, 95),        # 85-95%: Computing PCA for all years
     'umap': (95, 100),      # 95-100%: Computing UMAP (optional)
 }
@@ -86,7 +86,7 @@ class PipelineRunner:
         """Update unified pipeline progress (monotonically increasing).
 
         Args:
-            stage: Stage name ('download', 'rgb', 'pyramids', 'faiss', 'umap')
+            stage: Stage name ('download', 'rgb', 'pyramids', 'vectors', 'umap')
             stage_percent: Progress within this stage (0-100)
             message: Status message
         """
@@ -372,61 +372,60 @@ class PipelineRunner:
         logger.info(f"[PIPELINE] ✓ Stage 3 complete: {len(pyramid_levels)} pyramid levels created")
         return True, None
 
-    def stage_4_create_faiss(self, viewport_name):
-        """Stage 4: Create FAISS similarity search indices."""
-        logger.info(f"[PIPELINE] STAGE 4/5: Creating FAISS index for '{viewport_name}'...")
-        logger.info(f"[PIPELINE]   $ python create_faiss_index.py")
+    def stage_4_extract_vectors(self, viewport_name):
+        """Stage 4: Extract vectors from embeddings."""
+        logger.info(f"[PIPELINE] STAGE 4/5: Extracting vectors for '{viewport_name}'...")
+        logger.info(f"[PIPELINE]   $ python extract_vectors.py")
 
-        result = self.run_script('create_faiss_index.py')
+        result = self.run_script('extract_vectors.py')
 
         if result.returncode != 0:
-            error_msg = f"Stage 4 failed - FAISS creation:\n{result.stderr[:500]}"
+            error_msg = f"Stage 4 failed - Vector extraction:\n{result.stderr[:500]}"
             logger.error(f"[PIPELINE] ✗ {error_msg}")
             return False, error_msg
 
-        # Verify FAISS index exists (year-specific)
-        faiss_dir = FAISS_DIR
-        faiss_viewport_dir = faiss_dir / viewport_name
+        # Verify vectors exist (year-specific)
+        vectors_viewport_dir = VECTORS_DIR / viewport_name
 
-        if not faiss_viewport_dir.exists():
-            logger.warning(f"[PIPELINE] ⚠️  Stage 4: No FAISS directory — no data available for requested years")
+        if not vectors_viewport_dir.exists():
+            logger.warning(f"[PIPELINE] ⚠️  Stage 4: No vectors directory — no data available for requested years")
             return True, None
 
-        faiss_found = False
-        faiss_year_dir = None
-        for year_dir in faiss_viewport_dir.glob("*"):
+        vectors_found = False
+        vectors_year_dir = None
+        for year_dir in vectors_viewport_dir.glob("*"):
             if year_dir.is_dir():
                 embeddings_file = year_dir / "all_embeddings.npy"
                 if embeddings_file.exists():
-                    faiss_found = True
-                    faiss_year_dir = year_dir
+                    vectors_found = True
+                    vectors_year_dir = year_dir
                     break
 
-        if not faiss_found:
-            logger.warning(f"[PIPELINE] ⚠️  Stage 4: No FAISS index found — no data available for requested years")
+        if not vectors_found:
+            logger.warning(f"[PIPELINE] ⚠️  Stage 4: No vectors found — no data available for requested years")
             return True, None
 
         # Verify supporting files
         required_files = ["all_embeddings.npy", "pixel_coords.npy", "metadata.json"]
-        missing_files = [f for f in required_files if not (faiss_year_dir / f).exists()]
+        missing_files = [f for f in required_files if not (vectors_year_dir / f).exists()]
         if missing_files:
             logger.warning(f"[PIPELINE] Stage 4 warning - Missing files: {missing_files}")
 
-        logger.info(f"[PIPELINE] ✓ Stage 4 complete: FAISS index created")
+        logger.info(f"[PIPELINE] ✓ Stage 4 complete: Vectors extracted")
 
-        # Cleanup: Delete GeoTIFF mosaics now that FAISS has the embeddings
+        # Cleanup: Delete GeoTIFF mosaics now that vectors have the embeddings
         self.cleanup_mosaics(viewport_name)
 
         return True, None
 
     def cleanup_mosaics(self, viewport_name):
-        """Delete GeoTIFF mosaic files after FAISS creation to save disk space.
+        """Delete GeoTIFF mosaic files after vector extraction to save disk space.
 
-        After FAISS index is created, the following are no longer needed:
+        After vectors are extracted, the following are no longer needed:
         - {viewport}_embeddings_{year}.tif (~100-200MB each)
         - {viewport}_rgb_{year}.tif (~50MB each)
 
-        The FAISS directory contains all necessary data:
+        The vectors directory contains all necessary data:
         - all_embeddings.npy (128D vectors)
         - pixel_coords.npy (x,y coordinates)
         - metadata.json (geotransform for lat/lon conversion)
@@ -466,16 +465,16 @@ class PipelineRunner:
         """Stage 4b: Compute PCA for ALL years (for Panel 4 visualization)."""
         logger.info(f"[PIPELINE] STAGE 4b: Computing PCA for '{viewport_name}' (all years)...")
 
-        faiss_dir = FAISS_DIR / viewport_name
-        if not faiss_dir.exists():
-            logger.warning(f"[PIPELINE] ⚠️  PCA skipped - no FAISS directory for {viewport_name}")
+        vectors_dir = VECTORS_DIR / viewport_name
+        if not vectors_dir.exists():
+            logger.warning(f"[PIPELINE] ⚠️  PCA skipped - no vectors directory for {viewport_name}")
             return True, None
 
-        # Find all years with FAISS indices
+        # Find all years with vectors
         years_processed = 0
         years_failed = 0
 
-        for year_dir in sorted(faiss_dir.iterdir()):
+        for year_dir in sorted(vectors_dir.iterdir()):
             if year_dir.is_dir() and (year_dir / "all_embeddings.npy").exists():
                 year = year_dir.name
                 pca_file = year_dir / "pca_coords.npy"
@@ -517,8 +516,7 @@ class PipelineRunner:
             return True, None  # Don't fail pipeline
 
         # Verify UMAP coordinates file exists
-        faiss_dir = FAISS_DIR
-        umap_file = faiss_dir / viewport_name / str(umap_year) / "umap_coords.npy"
+        umap_file = VECTORS_DIR / viewport_name / str(umap_year) / "umap_coords.npy"
 
         if not self.wait_for_file(umap_file, min_size_bytes=100):
             logger.warning(f"[PIPELINE] ⚠️  Stage 5 warning - UMAP file not found")
@@ -531,7 +529,7 @@ class PipelineRunner:
         """
         Run complete pipeline in PARALLEL PER YEAR:
         - Download multiple years in parallel (one script call with all years)
-        - As each year completes download, process RGB → Pyramids → FAISS per-year
+        - As each year completes download, process RGB → Pyramids → Vectors per-year
         - Compute UMAP from first completed year
 
         Args:
@@ -548,12 +546,12 @@ class PipelineRunner:
         1. Download embeddings (all years in one call - downloads in parallel internally)
         2. Create RGB (all years in one call - processes in parallel)
         3. Create pyramids (all years in one call - processes in parallel)
-        4. Create FAISS (all years in one call - processes in parallel)
+        4. Extract vectors (all years in one call - processes in parallel)
         5. Compute UMAP (from first year to complete, if enabled)
 
         KEY GUARANTEES:
         - Viewer can switch as soon as ANY year has pyramids (Stage 3)
-        - Labeling available as soon as ANY year has FAISS (Stage 4)
+        - Labeling available as soon as ANY year has vectors (Stage 4)
         - UMAP available once computed (Stage 5)
         """
         logger.info(f"\n{'=' * 70}")
@@ -627,20 +625,20 @@ class PipelineRunner:
             return False, "Cancelled by user"
         self.update_progress('pyramids', 100, "Pyramids created")
 
-        # Stage 4: Create FAISS (all years in parallel)
+        # Stage 4: Extract vectors (all years in parallel)
         # ✓ After this stage, labeling controls BECOME AVAILABLE
         if check_cancelled():
             return False, "Cancelled by user"
-        self.update_progress('faiss', 0, "Building FAISS index...")
-        self._active_stage = ('faiss', viewport_name)
-        success, error = self.stage_4_create_faiss(viewport_name)
+        self.update_progress('vectors', 0, "Extracting vectors...")
+        self._active_stage = ('vectors', viewport_name)
+        success, error = self.stage_4_extract_vectors(viewport_name)
         self._active_stage = None
         if not success:
-            self.progress.error(f"FAISS creation failed: {error}")
+            self.progress.error(f"Vector extraction failed: {error}")
             return False, error
         if check_cancelled():
             return False, "Cancelled by user"
-        self.update_progress('faiss', 100, "FAISS index ready")
+        self.update_progress('vectors', 100, "Vectors ready")
 
         # Stage 4b: Compute PCA for all years (for Panel 4 visualization)
         # ✓ After this stage, Panel 4 PCA scatter plot BECOMES AVAILABLE
@@ -663,10 +661,10 @@ class PipelineRunner:
             if not effective_umap_year and years_str:
                 effective_umap_year = years_str.split(',')[0].strip()
             if not effective_umap_year:
-                # No year specified — pick the first year that has FAISS data
-                faiss_vp_dir = FAISS_DIR / viewport_name
-                if faiss_vp_dir.exists():
-                    year_dirs = sorted(d.name for d in faiss_vp_dir.iterdir()
+                # No year specified — pick the first year that has vector data
+                vectors_vp_dir = VECTORS_DIR / viewport_name
+                if vectors_vp_dir.exists():
+                    year_dirs = sorted(d.name for d in vectors_vp_dir.iterdir()
                                        if d.is_dir() and (d / 'all_embeddings.npy').exists())
                     if year_dirs:
                         effective_umap_year = year_dirs[0]
@@ -678,7 +676,7 @@ class PipelineRunner:
                 self._active_stage = None
                 self.update_progress('umap', 100, "UMAP complete")
             else:
-                logger.warning(f"[PIPELINE] ⚠️  Stage 5 skipped - no FAISS data found for UMAP")
+                logger.warning(f"[PIPELINE] ⚠️  Stage 5 skipped - no vector data found for UMAP")
         else:
             logger.info(f"[PIPELINE] Stage 5 skipped (compute_umap=False)")
 
@@ -692,7 +690,7 @@ class PipelineRunner:
         self.progress.complete(f"Pipeline complete for {viewport_name}")
 
         # Clean up per-stage progress files (subprocess temp files)
-        for stage in ('download', 'rgb', 'pyramids', 'faiss', 'pca', 'umap'):
+        for stage in ('download', 'rgb', 'pyramids', 'vectors', 'pca', 'umap'):
             stage_file = PROGRESS_DIR / f"{viewport_name}_{stage}_progress.json"
             try:
                 if stage_file.exists():

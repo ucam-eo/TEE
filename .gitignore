@@ -35,7 +35,7 @@ blore_data/
 mosaics/
 embeddings/
 pyramids/
-faiss_indices/
+vectors/
 *.tif
 *.tiff
 *.npy
@@ -47,7 +47,6 @@ DEBUG_IMPORT.md
 SETUP.md
 TEST_IMPORT_WORKFLOW.md
 BACKUP_README.md
-PLAN_FAISS_INTEGRATION.md
 
 # Private test/development scripts
 test_full_workflow.py

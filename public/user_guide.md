@@ -16,7 +16,7 @@ A **viewport** is a 5km x 5km geographic area for which TEE downloads and proces
 5. Click **Create** — processing runs in the background with a progress bar
 6. The viewer opens automatically when processing completes
 
-**Deleting a viewport:** Click the trash icon next to any viewport in the list. All associated data (mosaics, pyramids, FAISS indices) is cleaned up automatically.
+**Deleting a viewport:** Click the trash icon next to any viewport in the list. All associated data (mosaics, pyramids, vectors) is cleaned up automatically.
 
 ## The Viewer
 
@@ -57,7 +57,7 @@ Use the **year dropdown** above the embedding panels to switch between processed
 2. Adjust the **similarity slider** to control how similar a match must be (lower = more strict)
 3. Click **Save as Label** to name and color-code the current search results
 
-The first time you run a search for a viewport+year, FAISS data (~20-50MB) is downloaded and cached in your browser's IndexedDB. Subsequent searches are instant.
+The first time you run a search for a viewport+year, vector data (~20-50MB) is downloaded and cached in your browser's IndexedDB. Subsequent searches are instant.
 
 ### Single-Click
 
@@ -80,7 +80,7 @@ Click **Timeline** on any saved label to see how its coverage changes across all
 
 - A bar chart shows pixel counts per year
 - A percentage change summary compares the first and last years
-- Each year's FAISS data is loaded automatically from cache (or downloaded in background)
+- Each year's vector data is loaded automatically from cache (or downloaded in background)
 
 ### Importing and Exporting Labels
 
@@ -132,6 +132,6 @@ The temporal distance heatmap shows pixel-by-pixel embedding differences between
 ## Tips
 
 - **Processing time** is roughly the same whether you select 1 year or 8 years — all years download and process in parallel
-- **Features appear incrementally** — the viewer becomes usable as soon as pyramids are built, even before FAISS indexing completes
+- **Features appear incrementally** — the viewer becomes usable as soon as pyramids are built, even before vector extraction completes
 - **Privacy** — all similarity search and labeling runs locally in your browser. Only tile images are fetched from the server
 - **Storage** — each viewport uses ~5GB depending on the number of years processed

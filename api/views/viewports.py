@@ -16,8 +16,8 @@ from lib.viewport_utils import (
 from lib.viewport_writer import set_active_viewport, clear_active_viewport, create_viewport_from_bounds
 from lib.pipeline import cancel_pipeline
 from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, VIEWPORTS_DIR, PROGRESS_DIR
+from lib.config import VECTORS_DIR
 from api.helpers import (
-    FAISS_INDICES_DIR,
     MIN_YEAR,
     MAX_YEAR,
     check_viewport_mosaics_exist,
@@ -141,7 +141,7 @@ def switch_viewport(request):
             'viewport': viewport,
             'data_ready': True,
             'pyramids_ready': True,
-            'faiss_ready': False
+            'vectors_ready': False
         }
 
         operation_id = f"{viewport_name}_full_pipeline"
@@ -165,16 +165,16 @@ def switch_viewport(request):
             if not pipeline_status:
                 response_data['message'] += '\nPyramids not ready. Waiting for data to complete...'
 
-        faiss_dir = FAISS_INDICES_DIR / viewport_name
-        faiss_index_file = faiss_dir / 'all_embeddings.npy'
+        vector_dir = VECTORS_DIR / viewport_name
+        vectors_file = vector_dir / 'all_embeddings.npy'
 
-        if faiss_index_file.exists():
-            response_data['faiss_ready'] = True
-            logger.info(f"[MONITOR] FAISS ready for '{viewport_name}'")
+        if vectors_file.exists():
+            response_data['vectors_ready'] = True
+            logger.info(f"[MONITOR] Vectors ready for '{viewport_name}'")
         else:
-            response_data['faiss_ready'] = False
+            response_data['vectors_ready'] = False
             if pipeline_status:
-                response_data['message'] += '\nWaiting for FAISS index (created during pipeline processing)...'
+                response_data['message'] += '\nWaiting for vectors (created during pipeline processing)...'
 
         return JsonResponse(response_data)
     except FileNotFoundError:
@@ -343,15 +343,15 @@ def delete_viewport(request):
             except Exception as e:
                 logger.warning(f"Error deleting pyramids directory for {viewport_name}: {e}")
 
-        # Delete FAISS indices directory
-        if FAISS_INDICES_DIR.exists():
+        # Delete vectors directory
+        if VECTORS_DIR.exists():
             try:
-                faiss_viewport_dir = FAISS_INDICES_DIR / viewport_name
-                if faiss_viewport_dir.exists():
-                    shutil.rmtree(faiss_viewport_dir)
-                    deleted_items.append(f"FAISS/UMAP directory: {viewport_name}/")
+                vectors_viewport_dir = VECTORS_DIR / viewport_name
+                if vectors_viewport_dir.exists():
+                    shutil.rmtree(vectors_viewport_dir)
+                    deleted_items.append(f"vectors directory: {viewport_name}/")
             except Exception as e:
-                logger.warning(f"Error deleting FAISS index directory for {viewport_name}: {e}")
+                logger.warning(f"Error deleting vectors directory for {viewport_name}: {e}")
 
         # Clean up embeddings tile cache
         if bounds:
@@ -527,18 +527,18 @@ def is_ready(request, viewport_name):
             """True if this year was requested (or no config exists)."""
             return requested_set is None or year_dir_name in requested_set
 
-        # Check FAISS — only for requested years
-        has_faiss = False
-        faiss_dir = FAISS_INDICES_DIR / viewport_name
-        if faiss_dir.exists():
-            for year_dir in faiss_dir.glob("*"):
+        # Check vectors — only for requested years
+        has_vectors = False
+        vectors_dir = VECTORS_DIR / viewport_name
+        if vectors_dir.exists():
+            for year_dir in vectors_dir.glob("*"):
                 if year_dir.is_dir() and _year_matches(year_dir.name) and (year_dir / "all_embeddings.npy").exists():
-                    has_faiss = True
+                    has_vectors = True
                     break
 
         embedding_files = list(MOSAICS_DIR.glob(f"{viewport_name}_embeddings_*.tif"))
         has_mosaics = len(embedding_files) > 0
-        has_embeddings = has_faiss or has_mosaics
+        has_embeddings = has_vectors or has_mosaics
 
         # Check pyramids — only for requested years
         pyramid_dir = PYRAMIDS_DIR / viewport_name
@@ -553,15 +553,15 @@ def is_ready(request, viewport_name):
 
         # Check PCA/UMAP — only for requested years
         has_pca = False
-        if faiss_dir.exists():
-            for year_dir in faiss_dir.glob("*"):
+        if vectors_dir.exists():
+            for year_dir in vectors_dir.glob("*"):
                 if year_dir.is_dir() and _year_matches(year_dir.name) and (year_dir / 'pca_coords.npy').exists():
                     has_pca = True
                     break
 
         has_umap = False
-        if faiss_dir.exists():
-            for year_dir in faiss_dir.glob("*"):
+        if vectors_dir.exists():
+            for year_dir in vectors_dir.glob("*"):
                 if year_dir.is_dir() and _year_matches(year_dir.name) and (year_dir / 'umap_coords.npy').exists():
                     has_umap = True
                     break
@@ -623,7 +623,7 @@ def is_ready(request, viewport_name):
             'message': message,
             'has_embeddings': has_embeddings,
             'has_pyramids': has_pyramids,
-            'has_faiss': has_faiss,
+            'has_vectors': has_vectors,
             'has_pca': has_pca,
             'has_umap': has_umap,
             'years_available': sorted(years_available),

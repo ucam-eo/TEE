@@ -32,15 +32,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from lib.viewport_utils import get_active_viewport
 from lib.progress_tracker import ProgressTracker
-from lib.config import DATA_DIR, MOSAICS_DIR, FAISS_DIR
-
-# Configuration
-FAISS_INDICES_DIR = FAISS_DIR
+from lib.config import DATA_DIR, MOSAICS_DIR, VECTORS_DIR
 EMBEDDING_DIM = 128
 YEARS = range(2017, 2026)  # Support 2017-2025
 
 
-def create_faiss_index_for_year(viewport_id, bounds, year):
+def extract_vectors_for_year(viewport_id, bounds, year):
     """Extract and store all embeddings for a specific year.
 
     Reads the GeoTIFF mosaic, clips to viewport bounds, and saves:
@@ -48,7 +45,7 @@ def create_faiss_index_for_year(viewport_id, bounds, year):
     """
 
     # Initialize progress tracker - use script-specific progress file to avoid conflicts with pipeline orchestrator
-    progress = ProgressTracker(f"{viewport_id}_faiss")
+    progress = ProgressTracker(f"{viewport_id}_vectors")
     progress.update("starting", f"Extracting embeddings for {viewport_id} ({year})...")
 
     # Find mosaic file (year-specific)
@@ -65,7 +62,7 @@ def create_faiss_index_for_year(viewport_id, bounds, year):
     logger.info(f"Mosaic file: {mosaic_file.name}")
 
     # Create output directory (year-specific)
-    output_dir = FAISS_INDICES_DIR / viewport_id / str(year)
+    output_dir = VECTORS_DIR / viewport_id / str(year)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -223,13 +220,13 @@ def _process_year(args):
     """Worker function for parallel year processing."""
     viewport_id, bounds, year = args
     logger.info(f"\n📊 Extracting embeddings for year {year}...")
-    success = create_faiss_index_for_year(viewport_id, bounds, year)
+    success = extract_vectors_for_year(viewport_id, bounds, year)
     if not success:
         logger.warning(f"Failed to extract embeddings for {year}")
     return year, success
 
 
-def create_faiss_index():
+def extract_vectors():
     """Extract embeddings for all available years (in parallel)."""
 
     # Read active viewport
@@ -272,4 +269,4 @@ def create_faiss_index():
 
 
 if __name__ == "__main__":
-    create_faiss_index()
+    extract_vectors()

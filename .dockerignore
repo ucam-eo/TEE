@@ -28,7 +28,7 @@ blore_data/
 mosaics/
 embeddings/
 pyramids/
-faiss_indices/
+vectors/
 *.tif
 *.tiff
 *.npy

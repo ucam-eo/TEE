@@ -9,13 +9,11 @@ from pathlib import Path
 
 from django.http import JsonResponse
 
-from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, FAISS_DIR, EMBEDDINGS_DIR, VIEWPORTS_DIR
+from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, VECTORS_DIR, EMBEDDINGS_DIR, VIEWPORTS_DIR
 from lib.viewport_utils import list_viewports, read_viewport_file
 
 logger = logging.getLogger(__name__)
 
-# Aliases
-FAISS_INDICES_DIR = FAISS_DIR
 
 # Get venv Python path for subprocess calls
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -192,9 +190,9 @@ def get_viewport_data_size(viewport_name, active_viewport_name):
                 if rgb_file.is_file():
                     total_size += rgb_file.stat().st_size
 
-    faiss_dir = FAISS_INDICES_DIR / viewport_name
-    if faiss_dir.exists():
-        for item in faiss_dir.rglob('*'):
+    vector_dir = VECTORS_DIR / viewport_name
+    if vector_dir.exists():
+        for item in vector_dir.rglob('*'):
             if item.is_file():
                 total_size += item.stat().st_size
 

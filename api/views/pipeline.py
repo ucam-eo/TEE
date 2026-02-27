@@ -16,8 +16,8 @@ from lib.viewport_utils import (
 from lib.viewport_writer import clear_active_viewport
 from lib.pipeline import cancel_pipeline
 from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, PROGRESS_DIR, VIEWPORTS_DIR
+from lib.config import VECTORS_DIR
 from api.helpers import (
-    FAISS_INDICES_DIR,
     cleanup_viewport_embeddings,
 )
 from api.tasks import tasks, tasks_lock
@@ -48,7 +48,7 @@ def operations_progress(request, operation_id):
         # pull in granular detail (current_file, message, bytes) from the sub-op.
         if operation_id.endswith('_pipeline'):
             viewport_name = operation_id.rsplit('_pipeline', 1)[0]
-            for sub_op in ('download', 'pyramids', 'faiss', 'umap', 'pca', 'rgb'):
+            for sub_op in ('download', 'pyramids', 'vectors', 'umap', 'pca', 'rgb'):
                 sub_file = PROGRESS_DIR / f"{viewport_name}_{sub_op}_progress.json"
                 if sub_file.exists():
                     try:
@@ -184,13 +184,13 @@ def cancel_processing(request, viewport_name):
                 except Exception:
                     pass
 
-        # Delete FAISS directory
-        if FAISS_INDICES_DIR.exists():
-            faiss_viewport_dir = FAISS_INDICES_DIR / viewport_name
-            if faiss_viewport_dir.exists():
+        # Delete vectors directory
+        if VECTORS_DIR.exists():
+            vectors_viewport_dir = VECTORS_DIR / viewport_name
+            if vectors_viewport_dir.exists():
                 try:
-                    shutil.rmtree(faiss_viewport_dir)
-                    deleted_items.append(f"FAISS: {viewport_name}/")
+                    shutil.rmtree(vectors_viewport_dir)
+                    deleted_items.append(f"vectors: {viewport_name}/")
                 except Exception:
                     pass
 
