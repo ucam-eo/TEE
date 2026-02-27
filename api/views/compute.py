@@ -10,7 +10,7 @@ import numpy as np
 from django.http import JsonResponse
 
 from lib.viewport_utils import validate_viewport_name
-from lib.config import PROGRESS_DIR
+from lib.config import PROGRESS_DIR, MOSAICS_DIR
 from api.helpers import FAISS_INDICES_DIR, VENV_PYTHON, PROJECT_ROOT, parse_json_body
 
 logger = logging.getLogger(__name__)
