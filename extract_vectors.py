@@ -107,14 +107,25 @@ def extract_vectors_for_year(viewport_id, bounds, year):
             logger.info(f"\n💾 Step 1: Storing all pixel embeddings (clipped)...")
             logger.info(f"   Reading {clipped_width * clipped_height:,} pixels in viewport...")
 
-            all_embeddings = []
-            pixel_coords = []
+            # Pre-allocate output arrays
+            total_pixels = clipped_width * clipped_height
+            all_embeddings = np.empty((total_pixels, EMBEDDING_DIM), dtype=np.float32)
+
+            # Generate coordinates once (regular grid)
+            ys = np.arange(pixel_min_y, pixel_max_y)
+            xs = np.arange(pixel_min_x, pixel_max_x)
+            yy, xx = np.meshgrid(ys, xs, indexing='ij')
+            coords_array = np.column_stack([xx.ravel(), yy.ravel()]).astype(np.int32)
 
             # Read in chunks to manage memory
-            chunk_size = 256
+            chunk_size = 1024
+            has_nonzero = False
+            chunk_num = 0
             for y_start in range(pixel_min_y, pixel_max_y, chunk_size):
                 y_end = min(y_start + chunk_size, pixel_max_y)
-                logger.info(f"   Processing rows {y_start}-{y_end}...")
+                chunk_num += 1
+                if chunk_num % 10 == 1:
+                    logger.info(f"   Processing rows {y_start}-{y_end}...")
 
                 # Update progress
                 percent = min(100, int((y_start - pixel_min_y) / clipped_height * 100))
@@ -125,24 +136,21 @@ def extract_vectors_for_year(viewport_id, bounds, year):
                 window = rasterio_windows.Window(pixel_min_x, y_start, clipped_width, y_end - y_start)
                 chunk_data = src.read(window=window)  # (128, chunk_height, clipped_width)
 
-                # Reshape: (128, chunk_height, clipped_width) → (chunk_height*clipped_width, 128)
+                # Reshape and write directly into pre-allocated array
                 chunk_height = chunk_data.shape[1]
-                chunk_embeddings = chunk_data.transpose(1, 2, 0).reshape(-1, EMBEDDING_DIM)
-                all_embeddings.append(chunk_embeddings)
+                row_offset = (y_start - pixel_min_y) * clipped_width
+                chunk_pixels = chunk_height * clipped_width
+                all_embeddings[row_offset:row_offset + chunk_pixels] = chunk_data.transpose(1, 2, 0).reshape(-1, EMBEDDING_DIM)
 
-                # Generate pixel coordinates vectorized with meshgrid
-                ys = np.arange(y_start, y_end)
-                xs = np.arange(pixel_min_x, pixel_max_x)
-                yy, xx = np.meshgrid(ys, xs, indexing='ij')
-                pixel_coords.append(np.column_stack([xx.ravel(), yy.ravel()]))
+                # Incremental zero-check (short-circuits after first non-zero chunk)
+                if not has_nonzero and np.any(chunk_data):
+                    has_nonzero = True
 
-            # Keep as float32 (no conversion to uint8 - embeddings are already float32 in GeoTIFF)
-            all_embeddings = np.vstack(all_embeddings).astype(np.float32)
             logger.info(f"   ✓ Loaded all embeddings (clipped): {all_embeddings.shape}")
             logger.info(f"     Embeddings: {all_embeddings.shape[0]:,} pixels × {all_embeddings.shape[1]} dims")
 
             # Validate embeddings are not all zeros (indicates corrupt/empty mosaic)
-            if np.count_nonzero(all_embeddings) == 0:
+            if not has_nonzero:
                 error_msg = f"All embeddings are zero for {year} — mosaic may be corrupt or empty"
                 logger.error(f"   ✗ {error_msg}")
                 progress.error(error_msg)
@@ -155,8 +163,7 @@ def extract_vectors_for_year(viewport_id, bounds, year):
             embeddings_size_mb = embeddings_file.stat().st_size / (1024 * 1024)
             logger.info(f"     Size: {embeddings_size_mb:.1f} MB")
 
-            # Save pixel coordinates (x, y) as numpy array for quick lookup
-            coords_array = np.vstack(pixel_coords).astype(np.int32) if pixel_coords else np.empty((0, 2), dtype=np.int32)
+            # Save pixel coordinates
             coords_file = output_dir / "pixel_coords.npy"
             np.save(coords_file, coords_array)
 
