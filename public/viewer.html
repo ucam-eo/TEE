@@ -4545,6 +4545,9 @@
                     const pcaIcon = status.has_pca ? '✅' : '❌';
                     const umapIcon = status.has_umap ? '✅' : '❌';
                     const years = status.years_available ? status.years_available.join(', ') : 'None';
+                    const unavailable = status.years_unavailable && status.years_unavailable.length
+                        ? status.years_unavailable.join(', ')
+                        : null;
 
                     content.innerHTML = `
                         <div style="margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #ddd;">
@@ -4571,6 +4574,7 @@
                         <div style="margin-bottom: 8px;">
                             <strong>Years Available:</strong> ${years}
                         </div>
+                        ${unavailable ? `<div style="margin-bottom: 8px;"><strong>Years Unavailable:</strong> &#10060; ${unavailable}</div>` : ''}
                         <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 10px; color: #666;">
                             Last checked: ${new Date().toLocaleTimeString()}
                         </div>

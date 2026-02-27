@@ -567,25 +567,47 @@ def is_ready(request, viewport_name):
                     break
 
         is_ready_flag = has_pyramids
-        years_processing = sorted(set(years_requested) - set(years_available))
+        missing_years = sorted(set(years_requested) - set(years_available))
+
+        # Read downloaded years from mosaic metadata
+        downloaded_years = set()
+        years_meta = MOSAICS_DIR / f"{viewport_name}_years.json"
+        if years_meta.exists():
+            try:
+                with open(years_meta) as f:
+                    downloaded_years = {str(y) for y in json.load(f).get('available_years', [])}
+            except Exception:
+                pass
+
+        # Check if pipeline is running
+        operation_id = f"{viewport_name}_full_pipeline"
+        pipeline_running = False
+        pipeline_failed = False
+        with tasks_lock:
+            if operation_id in tasks:
+                task_status = tasks[operation_id].get('status')
+                pipeline_running = task_status in ('starting', 'in_progress')
+                pipeline_failed = task_status == 'failed'
+
+        # Split missing years into processing vs unavailable
+        if pipeline_running:
+            years_processing = missing_years
+            years_unavailable = []
+        else:
+            years_unavailable = [y for y in missing_years if y not in downloaded_years]
+            years_processing = [y for y in missing_years if y in downloaded_years]
 
         if is_ready_flag:
             available_str = ', '.join(sorted(years_available))
-            if years_processing:
-                processing_str = ', '.join(years_processing)
-                message = f"Ready ({available_str}) — processing: {processing_str}"
+            if years_unavailable and years_processing:
+                message = f"Ready ({available_str}) — unavailable: {', '.join(years_unavailable)}; processing: {', '.join(years_processing)}"
+            elif years_unavailable:
+                message = f"Ready ({available_str}) — unavailable: {', '.join(years_unavailable)}"
+            elif years_processing:
+                message = f"Ready ({available_str}) — processing: {', '.join(years_processing)}"
             else:
                 message = f"Ready to view ({available_str})"
         else:
-            operation_id = f"{viewport_name}_full_pipeline"
-            pipeline_running = False
-            pipeline_failed = False
-            with tasks_lock:
-                if operation_id in tasks:
-                    status = tasks[operation_id].get('status')
-                    pipeline_running = status in ('starting', 'in_progress')
-                    pipeline_failed = status == 'failed'
-
             if not pipeline_running and not pipeline_failed:
                 logger.info(f"[is-ready] Pipeline not running for '{viewport_name}' but data incomplete - re-triggering pipeline")
                 saved_years = [int(y) for y in years_requested] if years_requested else None
@@ -606,6 +628,7 @@ def is_ready(request, viewport_name):
             'has_umap': has_umap,
             'years_available': sorted(years_available),
             'years_processing': years_processing,
+            'years_unavailable': years_unavailable,
         })
 
     except Exception as e:
