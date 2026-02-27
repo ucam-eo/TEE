@@ -3456,7 +3456,7 @@
             return waitForDimReduction(operationId, 'umap');
         }
 
-        // Load distance heatmap for Panel 5
+        // Load distance heatmap for Panel 5 (client-side computation)
         async function loadHeatmap() {
             const waitMsg = document.getElementById('heatmap-waiting-message');
             const sameMsg = document.getElementById('heatmap-same-year-message');
@@ -3483,39 +3483,80 @@
             sameMsg.style.display = 'none';
 
             try {
-                const zoom = maps.heatmap.getZoom();
-                const response = await fetch('/api/embeddings/distance-heatmap', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        viewport_id: currentViewportName,
-                        year1: parseInt(currentEmbeddingYear),
-                        year2: parseInt(currentEmbeddingYear2),
-                        zoom: zoom
-                    })
-                });
+                // Save current localVectors so downloadVectorData side-effect doesn't clobber it
+                const savedLocalVectors = localVectors;
 
-                const data = await response.json();
-                if (data.success) {
-                    // Remove old heatmap layer
-                    if (heatmapCanvasLayer && maps.heatmap.hasLayer(heatmapCanvasLayer)) {
-                        maps.heatmap.removeLayer(heatmapCanvasLayer);
+                // Download vectors for both years (uses IndexedDB cache)
+                const [data1, data2] = await Promise.all([
+                    downloadVectorData(currentViewportName, currentEmbeddingYear),
+                    downloadVectorData(currentViewportName, currentEmbeddingYear2)
+                ]);
+
+                // Restore localVectors
+                localVectors = savedLocalVectors;
+
+                const numVectors = Math.min(data1.numVectors, data2.numVectors);
+                const dim = 128;
+                const gt = data1.metadata.geotransform;
+                const emb1 = data1.embeddings;
+                const emb2 = data2.embeddings;
+                const coords = data1.coords;
+
+                // Compute Euclidean distances element-wise and build result array
+                const distances = new Array(numVectors);
+                let minDist = Infinity, maxDist = 0, sumDist = 0;
+                const rawDists = new Float32Array(numVectors);
+
+                for (let i = 0; i < numVectors; i++) {
+                    let sum = 0;
+                    const base = i * dim;
+                    for (let d = 0; d < dim; d++) {
+                        const diff = emb1[base + d] - emb2[base + d];
+                        sum += diff * diff;
                     }
+                    const dist = Math.sqrt(sum);
+                    rawDists[i] = dist;
 
-                    // Create new heatmap layer with backend statistics for proper normalization
-                    heatmapCanvasLayer = new HeatmapCanvasLayer(data.distances, data.stats);
-                    heatmapCanvasLayer.addTo(maps.heatmap);
+                    const px = coords[i * 2];
+                    const py = coords[i * 2 + 1];
+                    distances[i] = {
+                        lat: gt.f + py * gt.e,
+                        lon: gt.c + px * gt.a,
+                        distance: dist
+                    };
 
-                    // Log distance statistics from backend
-                    if (data.stats) {
-                        console.log(`✓ Heatmap loaded: ${data.distances.length} distances (${data.stats.matched} matched)`);
-                        console.log(`  Distance range: ${data.stats.min_distance.toFixed(3)} to ${data.stats.max_distance.toFixed(3)} (mean: ${data.stats.mean_distance.toFixed(3)}, median: ${data.stats.median_distance.toFixed(3)})`);
-                    } else {
-                        console.log(`✓ Heatmap loaded: ${data.distances.length} distances`);
-                    }
-                } else {
+                    if (dist < minDist) minDist = dist;
+                    if (dist > maxDist) maxDist = dist;
+                    sumDist += dist;
                 }
+
+                // Compute median
+                const sorted = Float32Array.from(rawDists).sort();
+                const median = numVectors % 2 === 0
+                    ? (sorted[numVectors / 2 - 1] + sorted[numVectors / 2]) / 2
+                    : sorted[Math.floor(numVectors / 2)];
+
+                const stats = {
+                    matched: numVectors,
+                    min_distance: minDist,
+                    max_distance: maxDist,
+                    mean_distance: sumDist / numVectors,
+                    median_distance: median
+                };
+
+                // Remove old heatmap layer
+                if (heatmapCanvasLayer && maps.heatmap.hasLayer(heatmapCanvasLayer)) {
+                    maps.heatmap.removeLayer(heatmapCanvasLayer);
+                }
+
+                // Create new heatmap layer
+                heatmapCanvasLayer = new HeatmapCanvasLayer(distances, stats);
+                heatmapCanvasLayer.addTo(maps.heatmap);
+
+                console.log(`✓ Heatmap loaded (client-side): ${numVectors} distances (${stats.matched} matched)`);
+                console.log(`  Distance range: ${stats.min_distance.toFixed(3)} to ${stats.max_distance.toFixed(3)} (mean: ${stats.mean_distance.toFixed(3)}, median: ${stats.median_distance.toFixed(3)})`);
             } catch (error) {
+                console.error('Heatmap computation failed:', error);
             }
         }
 
