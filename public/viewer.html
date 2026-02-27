@@ -585,6 +585,9 @@
             <div id="heatmap-same-year-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 20px 30px; border-radius: 8px; font-size: 14px; z-index: 1000; white-space: nowrap; display: none;">
                 Select different years in panels 3 and 6
             </div>
+            <div id="heatmap-waiting-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 20px 30px; border-radius: 8px; font-size: 14px; z-index: 1000; white-space: nowrap; display: none;">
+                Waiting for embedding extraction...
+            </div>
         </div>
 
         <!-- Panel 6: Second Year Embeddings -->
@@ -789,6 +792,14 @@
                         (year) => switchEmbeddingYear2(year)
                     );
                     currentEmbeddingYear2 = String(yearToUse);
+                    // Pick a different year than Panel 3 so the change heatmap can load
+                    if (s.years_available.length >= 2 && currentEmbeddingYear2 === currentEmbeddingYear) {
+                        const alt = s.years_available.find(y => String(y) !== currentEmbeddingYear);
+                        if (alt) {
+                            currentEmbeddingYear2 = String(alt);
+                            document.getElementById('embedding-year-selector-2').value = currentEmbeddingYear2;
+                        }
+                    }
                     refreshEmbeddingTileLayer('embedding2', currentEmbeddingYear2);
                 },
                 satisfied: false
@@ -875,9 +886,9 @@
             },
             {
                 id: 'panel5-heatmap',
-                test: (s) => s.years_available.length >= 2 && currentEmbeddingYear !== currentEmbeddingYear2,
+                test: (s) => s.has_faiss && s.years_available.length >= 2,
                 onReady: () => {
-                    console.log('[DEP] panel5-heatmap: loading distance heatmap');
+                    console.log('[DEP] panel5-heatmap: FAISS ready, loading heatmap');
                     loadHeatmap();
                 },
                 satisfied: false
@@ -3430,29 +3441,31 @@
             return waitForDimReduction(operationId, 'umap');
         }
 
-        // Update heatmap message visibility based on year comparison
-        function updateHeatmapMessage() {
-            const messageDiv = document.getElementById('heatmap-same-year-message');
-            if (!messageDiv) return;
-
-            if (currentEmbeddingYear === currentEmbeddingYear2) {
-                // Years are the same - show message
-                messageDiv.style.display = 'block';
-            } else {
-                // Years are different - hide message and load heatmap
-                messageDiv.style.display = 'none';
-            }
-        }
-
         // Load distance heatmap for Panel 5
         async function loadHeatmap() {
-            // Check if years are the same and show/hide message
-            updateHeatmapMessage();
+            const waitMsg = document.getElementById('heatmap-waiting-message');
+            const sameMsg = document.getElementById('heatmap-same-year-message');
 
-            // If years are the same, don't load heatmap
-            if (currentEmbeddingYear === currentEmbeddingYear2) {
+            // Sync year variables from actual dropdown values
+            const sel1 = document.getElementById('embedding-year-selector');
+            const sel2 = document.getElementById('embedding-year-selector-2');
+            if (sel1 && sel1.value) currentEmbeddingYear = sel1.value;
+            if (sel2 && sel2.value) currentEmbeddingYear2 = sel2.value;
+
+            // Guard: need FAISS data for both years
+            if (!viewportStatus.has_faiss) {
+                waitMsg.style.display = 'block';
+                sameMsg.style.display = 'none';
                 return;
             }
+            waitMsg.style.display = 'none';
+
+            // Guard: need different years
+            if (currentEmbeddingYear === currentEmbeddingYear2) {
+                sameMsg.style.display = 'block';
+                return;
+            }
+            sameMsg.style.display = 'none';
 
             try {
                 const zoom = maps.heatmap.getZoom();

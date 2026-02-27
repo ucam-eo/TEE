@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 """
-Create FAISS index from embedding mosaics for fast similarity search.
+Extract embeddings from GeoTIFF mosaics for similarity search.
 
-Two-step approach:
-1. Create IVF-PQ index from sampled embeddings (every 4×4 pixels)
-2. Store ALL embeddings as numpy array for threshold-based filtering
+Reads embedding mosaics, clips to viewport bounds, and saves:
+- all_embeddings.npy: all pixel embeddings as float32
+- pixel_coords.npy: corresponding (x, y) pixel coordinates
+- metadata.json: geotransform and dimension info
 
-Enables queries like: "Find all pixels similar to embedding X with similarity > threshold"
+The client downloads these files and does brute-force search in JavaScript.
 """
 
 import sys
+import os
 import numpy as np
 import rasterio
 from rasterio import windows as rasterio_windows
 from pathlib import Path
 import json
 import logging
+from concurrent.futures import ProcessPoolExecutor
 
 # Configure logging
 logging.basicConfig(
@@ -33,37 +36,20 @@ from lib.config import DATA_DIR, MOSAICS_DIR, FAISS_DIR
 
 # Configuration
 FAISS_INDICES_DIR = FAISS_DIR
-SAMPLING_FACTOR = 4  # Every 4×4 pixels (reduces 19M → 1.2M vectors)
 EMBEDDING_DIM = 128
 YEARS = range(2017, 2026)  # Support 2017-2025
 
-def check_faiss_installed():
-    """Check if FAISS is installed, provide helpful message if not."""
-    try:
-        import faiss
-        return True
-    except ImportError:
-        logger.error("FAISS not installed. Install with: pip install faiss-cpu")
-        return False
-
-
-def normalize_embeddings(embeddings):
-    """Legacy function - NOT USED. Embeddings are already float32 in native range [-13.64, 17.22]."""
-    return embeddings.astype(np.float32) / 255.0
-
 
 def create_faiss_index_for_year(viewport_id, bounds, year):
-    """Create FAISS index and store all embeddings for a specific year."""
+    """Extract and store all embeddings for a specific year.
 
-    # Check FAISS availability
-    if not check_faiss_installed():
-        return False
-
-    import faiss
+    Reads the GeoTIFF mosaic, clips to viewport bounds, and saves:
+    - all_embeddings.npy, pixel_coords.npy, metadata.json
+    """
 
     # Initialize progress tracker - use script-specific progress file to avoid conflicts with pipeline orchestrator
     progress = ProgressTracker(f"{viewport_id}_faiss")
-    progress.update("starting", f"Creating FAISS index for {viewport_id} ({year})...")
+    progress.update("starting", f"Extracting embeddings for {viewport_id} ({year})...")
 
     # Find mosaic file (year-specific)
     mosaic_file = MOSAICS_DIR / f"{viewport_id}_embeddings_{year}.tif"
@@ -72,12 +58,11 @@ def create_faiss_index_for_year(viewport_id, bounds, year):
         return False
 
     logger.info("=" * 70)
-    logger.info(f"Creating FAISS Index for Embeddings ({year})")
+    logger.info(f"Extracting Embeddings ({year})")
     logger.info("=" * 70)
     logger.info(f"Viewport: {viewport_id}")
     logger.info(f"Year: {year}")
     logger.info(f"Mosaic file: {mosaic_file.name}")
-    logger.info(f"Sampling factor: {SAMPLING_FACTOR}×{SAMPLING_FACTOR}")
 
     # Create output directory (year-specific)
     output_dir = FAISS_INDICES_DIR / viewport_id / str(year)
@@ -121,60 +106,8 @@ def create_faiss_index_for_year(viewport_id, bounds, year):
             logger.info(f"Clipped dimensions: {clipped_width}×{clipped_height}")
             logger.info(f"Clipped pixels: {clipped_width * clipped_height:,}")
 
-            # Step 1: Read sampled embeddings for FAISS index
-            logger.info(f"\n📊 Step 1: Creating IVF-PQ index from sampled pixels...")
-            logger.info(f"   Reading every {SAMPLING_FACTOR}×{SAMPLING_FACTOR} pixel...")
-
-            sampled_embeddings = []
-            sampled_coords = []
-
-            # Read full viewport in chunks, then subsample in-memory (much faster than per-pixel reads)
-            sample_chunk_size = 256
-            for y_start in range(pixel_min_y, pixel_max_y, sample_chunk_size):
-                y_end = min(y_start + sample_chunk_size, pixel_max_y)
-                window = rasterio_windows.Window(pixel_min_x, y_start, clipped_width, y_end - y_start)
-                chunk_data = src.read(window=window)  # (128, chunk_h, clipped_w)
-                # Sample every SAMPLING_FACTOR pixel within this chunk
-                y_offset = y_start - pixel_min_y
-                y_sample_start = (-y_offset) % SAMPLING_FACTOR  # align to global grid
-                x_sample_start = 0
-                sampled = chunk_data[:, y_sample_start::SAMPLING_FACTOR, x_sample_start::SAMPLING_FACTOR]
-                if sampled.size > 0:
-                    sampled_embeddings.append(sampled.reshape(EMBEDDING_DIM, -1).T)
-                    ys = np.arange(y_start + y_sample_start, y_end, SAMPLING_FACTOR)
-                    xs = np.arange(pixel_min_x, pixel_max_x, SAMPLING_FACTOR)
-                    yy, xx = np.meshgrid(ys, xs, indexing='ij')
-                    sampled_coords.append(np.column_stack([xx.ravel(), yy.ravel()])[:sampled.shape[2] * sampled.shape[1]])
-
-            # Keep as float32 (no conversion to uint8 - embeddings are already float32 in GeoTIFF)
-            sampled_embeddings = np.vstack(sampled_embeddings).astype(np.float32) if sampled_embeddings else np.empty((0, EMBEDDING_DIM), dtype=np.float32)
-            sampled_coords = np.vstack(sampled_coords) if sampled_coords else np.empty((0, 2), dtype=np.int32)
-            logger.info(f"   ✓ Sampled {len(sampled_embeddings):,} pixels")
-            progress.update("processing", f"Sampled {len(sampled_embeddings):,} pixels", current_file="embeddings_sampled")
-
-            # Use float32 embeddings directly (no normalization needed - keep native range)
-            sampled_embeddings_f32 = sampled_embeddings
-
-            # Create IVF-PQ index
-            logger.info(f"   Creating IVF-PQ index...")
-            progress.update("processing", "Creating IVF-PQ index...", current_file="embeddings_index")
-            # IVF: 1024 cells, PQ: 64 subquantizers (128/2 = 64)
-            nlist = min(1024, max(100, len(sampled_embeddings) // 100))
-            quantizer = faiss.IndexFlatL2(EMBEDDING_DIM)
-            index = faiss.IndexIVFPQ(quantizer, EMBEDDING_DIM, nlist, 64, 8)
-            index.train(sampled_embeddings_f32)
-            index.add(sampled_embeddings_f32)
-
-            # Save FAISS index
-            index_file = output_dir / "embeddings.index"
-            faiss.write_index(index, str(index_file))
-            logger.info(f"   ✓ Saved FAISS index: {index_file}")
-            index_size_mb = index_file.stat().st_size / (1024 * 1024)
-            logger.info(f"     Index size: {index_size_mb:.1f} MB")
-            progress.update("processing", f"Created index ({index_size_mb:.1f} MB)", current_file="embeddings_index")
-
-            # Step 2: Read ALL embeddings for threshold-based search (clipped to viewport)
-            logger.info(f"\n💾 Step 2: Storing all pixel embeddings (clipped)...")
+            # Read ALL embeddings (clipped to viewport)
+            logger.info(f"\n💾 Step 1: Storing all pixel embeddings (clipped)...")
             logger.info(f"   Reading {clipped_width * clipped_height:,} pixels in viewport...")
 
             all_embeddings = []
@@ -230,8 +163,8 @@ def create_faiss_index_for_year(viewport_id, bounds, year):
             coords_file = output_dir / "pixel_coords.npy"
             np.save(coords_file, coords_array)
 
-            # Step 3: Create metadata JSON
-            logger.info(f"\n📋 Step 3: Creating metadata...")
+            # Step 2: Create metadata JSON
+            logger.info(f"\n📋 Step 2: Creating metadata...")
 
             metadata = {
                 "viewport_id": viewport_id,
@@ -243,8 +176,6 @@ def create_faiss_index_for_year(viewport_id, bounds, year):
                 "clipped_width": clipped_width,
                 "clipped_pixel_bounds": {"min_x": pixel_min_x, "max_x": pixel_max_x, "min_y": pixel_min_y, "max_y": pixel_max_y},
                 "num_total_pixels": clipped_width * clipped_height,  # Only pixels in viewport
-                "num_sampled_pixels": len(sampled_embeddings),
-                "sampling_factor": SAMPLING_FACTOR,
                 "embedding_dim": EMBEDDING_DIM,
                 "pixel_size_meters": 10,
                 "crs": "EPSG:4326",
@@ -255,8 +186,7 @@ def create_faiss_index_for_year(viewport_id, bounds, year):
                     "d": src.transform.d,  # rotation
                     "e": src.transform.e,  # pixel height (degrees, negative)
                     "f": src.transform.f   # y offset (latitude)
-                },
-                "faiss_index_type": f"IVF{nlist},PQ64"
+                }
             }
 
             metadata_file = output_dir / "metadata.json"
@@ -265,36 +195,42 @@ def create_faiss_index_for_year(viewport_id, bounds, year):
             logger.info(f"   ✓ Saved metadata: {metadata_file}")
 
     except Exception as e:
-        logger.error(f"Error creating FAISS index for {year}: {e}")
+        logger.error(f"Error extracting embeddings for {year}: {e}")
         import traceback
         traceback.print_exc()
-        progress.error(f"FAISS creation failed: {e}")
+        progress.error(f"Embedding extraction failed: {e}")
         return False
 
     # Summary
     logger.info("\n" + "=" * 70)
-    logger.info(f"✅ FAISS index creation complete for {year}!")
+    logger.info(f"✅ Embedding extraction complete for {year}!")
     logger.info(f"\nFiles created in {output_dir}/:")
-    logger.info(f"  - embeddings.index ({index_size_mb:.1f} MB)")
     logger.info(f"  - all_embeddings.npy ({embeddings_size_mb:.1f} MB)")
     logger.info(f"  - pixel_coords.npy ({coords_file.stat().st_size / 1024:.1f} KB)")
     logger.info(f"  - metadata.json")
-    total_size = (index_size_mb + embeddings_size_mb +
+    total_size = (embeddings_size_mb +
                   coords_file.stat().st_size / (1024 * 1024) +
                   metadata_file.stat().st_size / (1024 * 1024))
     logger.info(f"\nTotal size: {total_size:.1f} MB")
     logger.info("=" * 70)
 
     # Update progress to complete
-    progress.complete(f"Created FAISS index for {year}: {total_size:.1f} MB total")
+    progress.complete(f"Extracted embeddings for {year}: {total_size:.1f} MB total")
     return True
 
 
+def _process_year(args):
+    """Worker function for parallel year processing."""
+    viewport_id, bounds, year = args
+    logger.info(f"\n📊 Extracting embeddings for year {year}...")
+    success = create_faiss_index_for_year(viewport_id, bounds, year)
+    if not success:
+        logger.warning(f"Failed to extract embeddings for {year}")
+    return year, success
+
+
 def create_faiss_index():
-    """Create FAISS indices for all available years."""
-    # Check FAISS availability
-    if not check_faiss_installed():
-        sys.exit(1)
+    """Extract embeddings for all available years (in parallel)."""
 
     # Read active viewport
     try:
@@ -318,12 +254,21 @@ def create_faiss_index():
 
     logger.info(f"Found embeddings for years: {available_years}")
 
-    # Create FAISS index for each available year
-    for year in available_years:
-        logger.info(f"\n📊 Creating FAISS index for year {year}...")
-        success = create_faiss_index_for_year(viewport_id, bounds, year)
-        if not success:
-            logger.warning(f"Failed to create FAISS index for {year}")
+    # Process years in parallel
+    max_workers = min(len(available_years), os.cpu_count() or 1)
+    logger.info(f"Processing {len(available_years)} years with {max_workers} workers...")
+
+    args_list = [(viewport_id, bounds, year) for year in available_years]
+
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        results = list(executor.map(_process_year, args_list))
+
+    succeeded = [year for year, ok in results if ok]
+    failed = [year for year, ok in results if not ok]
+    if succeeded:
+        logger.info(f"✅ Successfully processed years: {succeeded}")
+    if failed:
+        logger.warning(f"⚠️  Failed years: {failed}")
 
 
 if __name__ == "__main__":

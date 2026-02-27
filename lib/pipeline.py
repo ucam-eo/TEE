@@ -396,8 +396,8 @@ class PipelineRunner:
         faiss_year_dir = None
         for year_dir in faiss_viewport_dir.glob("*"):
             if year_dir.is_dir():
-                index_file = year_dir / "embeddings.index"
-                if index_file.exists():
+                embeddings_file = year_dir / "all_embeddings.npy"
+                if embeddings_file.exists():
                     faiss_found = True
                     faiss_year_dir = year_dir
                     break
@@ -407,7 +407,7 @@ class PipelineRunner:
             return True, None
 
         # Verify supporting files
-        required_files = ["embeddings.index", "all_embeddings.npy", "pixel_coords.npy", "metadata.json"]
+        required_files = ["all_embeddings.npy", "pixel_coords.npy", "metadata.json"]
         missing_files = [f for f in required_files if not (faiss_year_dir / f).exists()]
         if missing_files:
             logger.warning(f"[PIPELINE] Stage 4 warning - Missing files: {missing_files}")
@@ -476,7 +476,7 @@ class PipelineRunner:
         years_failed = 0
 
         for year_dir in sorted(faiss_dir.iterdir()):
-            if year_dir.is_dir() and (year_dir / "embeddings.index").exists():
+            if year_dir.is_dir() and (year_dir / "all_embeddings.npy").exists():
                 year = year_dir.name
                 pca_file = year_dir / "pca_coords.npy"
 

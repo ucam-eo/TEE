@@ -532,7 +532,7 @@ def is_ready(request, viewport_name):
         faiss_dir = FAISS_INDICES_DIR / viewport_name
         if faiss_dir.exists():
             for year_dir in faiss_dir.glob("*"):
-                if year_dir.is_dir() and _year_matches(year_dir.name) and (year_dir / "embeddings.index").exists():
+                if year_dir.is_dir() and _year_matches(year_dir.name) and (year_dir / "all_embeddings.npy").exists():
                     has_faiss = True
                     break
 
