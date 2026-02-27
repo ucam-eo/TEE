@@ -726,6 +726,15 @@
                     <div id="processingBytes" style="font-size: 10px; color: #888; margin-top: 2px;"></div>
                 </div>
 
+                <!-- Export / Import Viewport -->
+                <div class="section" style="margin-bottom: 12px;">
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-toggle" style="flex:1" onclick="exportAllViewports()">↓ Export All Viewports</button>
+                        <button class="btn btn-toggle" style="flex:1" onclick="document.getElementById('import-viewport-file').click()">↑ Import Viewports</button>
+                    </div>
+                    <input type="file" id="import-viewport-file" accept=".json" style="display: none;">
+                </div>
+
                 <!-- Create New Viewport -->
                 <div class="section auth-required">
                     <button class="btn btn-toggle" onclick="toggleCreateForm()">+ Create New Viewport</button>
@@ -1839,6 +1848,7 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
                         <div class="viewport-item-actions">
                             <button class="viewport-item-btn" onclick="switchViewport('${vp.name}')">Select</button>
                             ${addYearBtn}
+                            <button class="viewport-item-btn" onclick="exportViewportByName('${vp.name}')">Export</button>
                             ${deleteBtn}
                         </div>
                     </div>
@@ -2177,6 +2187,93 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             });
         });
 
+        // --- Export / Import Viewport ---
+        function exportAllViewports() {
+            if (!lastLoadedViewports || lastLoadedViewports.length === 0) {
+                alert('No viewports to export.'); return;
+            }
+            const allData = lastLoadedViewports.map(vp => {
+                const b = vp.bounds;
+                const data = {
+                    name: vp.name,
+                    bounds: `${b.minLon},${b.minLat},${b.maxLon},${b.maxLat}`,
+                    years: vp.years_configured || []
+                };
+                const labelsRaw = localStorage.getItem('tee_labels_' + vp.name);
+                if (labelsRaw) {
+                    try { data.labels = JSON.parse(labelsRaw); } catch(e) {}
+                }
+                return data;
+            });
+            const blob = new Blob([JSON.stringify(allData, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'all_viewports.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function exportViewportByName(name) {
+            const vp = lastLoadedViewports?.find(v => v.name === name);
+            if (!vp) { alert('Viewport not found.'); return; }
+            downloadViewportJson(vp);
+        }
+
+        function downloadViewportJson(vp) {
+            const b = vp.bounds;
+            const data = {
+                name: vp.name,
+                bounds: `${b.minLon},${b.minLat},${b.maxLon},${b.maxLat}`,
+                years: vp.years_configured || []
+            };
+            const labelsRaw = localStorage.getItem('tee_labels_' + vp.name);
+            if (labelsRaw) {
+                try { data.labels = JSON.parse(labelsRaw); } catch(e) {}
+            }
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${vp.name}_viewport.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importViewport(file) {
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    const viewports = Array.isArray(parsed) ? parsed : [parsed];
+                    let created = 0, errors = [];
+                    for (const data of viewports) {
+                        if (!data.bounds) { errors.push(`${data.name || 'unknown'}: missing bounds`); continue; }
+                        const name = data.name || `imported_${Date.now()}`;
+                        const years = data.years || [];
+                        const resp = await fetch('/api/viewports/create', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ name, bounds: data.bounds, years })
+                        });
+                        const result = await resp.json();
+                        if (!result.success) { errors.push(`${name}: ${result.error}`); continue; }
+                        if (data.labels && data.labels.length > 0) {
+                            localStorage.setItem('tee_labels_' + name, JSON.stringify(data.labels));
+                        }
+                        created++;
+                    }
+                    let msg = `${created} viewport(s) created.`;
+                    if (errors.length > 0) msg += `\nErrors:\n${errors.join('\n')}`;
+                    alert(msg);
+                    loadViewports();
+                } catch(err) {
+                    alert('Error importing viewports: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
         // Initialize on page load
         window.addEventListener('DOMContentLoaded', function() {
             initMap();
@@ -2186,6 +2283,12 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             fetch('/health').then(r => r.json()).then(d => {
                 if (d.version) document.getElementById('teeVersion').textContent = d.version;
             }).catch(() => {});
+            document.getElementById('import-viewport-file').addEventListener('change', (e) => {
+                if (e.target.files[0]) {
+                    importViewport(e.target.files[0]);
+                    e.target.value = '';
+                }
+            });
         });
     </script>
 
