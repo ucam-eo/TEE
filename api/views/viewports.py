@@ -166,9 +166,10 @@ def switch_viewport(request):
                 response_data['message'] += '\nPyramids not ready. Waiting for data to complete...'
 
         vector_dir = VECTORS_DIR / viewport_name
-        vectors_file = vector_dir / 'all_embeddings.npy'
-
-        if vectors_file.exists():
+        if vector_dir.exists() and any(
+            (year_dir / 'all_embeddings.npy').exists()
+            for year_dir in vector_dir.iterdir() if year_dir.is_dir()
+        ):
             response_data['vectors_ready'] = True
             logger.info(f"[MONITOR] Vectors ready for '{viewport_name}'")
         else:
