@@ -5,7 +5,7 @@ from .views.viewports import (list_viewports, current_viewport, switch_viewport,
 from .views.pipeline import (
     operations_progress, pipeline_status, cancel_processing)
 from .views.vector_data import serve_vector_data
-from .views.compute import compute_umap, compute_pca, umap_status, pca_status, distance_heatmap
+from .views.compute import compute_umap, compute_pca, umap_status, pca_status
 from .views.config import get_config
 
 urlpatterns = [
@@ -34,7 +34,6 @@ urlpatterns = [
     path('viewports/<str:viewport_name>/compute-pca', compute_pca),
     path('viewports/<str:viewport_name>/umap-status', umap_status),
     path('viewports/<str:viewport_name>/pca-status', pca_status),
-    path('embeddings/distance-heatmap', distance_heatmap),
     # Config
     path('config', get_config),
 ]
