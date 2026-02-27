@@ -3325,7 +3325,7 @@
                 }
 
                 // Check if method needs to be computed
-                let statusResp = await fetch(`/api/viewports/${currentViewportName}/${dimMethod}-status?year=${currentEmbeddingYear}`);
+                let statusResp = await fetch(`/api/viewports/${currentViewportName}/${dimMethod}-status`);
                 let status = await statusResp.json();
 
                 // If waiting for embeddings (vector extraction still running), poll until ready
@@ -3337,7 +3337,7 @@
                     // Poll until embeddings are ready
                     while (status.waiting) {
                         await new Promise(resolve => setTimeout(resolve, 2000));
-                        statusResp = await fetch(`/api/viewports/${currentViewportName}/${dimMethod}-status?year=${currentEmbeddingYear}`);
+                        statusResp = await fetch(`/api/viewports/${currentViewportName}/${dimMethod}-status`);
                         status = await statusResp.json();
                     }
                     console.log(`[${methodUpper}] Embeddings ready, proceeding...`);
@@ -3361,10 +3361,25 @@
                 const response = await fetch(`/api/viewports/${currentViewportName}/compute-${dimMethod}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({year: parseInt(currentEmbeddingYear)})
+                    body: JSON.stringify({})
                 });
 
-                const data = await response.json();
+                let data = await response.json();
+
+                // If computation was auto-triggered, wait for it then retry
+                if (data.computing && data.operation_id) {
+                    console.log(`[${methodUpper}] Computation triggered on-demand, waiting...`);
+                    const umapContainer = document.getElementById('map-umap');
+                    umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">⏳ Computing ${methodUpper}...</div>`;
+                    await waitForDimReduction(data.operation_id, dimMethod);
+                    const retryResp = await fetch(`/api/viewports/${currentViewportName}/compute-${dimMethod}`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({})
+                    });
+                    data = await retryResp.json();
+                }
+
                 if (data.success) {
                     console.log(`[${methodUpper}] Got ${data.num_points} points, initializing Three.js scene...`);
                     umapData = data.points;
@@ -4557,7 +4572,7 @@
                             <strong>Status:</strong> ${readyIcon} ${status.message}
                         </div>
                         <div style="margin-bottom: 8px;">
-                            <strong>Embeddings:</strong> ${embeddingsIcon}
+                            <strong>GeoTIFF Mosaics:</strong> ${embeddingsIcon}
                         </div>
                         <div style="margin-bottom: 8px;">
                             <strong>Pyramids:</strong> ${pyramidsIcon}

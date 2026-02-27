@@ -52,6 +52,35 @@ def _projection_to_points(coords, lons, lats):
     return points
 
 
+def _find_year_with_file(viewport_name, filename, preferred_year=None):
+    """Find a year directory containing the given file.
+
+    Checks preferred_year first, then falls back to any available year.
+    Returns (year_str, vector_dir) or (None, None).
+    """
+    vectors_root = VECTORS_DIR / viewport_name
+    if not vectors_root.exists():
+        return None, None
+
+    # Try preferred year first
+    if preferred_year:
+        d = vectors_root / str(preferred_year)
+        if d.is_dir() and (d / filename).exists():
+            return str(preferred_year), d
+
+    # Fall back to any year (newest first)
+    for year_dir in sorted(vectors_root.iterdir(), reverse=True):
+        if year_dir.is_dir() and (year_dir / filename).exists():
+            return year_dir.name, year_dir
+
+    return None, None
+
+
+def _find_year_with_embeddings(viewport_name, preferred_year=None):
+    """Find a year directory containing all_embeddings.npy."""
+    return _find_year_with_file(viewport_name, 'all_embeddings.npy', preferred_year)
+
+
 def _compute_projection(request, viewport_name, coords_filename, label):
     """Shared logic for compute-umap and compute-pca endpoints."""
     if request.method != 'POST':
@@ -64,17 +93,32 @@ def _compute_projection(request, viewport_name, coords_filename, label):
         data, err = parse_json_body(request)
         if err:
             return err
-        year = data.get('year', 2024)
+        preferred_year = data.get('year')
 
-        vector_dir = VECTORS_DIR / viewport_name / str(year)
-        if not vector_dir.exists():
+        # Find a year that has the coords file, or fall back to one with embeddings
+        year, vector_dir = _find_year_with_file(viewport_name, coords_filename, preferred_year)
+        if not vector_dir:
+            year, vector_dir = _find_year_with_embeddings(viewport_name, preferred_year)
+        if not vector_dir:
             return JsonResponse({
                 'success': False,
-                'error': f'Vector data not found for {viewport_name} ({year})'
+                'error': f'Vector data not found for {viewport_name}'
             }, status=404)
 
         coords_file = vector_dir / coords_filename
         if not coords_file.exists():
+            # Auto-trigger computation if embeddings exist
+            embeddings_file = vector_dir / 'all_embeddings.npy'
+            if embeddings_file.exists():
+                sub_label = label.lower()
+                script = 'compute_pca.py' if sub_label == 'pca' else 'compute_umap.py'
+                operation_id = _trigger_computation(viewport_name, year, script)
+                return JsonResponse({
+                    'success': False,
+                    'error': f'{label} is being computed for {viewport_name} ({year}). Please retry shortly.',
+                    'computing': True,
+                    'operation_id': operation_id
+                }, status=202)
             return JsonResponse({
                 'success': False,
                 'error': f'{label} not yet available for {viewport_name} ({year}).'
@@ -159,11 +203,11 @@ def _projection_status(request, viewport_name, coords_filename, label):
     except ValueError as e:
         return JsonResponse({'error': str(e)}, status=400)
     try:
-        year = request.GET.get('year', '2024')
-        vector_dir = VECTORS_DIR / viewport_name / str(year)
-        coords_file = vector_dir / coords_filename
+        preferred_year = request.GET.get('year')
 
-        if coords_file.exists():
+        # Check if coords file already exists for any year
+        year, vector_dir = _find_year_with_file(viewport_name, coords_filename, preferred_year)
+        if vector_dir:
             return JsonResponse({'exists': True, 'computing': False})
 
         sub_label = label.lower()  # 'pca' or 'umap'
@@ -174,9 +218,9 @@ def _projection_status(request, viewport_name, coords_filename, label):
         if _is_progress_fresh(sub_progress_file):
             return JsonResponse({'exists': False, 'computing': True, 'operation_id': sub_operation_id})
 
-        # If embeddings exist, trigger computation immediately — don't wait for pipeline
-        embeddings_file = vector_dir / 'all_embeddings.npy'
-        if embeddings_file.exists():
+        # If embeddings exist for any year, trigger computation immediately
+        year, vector_dir = _find_year_with_embeddings(viewport_name, preferred_year)
+        if vector_dir:
             script = 'compute_pca.py' if sub_label == 'pca' else 'compute_umap.py'
             operation_id = _trigger_computation(viewport_name, year, script)
             return JsonResponse({'exists': False, 'computing': True, 'operation_id': operation_id})

@@ -615,7 +615,7 @@ def is_ready(request, viewport_name):
                 trigger_data_download_and_processing(viewport_name, years=saved_years)
                 message = "Restarting pipeline..."
             elif not has_embeddings:
-                message = "Downloading embeddings..."
+                message = "Downloading GeoTIFF mosaics..."
             else:
                 message = "Creating pyramids..."
 
