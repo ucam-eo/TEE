@@ -22,9 +22,6 @@ rio-tiler>=6.0.0
 # Vectorized computations
 scipy>=1.10.0
 
-# Authentication
-bcrypt>=4.0.0
-
 # HTTP client
 requests>=2.28.0
 

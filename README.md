@@ -195,7 +195,7 @@ Authentication is controlled by the presence of a `passwd` file in the data dire
 
 ### Managing Users
 
-Use the `manage_users.py` script (run with the venv Python so bcrypt is available):
+Use the `manage_users.py` script (run with the venv Python so Django is available):
 
 ```bash
 # Add a user (prompts for password with confirmation)

@@ -17,7 +17,11 @@ import os
 import getpass
 from pathlib import Path
 
-import bcrypt
+# Bootstrap Django so django.contrib.auth.hashers is available
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tee_project.settings.base')
+import django; django.setup()
+from django.contrib.auth.hashers import make_password, check_password
 
 # Resolve data directory same way as lib/config.py
 DATA_DIR = Path(os.environ.get('TEE_DATA_DIR', Path.home() / 'data'))
@@ -63,7 +67,7 @@ def cmd_add(username):
         sys.exit(1)
 
     users = load_users()
-    hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    hashed = make_password(password)
     action = "Updated" if username in users else "Added"
     users[username] = hashed
     save_users(users)
@@ -103,7 +107,7 @@ def cmd_check(username):
         print(f"User not found: {username}")
         sys.exit(1)
     password = getpass.getpass(f"Password for {username}: ")
-    if bcrypt.checkpw(password.encode('utf-8'), users[username].encode('utf-8')):
+    if check_password(password, users[username]):
         print("Password correct.")
     else:
         print("Password incorrect.")

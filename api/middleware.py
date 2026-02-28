@@ -1,7 +1,7 @@
 """
 DemoModeMiddleware - ports backend/auth.py's _require_auth() hook to Django.
 
-Uses DATA_DIR/passwd file with bcrypt-hashed passwords and mtime caching.
+Uses DATA_DIR/passwd file with hashed passwords and mtime caching.
 If no passwd file exists: open access (backwards compatible).
 If passwd file exists + user not in session: block writes (401 JSON), allow reads.
 """
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # Module state (same pattern as backend/auth.py)
 _passwd_file = DATA_DIR / 'passwd'
 _passwd_mtime = 0
-_passwd_users = {}  # username -> bcrypt_hash
+_passwd_users = {}  # username -> password_hash
 
 
 def _load_passwd():
@@ -69,13 +69,13 @@ def auth_enabled():
 
 def check_credentials(username, password):
     """Verify username/password against the passwd file."""
-    import bcrypt
+    from django.contrib.auth.hashers import check_password
     _load_passwd()
     hashed = _passwd_users.get(username)
     if hashed is None:
         return False
     try:
-        return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+        return check_password(password, hashed)
     except Exception:
         return False
 
