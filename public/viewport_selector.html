@@ -732,7 +732,7 @@
                         <button class="btn btn-toggle" style="flex:1" onclick="exportAllViewports()">↓ Export All Viewports</button>
                         <button class="btn btn-toggle" style="flex:1" onclick="document.getElementById('import-viewport-file').click()">↑ Import Viewports</button>
                     </div>
-                    <input type="file" id="import-viewport-file" accept=".json" style="display: none;">
+                    <input type="file" id="import-viewport-file" accept=".json,.geojson" style="display: none;">
                 </div>
 
                 <!-- Create New Viewport -->
@@ -2188,28 +2188,36 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
         });
 
         // --- Export / Import Viewport ---
+        function viewportToGeoJsonFeature(vp) {
+            const b = vp.bounds;
+            const props = { name: vp.name, years: vp.years_configured || [] };
+            const labelsRaw = localStorage.getItem('tee_labels_' + vp.name);
+            if (labelsRaw) {
+                try { props.labels = JSON.parse(labelsRaw); } catch(e) {}
+            }
+            return {
+                type: 'Feature',
+                properties: props,
+                geometry: {
+                    type: 'Polygon',
+                    coordinates: [[[b.minLon,b.minLat],[b.maxLon,b.minLat],[b.maxLon,b.maxLat],[b.minLon,b.maxLat],[b.minLon,b.minLat]]]
+                }
+            };
+        }
+
         function exportAllViewports() {
             if (!lastLoadedViewports || lastLoadedViewports.length === 0) {
                 alert('No viewports to export.'); return;
             }
-            const allData = lastLoadedViewports.map(vp => {
-                const b = vp.bounds;
-                const data = {
-                    name: vp.name,
-                    bounds: `${b.minLon},${b.minLat},${b.maxLon},${b.maxLat}`,
-                    years: vp.years_configured || []
-                };
-                const labelsRaw = localStorage.getItem('tee_labels_' + vp.name);
-                if (labelsRaw) {
-                    try { data.labels = JSON.parse(labelsRaw); } catch(e) {}
-                }
-                return data;
-            });
-            const blob = new Blob([JSON.stringify(allData, null, 2)], {type: 'application/json'});
+            const fc = {
+                type: 'FeatureCollection',
+                features: lastLoadedViewports.map(viewportToGeoJsonFeature)
+            };
+            const blob = new Blob([JSON.stringify(fc, null, 2)], {type: 'application/geo+json'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'all_viewports.json';
+            a.download = 'all_viewports.geojson';
             a.click();
             URL.revokeObjectURL(url);
         }
@@ -2217,27 +2225,24 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
         function exportViewportByName(name) {
             const vp = lastLoadedViewports?.find(v => v.name === name);
             if (!vp) { alert('Viewport not found.'); return; }
-            downloadViewportJson(vp);
+            downloadViewportGeoJson(vp);
         }
 
-        function downloadViewportJson(vp) {
-            const b = vp.bounds;
-            const data = {
-                name: vp.name,
-                bounds: `${b.minLon},${b.minLat},${b.maxLon},${b.maxLat}`,
-                years: vp.years_configured || []
-            };
-            const labelsRaw = localStorage.getItem('tee_labels_' + vp.name);
-            if (labelsRaw) {
-                try { data.labels = JSON.parse(labelsRaw); } catch(e) {}
-            }
-            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+        function downloadViewportGeoJson(vp) {
+            const fc = { type: 'FeatureCollection', features: [viewportToGeoJsonFeature(vp)] };
+            const blob = new Blob([JSON.stringify(fc, null, 2)], {type: 'application/geo+json'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${vp.name}_viewport.json`;
+            a.download = `${vp.name}_viewport.geojson`;
             a.click();
             URL.revokeObjectURL(url);
+        }
+
+        function boundsFromGeoJsonCoords(coords) {
+            const lons = coords.map(c => c[0]);
+            const lats = coords.map(c => c[1]);
+            return `${Math.min(...lons)},${Math.min(...lats)},${Math.max(...lons)},${Math.max(...lats)}`;
         }
 
         function importViewport(file) {
@@ -2245,7 +2250,24 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             reader.onload = async function(e) {
                 try {
                     const parsed = JSON.parse(e.target.result);
-                    const viewports = Array.isArray(parsed) ? parsed : [parsed];
+                    let viewports;
+                    if (parsed.type === 'FeatureCollection') {
+                        viewports = parsed.features.map(f => ({
+                            name: f.properties?.name,
+                            bounds: boundsFromGeoJsonCoords(f.geometry.coordinates[0]),
+                            years: f.properties?.years || [],
+                            labels: f.properties?.labels
+                        }));
+                    } else if (parsed.type === 'Feature') {
+                        viewports = [{
+                            name: parsed.properties?.name,
+                            bounds: boundsFromGeoJsonCoords(parsed.geometry.coordinates[0]),
+                            years: parsed.properties?.years || [],
+                            labels: parsed.properties?.labels
+                        }];
+                    } else {
+                        viewports = Array.isArray(parsed) ? parsed : [parsed];
+                    }
                     let created = 0, errors = [];
                     for (const data of viewports) {
                         if (!data.bounds) { errors.push(`${data.name || 'unknown'}: missing bounds`); continue; }
