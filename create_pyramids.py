@@ -5,7 +5,7 @@ Create image pyramids (12 zoom levels) for Tessera embeddings and satellite RGB.
 For Tessera: Extract first 3 bands as RGB, then create pyramids
 For Satellite RGB: Create pyramids from existing RGB image
 
-Uses Lanczos resampling for high-quality downsampling to reduce blockiness.
+Uses nearest-neighbor resampling to preserve crisp 10m embedding boundaries.
 
 Output structure:
 pyramids/
@@ -99,11 +99,12 @@ def create_rgb_from_tessera(input_file, output_file, upscale_factor=3):
     return output_file
 
 
-def create_pyramid_level(input_file, output_file, scale_factor, target_width, target_height, use_nearest=False):
+def create_pyramid_level(input_file, output_file, scale_factor, target_width, target_height, use_nearest=True):
     """Create pyramid level - high-resolution RECTANGULAR output, with 2x2 averaging between levels.
 
     Maintains aspect ratio by using rectangular target dimensions instead of square.
     This preserves crisp 10m resolution boundaries without distortion.
+    Uses nearest-neighbor resampling throughout for speed and crisp boundaries.
 
     Args:
         input_file: Path to the input GeoTIFF (previous pyramid level)
@@ -111,9 +112,7 @@ def create_pyramid_level(input_file, output_file, scale_factor, target_width, ta
         scale_factor: The pyramid level number (1, 2, 3, etc.)
         target_width: Target output width (maintains high resolution)
         target_height: Target output height (maintains aspect ratio)
-        use_nearest: If True, use nearest-neighbor resampling (crisp boundaries).
-                     If False, use Lanczos (smooth). Top 3 levels use nearest-neighbor
-                     for crisp 10m embedding boundaries.
+        use_nearest: Resampling mode (default True = nearest-neighbor).
     """
     resampling_method = Resampling.nearest if use_nearest else Resampling.lanczos
 
@@ -125,7 +124,7 @@ def create_pyramid_level(input_file, output_file, scale_factor, target_width, ta
         intermediate_height = max(1, int(original_height / 2))
         intermediate_width = max(1, int(original_width / 2))
 
-        # Step 1: Downsample by 2x using specified resampling method
+        # Step 1: Downsample by 2x using nearest-neighbor
         downsampled_data = src.read(
             out_shape=(src.count, intermediate_height, intermediate_width),
             resampling=resampling_method
@@ -134,10 +133,7 @@ def create_pyramid_level(input_file, output_file, scale_factor, target_width, ta
         # Step 2: Upsample back to target size using scipy.ndimage.zoom (all bands at once)
         scale_y = target_height / downsampled_data.shape[1]
         scale_x = target_width / downsampled_data.shape[2]
-        if use_nearest:
-            final_data = zoom(downsampled_data, (1, scale_y, scale_x), order=0)
-        else:
-            final_data = zoom(downsampled_data, (1, scale_y, scale_x), order=4).clip(0, 255).astype(downsampled_data.dtype)
+        final_data = zoom(downsampled_data, (1, scale_y, scale_x), order=0)
 
         # Update transform to reflect the effective resolution change
         # Output is target_width×target_height, each pixel represents a larger area
@@ -160,8 +156,7 @@ def create_pyramid_level(input_file, output_file, scale_factor, target_width, ta
 
     size_kb = output_file.stat().st_size / 1024
     spatial_scale = 10 * (2 ** scale_factor)  # 20m, 40m, 80m, etc.
-    resampling_label = "nearest" if use_nearest else "lanczos"
-    print(f"    Level {scale_factor}: {target_width}×{target_height} @ {spatial_scale}m/pixel [{resampling_label}] ({size_kb:.1f} KB)")
+    print(f"    Level {scale_factor}: {target_width}×{target_height} @ {spatial_scale}m/pixel [nearest] ({size_kb:.1f} KB)")
 
 
 def upscale_image(source_file, output_file, upscale_factor=3):
@@ -230,13 +225,11 @@ def create_pyramids_for_image(source_file, output_dir, name, upscale_factor=1):
 
     # Create downsampled levels with high-resolution RECTANGULAR output
     # Each level averages 2x2 pixels from previous level, then upsamples to target dimensions
-    # Use nearest-neighbor for top 3 levels (0-2) to preserve crisp 10m embedding boundaries
-    # Use Lanczos for coarser levels (3+) for smoother appearance at lower zoom
+    # Use nearest-neighbor for all levels to preserve crisp 10m embedding boundaries
     prev_level_file = level_0
     for level in range(1, NUM_ZOOM_LEVELS):
         level_file = output_dir / f"level_{level}.tif"
-        use_nearest = (level <= 2)  # Levels 1-2 use nearest-neighbor (top 3 with level_0)
-        create_pyramid_level(prev_level_file, level_file, level, target_width, target_height, use_nearest=use_nearest)
+        create_pyramid_level(prev_level_file, level_file, level, target_width, target_height, use_nearest=True)
         prev_level_file = level_file
 
     print(f"  ✓ Created {NUM_ZOOM_LEVELS} zoom levels in {output_dir}")
