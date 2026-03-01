@@ -23,6 +23,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'api.middleware.TileShortcircuitMiddleware',   # first — skip everything else for tiles
+    'django.middleware.gzip.GZipMiddleware',       # compress API/vector responses (tiles already short-circuited)
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
