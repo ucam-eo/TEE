@@ -753,7 +753,6 @@
             has_embeddings: false,
             has_pyramids: false,
             has_vectors: false,
-            has_pca: false,
             has_umap: false,
             years_available: [],
             // Client-side flags
@@ -866,7 +865,7 @@
             },
             {
                 id: 'panel4-pca',
-                test: (s) => s.has_pca && !s.pca_loaded && currentDimReduction === 'pca',
+                test: (s) => s.has_vectors && !s.pca_loaded && currentDimReduction === 'pca',
                 onReady: async () => {
                     console.log('[DEP] panel4-pca: loading PCA visualization');
                     await loadDimReduction('pca');
@@ -900,7 +899,6 @@
             return current.has_embeddings !== (incoming.has_embeddings || false) ||
                    current.has_pyramids !== (incoming.has_pyramids || false) ||
                    current.has_vectors !== (incoming.has_vectors || false) ||
-                   current.has_pca !== (incoming.has_pca || false) ||
                    current.has_umap !== (incoming.has_umap || false) ||
                    JSON.stringify(current.years_available) !== JSON.stringify(incoming.years_available || []);
         }
@@ -950,7 +948,6 @@
                 viewportStatus.has_embeddings = incoming.has_embeddings || false;
                 viewportStatus.has_pyramids = incoming.has_pyramids || false;
                 viewportStatus.has_vectors = incoming.has_vectors || false;
-                viewportStatus.has_pca = incoming.has_pca || false;
                 viewportStatus.has_umap = incoming.has_umap || false;
                 viewportStatus.years_available = incoming.years_available || [];
 
@@ -958,7 +955,6 @@
                     console.log('[DEP] Status changed:', JSON.stringify({
                         pyramids: viewportStatus.has_pyramids,
                         vectors: viewportStatus.has_vectors,
-                        pca: viewportStatus.has_pca,
                         umap: viewportStatus.has_umap,
                         years: viewportStatus.years_available
                     }));
@@ -969,7 +965,7 @@
             }
 
             // Schedule next poll — fast while server still computing, slow when done
-            const serverBusy = !viewportStatus.has_pyramids || !viewportStatus.has_vectors || !viewportStatus.has_pca;
+            const serverBusy = !viewportStatus.has_pyramids || !viewportStatus.has_vectors;
             const interval = serverBusy ? POLL_FAST : POLL_SLOW;
             pollTimerId = setTimeout(pollViewportStatus, interval);
         }
@@ -3335,6 +3331,109 @@
 
         // ===== UMAP AND HEATMAP LOADING FUNCTIONS =====
 
+        // Compute PCA from locally-downloaded vectors (no server round-trip)
+        function computePCAFromLocal(lv) {
+            const n = lv.numVectors;
+            const dim = lv.dim; // 128
+            const emb = lv.embeddings; // Float32Array, n * dim
+            const coords = lv.coords;  // Int32Array, n * 2
+            const gt = lv.metadata.geotransform;
+
+            // 1. Compute per-dimension mean
+            const mean = new Float64Array(dim);
+            for (let i = 0; i < n; i++) {
+                const off = i * dim;
+                for (let d = 0; d < dim; d++) mean[d] += emb[off + d];
+            }
+            for (let d = 0; d < dim; d++) mean[d] /= n;
+
+            // 2. Center data (in-place copy)
+            const centered = new Float32Array(n * dim);
+            for (let i = 0; i < n; i++) {
+                const off = i * dim;
+                for (let d = 0; d < dim; d++) centered[off + d] = emb[off + d] - mean[d];
+            }
+
+            // 3. Compute 128x128 covariance matrix (upper triangle, then mirror)
+            const cov = new Float64Array(dim * dim);
+            for (let i = 0; i < n; i++) {
+                const off = i * dim;
+                for (let d1 = 0; d1 < dim; d1++) {
+                    const v1 = centered[off + d1];
+                    for (let d2 = d1; d2 < dim; d2++) {
+                        cov[d1 * dim + d2] += v1 * centered[off + d2];
+                    }
+                }
+            }
+            const denom = n > 1 ? n - 1 : 1;
+            for (let d1 = 0; d1 < dim; d1++) {
+                for (let d2 = d1; d2 < dim; d2++) {
+                    cov[d1 * dim + d2] /= denom;
+                    if (d2 !== d1) cov[d2 * dim + d1] = cov[d1 * dim + d2];
+                }
+            }
+
+            // 4. Power iteration with deflation to find top 3 eigenvectors
+            const numComponents = 3;
+            const eigenvectors = [];
+            const covWork = new Float64Array(cov); // working copy for deflation
+
+            for (let comp = 0; comp < numComponents; comp++) {
+                // Initialize random vector
+                let vec = new Float64Array(dim);
+                for (let d = 0; d < dim; d++) vec[d] = Math.random() - 0.5;
+
+                // Normalize
+                let norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0));
+                for (let d = 0; d < dim; d++) vec[d] /= norm;
+
+                // Power iteration (100 iterations is plenty for 128-dim)
+                for (let iter = 0; iter < 100; iter++) {
+                    const newVec = new Float64Array(dim);
+                    for (let d1 = 0; d1 < dim; d1++) {
+                        let s = 0;
+                        for (let d2 = 0; d2 < dim; d2++) s += covWork[d1 * dim + d2] * vec[d2];
+                        newVec[d1] = s;
+                    }
+                    norm = Math.sqrt(newVec.reduce((s, v) => s + v * v, 0));
+                    if (norm < 1e-10) break;
+                    for (let d = 0; d < dim; d++) vec[d] = newVec[d] / norm;
+                }
+
+                eigenvectors.push(vec);
+
+                // Deflate: covWork -= eigenvalue * vec * vec^T
+                // eigenvalue = vec^T * covWork * vec (= norm from last iteration)
+                const eigenvalue = norm;
+                for (let d1 = 0; d1 < dim; d1++) {
+                    for (let d2 = 0; d2 < dim; d2++) {
+                        covWork[d1 * dim + d2] -= eigenvalue * vec[d1] * vec[d2];
+                    }
+                }
+            }
+
+            // 5. Project centered data onto eigenvectors
+            const points = new Array(n);
+            for (let i = 0; i < n; i++) {
+                const off = i * dim;
+                const px = coords[i * 2];
+                const py = coords[i * 2 + 1];
+                const lon = gt.c + gt.a * px + gt.b * py;
+                const lat = gt.f + gt.d * px + gt.e * py;
+
+                let x = 0, y = 0, z = 0;
+                for (let d = 0; d < dim; d++) {
+                    const v = centered[off + d];
+                    x += v * eigenvectors[0][d];
+                    y += v * eigenvectors[1][d];
+                    z += v * eigenvectors[2][d];
+                }
+                points[i] = { lat, lon, x, y, z };
+            }
+
+            return points;
+        }
+
         // Load dimensionality reduction (PCA or UMAP) with background computation if needed
         async function loadDimReduction(method = null) {
             // Use specified method or current selection
@@ -3342,7 +3441,7 @@
             const methodUpper = dimMethod.toUpperCase();
 
             try {
-                console.log(`[${methodUpper}] Checking status for ${currentViewportName}/${currentEmbeddingYear}...`);
+                console.log(`[${methodUpper}] Loading for ${currentViewportName}/${currentEmbeddingYear}...`);
 
                 // Update panel title
                 const titleEl = document.getElementById('panel4-title');
@@ -3350,65 +3449,94 @@
                     titleEl.textContent = `${methodUpper} (Embedding Space)`;
                 }
 
-                // Check if method needs to be computed
-                let statusResp = await fetch(`/api/viewports/${currentViewportName}/${dimMethod}-status`);
-                let status = await statusResp.json();
+                let points = null;
 
-                // If waiting for embeddings (vector extraction still running), poll until ready
-                if (status.waiting) {
-                    console.log(`[${methodUpper}] Waiting for embeddings (vector extraction in progress)...`);
+                if (dimMethod === 'pca') {
+                    // PCA: compute client-side from downloaded vectors
                     const umapContainer = document.getElementById('map-umap');
-                    umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">⏳ ${status.message || 'Waiting for data...'}</div>`;
 
-                    // Poll until embeddings are ready
-                    while (status.waiting) {
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                        statusResp = await fetch(`/api/viewports/${currentViewportName}/${dimMethod}-status`);
-                        status = await statusResp.json();
+                    // Ensure vectors are downloaded first
+                    if (!localVectors || localVectors.viewport !== currentViewportName || localVectors.year !== String(currentEmbeddingYear)) {
+                        umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">⏳ Downloading vectors...</div>`;
+                        await downloadVectorData(currentViewportName, currentEmbeddingYear);
+                        viewportStatus.vectors_downloaded = true;
                     }
-                    console.log(`[${methodUpper}] Embeddings ready, proceeding...`);
-                }
 
-                if (status.computing || !status.exists) {
-                    const waitMsg = dimMethod === 'pca' ? 'Computing PCA...' : 'Computing UMAP (this may take a few minutes)...';
-                    console.log(`[${methodUpper}] ${status.computing ? 'Already computing' : 'Starting computation'}... (operation: ${status.operation_id})`);
+                    umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">⏳ Computing PCA...</div>`;
 
-                    // Show loading message in Panel 4
-                    const umapContainer = document.getElementById('map-umap');
-                    umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">⏳ ${waitMsg}</div>`;
+                    // Yield to UI before heavy computation
+                    await new Promise(resolve => setTimeout(resolve, 50));
 
-                    // Poll until complete
-                    await waitForDimReduction(status.operation_id, dimMethod);
-                    console.log(`[${methodUpper}] Computation complete`);
-                }
+                    console.log(`[PCA] Computing client-side PCA for ${localVectors.numVectors} vectors...`);
+                    const t0 = performance.now();
+                    points = computePCAFromLocal(localVectors);
+                    console.log(`[PCA] Computed in ${((performance.now() - t0) / 1000).toFixed(2)}s`);
+                } else {
+                    // UMAP: use existing server-side flow
+                    console.log(`[${methodUpper}] Checking status for ${currentViewportName}/${currentEmbeddingYear}...`);
 
-                // Load the coordinates (either already existed or just finished computing)
-                console.log(`[${methodUpper}] Loading coordinates...`);
-                const response = await fetch(`/api/viewports/${currentViewportName}/compute-${dimMethod}`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({})
-                });
+                    let statusResp = await fetch(`/api/viewports/${currentViewportName}/${dimMethod}-status`);
+                    let status = await statusResp.json();
 
-                let data = await response.json();
+                    if (status.waiting) {
+                        console.log(`[${methodUpper}] Waiting for embeddings (vector extraction in progress)...`);
+                        const umapContainer = document.getElementById('map-umap');
+                        umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">⏳ ${status.message || 'Waiting for data...'}</div>`;
 
-                // If computation was auto-triggered, wait for it then retry
-                if (data.computing && data.operation_id) {
-                    console.log(`[${methodUpper}] Computation triggered on-demand, waiting...`);
-                    const umapContainer = document.getElementById('map-umap');
-                    umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">⏳ Computing ${methodUpper}...</div>`;
-                    await waitForDimReduction(data.operation_id, dimMethod);
-                    const retryResp = await fetch(`/api/viewports/${currentViewportName}/compute-${dimMethod}`, {
+                        while (status.waiting) {
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            statusResp = await fetch(`/api/viewports/${currentViewportName}/${dimMethod}-status`);
+                            status = await statusResp.json();
+                        }
+                        console.log(`[${methodUpper}] Embeddings ready, proceeding...`);
+                    }
+
+                    if (status.computing || !status.exists) {
+                        const waitMsg = 'Computing UMAP (this may take a few minutes)...';
+                        console.log(`[${methodUpper}] ${status.computing ? 'Already computing' : 'Starting computation'}... (operation: ${status.operation_id})`);
+
+                        const umapContainer = document.getElementById('map-umap');
+                        umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">⏳ ${waitMsg}</div>`;
+
+                        await waitForDimReduction(status.operation_id, dimMethod);
+                        console.log(`[${methodUpper}] Computation complete`);
+                    }
+
+                    console.log(`[${methodUpper}] Loading coordinates...`);
+                    const response = await fetch(`/api/viewports/${currentViewportName}/compute-${dimMethod}`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({})
                     });
-                    data = await retryResp.json();
+
+                    let data = await response.json();
+
+                    if (data.computing && data.operation_id) {
+                        console.log(`[${methodUpper}] Computation triggered on-demand, waiting...`);
+                        const umapContainer = document.getElementById('map-umap');
+                        umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">⏳ Computing ${methodUpper}...</div>`;
+                        await waitForDimReduction(data.operation_id, dimMethod);
+                        const retryResp = await fetch(`/api/viewports/${currentViewportName}/compute-${dimMethod}`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({})
+                        });
+                        data = await retryResp.json();
+                    }
+
+                    if (data.success) {
+                        points = data.points;
+                    } else {
+                        console.error(`[${methodUpper}] Error: ${data.error}`);
+                        const umapContainer = document.getElementById('map-umap');
+                        umapContainer.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:16px;color:#e74c3c;">Error: ${data.error}</div>`;
+                        return;
+                    }
                 }
 
-                if (data.success) {
-                    console.log(`[${methodUpper}] Got ${data.num_points} points, initializing Three.js scene...`);
-                    umapData = data.points;
+                if (points) {
+                    console.log(`[${methodUpper}] Got ${points.length} points, initializing Three.js scene...`);
+                    umapData = points;
 
                     // Destroy previous scene if reloading
                     if (umapCanvasLayer) {
@@ -3429,14 +3557,10 @@
                     if (savedLabels && savedLabels.length > 0) {
                         console.log(`[${methodUpper}] Applying ${savedLabels.length} labels to colors...`);
                         updateUMAPColorsFromLabels();
-                        console.log(`✓ ${methodUpper} rendered: ${data.num_points} points (colored by labels)`);
+                        console.log(`✓ ${methodUpper} rendered: ${points.length} points (colored by labels)`);
                     } else {
-                        console.log(`✓ ${methodUpper} rendered: ${data.num_points} points (all grey)`);
+                        console.log(`✓ ${methodUpper} rendered: ${points.length} points (all grey)`);
                     }
-                } else {
-                    console.error(`[${methodUpper}] Error: ${data.error}`);
-                    const umapContainer = document.getElementById('map-umap');
-                    umapContainer.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:16px;color:#e74c3c;">Error: ${data.error}</div>`;
                 }
             } catch (error) {
                 console.error(`[${methodUpper}] Fatal error:`, error);
@@ -4624,7 +4748,7 @@
                     const embeddingsIcon = status.has_embeddings ? '✅' : '❌';
                     const pyramidsIcon = status.has_pyramids ? '✅' : '❌';
                     const vectorsIcon = status.has_vectors ? '✅' : '❌';
-                    const pcaIcon = status.has_pca ? '✅' : '❌';
+                    const pcaIcon = '🖥️'; // PCA computed client-side
                     const umapIcon = status.has_umap ? '✅' : '❌';
                     const years = status.years_available ? status.years_available.join(', ') : 'None';
                     const unavailable = status.years_unavailable && status.years_unavailable.length
@@ -4648,7 +4772,7 @@
                             <strong>Vectors:</strong> ${vectorsIcon}
                         </div>
                         <div style="margin-bottom: 8px;">
-                            <strong>PCA (Panel 4):</strong> ${pcaIcon}
+                            <strong>PCA (Panel 4):</strong> ${pcaIcon} (client-side)
                         </div>
                         <div style="margin-bottom: 8px;">
                             <strong>UMAP:</strong> ${umapIcon}

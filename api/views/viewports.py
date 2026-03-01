@@ -552,14 +552,7 @@ def is_ready(request, viewport_name):
                         has_pyramids = True
                         years_available.append(year_dir.name)
 
-        # Check PCA/UMAP — only for requested years
-        has_pca = False
-        if vectors_dir.exists():
-            for year_dir in vectors_dir.glob("*"):
-                if year_dir.is_dir() and _year_matches(year_dir.name) and (year_dir / 'pca_coords.npy').exists():
-                    has_pca = True
-                    break
-
+        # Check UMAP — only for requested years
         has_umap = False
         if vectors_dir.exists():
             for year_dir in vectors_dir.glob("*"):
@@ -625,7 +618,6 @@ def is_ready(request, viewport_name):
             'has_embeddings': has_embeddings,
             'has_pyramids': has_pyramids,
             'has_vectors': has_vectors,
-            'has_pca': has_pca,
             'has_umap': has_umap,
             'years_available': sorted(years_available),
             'years_processing': years_processing,

@@ -1,4 +1,4 @@
-"""Compute endpoints: UMAP, PCA, status checks, distance heatmap."""
+"""Compute endpoints: UMAP, status checks, distance heatmap."""
 
 import json
 import time
@@ -85,7 +85,7 @@ def _find_year_with_embeddings(viewport_name, preferred_year=None):
 
 
 def _compute_projection(request, viewport_name, coords_filename, label):
-    """Shared logic for compute-umap and compute-pca endpoints."""
+    """Shared logic for compute-umap endpoint."""
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     try:
@@ -112,9 +112,7 @@ def _compute_projection(request, viewport_name, coords_filename, label):
         if not coords_file.exists():
             # Auto-trigger computation if embeddings exist
             if (vector_dir / 'all_embeddings.npy').exists() or (vector_dir / 'all_embeddings.npy.gz').exists():
-                sub_label = label.lower()
-                script = 'compute_pca.py' if sub_label == 'pca' else 'compute_umap.py'
-                operation_id = _trigger_computation(viewport_name, year, script)
+                operation_id = _trigger_computation(viewport_name, year, 'compute_umap.py')
                 return JsonResponse({
                     'success': False,
                     'error': f'{label} is being computed for {viewport_name} ({year}). Please retry shortly.',
@@ -154,11 +152,6 @@ def compute_umap(request, viewport_name):
     return _compute_projection(request, viewport_name, 'umap_coords.npy', 'UMAP')
 
 
-def compute_pca(request, viewport_name):
-    """Load pre-computed PCA coordinates for visualization."""
-    return _compute_projection(request, viewport_name, 'pca_coords.npy', 'PCA')
-
-
 def _is_progress_fresh(progress_file, max_age_seconds=60):
     """Check if a progress file exists, is non-terminal, and was updated recently."""
     if not progress_file.exists():
@@ -178,7 +171,7 @@ def _is_progress_fresh(progress_file, max_age_seconds=60):
 
 
 def _trigger_computation(viewport_name, year, script_name):
-    """Trigger a background computation (PCA or UMAP) if not already running."""
+    """Trigger a background UMAP computation if not already running."""
     sub_label = script_name.replace('compute_', '').replace('.py', '')
     operation_id = f"{viewport_name}_{sub_label}"
     progress_file = PROGRESS_DIR / f"{operation_id}_progress.json"
@@ -199,7 +192,7 @@ def _trigger_computation(viewport_name, year, script_name):
 
 
 def _projection_status(request, viewport_name, coords_filename, label):
-    """Shared logic for umap-status and pca-status endpoints."""
+    """Shared logic for umap-status endpoint."""
     try:
         validate_viewport_name(viewport_name)
     except ValueError as e:
@@ -223,8 +216,7 @@ def _projection_status(request, viewport_name, coords_filename, label):
         # If embeddings exist for any year, trigger computation immediately
         year, vector_dir = _find_year_with_embeddings(viewport_name, preferred_year)
         if vector_dir:
-            script = 'compute_pca.py' if sub_label == 'pca' else 'compute_umap.py'
-            operation_id = _trigger_computation(viewport_name, year, script)
+            operation_id = _trigger_computation(viewport_name, year, 'compute_umap.py')
             return JsonResponse({'exists': False, 'computing': True, 'operation_id': operation_id})
 
         # Embeddings don't exist yet — waiting for vectors stage
@@ -245,6 +237,3 @@ def umap_status(request, viewport_name):
     return _projection_status(request, viewport_name, 'umap_coords.npy', 'UMAP')
 
 
-def pca_status(request, viewport_name):
-    """Check if PCA exists."""
-    return _projection_status(request, viewport_name, 'pca_coords.npy', 'PCA')

@@ -24,9 +24,8 @@ STAGE_PROGRESS = {
     'download': (0, 50),    # 0-50%: Downloading embeddings (slowest)
     'rgb': (50, 60),        # 50-60%: Creating RGB
     'pyramids': (60, 75),   # 60-75%: Creating pyramids
-    'vectors': (75, 85),    # 75-85%: Extracting vectors
-    'pca': (85, 95),        # 85-95%: Computing PCA for all years
-    'umap': (95, 100),      # 95-100%: Computing UMAP (optional)
+    'vectors': (75, 90),    # 75-90%: Extracting vectors
+    'umap': (90, 100),      # 90-100%: Computing UMAP (optional)
 }
 
 # Global registry of active pipeline processes (for cancellation)
@@ -463,7 +462,7 @@ class PipelineRunner:
             logger.warning(f"[PIPELINE] Cleanup warning: {e}")
 
     def _cleanup_uncompressed_embeddings(self, viewport_name):
-        """Delete uncompressed all_embeddings.npy files now that PCA+UMAP are done.
+        """Delete uncompressed all_embeddings.npy files now that UMAP is done.
 
         The .npy.gz created during extraction is kept for serving to browsers.
         """
@@ -478,47 +477,6 @@ class PipelineRunner:
                 size_mb = npy.stat().st_size / (1024 * 1024)
                 npy.unlink()
                 logger.info(f"[PIPELINE] Deleted uncompressed all_embeddings.npy for {year_dir.name} ({size_mb:.1f} MB)")
-
-    def stage_4b_compute_pca(self, viewport_name):
-        """Stage 4b: Compute PCA for ALL years (for Panel 4 visualization)."""
-        logger.info(f"[PIPELINE] STAGE 4b: Computing PCA for '{viewport_name}' (all years)...")
-
-        vectors_dir = VECTORS_DIR / viewport_name
-        if not vectors_dir.exists():
-            logger.warning(f"[PIPELINE] ⚠️  PCA skipped - no vectors directory for {viewport_name}")
-            return True, None
-
-        # Find all years with vectors
-        years_processed = 0
-        years_failed = 0
-
-        for year_dir in sorted(vectors_dir.iterdir()):
-            if year_dir.is_dir() and ((year_dir / "all_embeddings.npy").exists() or (year_dir / "all_embeddings.npy.gz").exists()):
-                year = year_dir.name
-                pca_file = year_dir / "pca_coords.npy"
-
-                # Skip if PCA already exists
-                if pca_file.exists():
-                    logger.info(f"[PIPELINE]   ✓ PCA already exists for {year}")
-                    years_processed += 1
-                    continue
-
-                logger.info(f"[PIPELINE]   Computing PCA for {year}...")
-                result = self.run_script('compute_pca.py', viewport_name, year, timeout=120)
-
-                if result.returncode != 0:
-                    logger.warning(f"[PIPELINE]   ⚠️  PCA failed for {year}: {result.stderr[:100]}")
-                    years_failed += 1
-                else:
-                    logger.info(f"[PIPELINE]   ✓ PCA computed for {year}")
-                    years_processed += 1
-
-        if years_processed > 0:
-            logger.info(f"[PIPELINE] ✓ Stage 4b complete: PCA computed for {years_processed} years")
-        else:
-            logger.warning(f"[PIPELINE] ⚠️  Stage 4b: No PCA files created")
-
-        return True, None  # PCA is non-critical, don't fail pipeline
 
     def stage_5_compute_umap(self, viewport_name, umap_year):
         """Stage 5: Compute UMAP 2D projection (optional)."""
@@ -658,18 +616,6 @@ class PipelineRunner:
             return False, "Cancelled by user"
         self.update_progress('vectors', 100, "Vectors ready")
 
-        # Stage 4b: Compute PCA for all years (for Panel 4 visualization)
-        # ✓ After this stage, Panel 4 PCA scatter plot BECOMES AVAILABLE
-        if check_cancelled():
-            return False, "Cancelled by user"
-        self.update_progress('pca', 0, "Computing PCA for visualization...")
-        self._active_stage = ('pca', viewport_name)
-        success, error = self.stage_4b_compute_pca(viewport_name)
-        self._active_stage = None
-        if check_cancelled():
-            return False, "Cancelled by user"
-        self.update_progress('pca', 100, "PCA ready")
-
         # Stage 5: Compute UMAP (optional)
         # ✓ After this stage, UMAP visualization BECOMES AVAILABLE
         if check_cancelled():
@@ -711,7 +657,7 @@ class PipelineRunner:
         self.progress.complete(f"Pipeline complete for {viewport_name}")
 
         # Clean up per-stage progress files (subprocess temp files)
-        for stage in ('download', 'rgb', 'pyramids', 'vectors', 'pca', 'umap'):
+        for stage in ('download', 'rgb', 'pyramids', 'vectors', 'umap'):
             stage_file = PROGRESS_DIR / f"{viewport_name}_{stage}_progress.json"
             try:
                 if stage_file.exists():

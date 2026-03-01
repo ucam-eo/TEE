@@ -5,7 +5,7 @@ from .views.viewports import (list_viewports, current_viewport, switch_viewport,
 from .views.pipeline import (
     operations_progress, pipeline_status, cancel_processing)
 from .views.vector_data import serve_vector_data
-from .views.compute import compute_umap, compute_pca, umap_status, pca_status
+from .views.compute import compute_umap, umap_status
 from .views.config import get_config
 
 urlpatterns = [
@@ -31,9 +31,7 @@ urlpatterns = [
     path('vector-data/<str:viewport>/<str:year>/<str:filename>', serve_vector_data),
     # Compute
     path('viewports/<str:viewport_name>/compute-umap', compute_umap),
-    path('viewports/<str:viewport_name>/compute-pca', compute_pca),
     path('viewports/<str:viewport_name>/umap-status', umap_status),
-    path('viewports/<str:viewport_name>/pca-status', pca_status),
     # Config
     path('config', get_config),
 ]
