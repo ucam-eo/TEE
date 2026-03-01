@@ -1110,6 +1110,12 @@
             }
         };
 
+        async function decompressGzip(blob) {
+            const ds = new DecompressionStream('gzip');
+            const decompressed = new Response(blob.stream().pipeThrough(ds));
+            return await decompressed.arrayBuffer();
+        }
+
         function parseNpy(buffer) {
             // Parse numpy .npy format: magic(6) + version(2) + header_len(2 or 4) + header + data
             const view = new DataView(buffer);
@@ -1192,10 +1198,16 @@
                 bar.style.width = '5%';
                 percent.textContent = '5%';
 
-                // Fetch coords
-                const coordsResp = await fetch(`/api/vector-data/${viewport}/${year}/pixel_coords.npy`);
-                if (!coordsResp.ok) throw new Error(`pixel_coords.npy: ${coordsResp.status}`);
-                const coordsBuf = await coordsResp.arrayBuffer();
+                // Fetch coords (try .gz first, fall back to raw .npy)
+                let coordsBuf;
+                const coordsGzResp = await fetch(`/api/vector-data/${viewport}/${year}/pixel_coords.npy.gz`);
+                if (coordsGzResp.ok) {
+                    coordsBuf = await decompressGzip(await coordsGzResp.blob());
+                } else {
+                    const coordsResp = await fetch(`/api/vector-data/${viewport}/${year}/pixel_coords.npy`);
+                    if (!coordsResp.ok) throw new Error(`pixel_coords.npy: ${coordsResp.status}`);
+                    coordsBuf = await coordsResp.arrayBuffer();
+                }
                 const coordsParsed = parseNpy(coordsBuf);
                 const coordsData = new Int32Array(coordsParsed.rawData);
                 status.textContent = 'Downloading embeddings...';
@@ -1203,8 +1215,13 @@
                 percent.textContent = '10%';
 
                 // Fetch embeddings with progress tracking (large file)
-                const embResp = await fetch(`/api/vector-data/${viewport}/${year}/all_embeddings.npy`);
-                if (!embResp.ok) throw new Error(`all_embeddings.npy: ${embResp.status}`);
+                // Try .gz first, fall back to raw .npy
+                let embResp = await fetch(`/api/vector-data/${viewport}/${year}/all_embeddings.npy.gz`);
+                let isGzipped = embResp.ok;
+                if (!isGzipped) {
+                    embResp = await fetch(`/api/vector-data/${viewport}/${year}/all_embeddings.npy`);
+                    if (!embResp.ok) throw new Error(`all_embeddings.npy: ${embResp.status}`);
+                }
                 const contentLength = parseInt(embResp.headers.get('Content-Length') || '0');
                 const reader = embResp.body.getReader();
                 const chunks = [];
@@ -1230,7 +1247,16 @@
                     embBuffer.set(chunk, offset);
                     offset += chunk.length;
                 }
-                const embParsed = parseNpy(embBuffer.buffer);
+
+                // Decompress if gzipped
+                let embArrayBuffer;
+                if (isGzipped) {
+                    status.textContent = 'Decompressing embeddings...';
+                    embArrayBuffer = await decompressGzip(new Blob([embBuffer]));
+                } else {
+                    embArrayBuffer = embBuffer.buffer;
+                }
+                const embParsed = parseNpy(embArrayBuffer);
                 const embDim = 128;
                 let embeddingsData;
 

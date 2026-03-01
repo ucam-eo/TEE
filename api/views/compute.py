@@ -77,8 +77,11 @@ def _find_year_with_file(viewport_name, filename, preferred_year=None):
 
 
 def _find_year_with_embeddings(viewport_name, preferred_year=None):
-    """Find a year directory containing all_embeddings.npy."""
-    return _find_year_with_file(viewport_name, 'all_embeddings.npy', preferred_year)
+    """Find a year directory containing all_embeddings.npy or .npy.gz."""
+    year, d = _find_year_with_file(viewport_name, 'all_embeddings.npy', preferred_year)
+    if d:
+        return year, d
+    return _find_year_with_file(viewport_name, 'all_embeddings.npy.gz', preferred_year)
 
 
 def _compute_projection(request, viewport_name, coords_filename, label):
@@ -108,8 +111,7 @@ def _compute_projection(request, viewport_name, coords_filename, label):
         coords_file = vector_dir / coords_filename
         if not coords_file.exists():
             # Auto-trigger computation if embeddings exist
-            embeddings_file = vector_dir / 'all_embeddings.npy'
-            if embeddings_file.exists():
+            if (vector_dir / 'all_embeddings.npy').exists() or (vector_dir / 'all_embeddings.npy.gz').exists():
                 sub_label = label.lower()
                 script = 'compute_pca.py' if sub_label == 'pca' else 'compute_umap.py'
                 operation_id = _trigger_computation(viewport_name, year, script)

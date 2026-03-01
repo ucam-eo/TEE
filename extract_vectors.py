@@ -12,6 +12,7 @@ The client downloads these files and does brute-force search in JavaScript.
 
 import sys
 import os
+import gzip
 import numpy as np
 import rasterio
 from rasterio import windows as rasterio_windows
@@ -159,13 +160,26 @@ def extract_vectors_for_year(viewport_id, bounds, year):
             # Save all embeddings
             embeddings_file = output_dir / "all_embeddings.npy"
             np.save(embeddings_file, all_embeddings)
-            logger.info(f"   ✓ Saved all embeddings: {embeddings_file}")
             embeddings_size_mb = embeddings_file.stat().st_size / (1024 * 1024)
+            logger.info(f"   ✓ Saved all embeddings: {embeddings_file}")
             logger.info(f"     Size: {embeddings_size_mb:.1f} MB")
+
+            # Gzip-compress for faster client downloads
+            embeddings_gz = output_dir / "all_embeddings.npy.gz"
+            with open(embeddings_file, 'rb') as f_in, gzip.open(embeddings_gz, 'wb', compresslevel=6) as f_out:
+                f_out.write(f_in.read())
+            gz_size_mb = embeddings_gz.stat().st_size / (1024 * 1024)
+            logger.info(f"   ✓ Compressed: {gz_size_mb:.1f} MB ({gz_size_mb/embeddings_size_mb*100:.0f}% of original)")
 
             # Save pixel coordinates
             coords_file = output_dir / "pixel_coords.npy"
             np.save(coords_file, coords_array)
+
+            # Gzip-compress coords
+            coords_gz = output_dir / "pixel_coords.npy.gz"
+            with open(coords_file, 'rb') as f_in, gzip.open(coords_gz, 'wb', compresslevel=6) as f_out:
+                f_out.write(f_in.read())
+            logger.info(f"   ✓ Compressed pixel_coords: {coords_gz.stat().st_size / 1024:.1f} KB")
 
             # Step 2: Create metadata JSON
             logger.info(f"\n📋 Step 2: Creating metadata...")

@@ -395,8 +395,7 @@ class PipelineRunner:
         vectors_year_dir = None
         for year_dir in vectors_viewport_dir.glob("*"):
             if year_dir.is_dir():
-                embeddings_file = year_dir / "all_embeddings.npy"
-                if embeddings_file.exists():
+                if (year_dir / "all_embeddings.npy").exists() or (year_dir / "all_embeddings.npy.gz").exists():
                     vectors_found = True
                     vectors_year_dir = year_dir
                     break
@@ -406,8 +405,10 @@ class PipelineRunner:
             return True, None
 
         # Verify supporting files
-        required_files = ["all_embeddings.npy", "pixel_coords.npy", "metadata.json"]
+        required_files = ["pixel_coords.npy", "metadata.json"]
         missing_files = [f for f in required_files if not (vectors_year_dir / f).exists()]
+        if not (vectors_year_dir / "all_embeddings.npy").exists() and not (vectors_year_dir / "all_embeddings.npy.gz").exists():
+            missing_files.append("all_embeddings.npy[.gz]")
         if missing_files:
             logger.warning(f"[PIPELINE] Stage 4 warning - Missing files: {missing_files}")
 
@@ -461,6 +462,23 @@ class PipelineRunner:
             # Non-critical - log but don't fail pipeline
             logger.warning(f"[PIPELINE] Cleanup warning: {e}")
 
+    def _cleanup_uncompressed_embeddings(self, viewport_name):
+        """Delete uncompressed all_embeddings.npy files now that PCA+UMAP are done.
+
+        The .npy.gz created during extraction is kept for serving to browsers.
+        """
+        vectors_dir = VECTORS_DIR / viewport_name
+        if not vectors_dir.exists():
+            return
+        for year_dir in sorted(vectors_dir.iterdir()):
+            if not year_dir.is_dir():
+                continue
+            npy = year_dir / "all_embeddings.npy"
+            if npy.exists() and (year_dir / "all_embeddings.npy.gz").exists():
+                size_mb = npy.stat().st_size / (1024 * 1024)
+                npy.unlink()
+                logger.info(f"[PIPELINE] Deleted uncompressed all_embeddings.npy for {year_dir.name} ({size_mb:.1f} MB)")
+
     def stage_4b_compute_pca(self, viewport_name):
         """Stage 4b: Compute PCA for ALL years (for Panel 4 visualization)."""
         logger.info(f"[PIPELINE] STAGE 4b: Computing PCA for '{viewport_name}' (all years)...")
@@ -475,7 +493,7 @@ class PipelineRunner:
         years_failed = 0
 
         for year_dir in sorted(vectors_dir.iterdir()):
-            if year_dir.is_dir() and (year_dir / "all_embeddings.npy").exists():
+            if year_dir.is_dir() and ((year_dir / "all_embeddings.npy").exists() or (year_dir / "all_embeddings.npy.gz").exists()):
                 year = year_dir.name
                 pca_file = year_dir / "pca_coords.npy"
 
@@ -665,7 +683,7 @@ class PipelineRunner:
                 vectors_vp_dir = VECTORS_DIR / viewport_name
                 if vectors_vp_dir.exists():
                     year_dirs = sorted(d.name for d in vectors_vp_dir.iterdir()
-                                       if d.is_dir() and (d / 'all_embeddings.npy').exists())
+                                       if d.is_dir() and ((d / 'all_embeddings.npy').exists() or (d / 'all_embeddings.npy.gz').exists()))
                     if year_dirs:
                         effective_umap_year = year_dirs[0]
                         logger.info(f"[PIPELINE] Auto-selected year {effective_umap_year} for UMAP")
@@ -682,6 +700,9 @@ class PipelineRunner:
 
         if check_cancelled():
             return False, "Cancelled by user"
+
+        # Delete uncompressed all_embeddings.npy — .npy.gz exists for client downloads
+        self._cleanup_uncompressed_embeddings(viewport_name)
 
         logger.info(f"\n{'=' * 70}")
         logger.info(f"✅ PARALLEL PIPELINE COMPLETE: {viewport_name}")
