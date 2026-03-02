@@ -572,7 +572,7 @@
                     <option value="umap">UMAP (slow)</option>
                 </select>
             </div>
-            <div id="map-umap" class="map"></div>
+            <div id="map-umap" class="map"><div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:16px;color:#999;">Waiting for vectors...</div></div>
         </div>
 
         <!-- Panel 5: Distance Heatmap -->
@@ -835,6 +835,9 @@
                         evaluateDependencies();
                     } catch (e) {
                         console.error('[DEP] vectors-download failed:', e);
+                        // Reset so next poll re-triggers the download
+                        const dep = dependencyRegistry.find(d => d.id === 'vectors-download');
+                        if (dep) dep.satisfied = false;
                     }
                 },
                 satisfied: false
