@@ -1140,15 +1140,38 @@
         }
 
         async function downloadVectorData(viewport, year) {
-            // Check IndexedDB cache first
+            // Fetch metadata first (small, needed for cache validation)
+            const metaResp0 = await fetch(`/api/vector-data/${viewport}/${year}/metadata.json`);
+            const serverMetadata = metaResp0.ok ? await metaResp0.json() : null;
+
+            // Check IndexedDB cache
             const cached = await VectorCache.get(viewport, year);
             if (cached) {
-                // Validate cached embeddings aren't all zeros (corrupt data)
-                let hasNonZero = false;
-                for (let i = 0; i < Math.min(1000, cached.embeddings.length); i++) {
-                    if (cached.embeddings[i] !== 0) { hasNonZero = true; break; }
+                // Validate cached data matches current viewport (bounds may have changed
+                // if viewport was deleted and recreated with the same name)
+                let cacheValid = true;
+                if (serverMetadata && cached.metadata) {
+                    const cgt = cached.metadata.geotransform;
+                    const sgt = serverMetadata.geotransform;
+                    if (cgt && sgt && (cgt.c !== sgt.c || cgt.f !== sgt.f || cgt.a !== sgt.a)) {
+                        console.warn(`[VECTORS] Cache stale for ${viewport}/${year} — geotransform mismatch, re-downloading`);
+                        cacheValid = false;
+                    }
                 }
-                if (hasNonZero) {
+
+                // Validate cached embeddings aren't all zeros (corrupt data)
+                if (cacheValid) {
+                    let hasNonZero = false;
+                    for (let i = 0; i < Math.min(1000, cached.embeddings.length); i++) {
+                        if (cached.embeddings[i] !== 0) { hasNonZero = true; break; }
+                    }
+                    if (!hasNonZero) {
+                        console.warn(`[VECTORS] Cached data for ${viewport}/${year} is all zeros — purging`);
+                        cacheValid = false;
+                    }
+                }
+
+                if (cacheValid) {
                     console.log(`[VECTORS] Cache hit for ${viewport}/${year}`);
                     const numVectors = cached.embeddings.length / 128;
                     const pixelLookup = new Map();
@@ -1166,10 +1189,8 @@
                         year: String(year)
                     };
                     return localVectors;
-                } else {
-                    console.warn(`[VECTORS] Cached data for ${viewport}/${year} is all zeros — purging stale cache`);
-                    await VectorCache.delete(viewport, year);
                 }
+                await VectorCache.delete(viewport, year);
             }
 
             console.log(`[VECTORS] Downloading vector data for ${viewport}/${year}...`);
@@ -1189,10 +1210,12 @@
             percent.textContent = '0%';
 
             try {
-                // Fetch metadata first (small)
-                const metaResp = await fetch(`/api/vector-data/${viewport}/${year}/metadata.json`);
-                if (!metaResp.ok) throw new Error(`metadata.json: ${metaResp.status}`);
-                const metadata = await metaResp.json();
+                // Reuse metadata from cache validation (or fetch if not available)
+                const metadata = serverMetadata || await (async () => {
+                    const r = await fetch(`/api/vector-data/${viewport}/${year}/metadata.json`);
+                    if (!r.ok) throw new Error(`metadata.json: ${r.status}`);
+                    return r.json();
+                })();
                 status.textContent = 'Downloading pixel coordinates...';
                 bar.style.width = '5%';
                 percent.textContent = '5%';
