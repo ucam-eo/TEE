@@ -128,7 +128,7 @@ def download_single_year(tessera, year, BBOX, viewport_id, output_file, est_byte
         with progress_lock:
             cumulative_bytes[0] += est_bytes
             progress.update("processing", f"Using existing {year}",
-                           current_value=cumulative_bytes[0], total_value=total_estimated_bytes,
+                           current_value=cumulative_bytes[0], total_value=total_estimated_bytes[0],
                            current_file=output_file.name)
         return (year, True, actual_size_mb)
 
@@ -140,6 +140,9 @@ def download_single_year(tessera, year, BBOX, viewport_id, output_file, est_byte
         )
         total_download_mb = total_download_bytes / (1024 * 1024)
         print(f"   [{year}] Download required: {total_files} files, {total_download_mb:.1f} MB")
+        # Adjust total estimate to use actual download size instead of bbox estimate
+        with progress_lock:
+            total_estimated_bytes[0] += (total_download_bytes - est_bytes)
     except Exception as e:
         print(f"   [{year}] ⚠️  Could not calculate download size: {e}")
         total_download_bytes = est_bytes
@@ -166,7 +169,7 @@ def download_single_year(tessera, year, BBOX, viewport_id, output_file, est_byte
                     msg = f"{_year}: {status}"
                 progress.update("downloading", msg,
                                current_value=overall_bytes,
-                               total_value=total_estimated_bytes,
+                               total_value=total_estimated_bytes[0],
                                current_file=output_file.name)
 
     # Retry logic
@@ -203,9 +206,9 @@ def download_single_year(tessera, year, BBOX, viewport_id, output_file, est_byte
             print(f"   [{year}] ✓ Saved ({actual_size_mb:.1f} MB)")
 
             with progress_lock:
-                cumulative_bytes[0] += est_bytes
+                cumulative_bytes[0] += total_download_bytes
                 progress.update("processing", f"✓ {year} saved ({actual_size_mb:.1f} MB)",
-                               current_value=cumulative_bytes[0], total_value=total_estimated_bytes,
+                               current_value=cumulative_bytes[0], total_value=total_estimated_bytes[0],
                                current_file=output_file.name)
 
             del mosaic_array, mosaic_transform
@@ -226,9 +229,9 @@ def download_single_year(tessera, year, BBOX, viewport_id, output_file, est_byte
                 if output_file.exists():
                     output_file.unlink()
                 with progress_lock:
-                    cumulative_bytes[0] += est_bytes
+                    cumulative_bytes[0] += total_download_bytes
                     progress.update("processing", f"Skipped {year} (not available)",
-                                   current_value=cumulative_bytes[0], total_value=total_estimated_bytes,
+                                   current_value=cumulative_bytes[0], total_value=total_estimated_bytes[0],
                                    current_file=output_file.name)
                 return (year, False, 0)
 
@@ -317,7 +320,7 @@ def download_embeddings():
 
     # Track progress across all years
     total_years = len(list(YEARS))
-    total_estimated_bytes = est_bytes * total_years
+    total_estimated_bytes = [est_bytes * total_years]  # Mutable — adjusted per-year when actual sizes are known
     cumulative_bytes = [0]
     progress_lock = threading.Lock()
 
