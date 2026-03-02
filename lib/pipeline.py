@@ -21,11 +21,11 @@ logger = logging.getLogger(__name__)
 
 # Pipeline stage progress allocation (must sum to 100)
 STAGE_PROGRESS = {
-    'download': (0, 50),    # 0-50%: Downloading embeddings (slowest)
-    'rgb': (50, 60),        # 50-60%: Creating RGB
-    'pyramids': (60, 75),   # 60-75%: Creating pyramids
-    'vectors': (75, 90),    # 75-90%: Extracting vectors
-    'umap': (90, 100),      # 90-100%: Computing UMAP (optional)
+    'download': (0, 85),    # 0-85%: Downloading embeddings (dominates wall time)
+    'rgb': (85, 88),        # 85-88%: Creating RGB
+    'pyramids': (88, 92),   # 88-92%: Creating pyramids
+    'vectors': (92, 96),    # 92-96%: Extracting vectors
+    'umap': (96, 100),      # 96-100%: Computing UMAP (optional)
 }
 
 # Global registry of active pipeline processes (for cancellation)
