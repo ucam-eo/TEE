@@ -115,7 +115,7 @@ class PipelineRunner:
                 return
             sub_percent = sub_data.get('percent', 0)
             sub_message = sub_data.get('message', '')
-            if sub_percent > 0:
+            if sub_percent > 0 or sub_message:
                 self.update_progress(stage_name, sub_percent, sub_message)
         except (ValueError, IOError, OSError):
             pass
