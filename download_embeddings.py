@@ -45,7 +45,6 @@ except ImportError as e:
 
 # Configuration
 DEFAULT_YEARS = range(2017, 2026)  # Support 2017-2025 (Sentinel-2 availability)
-MAX_CONCURRENT_DOWNLOADS = 3  # Limit parallel downloads to bound memory usage
 
 # Parse command line arguments for year selection
 import argparse
@@ -326,33 +325,21 @@ def download_embeddings():
 
     successful_years = []
 
-    # Download years in parallel using per-thread GeoTessera instances.
-    # The first instance (created above) already warmed the cache files,
-    # so worker threads init in <1s instead of ~50s.
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    # Download years serially to avoid OOM — each mosaic can use hundreds of MB
+    print(f"\nDownloading {total_years} year(s) serially...")
 
-    workers = min(MAX_CONCURRENT_DOWNLOADS, total_years)
-    print(f"\nDownloading {total_years} year(s) with {workers} parallel workers...")
-
-    def _download_year(year):
+    for year in YEARS:
         output_file = MOSAICS_DIR / f"{viewport_id}_embeddings_{year}.tif"
-        # Each thread creates its own GeoTessera instance (pass None)
-        return download_single_year(
-            None, year, BBOX, viewport_id, output_file, est_bytes, est_mb,
-            progress, progress_lock, cumulative_bytes, total_estimated_bytes, total_years
-        )
-
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(_download_year, year): year for year in YEARS}
-        for future in as_completed(futures):
-            year = futures[future]
-            try:
-                yr, success, size_mb = future.result()
-                if success:
-                    successful_years.append(yr)
-            except Exception as e:
-                print(f"   [{year}] ⚠️  Unexpected error: {type(e).__name__}: {e}")
-                traceback.print_exc(file=sys.stderr)
+        try:
+            yr, success, size_mb = download_single_year(
+                tessera, year, BBOX, viewport_id, output_file, est_bytes, est_mb,
+                progress, progress_lock, cumulative_bytes, total_estimated_bytes, total_years
+            )
+            if success:
+                successful_years.append(yr)
+        except Exception as e:
+            print(f"   [{year}] ⚠️  Unexpected error: {type(e).__name__}: {e}")
+            traceback.print_exc(file=sys.stderr)
 
     print("\n" + "=" * 60)
     print("Download complete!")
