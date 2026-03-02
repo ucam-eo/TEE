@@ -4792,7 +4792,6 @@
                     const embeddingsIcon = status.has_embeddings ? '✅' : '❌';
                     const pyramidsIcon = status.has_pyramids ? '✅' : '❌';
                     const vectorsIcon = status.has_vectors ? '✅' : '❌';
-                    const pcaIcon = '🖥️'; // PCA computed client-side
                     const umapIcon = status.has_umap ? '✅' : '❌';
                     const years = status.years_available ? status.years_available.join(', ') : 'None';
                     const unavailable = status.years_unavailable && status.years_unavailable.length
@@ -4814,9 +4813,6 @@
                         </div>
                         <div style="margin-bottom: 8px;">
                             <strong>Vectors:</strong> ${vectorsIcon}
-                        </div>
-                        <div style="margin-bottom: 8px;">
-                            <strong>PCA (Panel 4):</strong> ${pcaIcon} (client-side)
                         </div>
                         <div style="margin-bottom: 8px;">
                             <strong>UMAP:</strong> ${umapIcon}
