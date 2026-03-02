@@ -99,12 +99,12 @@ The **Export** dropdown in the header provides three formats:
 | **Labels (GeoJSON)** | FeatureCollection with 10m polygons per pixel, compatible with QGIS and other GIS tools. Properties include label name, color, distance, and threshold. |
 | **Map (JPG)** | High-resolution satellite image with label overlays and legend, rendered at zoom level 18 |
 
-## UMAP / PCA Visualization (Panel 4)
+## PCA / UMAP Visualization (Panel 4)
 
-In the 6-panel layout, Panel 4 shows a 2D projection of the embedding space:
+In the 6-panel layout, Panel 4 shows a 3D projection of the embedding space:
 
-- **PCA** — fast, available immediately
-- **UMAP** — richer structure, auto-computed on first load (~1-2 min)
+- **PCA** — computed instantly in your browser from the downloaded vectors (no server round-trip). Available as soon as vectors are downloaded.
+- **UMAP** — richer structure, computed server-side on first load (~1-2 min)
 - Points are colored using satellite RGB values
 - Single-click a point to place a marker on all map panels; double-click to trigger a similarity search from that point
 - Toggle between PCA and UMAP using the dropdown

@@ -59,7 +59,7 @@ The viewer includes a **6-panel layout** toggle for advanced analysis:
 1. **OSM** — OpenStreetMap geographic reference
 2. **RGB** — Satellite imagery with label painting tools
 3. **Embeddings Y1** — First year embeddings with similarity search
-4. **UMAP** — 2D projection of embedding space (auto-computed on load)
+4. **PCA / UMAP** — Dimensionality reduction of embedding space (PCA computed in-browser, UMAP server-side)
 5. **Heatmap** — Temporal distance heatmap (Y1 vs Y2 pixel-by-pixel differences)
 6. **Embeddings Y2** — Second year embeddings for temporal comparison
 
@@ -281,7 +281,7 @@ The system processes satellite embeddings through five main stages with **parall
 ./venv/bin/python3 setup_viewport.py --years 2023,2024,2025 --umap-year 2024
 ```
 
-This runs the full pipeline: download → RGB → pyramids → vectors → UMAP.
+This runs the full pipeline: download → RGB → pyramids → vectors → UMAP. PCA is computed client-side in the browser (no pipeline stage needed).
 
 Or use the web interface: `bash restart.sh`, open http://localhost:8001, click "+ Create New Viewport", select years and click Create. Processing runs in the background with status tracking.
 
@@ -333,7 +333,7 @@ python3 compute_umap.py {viewport_name} {year}
 | Stage | Feature | Available When |
 |-------|---------|-----------------|
 | After Stage 3 (Pyramids) | Basic viewer with maps | ANY year has pyramids |
-| After Stage 4 (Vectors) | Labeling/similarity search | ANY year has vectors |
+| After Stage 4 (Vectors) | Labeling/similarity search, PCA (Panel 4) | ANY year has vectors |
 | After Stage 5 (UMAP) | UMAP visualization (Panel 4) | UMAP computed for any year |
 
 ### Status Tracking
@@ -381,7 +381,7 @@ Content-Type: application/json
 ```
 GET /api/viewports/{viewport_name}/is-ready
 ```
-Returns: `{ready: bool, message: string, has_embeddings: bool, has_pyramids: bool, has_vectors: bool, years_available: [string]}`
+Returns: `{ready: bool, message: string, has_embeddings: bool, has_pyramids: bool, has_vectors: bool, has_umap: bool, years_available: [string]}`
 
 **Get available years:**
 ```
@@ -446,7 +446,7 @@ TEE/
 │   └── views/                         # Endpoint modules
 │       ├── viewports.py               # Viewport CRUD and status
 │       ├── pipeline.py                # Downloads and processing
-│       ├── compute.py                 # UMAP, PCA, distance heatmap
+│       ├── compute.py                 # UMAP, distance heatmap
 │       ├── tiles.py                   # Tile serving with LRU cache and ETag support
 │       ├── vector_data.py             # Vector data serving
 │       └── config.py                  # Health, static files, client config
@@ -475,7 +475,6 @@ TEE/
 ├── create_pyramids.py                 # Build zoom-level pyramid structure
 ├── extract_vectors.py                 # Extract vectors for similarity search
 ├── compute_umap.py                    # Compute UMAP projection
-├── compute_pca.py                     # Compute PCA projection
 └── setup_viewport.py                  # Orchestrate full workflow
 ```
 

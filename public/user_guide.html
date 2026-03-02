@@ -199,13 +199,13 @@
     <tr><td><strong>Map (JPG)</strong></td><td>High-resolution satellite image with label overlays and legend, rendered at zoom level 18</td></tr>
 </table>
 
-<h2>UMAP / PCA Visualization (Panel 4)</h2>
+<h2>PCA / UMAP Visualization (Panel 4)</h2>
 
-<p>In the 6-panel layout, Panel 4 shows a 2D projection of the embedding space:</p>
+<p>In the 6-panel layout, Panel 4 shows a 3D projection of the embedding space:</p>
 
 <ul>
-    <li><strong>PCA</strong> &mdash; fast, available immediately</li>
-    <li><strong>UMAP</strong> &mdash; richer structure, auto-computed on first load (~1&ndash;2 min)</li>
+    <li><strong>PCA</strong> &mdash; computed instantly in your browser from the downloaded vectors (no server round-trip). Available as soon as vectors are downloaded.</li>
+    <li><strong>UMAP</strong> &mdash; richer structure, computed server-side on first load (~1&ndash;2 min)</li>
     <li>Points are colored using satellite RGB values</li>
     <li>Single-click a point to place a marker on all map panels; double-click to trigger a similarity search from that point</li>
     <li>Toggle between PCA and UMAP using the dropdown</li>
