@@ -4998,12 +4998,25 @@
 
             this._rotationTimer = setInterval(() => this._pickNewRotation(), 3000 + Math.random() * 3000);
 
-            // ── highlight sphere (gold, placed on click / highlightUMAPPoint) ──
-            const sphereGeo = new THREE.SphereGeometry(0.035, 16, 16);
-            const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
-            this.highlightSphere = new THREE.Mesh(sphereGeo, sphereMat);
-            this.highlightSphere.visible = false;
-            this.scene.add(this.highlightSphere);
+            // ── highlight crosshair (3D pointer, placed on click) ──
+            this.highlightGroup = new THREE.Group();
+            this.highlightGroup.visible = false;
+            const armLen = 0.04;
+            const armRadius = 0.002;
+            const armMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+            // Three axis-aligned arms
+            for (const axis of ['x', 'y', 'z']) {
+                const cyl = new THREE.CylinderGeometry(armRadius, armRadius, armLen * 2, 6);
+                const mesh = new THREE.Mesh(cyl, armMat);
+                if (axis === 'x') mesh.rotation.z = Math.PI / 2;
+                if (axis === 'z') mesh.rotation.x = Math.PI / 2;
+                this.highlightGroup.add(mesh);
+            }
+            // Small wireframe sphere at center
+            const ringGeo = new THREE.SphereGeometry(0.012, 12, 8);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd700, wireframe: true });
+            this.highlightGroup.add(new THREE.Mesh(ringGeo, ringMat));
+            this.scene.add(this.highlightGroup);
 
             // ── raycaster for click detection ────────────────────────
             this.raycaster = new THREE.Raycaster();
@@ -5013,8 +5026,12 @@
             this._onClickBound    = this._onClick.bind(this);
             this._onDblClickBound = this._onDblClick.bind(this);
             this._onResizeBound   = this._onResize.bind(this);
-            this._onMouseDownBound = () => { this.renderer.domElement.style.cursor = 'grabbing'; };
-            this._onMouseUpBound   = () => { this.renderer.domElement.style.cursor = 'crosshair'; };
+            this._dragStartPos = null;
+            this._onMouseDownBound = (e) => {
+                this.renderer.domElement.style.cursor = 'grabbing';
+                this._dragStartPos = { x: e.clientX, y: e.clientY };
+            };
+            this._onMouseUpBound = () => { this.renderer.domElement.style.cursor = 'crosshair'; };
 
             this.renderer.domElement.addEventListener('click', this._onClickBound);
             this.renderer.domElement.addEventListener('dblclick', this._onDblClickBound);
@@ -5032,21 +5049,21 @@
 
         // ── public API called by the main script ──────────────────────
 
-        /** Move gold highlight sphere to the given point (or hide if null). */
+        /** Move highlight crosshair to the given point (or hide if null). */
         setHighlight(point) {
             if (!point) {
-                this.highlightSphere.visible = false;
+                this.highlightGroup.visible = false;
                 return;
             }
             const range = this.dataRange;
             const mid   = this.dataMid;
             const pz    = point.z !== undefined ? point.z : 0;
-            this.highlightSphere.position.set(
+            this.highlightGroup.position.set(
                 (point.x - mid[0]) / range,
                 (point.y - mid[1]) / range,
                 (pz      - mid[2]) / range
             );
-            this.highlightSphere.visible = true;
+            this.highlightGroup.visible = true;
         }
 
         /**
@@ -5185,8 +5202,16 @@
             this.renderer.render(this.scene, this.camera);
         }
 
+        _wasDrag(e) {
+            if (!this._dragStartPos) return false;
+            const dx = e.clientX - this._dragStartPos.x;
+            const dy = e.clientY - this._dragStartPos.y;
+            return (dx * dx + dy * dy) > 9; // 3px threshold
+        }
+
         _onClick(e) {
-            // Raycast to find clicked point
+            if (this._wasDrag(e)) return; // Ignore drags (pan/rotate)
+
             const rect = this.renderer.domElement.getBoundingClientRect();
             this._mouse.x =  ((e.clientX - rect.left)  / rect.width)  * 2 - 1;
             this._mouse.y = -((e.clientY - rect.top)   / rect.height) * 2 + 1;
@@ -5198,7 +5223,7 @@
                 const idx = intersects[0].index;
                 const hitPoint = this.points[idx];
 
-                // Move highlight sphere
+                // Move highlight crosshair
                 this.setHighlight(hitPoint);
 
                 // Use unified click handler to place markers on all panels
@@ -5210,7 +5235,8 @@
         }
 
         _onDblClick(e) {
-            // Raycast to find double-clicked point
+            if (this._wasDrag(e)) return; // Ignore drags
+
             const rect = this.renderer.domElement.getBoundingClientRect();
             this._mouse.x =  ((e.clientX - rect.left)  / rect.width)  * 2 - 1;
             this._mouse.y = -((e.clientY - rect.top)   / rect.height) * 2 + 1;
