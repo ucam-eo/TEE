@@ -4,14 +4,13 @@ Download Tessera embeddings for current viewport
 
 Reads viewport bounds from active viewport configuration.
 Uses cache checking to avoid re-downloading for previously-selected viewports.
-Downloads multiple years in parallel for faster throughput.
+Downloads years serially to avoid OOM on memory-constrained systems.
 """
 
 import sys
 import os
 import json
 import traceback
-import threading
 import time as _time
 from pathlib import Path
 
@@ -104,17 +103,15 @@ def estimate_mosaic_dimensions(bbox):
     return width_pixels, height_pixels, compressed_mb, compressed_bytes
 
 
-def download_single_year(tessera, year, BBOX, viewport_id, output_file, est_bytes, est_mb,
-                         progress, progress_lock, cumulative_bytes, total_estimated_bytes, total_years):
-    """Download and save embeddings for a single year. Thread-safe.
+def download_single_year(tessera, year, BBOX, viewport_id, output_file,
+                         progress, year_index, total_years):
+    """Download and save embeddings for a single year.
 
-    Each thread gets its own GeoTessera instance to avoid thread-safety issues.
-    If tessera is None, creates a new instance (uses cached registry files so init is fast).
+    Progress is year-based: each year = 1/total_years of the download stage.
 
     Returns:
         (year, success: bool, size_mb: float or 0)
     """
-    # Create per-thread GeoTessera instance if needed
     if tessera is None:
         t0 = _time.monotonic()
         tessera = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
@@ -124,52 +121,24 @@ def download_single_year(tessera, year, BBOX, viewport_id, output_file, est_byte
     if output_file.exists():
         actual_size_mb = output_file.stat().st_size / (1024 * 1024)
         print(f"   [{year}] ✓ Already exists ({actual_size_mb:.1f} MB)")
-        with progress_lock:
-            cumulative_bytes[0] += est_bytes
-            progress.update("processing", f"Using existing {year}",
-                           current_value=cumulative_bytes[0], total_value=total_estimated_bytes[0],
-                           current_file=output_file.name)
+        overall_pct = int((year_index + 1) / total_years * 100)
+        progress.update("processing", f"Using existing {year} ({actual_size_mb:.1f} MB)",
+                        current_file=output_file.name, percent=overall_pct)
         return (year, True, actual_size_mb)
 
-    # Calculate download requirements
-    try:
-        tiles = list(tessera.registry.iter_tiles_in_region(BBOX, year))
-        total_download_bytes, total_files, _ = tessera.registry.calculate_download_requirements(
-            tiles, EMBEDDINGS_DIR, format_type='npy', check_existing=True
-        )
-        total_download_mb = total_download_bytes / (1024 * 1024)
-        print(f"   [{year}] Download required: {total_files} files, {total_download_mb:.1f} MB")
-        # Adjust total estimate to use actual download size instead of bbox estimate
-        with progress_lock:
-            total_estimated_bytes[0] += (total_download_bytes - est_bytes)
-    except Exception as e:
-        print(f"   [{year}] ⚠️  Could not calculate download size: {e}")
-        total_download_bytes = est_bytes
-        total_download_mb = est_mb
-
-    # Progress callback (throttled, thread-safe)
+    # Progress callback (throttled) — year-based percent
     _last_write = [0]
 
-    def on_progress(current, total, status, _year=year, _total_mb=total_download_mb):
+    def on_progress(current, total, status, _year=year):
         now = _time.monotonic()
         if now - _last_write[0] < 0.5:
             return
         _last_write[0] = now
         if total > 0:
-            with progress_lock:
-                if total_download_bytes > 0:
-                    year_bytes = int((current / total) * total_download_bytes)
-                    year_mb_done = year_bytes / (1024 * 1024)
-                    overall_bytes = cumulative_bytes[0] + year_bytes
-                    msg = f"{_year}: {status} ({year_mb_done:.1f} / {_total_mb:.1f} MB)"
-                else:
-                    # Tiles already cached, just processing
-                    overall_bytes = cumulative_bytes[0] + int((current / total) * est_bytes)
-                    msg = f"{_year}: {status}"
-                progress.update("downloading", msg,
-                               current_value=overall_bytes,
-                               total_value=total_estimated_bytes[0],
-                               current_file=output_file.name)
+            year_pct = current / total  # 0.0 - 1.0 within this year
+            overall_pct = int((year_index + year_pct) / total_years * 100)
+            progress.update("downloading", f"{_year}: {status}",
+                            current_file=output_file.name, percent=overall_pct)
 
     # Retry logic
     max_retries = 3
@@ -204,11 +173,9 @@ def download_single_year(tessera, year, BBOX, viewport_id, output_file, est_byte
             actual_size_mb = output_file.stat().st_size / (1024 * 1024)
             print(f"   [{year}] ✓ Saved ({actual_size_mb:.1f} MB)")
 
-            with progress_lock:
-                cumulative_bytes[0] += total_download_bytes
-                progress.update("processing", f"✓ {year} saved ({actual_size_mb:.1f} MB)",
-                               current_value=cumulative_bytes[0], total_value=total_estimated_bytes[0],
-                               current_file=output_file.name)
+            overall_pct = int((year_index + 1) / total_years * 100)
+            progress.update("processing", f"✓ {year} saved ({actual_size_mb:.1f} MB)",
+                            current_file=output_file.name, percent=overall_pct)
 
             del mosaic_array, mosaic_transform
             gc.collect()
@@ -218,7 +185,6 @@ def download_single_year(tessera, year, BBOX, viewport_id, output_file, est_byte
             if attempt < max_retries:
                 print(f"   [{year}] ⚠️  Attempt {attempt} failed, retrying: {type(e).__name__}: {e}")
                 _time.sleep(5)
-                # Delete corrupted file if it exists
                 if output_file.exists():
                     output_file.unlink()
                 continue
@@ -227,11 +193,9 @@ def download_single_year(tessera, year, BBOX, viewport_id, output_file, est_byte
                 traceback.print_exc(file=sys.stderr)
                 if output_file.exists():
                     output_file.unlink()
-                with progress_lock:
-                    cumulative_bytes[0] += total_download_bytes
-                    progress.update("processing", f"Skipped {year} (not available)",
-                                   current_value=cumulative_bytes[0], total_value=total_estimated_bytes[0],
-                                   current_file=output_file.name)
+                overall_pct = int((year_index + 1) / total_years * 100)
+                progress.update("processing", f"Skipped {year} (not available)",
+                                percent=overall_pct)
                 return (year, False, 0)
 
     return (year, False, 0)
@@ -319,21 +283,17 @@ def download_embeddings():
 
     # Track progress across all years
     total_years = len(list(YEARS))
-    total_estimated_bytes = [est_bytes * total_years]  # Mutable — adjusted per-year when actual sizes are known
-    cumulative_bytes = [0]
-    progress_lock = threading.Lock()
-
     successful_years = []
 
     # Download years serially to avoid OOM — each mosaic can use hundreds of MB
     print(f"\nDownloading {total_years} year(s) serially...")
 
-    for year in YEARS:
+    for year_index, year in enumerate(YEARS):
         output_file = MOSAICS_DIR / f"{viewport_id}_embeddings_{year}.tif"
         try:
             yr, success, size_mb = download_single_year(
-                tessera, year, BBOX, viewport_id, output_file, est_bytes, est_mb,
-                progress, progress_lock, cumulative_bytes, total_estimated_bytes, total_years
+                tessera, year, BBOX, viewport_id, output_file,
+                progress, year_index, total_years
             )
             if success:
                 successful_years.append(yr)
