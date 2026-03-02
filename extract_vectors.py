@@ -164,12 +164,35 @@ def extract_vectors_for_year(viewport_id, bounds, year):
             logger.info(f"   ✓ Saved all embeddings: {embeddings_file}")
             logger.info(f"     Size: {embeddings_size_mb:.1f} MB")
 
-            # Gzip-compress for faster client downloads
+            # Quantize to uint8 with per-dimension min/max for ~5x smaller downloads
+            dim_min = all_embeddings.min(axis=0).astype(np.float64)
+            dim_max = all_embeddings.max(axis=0).astype(np.float64)
+            dim_scale = dim_max - dim_min
+            dim_scale[dim_scale == 0] = 1  # avoid division by zero
+            quantized = ((all_embeddings - dim_min) / dim_scale * 255).astype(np.uint8)
+
+            # Save quantization parameters
+            quant_file = output_dir / "quantization.json"
+            with open(quant_file, 'w') as f:
+                json.dump({'dim_min': dim_min.tolist(), 'dim_max': dim_max.tolist()}, f)
+            logger.info(f"   ✓ Saved quantization params: {quant_file}")
+
+            # Save and compress uint8 embeddings
+            quantized_file = output_dir / "all_embeddings_uint8.npy"
+            np.save(quantized_file, quantized)
+            quantized_gz = output_dir / "all_embeddings_uint8.npy.gz"
+            with open(quantized_file, 'rb') as f_in, gzip.open(quantized_gz, 'wb', compresslevel=6) as f_out:
+                f_out.write(f_in.read())
+            quantized_file.unlink()  # only keep the .gz version
+            q_gz_mb = quantized_gz.stat().st_size / (1024 * 1024)
+            logger.info(f"   ✓ Quantized uint8+gz: {q_gz_mb:.1f} MB ({q_gz_mb/embeddings_size_mb*100:.0f}% of float32)")
+
+            # Also gzip-compress float32 as fallback
             embeddings_gz = output_dir / "all_embeddings.npy.gz"
             with open(embeddings_file, 'rb') as f_in, gzip.open(embeddings_gz, 'wb', compresslevel=6) as f_out:
                 f_out.write(f_in.read())
             gz_size_mb = embeddings_gz.stat().st_size / (1024 * 1024)
-            logger.info(f"   ✓ Compressed: {gz_size_mb:.1f} MB ({gz_size_mb/embeddings_size_mb*100:.0f}% of original)")
+            logger.info(f"   ✓ Float32 gz fallback: {gz_size_mb:.1f} MB ({gz_size_mb/embeddings_size_mb*100:.0f}% of original)")
 
             # Save pixel coordinates
             coords_file = output_dir / "pixel_coords.npy"

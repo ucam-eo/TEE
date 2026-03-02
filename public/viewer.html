@@ -1211,13 +1211,34 @@
                 percent.textContent = '10%';
 
                 // Fetch embeddings with progress tracking (large file)
-                // Try .gz first, fall back to raw .npy
-                let embResp = await fetch(`/api/vector-data/${viewport}/${year}/all_embeddings.npy.gz`);
-                let isGzipped = embResp.ok;
-                if (!isGzipped) {
+                // Try uint8 quantized first (~5x smaller), fall back to float32 gz, then raw
+                let embResp = null;
+                let isGzipped = false;
+                let quantParams = null;
+
+                // Try uint8 quantized version (smallest: ~28MB vs ~130MB)
+                const quantResp = await fetch(`/api/vector-data/${viewport}/${year}/quantization.json`);
+                if (quantResp.ok) {
+                    quantParams = await quantResp.json();
+                    embResp = await fetch(`/api/vector-data/${viewport}/${year}/all_embeddings_uint8.npy.gz`);
+                    if (embResp.ok) {
+                        isGzipped = true;
+                        console.log(`[VECTORS] Using uint8 quantized embeddings`);
+                    } else {
+                        quantParams = null; // fall through
+                    }
+                }
+                // Fall back to float32 gzip
+                if (!embResp || !embResp.ok) {
+                    embResp = await fetch(`/api/vector-data/${viewport}/${year}/all_embeddings.npy.gz`);
+                    isGzipped = embResp.ok;
+                }
+                // Fall back to raw float32
+                if (!embResp.ok) {
                     embResp = await fetch(`/api/vector-data/${viewport}/${year}/all_embeddings.npy`);
                     if (!embResp.ok) throw new Error(`all_embeddings.npy: ${embResp.status}`);
                 }
+
                 const contentLength = parseInt(embResp.headers.get('Content-Length') || '0');
                 const reader = embResp.body.getReader();
                 const chunks = [];
@@ -1256,20 +1277,40 @@
                 const embDim = 128;
                 let embeddingsData;
 
-                // Handle dtype: uint8 needs conversion to float32
+                // Handle dtype: uint8 with dequantization
                 if (embParsed.dtype === '|u1' || embParsed.dtype === '<u1') {
                     const raw = new Uint8Array(embParsed.rawData);
                     const N = embParsed.shape[0];
                     embeddingsData = new Float32Array(N * embDim);
-                    if (embParsed.fortranOrder) {
-                        // Fortran (column-major): raw layout is all col0, then col1, ...
-                        for (let i = 0; i < N; i++) {
-                            for (let d = 0; d < embDim; d++) {
-                                embeddingsData[i * embDim + d] = raw[d * N + i];
+                    if (quantParams) {
+                        // Dequantize using per-dimension min/max
+                        const dimMin = quantParams.dim_min;
+                        const dimMax = quantParams.dim_max;
+                        status.textContent = 'Dequantizing embeddings...';
+                        for (let d = 0; d < embDim; d++) {
+                            const scale = (dimMax[d] - dimMin[d]) / 255.0;
+                            const minVal = dimMin[d];
+                            if (embParsed.fortranOrder) {
+                                for (let i = 0; i < N; i++) {
+                                    embeddingsData[i * embDim + d] = raw[d * N + i] * scale + minVal;
+                                }
+                            } else {
+                                for (let i = 0; i < N; i++) {
+                                    embeddingsData[i * embDim + d] = raw[i * embDim + d] * scale + minVal;
+                                }
                             }
                         }
                     } else {
-                        for (let k = 0; k < raw.length; k++) embeddingsData[k] = raw[k];
+                        // Legacy uint8 without quantization params — copy as-is
+                        if (embParsed.fortranOrder) {
+                            for (let i = 0; i < N; i++) {
+                                for (let d = 0; d < embDim; d++) {
+                                    embeddingsData[i * embDim + d] = raw[d * N + i];
+                                }
+                            }
+                        } else {
+                            for (let k = 0; k < raw.length; k++) embeddingsData[k] = raw[k];
+                        }
                     }
                 } else if (embParsed.dtype === '<f4') {
                     const raw = new Float32Array(embParsed.rawData);

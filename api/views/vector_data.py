@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 ALLOWED_FILES = {
     'all_embeddings.npy', 'pixel_coords.npy', 'metadata.json',
     'all_embeddings.npy.gz', 'pixel_coords.npy.gz',
+    'all_embeddings_uint8.npy.gz', 'quantization.json',
 }
 
 
