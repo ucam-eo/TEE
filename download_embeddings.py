@@ -8,6 +8,7 @@ Downloads multiple years in parallel for faster throughput.
 """
 
 import sys
+import os
 import json
 import traceback
 import threading
@@ -263,14 +264,46 @@ def download_embeddings():
     print(f"   geotessera version: {gt.__version__ if hasattr(gt, '__version__') else 'unknown'}")
     print(f"   embeddings_dir: {EMBEDDINGS_DIR.absolute()}")
     progress.update("initializing", "Connecting to GeoTessera registry...")
+
+    # Show cache file sizes for context
+    import platform
+    if platform.system() != 'Windows':
+        cache_dir = Path.home() / '.cache' / 'geotessera'
+    else:
+        cache_dir = Path(os.environ.get('LOCALAPPDATA', '~')).expanduser() / 'geotessera'
+    for fname in ('registry.parquet', 'landmasks.parquet'):
+        fpath = cache_dir / fname
+        if fpath.exists():
+            print(f"   cache: {fname} ({fpath.stat().st_size / (1024*1024):.0f} MB)")
+        else:
+            print(f"   cache: {fname} (not cached — will download)")
+
+    # Instrument geotessera's internal logger to show timed substeps
+    import logging as _logging
+    _gt_logger = _logging.getLogger('geotessera')
+    _gt_logger.setLevel(_logging.INFO)
+    class _TimingHandler(_logging.Handler):
+        def __init__(self):
+            super().__init__()
+            self.t0 = _time.monotonic()
+        def emit(self, record):
+            elapsed = _time.monotonic() - self.t0
+            print(f"   [{elapsed:5.1f}s] {record.getMessage()}")
+    _timing_handler = _TimingHandler()
+    _gt_logger.addHandler(_timing_handler)
+
     try:
+        t_start = _time.monotonic()
         tessera = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
-        print(f"✓ Connected to registry")
+        t_total = _time.monotonic() - t_start
+        print(f"✓ Connected to registry ({t_total:.1f}s)")
     except Exception as e:
         print(f"✗ Failed to connect to GeoTessera: {type(e).__name__}: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         progress.error(f"GeoTessera connection failed: {e}")
         sys.exit(1)
+    finally:
+        _gt_logger.removeHandler(_timing_handler)
 
     # Track progress across all years
     total_years = len(list(YEARS))

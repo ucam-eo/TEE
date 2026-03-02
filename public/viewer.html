@@ -2772,7 +2772,13 @@
 
             try {
                 if (!localVectors) {
-                    alert('Vector data not loaded yet. Please wait for download to complete.');
+                    console.log('[EXPLORER] Vectors not loaded, downloading now...');
+                    await downloadVectorData(currentViewportName, currentEmbeddingYear);
+                    viewportStatus.vectors_downloaded = true;
+                    evaluateDependencies();
+                }
+                if (!localVectors) {
+                    alert('Vector data not available for this viewport/year.');
                     return;
                 }
 
