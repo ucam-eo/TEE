@@ -15,6 +15,9 @@ import threading
 import time as _time
 from pathlib import Path
 
+# Force unbuffered stdout so pipeline can stream lines in real-time
+sys.stdout.reconfigure(line_buffering=True)
+
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(Path(__file__).parent))
 

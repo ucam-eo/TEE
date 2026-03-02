@@ -865,7 +865,7 @@
             },
             {
                 id: 'panel4-pca',
-                test: (s) => s.has_vectors && !s.pca_loaded && currentDimReduction === 'pca',
+                test: (s) => s.vectors_downloaded && !s.pca_loaded && currentDimReduction === 'pca',
                 onReady: async () => {
                     console.log('[DEP] panel4-pca: loading PCA visualization');
                     await loadDimReduction('pca');
@@ -1836,6 +1836,8 @@
 
             // Mark vectors as needing re-download for new year
             viewportStatus.vectors_downloaded = false;
+            viewportStatus.pca_loaded = false;
+            viewportStatus.umap_loaded = false;
 
             // Always reload vector data for the new year (needed for similarity search)
             if (localVectors && localVectors.year !== String(year)) {
