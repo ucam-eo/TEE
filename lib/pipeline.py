@@ -394,7 +394,8 @@ class PipelineRunner:
         vectors_year_dir = None
         for year_dir in vectors_viewport_dir.glob("*"):
             if year_dir.is_dir():
-                if (year_dir / "all_embeddings.npy").exists() or (year_dir / "all_embeddings.npy.gz").exists():
+                if ((year_dir / "all_embeddings.npy").exists() or
+                    (year_dir / "all_embeddings_uint8.npy.gz").exists()):
                     vectors_found = True
                     vectors_year_dir = year_dir
                     break
@@ -406,8 +407,9 @@ class PipelineRunner:
         # Verify supporting files
         required_files = ["pixel_coords.npy", "metadata.json"]
         missing_files = [f for f in required_files if not (vectors_year_dir / f).exists()]
-        if not (vectors_year_dir / "all_embeddings.npy").exists() and not (vectors_year_dir / "all_embeddings.npy.gz").exists():
-            missing_files.append("all_embeddings.npy[.gz]")
+        if (not (vectors_year_dir / "all_embeddings.npy").exists() and
+            not (vectors_year_dir / "all_embeddings_uint8.npy.gz").exists()):
+            missing_files.append("all_embeddings{.npy,.uint8.npy.gz}")
         if missing_files:
             logger.warning(f"[PIPELINE] Stage 4 warning - Missing files: {missing_files}")
 
@@ -464,7 +466,9 @@ class PipelineRunner:
     def _cleanup_uncompressed_embeddings(self, viewport_name):
         """Delete uncompressed all_embeddings.npy files now that UMAP is done.
 
-        The .npy.gz created during extraction is kept for serving to browsers.
+        The uint8 quantized version (all_embeddings_uint8.npy.gz) is kept for
+        serving to browsers. The uncompressed float32 file is only needed by
+        compute_umap.py during the pipeline.
         """
         vectors_dir = VECTORS_DIR / viewport_name
         if not vectors_dir.exists():
@@ -473,10 +477,16 @@ class PipelineRunner:
             if not year_dir.is_dir():
                 continue
             npy = year_dir / "all_embeddings.npy"
-            if npy.exists() and (year_dir / "all_embeddings.npy.gz").exists():
+            if npy.exists() and (year_dir / "all_embeddings_uint8.npy.gz").exists():
                 size_mb = npy.stat().st_size / (1024 * 1024)
                 npy.unlink()
                 logger.info(f"[PIPELINE] Deleted uncompressed all_embeddings.npy for {year_dir.name} ({size_mb:.1f} MB)")
+            # Also remove legacy float32 .gz if present
+            legacy_gz = year_dir / "all_embeddings.npy.gz"
+            if legacy_gz.exists():
+                size_mb = legacy_gz.stat().st_size / (1024 * 1024)
+                legacy_gz.unlink()
+                logger.info(f"[PIPELINE] Deleted legacy all_embeddings.npy.gz for {year_dir.name} ({size_mb:.1f} MB)")
 
     def stage_5_compute_umap(self, viewport_name, umap_year):
         """Stage 5: Compute UMAP 2D projection (optional)."""
@@ -629,7 +639,7 @@ class PipelineRunner:
                 vectors_vp_dir = VECTORS_DIR / viewport_name
                 if vectors_vp_dir.exists():
                     year_dirs = sorted(d.name for d in vectors_vp_dir.iterdir()
-                                       if d.is_dir() and ((d / 'all_embeddings.npy').exists() or (d / 'all_embeddings.npy.gz').exists()))
+                                       if d.is_dir() and ((d / 'all_embeddings.npy').exists() or (d / 'all_embeddings_uint8.npy.gz').exists()))
                     if year_dirs:
                         effective_umap_year = year_dirs[0]
                         logger.info(f"[PIPELINE] Auto-selected year {effective_umap_year} for UMAP")

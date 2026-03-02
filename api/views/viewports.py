@@ -167,7 +167,7 @@ def switch_viewport(request):
 
         vector_dir = VECTORS_DIR / viewport_name
         if vector_dir.exists() and any(
-            (year_dir / 'all_embeddings.npy').exists() or (year_dir / 'all_embeddings.npy.gz').exists()
+            (year_dir / 'all_embeddings.npy').exists() or (year_dir / 'all_embeddings_uint8.npy.gz').exists()
             for year_dir in vector_dir.iterdir() if year_dir.is_dir()
         ):
             response_data['vectors_ready'] = True
@@ -533,7 +533,7 @@ def is_ready(request, viewport_name):
         vectors_dir = VECTORS_DIR / viewport_name
         if vectors_dir.exists():
             for year_dir in vectors_dir.glob("*"):
-                if year_dir.is_dir() and _year_matches(year_dir.name) and ((year_dir / "all_embeddings.npy").exists() or (year_dir / "all_embeddings.npy.gz").exists()):
+                if year_dir.is_dir() and _year_matches(year_dir.name) and ((year_dir / "all_embeddings.npy").exists() or (year_dir / "all_embeddings_uint8.npy.gz").exists()):
                     has_vectors = True
                     break
 

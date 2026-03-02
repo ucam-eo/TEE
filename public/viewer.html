@@ -1211,12 +1211,12 @@
                 percent.textContent = '10%';
 
                 // Fetch embeddings with progress tracking (large file)
-                // Try uint8 quantized first (~5x smaller), fall back to float32 gz, then raw
+                // Try uint8 quantized first (~5x smaller), fall back to raw float32
                 let embResp = null;
                 let isGzipped = false;
                 let quantParams = null;
 
-                // Try uint8 quantized version (smallest: ~28MB vs ~130MB)
+                // Try uint8 quantized version (~28MB vs ~130MB)
                 const quantResp = await fetch(`/api/vector-data/${viewport}/${year}/quantization.json`);
                 if (quantResp.ok) {
                     quantParams = await quantResp.json();
@@ -1228,13 +1228,8 @@
                         quantParams = null; // fall through
                     }
                 }
-                // Fall back to float32 gzip
-                if (!embResp || !embResp.ok) {
-                    embResp = await fetch(`/api/vector-data/${viewport}/${year}/all_embeddings.npy.gz`);
-                    isGzipped = embResp.ok;
-                }
                 // Fall back to raw float32
-                if (!embResp.ok) {
+                if (!embResp || !embResp.ok) {
                     embResp = await fetch(`/api/vector-data/${viewport}/${year}/all_embeddings.npy`);
                     if (!embResp.ok) throw new Error(`all_embeddings.npy: ${embResp.status}`);
                 }

@@ -187,12 +187,8 @@ def extract_vectors_for_year(viewport_id, bounds, year):
             q_gz_mb = quantized_gz.stat().st_size / (1024 * 1024)
             logger.info(f"   ✓ Quantized uint8+gz: {q_gz_mb:.1f} MB ({q_gz_mb/embeddings_size_mb*100:.0f}% of float32)")
 
-            # Also gzip-compress float32 as fallback
-            embeddings_gz = output_dir / "all_embeddings.npy.gz"
-            with open(embeddings_file, 'rb') as f_in, gzip.open(embeddings_gz, 'wb', compresslevel=6) as f_out:
-                f_out.write(f_in.read())
-            gz_size_mb = embeddings_gz.stat().st_size / (1024 * 1024)
-            logger.info(f"   ✓ Float32 gz fallback: {gz_size_mb:.1f} MB ({gz_size_mb/embeddings_size_mb*100:.0f}% of original)")
+            # Note: uncompressed all_embeddings.npy is kept for UMAP computation
+            # and deleted by the pipeline after UMAP completes
 
             # Save pixel coordinates
             coords_file = output_dir / "pixel_coords.npy"

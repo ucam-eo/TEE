@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_FILES = {
     'all_embeddings.npy', 'pixel_coords.npy', 'metadata.json',
-    'all_embeddings.npy.gz', 'pixel_coords.npy.gz',
+    'pixel_coords.npy.gz',
     'all_embeddings_uint8.npy.gz', 'quantization.json',
 }
 
@@ -28,9 +28,9 @@ def serve_vector_data(request, viewport, year, filename):
 
     vector_dir = VECTORS_DIR / viewport / str(year)
 
-    # For .npy requests, prefer serving the pre-compressed .npy.gz if it exists
-    if filename.endswith('.npy'):
-        gz_path = vector_dir / (filename + '.gz')
+    # For pixel_coords.npy, prefer the pre-compressed .gz if it exists
+    if filename == 'pixel_coords.npy':
+        gz_path = vector_dir / 'pixel_coords.npy.gz'
         if gz_path.exists():
             file_size = gz_path.stat().st_size
             response = FileResponse(gz_path.open('rb'), content_type='application/gzip')
