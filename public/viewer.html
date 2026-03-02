@@ -2836,6 +2836,10 @@
 
             try {
                 if (!localVectors) {
+                    if (!viewportStatus.has_vectors) {
+                        alert('Please wait for vectors to be extracted.');
+                        return;
+                    }
                     console.log('[EXPLORER] Vectors not loaded, downloading now...');
                     await downloadVectorData(currentViewportName, currentEmbeddingYear);
                     viewportStatus.vectors_downloaded = true;
