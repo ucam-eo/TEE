@@ -1339,18 +1339,18 @@
                     startProgressPolling(name);
 
                     // Wait for viewport to be ready
-                    const isReady = await waitForViewportReady(name);
+                    const result = await waitForViewportReady(name);
 
                     // Hide processing section
                     document.getElementById('processingSection').style.display = 'none';
 
-                    if (isReady) {
+                    if (result.ready) {
                         console.log('[VIEWPORT CREATE] ✓ Data is ready, navigating to viewer...');
                         console.log('[VIEWPORT CREATE] Navigating to viewer');
                         window.location.href = 'viewer.html';
                     } else {
-                        console.log('[VIEWPORT CREATE] ✗ Timeout waiting for data');
-                        document.getElementById('processingMessage').textContent = '✗ Processing timeout - please check back in a few minutes';
+                        console.log('[VIEWPORT CREATE] ✗ Pipeline failed:', result.error);
+                        document.getElementById('processingMessage').textContent = `✗ ${result.error || 'Processing timeout - please check back in a few minutes'}`;
                         // Keep processing section visible to show error message
                         document.getElementById('mapClickInstruction').style.display = 'inline-block';
                     }
@@ -1706,12 +1706,12 @@
                     console.log(`[VIEWER] ${name} not ready, waiting for pipeline...`);
                     document.getElementById('processingSection').style.display = 'block';
                     startProgressPolling(name);
-                    const isReady = await waitForViewportReady(name);
+                    const result = await waitForViewportReady(name);
                     document.getElementById('processingSection').style.display = 'none';
-                    if (isReady) {
+                    if (result.ready) {
                         window.location.href = 'viewer.html';
                     } else {
-                        alert('Processing failed or timed out. Please try again.');
+                        alert(`Processing failed: ${result.error || 'Unknown error. Check server logs.'}`);
                     }
                 }
             } catch (error) {
@@ -1973,7 +1973,7 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
                             if (readyResult.ready) {
                                 console.log(`[WAIT] ✓ ${viewportName} is ready — switching to viewer`);
                                 clearInterval(pollInterval);
-                                resolve(true);
+                                resolve({ ready: true });
                                 return;
                             }
                         } catch (e) {
@@ -1992,7 +1992,7 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
                                 if (progress.status === 'complete') {
                                     console.log(`[WAIT] ✓ ${viewportName} pipeline complete!`);
                                     clearInterval(pollInterval);
-                                    resolve(true);
+                                    resolve({ ready: true });
                                     return;
                                 }
 
@@ -2000,7 +2000,7 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
                                 if (progress.status === 'error') {
                                     console.log(`[WAIT] ✗ Pipeline error for ${viewportName}: ${progress.message}`);
                                     clearInterval(pollInterval);
-                                    resolve(false);
+                                    resolve({ ready: false, error: progress.message });
                                     return;
                                 }
                             }
@@ -2017,7 +2017,7 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
                                 message: 'Timeout - please try again'
                             });
                             clearInterval(pollInterval);
-                            resolve(false);
+                            resolve({ ready: false, error: 'Timeout waiting for processing' });
                             return;
                         }
                     } catch (error) {

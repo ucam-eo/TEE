@@ -46,7 +46,9 @@ def operations_progress(request, operation_id):
         # For pipeline operations, merge detail from the active sub-operation
         # Keep the pipeline's overall percent (computed from stage ranges) but
         # pull in granular detail (current_file, message, bytes) from the sub-op.
-        if operation_id.endswith('_pipeline'):
+        # Only merge when pipeline is actively processing — if pipeline errored,
+        # show the pipeline's own error message, not stale substage progress.
+        if operation_id.endswith('_pipeline') and progress_data.get('status') not in ('error', 'complete'):
             viewport_name = operation_id.rsplit('_pipeline', 1)[0]
             for sub_op in ('download', 'pyramids', 'vectors', 'umap', 'pca', 'rgb'):
                 sub_file = PROGRESS_DIR / f"{viewport_name}_{sub_op}_progress.json"
