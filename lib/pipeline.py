@@ -81,13 +81,17 @@ class PipelineRunner:
         self._last_percent = 0  # Track last reported percent for monotonicity
         self._active_stage = None  # (stage_name, viewport_name) during subprocess runs
 
-    def update_progress(self, stage: str, stage_percent: int, message: str):
+    def update_progress(self, stage: str, stage_percent: int, message: str,
+                        current_file: str = "", current_value: int = 0, total_value: int = 0):
         """Update unified pipeline progress (monotonically increasing).
 
         Args:
             stage: Stage name ('download', 'rgb', 'pyramids', 'vectors', 'umap')
             stage_percent: Progress within this stage (0-100)
             message: Status message
+            current_file: File currently being processed
+            current_value: Byte-level progress (e.g. bytes downloaded)
+            total_value: Byte-level total (e.g. total bytes to download)
         """
         if not self.progress:
             return
@@ -98,10 +102,12 @@ class PipelineRunner:
         # Enforce monotonicity — never report a lower percent than before
         overall_percent = max(overall_percent, self._last_percent)
         self._last_percent = overall_percent
-        self.progress.update("processing", message, overall_percent, 100)
+        self.progress.update("processing", message, current_value=current_value,
+                             total_value=total_value, current_file=current_file,
+                             percent=overall_percent)
 
     def _poll_substage_progress(self):
-        """Read the active sub-operation's progress file and forward to pipeline."""
+        """Read the active sub-operation's progress file and forward ALL fields to pipeline."""
         if not self._active_stage:
             return
         stage_name, viewport_name = self._active_stage
@@ -116,7 +122,10 @@ class PipelineRunner:
             sub_percent = sub_data.get('percent', 0)
             sub_message = sub_data.get('message', '')
             if sub_percent > 0 or sub_message:
-                self.update_progress(stage_name, sub_percent, sub_message)
+                self.update_progress(stage_name, sub_percent, sub_message,
+                                     current_file=sub_data.get('current_file', ''),
+                                     current_value=sub_data.get('current_value', 0),
+                                     total_value=sub_data.get('total_value', 0))
         except (ValueError, IOError, OSError):
             pass
 

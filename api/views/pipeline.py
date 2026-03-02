@@ -43,31 +43,6 @@ def operations_progress(request, operation_id):
         with open(progress_file, 'r') as f:
             progress_data = json.load(f)
 
-        # For pipeline operations, merge detail from the active sub-operation
-        # Keep the pipeline's overall percent (computed from stage ranges) but
-        # pull in granular detail (current_file, message, bytes) from the sub-op.
-        # Only merge when pipeline is actively processing — if pipeline errored,
-        # show the pipeline's own error message, not stale substage progress.
-        if operation_id.endswith('_pipeline') and progress_data.get('status') not in ('error', 'complete'):
-            viewport_name = operation_id.rsplit('_pipeline', 1)[0]
-            for sub_op in ('download', 'pyramids', 'vectors', 'umap', 'pca', 'rgb'):
-                sub_file = PROGRESS_DIR / f"{viewport_name}_{sub_op}_progress.json"
-                if sub_file.exists():
-                    try:
-                        with open(sub_file, 'r') as f:
-                            sub_data = json.load(f)
-                        if sub_data.get('status') not in ('complete', 'error'):
-                            # Merge detail fields but NOT percent — pipeline
-                            # percent is the authoritative overall progress
-                            for key in ('current_file', 'current_value', 'total_value'):
-                                if sub_data.get(key):
-                                    progress_data[key] = sub_data[key]
-                            if sub_data.get('message'):
-                                progress_data['message'] = sub_data['message']
-                            break
-                    except (json.JSONDecodeError, IOError):
-                        continue
-
         return JsonResponse({
             'success': True,
             **progress_data

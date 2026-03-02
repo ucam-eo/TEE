@@ -26,20 +26,22 @@ class ProgressTracker:
         self.start_time = datetime.now(timezone.utc).isoformat()
 
     def update(self, status: str, message: str = "", current_value: int = 0,
-               total_value: int = 0, current_file: str = ""):
+               total_value: int = 0, current_file: str = "", percent: int = None):
         """
         Update progress and write to JSON file.
 
         Args:
             status: 'downloading', 'processing', 'complete', 'error'
             message: Human-readable message
-            current_value: Current progress (e.g., MB downloaded)
-            total_value: Total to complete (e.g., total MB)
+            current_value: Current progress (e.g., bytes downloaded)
+            total_value: Total to complete (e.g., total bytes)
             current_file: Name of file currently being processed
+            percent: Explicit percent override (0-100). If None, computed from current_value/total_value.
         """
-        percent = 0
-        if total_value > 0:
-            percent = min(100, int((current_value / total_value) * 100))
+        if percent is None:
+            percent = 0
+            if total_value > 0:
+                percent = min(100, int((current_value / total_value) * 100))
 
         progress_data = {
             "operation_id": self.operation_id,
