@@ -1687,7 +1687,6 @@
         }
 
         async function goToViewer(viewportName) {
-            // Simple version: check readiness, then navigate if ready
             const name = viewportName || (currentViewport ? currentViewport.name : null);
 
             if (!name) {
@@ -1703,7 +1702,17 @@
                     console.log(`[VIEWER] ${name} is ready, navigating to viewer`);
                     window.location.href = 'viewer.html';
                 } else {
-                    alert(`Data not ready yet.\n\n${result.message}\n\nPlease wait and try again.`);
+                    // Pipeline still running — show progress and wait
+                    console.log(`[VIEWER] ${name} not ready, waiting for pipeline...`);
+                    document.getElementById('processingSection').style.display = 'block';
+                    startProgressPolling(name);
+                    const isReady = await waitForViewportReady(name);
+                    document.getElementById('processingSection').style.display = 'none';
+                    if (isReady) {
+                        window.location.href = 'viewer.html';
+                    } else {
+                        alert('Processing failed or timed out. Please try again.');
+                    }
                 }
             } catch (error) {
                 console.error('[VIEWER] Error checking readiness:', error);
