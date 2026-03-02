@@ -109,10 +109,17 @@ def download_single_year(tessera, year, BBOX, viewport_id, output_file, est_byte
                          progress, progress_lock, cumulative_bytes, total_estimated_bytes, total_years):
     """Download and save embeddings for a single year. Thread-safe.
 
+    Each thread gets its own GeoTessera instance to avoid thread-safety issues.
+    If tessera is None, creates a new instance (uses cached registry files so init is fast).
+
     Returns:
         (year, success: bool, size_mb: float or 0)
     """
-    year_label = f"{year}"
+    # Create per-thread GeoTessera instance if needed
+    if tessera is None:
+        t0 = _time.monotonic()
+        tessera = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
+        print(f"   [{year}] Worker connected to registry ({_time.monotonic() - t0:.1f}s)")
 
     # Skip if already exists
     if output_file.exists():
@@ -312,25 +319,37 @@ def download_embeddings():
     total_years = len(list(YEARS))
     total_estimated_bytes = est_bytes * total_years
     cumulative_bytes = [0]
-    progress_lock = threading.Lock()  # kept for download_single_year signature
+    progress_lock = threading.Lock()
 
     successful_years = []
 
-    # Download years sequentially (GeoTessera client is not thread-safe)
-    print(f"\nDownloading {total_years} year(s)...")
+    # Download years in parallel using per-thread GeoTessera instances.
+    # The first instance (created above) already warmed the cache files,
+    # so worker threads init in <1s instead of ~50s.
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    for year in YEARS:
+    workers = min(MAX_CONCURRENT_DOWNLOADS, total_years)
+    print(f"\nDownloading {total_years} year(s) with {workers} parallel workers...")
+
+    def _download_year(year):
         output_file = MOSAICS_DIR / f"{viewport_id}_embeddings_{year}.tif"
-        try:
-            yr, success, size_mb = download_single_year(
-                tessera, year, BBOX, viewport_id, output_file, est_bytes, est_mb,
-                progress, progress_lock, cumulative_bytes, total_estimated_bytes, total_years
-            )
-            if success:
-                successful_years.append(yr)
-        except Exception as e:
-            print(f"   [{year}] ⚠️  Unexpected error: {type(e).__name__}: {e}")
-            traceback.print_exc(file=sys.stderr)
+        # Each thread creates its own GeoTessera instance (pass None)
+        return download_single_year(
+            None, year, BBOX, viewport_id, output_file, est_bytes, est_mb,
+            progress, progress_lock, cumulative_bytes, total_estimated_bytes, total_years
+        )
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(_download_year, year): year for year in YEARS}
+        for future in as_completed(futures):
+            year = futures[future]
+            try:
+                yr, success, size_mb = future.result()
+                if success:
+                    successful_years.append(yr)
+            except Exception as e:
+                print(f"   [{year}] ⚠️  Unexpected error: {type(e).__name__}: {e}")
+                traceback.print_exc(file=sys.stderr)
 
     print("\n" + "=" * 60)
     print("Download complete!")
