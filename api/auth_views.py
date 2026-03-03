@@ -3,7 +3,7 @@
 import time
 import logging
 
-from django.contrib.auth.hashers import make_password
+import bcrypt
 from django.http import JsonResponse
 
 from api.middleware import auth_enabled, check_credentials, _passwd_file
@@ -69,7 +69,7 @@ def auth_change_password(request):
         return JsonResponse({'success': False, 'error': 'Current password is incorrect'}, status=403)
 
     # Hash new password and update passwd file in-place
-    new_hash = make_password(new_password)
+    new_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
     try:
         lines = _passwd_file.read_text().splitlines()
         new_lines = []

@@ -68,14 +68,15 @@ def auth_enabled():
 
 
 def check_credentials(username, password):
-    """Verify username/password against the passwd file."""
-    from django.contrib.auth.hashers import check_password
+    """Verify username/password against the passwd file (htpasswd bcrypt format)."""
+    import bcrypt as _bcrypt
     _load_passwd()
     hashed = _passwd_users.get(username)
     if hashed is None:
         return False
     try:
-        return check_password(password, hashed)
+        normalized = hashed.replace('$2y$', '$2b$', 1)
+        return _bcrypt.checkpw(password.encode(), normalized.encode())
     except Exception:
         return False
 
