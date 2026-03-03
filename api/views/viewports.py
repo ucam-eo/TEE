@@ -298,8 +298,9 @@ def delete_viewport(request):
         viewports_dir = VIEWPORTS_DIR
         viewport_file = viewports_dir / f'{viewport_name}.txt'
 
+        # Don't require .txt to exist — clean up whatever data remains
         if not viewport_file.exists():
-            return JsonResponse({'success': False, 'error': 'Viewport not found'}, status=404)
+            logger.warning(f"Viewport file {viewport_file} not found, proceeding with data cleanup")
 
         active_viewport = get_active_viewport_name()
         if active_viewport == viewport_name:
@@ -389,8 +390,9 @@ def delete_viewport(request):
                 logger.warning(f"Error deleting progress file {progress_file.name}: {e}")
 
         # Delete the viewport file
-        viewport_file.unlink()
-        deleted_items.append(f"viewport: {viewport_name}.txt")
+        if viewport_file.exists():
+            viewport_file.unlink()
+            deleted_items.append(f"viewport: {viewport_name}.txt")
         logger.info(f"Deleted viewport: {viewport_name}")
 
         return JsonResponse({
