@@ -29,6 +29,7 @@ mosaics/
 embeddings/
 pyramids/
 vectors/
+viewports/
 *.tif
 *.tiff
 *.npy

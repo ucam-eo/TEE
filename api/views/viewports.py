@@ -27,8 +27,8 @@ from api.helpers import (
     estimate_viewport_size,
     cleanup_viewport_embeddings,
     parse_json_body,
-    USER_QUOTA_MB,
 )
+from api.middleware import get_user_quota
 from api.tasks import tasks, tasks_lock, trigger_data_download_and_processing
 
 logger = logging.getLogger(__name__)
@@ -230,17 +230,18 @@ def create_viewport(request):
         # Per-user disk quota check
         user = request.session.get('user')
         if user and user != 'admin':
+            quota_mb = get_user_quota(user)
             num_years = len(years) if years else 1
             estimated_mb = estimate_viewport_size(bounds, num_years)
             current_mb = get_user_total_data_size(user)
-            if current_mb + estimated_mb > USER_QUOTA_MB:
+            if current_mb + estimated_mb > quota_mb:
                 return JsonResponse({
                     'success': False,
                     'error': (
                         f'Disk quota exceeded. '
                         f'Your existing viewports use {current_mb:.0f} MB, '
                         f'this viewport would add ~{estimated_mb:.0f} MB, '
-                        f'but your limit is {USER_QUOTA_MB} MB ({USER_QUOTA_MB / 1024:.0f} GB). '
+                        f'but your limit is {quota_mb:.0f} MB ({quota_mb / 1024:.0f} GB). '
                         f'Delete some viewports to free up space.'
                     )
                 }, status=403)
@@ -455,18 +456,19 @@ def add_years(request, viewport_name):
         # Disk quota check
         user = request.session.get('user')
         if user and user != 'admin':
+            quota_mb = get_user_quota(user)
             bounds = viewport['bounds']
             bounds_tuple = (bounds['minLon'], bounds['minLat'], bounds['maxLon'], bounds['maxLat'])
             estimated_mb = estimate_viewport_size(bounds_tuple, len(new_years))
             current_mb = get_user_total_data_size(user)
-            if current_mb + estimated_mb > USER_QUOTA_MB:
+            if current_mb + estimated_mb > quota_mb:
                 return JsonResponse({
                     'success': False,
                     'error': (
                         f'Disk quota exceeded. '
                         f'Your existing viewports use {current_mb:.0f} MB, '
                         f'adding {len(new_years)} year(s) would add ~{estimated_mb:.0f} MB, '
-                        f'but your limit is {USER_QUOTA_MB} MB ({USER_QUOTA_MB / 1024:.0f} GB). '
+                        f'but your limit is {quota_mb:.0f} MB ({quota_mb / 1024:.0f} GB). '
                         f'Delete some viewports to free up space.'
                     )
                 }, status=403)

@@ -26,8 +26,8 @@ logger.info(f"Using Python: {VENV_PYTHON}")
 MIN_YEAR = 2017
 MAX_YEAR = 2025
 
-# Per-user disk quota (2 GB default)
-USER_QUOTA_MB = 2048
+# Per-user disk quota default (2 GB); overridable in passwd file
+DEFAULT_QUOTA_MB = 2048
 
 
 def cleanup_viewport_embeddings(viewport_name, viewport_bounds):

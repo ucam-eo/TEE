@@ -11,13 +11,14 @@ import logging
 from django.http import JsonResponse, HttpResponseRedirect
 
 from lib.config import DATA_DIR
+from api.helpers import DEFAULT_QUOTA_MB
 
 logger = logging.getLogger(__name__)
 
 # Module state (same pattern as backend/auth.py)
 _passwd_file = DATA_DIR / 'passwd'
 _passwd_mtime = 0
-_passwd_users = {}  # username -> password_hash
+_passwd_users = {}  # username -> {'hash': str, 'quota_mb': int}
 
 
 def _load_passwd():
@@ -47,11 +48,17 @@ def _load_passwd():
                 continue
             if ':' not in line:
                 continue
-            username, hashed = line.split(':', 1)
-            username = username.strip()
-            hashed = hashed.strip()
+            parts = line.split(':')
+            username = parts[0].strip()
+            hashed = parts[1].strip()
+            quota_mb = DEFAULT_QUOTA_MB
+            if len(parts) > 2 and parts[2].strip():
+                try:
+                    quota_mb = int(parts[2].strip())
+                except ValueError:
+                    pass
             if username and hashed:
-                users[username] = hashed
+                users[username] = {'hash': hashed, 'quota_mb': quota_mb}
     except OSError as e:
         logger.error(f"Error reading passwd file: {e}")
         return
@@ -71,14 +78,25 @@ def check_credentials(username, password):
     """Verify username/password against the passwd file (htpasswd bcrypt format)."""
     import bcrypt as _bcrypt
     _load_passwd()
-    hashed = _passwd_users.get(username)
-    if hashed is None:
+    entry = _passwd_users.get(username)
+    if entry is None:
         return False
     try:
-        normalized = hashed.replace('$2y$', '$2b$', 1)
+        normalized = entry['hash'].replace('$2y$', '$2b$', 1)
         return _bcrypt.checkpw(password.encode(), normalized.encode())
     except Exception:
         return False
+
+
+def get_user_quota(username):
+    """Return disk quota in MB for *username*. Admin is unlimited."""
+    _load_passwd()
+    if username == 'admin':
+        return float('inf')
+    entry = _passwd_users.get(username)
+    if entry is None:
+        return DEFAULT_QUOTA_MB
+    return entry['quota_mb']
 
 
 # Paths that never require authentication
