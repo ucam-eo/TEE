@@ -946,6 +946,8 @@
                 const incoming = await resp.json();
 
                 const changed = hasStatusChanged(viewportStatus, incoming);
+                const yearsChanged = JSON.stringify(viewportStatus.years_available) !==
+                                     JSON.stringify(incoming.years_available || []);
 
                 // Update server-side flags (preserve client-side flags)
                 viewportStatus.has_embeddings = incoming.has_embeddings || false;
@@ -962,6 +964,18 @@
                         years: viewportStatus.years_available
                     }));
                     evaluateDependencies();
+                }
+
+                // Update year dropdowns even when dependencies are already satisfied
+                if (yearsChanged && viewportStatus.years_available.length > 0) {
+                    applyYearSelector(
+                        'embedding-year-selector', viewportStatus.years_available, currentEmbeddingYear,
+                        (year) => switchEmbeddingYear(parseInt(year))
+                    );
+                    applyYearSelector(
+                        'embedding-year-selector-2', viewportStatus.years_available, currentEmbeddingYear2,
+                        (year) => switchEmbeddingYear2(year)
+                    );
                 }
             } catch (e) {
                 console.warn('[DEP] Poll failed:', e);
