@@ -4873,6 +4873,7 @@
         window.handleSimilaritySearch = handleSimilaritySearch;
         window.clearCrossPanelMarkers = clearCrossPanelMarkers;
         window.setCrossPanelMarker = setCrossPanelMarker;
+        window.maps = maps;
     </script>
 
     <!-- ===== Pixelated Canvas Tile Layer ===== -->
@@ -5294,6 +5295,10 @@
                 if (typeof window.handleUnifiedClick === 'function') {
                     window.handleUnifiedClick(hitPoint.lat, hitPoint.lon);
                 }
+                // Pan map panels to the clicked location so markers are visible
+                if (window.maps && window.maps.osm) {
+                    window.maps.osm.panTo([hitPoint.lat, hitPoint.lon]);
+                }
                 console.log(`[UMAPScene] Click → lat=${hitPoint.lat.toFixed(6)} lon=${hitPoint.lon.toFixed(6)}`);
             }
         }
@@ -5315,6 +5320,10 @@
                 // Use similarity search handler
                 if (typeof window.handleSimilaritySearch === 'function') {
                     window.handleSimilaritySearch(hitPoint.lat, hitPoint.lon);
+                }
+                // Pan map panels to the clicked location so markers are visible
+                if (window.maps && window.maps.osm) {
+                    window.maps.osm.panTo([hitPoint.lat, hitPoint.lon]);
                 }
                 console.log(`[UMAPScene] DblClick → similarity search at lat=${hitPoint.lat.toFixed(6)} lon=${hitPoint.lon.toFixed(6)}`);
             }

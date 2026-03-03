@@ -1626,6 +1626,23 @@
                 } catch (error) {
                     console.error('Error polling progress:', error);
                 }
+
+                // Also check is-ready — enable viewer button as soon as pyramids exist
+                try {
+                    const readyResp = await fetch(`/api/viewports/${viewportName}/is-ready`);
+                    const readyData = await readyResp.json();
+                    if (readyData.ready) {
+                        const viewerBtn = document.getElementById('quickViewerBtn');
+                        viewerBtn.disabled = false;
+                        viewerBtn.style.opacity = '1';
+                        viewerBtn.style.cursor = 'pointer';
+                        const statusText = document.getElementById('dataStatusText');
+                        statusText.textContent = readyData.message;
+                        const statusEl = document.getElementById('dataStatusMessage');
+                        statusEl.style.background = '#e8f5e9';
+                        statusEl.style.color = '#2e7d32';
+                    }
+                } catch (e) { /* is-ready not available yet */ }
             }, 2000);
         }
 
