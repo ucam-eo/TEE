@@ -78,7 +78,9 @@ def auth_change_password(request):
             if stripped and not stripped.startswith('#') and ':' in stripped:
                 uname = stripped.split(':', 1)[0].strip()
                 if uname == user:
-                    new_lines.append(f'{user}:{new_hash}')
+                    parts = stripped.split(':')
+                    quota_suffix = f':{parts[2]}' if len(parts) > 2 else ''
+                    new_lines.append(f'{user}:{new_hash}{quota_suffix}')
                     continue
             new_lines.append(line)
         _passwd_file.write_text('\n'.join(new_lines) + '\n')
