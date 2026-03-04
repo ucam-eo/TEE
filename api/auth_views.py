@@ -39,7 +39,7 @@ def auth_logout(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-    request.session.pop('user', None)
+    request.session.flush()
     return JsonResponse({'success': True})
 
 

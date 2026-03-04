@@ -105,7 +105,6 @@ PUBLIC_PATHS = {
     '/api/auth/login',
     '/api/auth/logout',
     '/api/auth/status',
-    '/api/auth/change-password',
     '/login.html',
 }
 
@@ -113,6 +112,8 @@ PUBLIC_PATHS = {
 WRITE_ENDPOINTS = {
     '/api/viewports/create',
     '/api/viewports/delete',
+    '/api/viewports/switch',
+    '/api/auth/change-password',
     '/api/downloads/embeddings',
     '/api/downloads/process',
 }
@@ -131,6 +132,8 @@ def _is_write_endpoint(path):
     if path.startswith('/api/viewports/') and path.endswith('/cancel-processing'):
         return True
     if path.startswith('/api/viewports/') and path.endswith('/add-years'):
+        return True
+    if path.startswith('/api/viewports/') and path.endswith('/compute-umap'):
         return True
     return False
 

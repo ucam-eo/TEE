@@ -26,6 +26,7 @@ from api.helpers import (
     get_user_total_data_size,
     estimate_viewport_size,
     cleanup_viewport_embeddings,
+    check_viewport_owner,
     parse_json_body,
 )
 from api.middleware import get_user_quota
@@ -296,13 +297,9 @@ def delete_viewport(request):
         except ValueError as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
-        current_user = request.session.get('user')
-        config_file = VIEWPORTS_DIR / f'{viewport_name}_config.json'
-        if config_file.exists():
-            with open(config_file) as f:
-                cfg = json.load(f)
-            if current_user != 'admin' and cfg.get('created_by') and cfg.get('created_by') != current_user:
-                return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+        allowed, deny_response = check_viewport_owner(request, viewport_name)
+        if not allowed:
+            return deny_response
 
         viewports_dir = VIEWPORTS_DIR
         viewport_file = viewports_dir / f'{viewport_name}.txt'
@@ -424,6 +421,10 @@ def add_years(request, viewport_name):
     except ValueError as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
     try:
+        allowed, deny_response = check_viewport_owner(request, viewport_name)
+        if not allowed:
+            return deny_response
+
         viewport = read_viewport_file(viewport_name)
 
         data, err = parse_json_body(request)
@@ -457,10 +458,6 @@ def add_years(request, viewport_name):
                 config = json.load(f)
         else:
             config = {'years': [], 'created_by': request.session.get('user')}
-
-        current_user = request.session.get('user')
-        if config.get('created_by') and current_user != 'admin' and config.get('created_by') != current_user:
-            return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
 
         existing_years = config.get('years') or []
         merged_years = sorted(set(existing_years) | set(new_years))
@@ -618,7 +615,7 @@ def is_ready(request, viewport_name):
             else:
                 message = f"Ready to view ({available_str})"
         else:
-            if not pipeline_running and not pipeline_failed:
+            if not pipeline_running and not pipeline_failed and request.session.get('user'):
                 logger.info(f"[is-ready] Pipeline not running for '{viewport_name}' but data incomplete - re-triggering pipeline")
                 saved_years = [int(y) for y in years_requested] if years_requested else None
                 trigger_data_download_and_processing(viewport_name, years=saved_years)

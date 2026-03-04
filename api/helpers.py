@@ -251,6 +251,29 @@ def estimate_viewport_size(bounds, num_years):
     return total_mb
 
 
+def check_viewport_owner(request, viewport_name):
+    """Check if the current user is admin or owner of the viewport.
+
+    Returns (True, None) if authorized, (False, JsonResponse 403) if not.
+    Viewports without _config.json (legacy) are allowed for anyone.
+    """
+    current_user = request.session.get('user')
+    if current_user == 'admin':
+        return True, None
+    config_file = VIEWPORTS_DIR / f'{viewport_name}_config.json'
+    if not config_file.exists():
+        return True, None
+    try:
+        with open(config_file) as f:
+            cfg = json.load(f)
+    except Exception:
+        return True, None
+    owner = cfg.get('created_by')
+    if not owner or owner == current_user:
+        return True, None
+    return False, JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
+
 def parse_json_body(request):
     """Parse JSON from request body. Returns (data_dict, error_response).
 

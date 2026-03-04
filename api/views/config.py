@@ -49,7 +49,6 @@ def health(request):
         'status': 'healthy',
         'service': 'TEE',
         'version': _VERSION,
-        'data_dir': str(DATA_DIR)
     })
 
 

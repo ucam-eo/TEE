@@ -19,6 +19,7 @@ from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, PROGRESS_DIR, VIEWPORTS_DIR
 from lib.config import VECTORS_DIR
 from api.helpers import (
     cleanup_viewport_embeddings,
+    check_viewport_owner,
 )
 from api.tasks import tasks, tasks_lock
 
@@ -90,6 +91,10 @@ def cancel_processing(request, viewport_name):
     except ValueError as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
     try:
+        allowed, deny_response = check_viewport_owner(request, viewport_name)
+        if not allowed:
+            return deny_response
+
         import shutil
 
         operation_id = f"{viewport_name}_full_pipeline"
