@@ -179,6 +179,7 @@ cmd_update() {
         --name "$CONTAINER" \
         --restart unless-stopped \
         -p 8001:8001 \
+        -e TEE_HTTPS=1 \
         -v /data:/data \
         -v /data/viewports:/app/viewports \
         "$IMAGE"
