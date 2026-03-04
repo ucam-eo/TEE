@@ -49,9 +49,9 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 
 STATIC_URL = '/static/'
 
-# CORS - matches Flask-CORS(app, supports_credentials=True)
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
+# CORS — locked down by default; desktop.py opens it up for local dev
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = False
 
 # Logging
 LOGGING = {
