@@ -112,7 +112,6 @@ PUBLIC_PATHS = {
 WRITE_ENDPOINTS = {
     '/api/viewports/create',
     '/api/viewports/delete',
-    '/api/viewports/switch',
     '/api/auth/change-password',
     '/api/downloads/embeddings',
     '/api/downloads/process',
