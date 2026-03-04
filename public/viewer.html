@@ -4089,6 +4089,10 @@
             });
         }
 
+        function escapeHtml(s) {
+            return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        }
+
         // Render grouped label card
         function renderLabelGroup(name, members) {
             const color = members[0].color;
@@ -4103,14 +4107,14 @@
                     <div style="flex: 1;">
                       <div style="display: flex; align-items: center; margin-bottom: 4px;">
                         <div style="width: 14px; height: 14px; background: ${color}; border-radius: 2px; margin-right: 8px;"></div>
-                        <div style="font-weight: 600; font-size: 13px; color: #333;">${name}${markerNote}</div>
+                        <div style="font-weight: 600; font-size: 13px; color: #333;">${escapeHtml(name)}${markerNote}</div>
                       </div>
                       <div style="font-size: 11px; color: #999; margin-left: 22px;">${totalPixels.toLocaleString()} pixels, threshold: ${members[0].threshold}</div>
                     </div>
                     <div style="display: flex; gap: 6px;">
-                      <button class="timeline-label-btn" data-label-name="${name}" style="padding: 5px 8px; background: #f0f0ff; border: 1px solid #b0b0ff; border-radius: 3px; cursor: pointer; font-size: 12px; color: #5500cc; font-weight: 600;" title="Show coverage timeline across years">Timeline</button>
-                      <button class="toggle-label-btn" data-label-name="${name}" style="padding: 5px 8px; background: #e8f0ff; border: 1px solid #b0d4ff; border-radius: 3px; cursor: pointer; font-size: 12px; color: #0066cc; font-weight: 600;" title="Toggle visibility">${toggleText}</button>
-                      <button class="delete-label-btn" data-label-name="${name}" style="padding: 5px 8px; background: #ffe8e8; border: 1px solid #ffb0b0; border-radius: 3px; cursor: pointer; font-size: 12px; color: #cc0000; font-weight: 600;" title="Delete label">Delete</button>
+                      <button class="timeline-label-btn" data-label-name="${escapeHtml(name)}" style="padding: 5px 8px; background: #f0f0ff; border: 1px solid #b0b0ff; border-radius: 3px; cursor: pointer; font-size: 12px; color: #5500cc; font-weight: 600;" title="Show coverage timeline across years">Timeline</button>
+                      <button class="toggle-label-btn" data-label-name="${escapeHtml(name)}" style="padding: 5px 8px; background: #e8f0ff; border: 1px solid #b0d4ff; border-radius: 3px; cursor: pointer; font-size: 12px; color: #0066cc; font-weight: 600;" title="Toggle visibility">${toggleText}</button>
+                      <button class="delete-label-btn" data-label-name="${escapeHtml(name)}" style="padding: 5px 8px; background: #ffe8e8; border: 1px solid #ffb0b0; border-radius: 3px; cursor: pointer; font-size: 12px; color: #cc0000; font-weight: 600;" title="Delete label">Delete</button>
                     </div>
                   </div>
                 </div>
@@ -4151,7 +4155,7 @@
                 for (const ul of uniqueLabels) {
                     const row = document.createElement('div');
                     row.style.cssText = 'display: flex; align-items: center; gap: 10px; padding: 8px 10px; cursor: pointer; border-radius: 4px; border: 2px solid transparent; margin-bottom: 4px; background: #f5f5f5;';
-                    row.innerHTML = `<span style="width: 18px; height: 18px; border-radius: 3px; background: ${ul.color}; border: 1px solid #999; flex-shrink: 0;"></span><span style="color: #333; font-size: 14px;">${ul.name}</span>`;
+                    row.innerHTML = `<span style="width: 18px; height: 18px; border-radius: 3px; background: ${ul.color}; border: 1px solid #999; flex-shrink: 0;"></span><span style="color: #333; font-size: 14px;">${escapeHtml(ul.name)}</span>`;
                     row.addEventListener('click', function() {
                         document.getElementById('label-name-input').value = ul.name;
                         document.getElementById('label-color-input').value = ul.color;
