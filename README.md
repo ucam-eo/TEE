@@ -90,8 +90,16 @@ A consolidated **Export** dropdown provides three formats:
 
 2. **Pull and run from Docker Hub (easiest):**
    ```bash
-   docker pull sk818/tee:2.2.0
-   docker run -p 8001:8001 -v ~/tee_data:/data sk818/tee:2.2.0
+   docker pull sk818/tee:stable
+   docker run -d --name tee --restart unless-stopped \
+       -p 8001:8001 -v /data:/data -v /data/viewports:/app/viewports \
+       sk818/tee:stable
+   ```
+
+   **Management** (users, quotas, updates):
+   ```bash
+   docker cp tee:/app/scripts/manage.sh ~/manage.sh && chmod +x ~/manage.sh
+   sudo ./manage.sh
    ```
 
    **Or build from source:**
@@ -191,41 +199,35 @@ TEE supports optional per-user authentication. When enabled, unauthenticated use
 
 ### Enabling Authentication
 
-Authentication is controlled by the presence of a `passwd` file in the data directory (`~/data/passwd`). If no passwd file exists, auth is disabled and all users have open access with no quota limits.
+Authentication is controlled by the presence of a `passwd` file in the data directory (`/data/passwd`). If no passwd file exists, auth is disabled and all users have open access with no quota limits.
 
-### Managing Users
+### Managing Users (Docker)
 
-Use the `manage_users.py` script (run with the venv Python so Django is available):
+Copy the management script out of the container once, then use it to manage everything:
 
 ```bash
-# Add a user (prompts for password with confirmation)
-./venv/bin/python3 scripts/manage_users.py add admin
-
-# Add another user
-./venv/bin/python3 scripts/manage_users.py add alice
-
-# List all users
-./venv/bin/python3 scripts/manage_users.py list
-
-# Verify a user's password
-./venv/bin/python3 scripts/manage_users.py check admin
-
-# Remove a user
-./venv/bin/python3 scripts/manage_users.py remove alice
+docker cp tee:/app/scripts/manage.sh ~/manage.sh && chmod +x ~/manage.sh
+sudo ./manage.sh
 ```
 
-In Docker:
-```bash
-docker exec -it <container> python3 scripts/manage_users.py add admin
+This gives an interactive menu:
 ```
+TEE Management
+  1) List users
+  2) Add user
+  3) Remove user
+  4) Set quota
+  5) Update container
+  6) Exit
+```
+
+The script manages the `/data/passwd` file directly on the host and uses the Docker image to generate bcrypt password hashes — no extra dependencies needed.
 
 ### Disabling Authentication
 
-Remove all users or delete the passwd file:
+Remove all users via the management script (option 3), or delete the passwd file:
 ```bash
-./venv/bin/python3 scripts/manage_users.py remove admin
-# or
-rm ~/data/passwd
+rm /data/passwd
 ```
 When the last user is removed, the script deletes the passwd file automatically, returning to open access. No server restart is needed — the passwd file is re-read on every request.
 
@@ -233,11 +235,17 @@ When the last user is removed, the script deletes the passwd file automatically,
 
 The `admin` user has special privileges:
 - **No disk quota** — can create viewports without size limits
-- All other users are subject to a **2 GB disk quota** per user
+- All other users default to a **2 GB disk quota** (configurable per user)
 
-### Disk Quota
+### Disk Quotas
 
-Each non-admin user has a **2 GB disk quota** for viewport data. When creating a viewport, the server estimates the disk usage and rejects the request if it would exceed the quota. Delete existing viewports to free up space.
+Each non-admin user has a disk quota for viewport data (default 2 GB). Set per-user quotas via the management script (option 4) — accepts values like `4G`, `512M`, or bare MB.
+
+The quota is stored as an optional third field in the passwd file:
+```
+admin:$2b$05$hash
+user2:$2b$05$hash:4096
+```
 
 ### Changing Passwords
 
