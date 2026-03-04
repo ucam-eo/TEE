@@ -130,6 +130,8 @@ def _is_write_endpoint(path):
     # Match /api/viewports/<name>/cancel-processing
     if path.startswith('/api/viewports/') and path.endswith('/cancel-processing'):
         return True
+    if path.startswith('/api/viewports/') and path.endswith('/add-years'):
+        return True
     return False
 
 
