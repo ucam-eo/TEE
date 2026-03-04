@@ -296,6 +296,14 @@ def delete_viewport(request):
         except ValueError as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
+        current_user = request.session.get('user')
+        config_file = VIEWPORTS_DIR / f'{viewport_name}_config.json'
+        if config_file.exists():
+            with open(config_file) as f:
+                cfg = json.load(f)
+            if current_user != 'admin' and cfg.get('created_by') and cfg.get('created_by') != current_user:
+                return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
         viewports_dir = VIEWPORTS_DIR
         viewport_file = viewports_dir / f'{viewport_name}.txt'
 
@@ -449,6 +457,10 @@ def add_years(request, viewport_name):
                 config = json.load(f)
         else:
             config = {'years': [], 'created_by': request.session.get('user')}
+
+        current_user = request.session.get('user')
+        if config.get('created_by') and current_user != 'admin' and config.get('created_by') != current_user:
+            return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
 
         existing_years = config.get('years') or []
         merged_years = sorted(set(existing_years) | set(new_years))
