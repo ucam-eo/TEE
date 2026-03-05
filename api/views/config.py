@@ -14,7 +14,11 @@ try:
         cwd=str(APP_DIR), stderr=subprocess.DEVNULL
     ).decode().strip()
 except Exception:
-    _VERSION = 'unknown'
+    # Docker: .git is excluded, read baked VERSION file instead
+    try:
+        _VERSION = (APP_DIR / 'VERSION').read_text().strip()
+    except Exception:
+        _VERSION = 'unknown'
 
 PUBLIC_DIR = APP_DIR / 'public'
 
