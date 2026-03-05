@@ -200,14 +200,17 @@
             transition: grid-template-rows 0.3s ease;
         }
 
-        /* 3-panel mode: hide bottom row */
-        #map-container.three-panel {
-            grid-template-rows: 1fr;
-        }
+        /* Simple: full-height top row, hide bottom */
+        #map-container.mode-simple { grid-template-rows: 1fr; }
+        #map-container.mode-simple .panel:nth-child(n+4) { display: none; }
 
-        #map-container.three-panel .panel:nth-child(n+4) {
-            display: none;
-        }
+        /* Change Detection: blank panel 4, so panels 5+6 shift right */
+        #map-container.mode-change-detection .panel:nth-child(4) { visibility: hidden; }
+
+        /* Labelling: repurpose panel 6 as label-management split view */
+        #panel6-label-view { display: none; }
+        #map-container.mode-labelling #map-embedding2 { display: none; }
+        #map-container.mode-labelling #panel6-label-view { display: flex; }
 
         .panel {
             position: relative;
@@ -430,6 +433,22 @@
         #progress-status.error {
             color: #dc3545;
         }
+
+        /* Segmentation panel styles */
+        .seg-cluster-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 0;
+        }
+        .seg-color-swatch {
+            width: 16px;
+            height: 16px;
+            display: inline-block;
+            border-radius: 3px;
+            border: 1px solid rgba(0,0,0,0.2);
+            flex-shrink: 0;
+        }
     </style>
 </head>
 <body>
@@ -439,8 +458,9 @@
             <button style="background: #6c757d; color: white; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 13px;" onclick="window.location.href = '/'">← Back</button>
             <button id="status-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;">ℹ️ Status</button>
             <select id="panel-layout-select" onchange="setPanelLayout(this.value)" style="padding: 5px 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 13px; cursor: pointer;">
-                <option value="3">3 Panels</option>
-                <option value="6">6 Panels</option>
+                <option value="simple">Simple</option>
+                <option value="change-detection">Change Detection</option>
+                <option value="labelling">Labelling</option>
             </select>
             <button id="help-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;">? Help</button>
         </div>
@@ -507,6 +527,7 @@
                 <div><b>Scroll</b> to zoom in/out</div>
                 <div><b>Double-click</b> for similarity search. Use similarity slider to change selected region and click <b>Save as Label</b> to label it.</div>
                 <div><b>Right-click drag</b> to rotate (PCA/UMAP pane)</div>
+                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;"><b>Segmentation:</b> Use the <b>k</b> slider and <b>Segment</b> to auto-cluster the viewport. Clusters are temporary previews. Click <b>&#8599;</b> on a cluster row to promote it to a permanent saved label, or <b>Promote All</b> to save them all. Promoted labels support timeline analysis and re-matching.</div>
                 <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">Use <b>Export</b> / <b>Import</b> to save labels to your desktop or load them from a local file.</div>
             </div>
         </div>
@@ -523,14 +544,26 @@
         </div>
 
         <!-- Labels Details Panel - drops down below header -->
-        <div id="labels-details-panel" style="position: absolute; top: 100%; right: 10px; width: 300px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-radius: 8px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 999; max-height: 450px; overflow-y: auto; font-size: 12px; display: none;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div id="labels-details-panel" style="position: fixed; bottom: 40px; right: 20px; width: 300px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-radius: 8px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 999; max-height: 450px; overflow-y: auto; font-size: 12px; display: none;">
+            <div id="labels-panel-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; cursor: grab;">
                 <div style="font-weight: 600;">📋 Saved Labels</div>
                 <button id="labels-close-btn" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px;">✕</button>
             </div>
             <div id="labels-list" style="max-height: 350px; overflow-y: auto;">
                 <!-- Labels will be rendered here -->
             </div>
+        </div>
+
+        <!-- Segmentation Results Panel -->
+        <div id="seg-results-panel" style="position: fixed; bottom: 40px; right: 20px; width: 320px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-radius: 8px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 999; max-height: 500px; overflow-y: auto; font-size: 12px; display: none;">
+            <div id="seg-panel-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; cursor: grab;">
+                <div><span style="font-weight: 600; font-size: 14px; color: #333;">Segmentation</span> <span style="font-size: 11px; color: #999; font-weight: 400;">(temporary preview)</span></div>
+                <button id="seg-panel-close-btn" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px; color: #666;">&#10005;</button>
+            </div>
+            <div id="seg-cluster-list">
+                <!-- Cluster rows rendered by JS -->
+            </div>
+            <button id="seg-export-btn" style="margin-top: 12px; width: 100%; padding: 8px; background: #667eea; color: white; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 13px;">Promote All to Labels</button>
         </div>
     </div>
 
@@ -578,7 +611,7 @@
         <!-- Panel 5: Distance Heatmap -->
         <div class="panel">
             <div class="panel-header" style="background: #805AD5; color: white; padding: 8px; font-weight: 600; font-size: 14px;">
-                <span>Change Heatmap</span>
+                <span id="panel5-title">Change Heatmap</span>
             </div>
             <div id="map-heatmap" class="map"></div>
             <!-- Message when years are the same -->
@@ -590,14 +623,42 @@
             </div>
         </div>
 
-        <!-- Panel 6: Second Year Embeddings -->
+        <!-- Panel 6: Second Year Embeddings / Label Management -->
         <div class="panel">
             <div class="panel-header" style="background: #2C5282; color: white; padding: 8px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
-                <span>Tessera Embeddings</span>
+                <span id="panel6-header-text">Tessera Embeddings</span>
                 <select id="embedding-year-selector-2" style="display: none; margin-left: 10px; padding: 4px 8px; border: 1px solid #555; border-radius: 3px; background: #333; color: #fff; font-size: 13px;">
                 </select>
             </div>
             <div id="map-embedding2" class="map"></div>
+            <!-- Label management split view (labelling mode only) -->
+            <div id="panel6-label-view" style="position: absolute; top: 45px; left: 0; right: 0; bottom: 0; flex-direction: row; gap: 2px; background: #2a2a2a; font-size: 12px;">
+                <!-- Left: Clusters (temporary) -->
+                <div style="flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.95); border-radius: 4px; margin: 4px; overflow: hidden;">
+                    <div id="seg-controls" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #e8ecf0; border-bottom: 1px solid #ddd; opacity: 0.4;">
+                        <label style="margin: 0; font-size: 12px; color: #333;">k:</label>
+                        <input type="range" id="seg-k-slider" min="2" max="20" value="5" style="width: 70px; cursor: pointer;" disabled>
+                        <span id="seg-k-display" style="font-size: 12px; min-width: 18px; text-align: center; color: #333;">5</span>
+                        <button id="seg-run-btn" style="padding: 4px 8px; background: #38a169; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" disabled>Segment</button>
+                        <button id="seg-clear-btn" style="display:none; padding: 4px 8px; background: #e53e3e; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;">Clear</button>
+                    </div>
+                    <div style="padding: 8px 10px; font-weight: 600; color: #333; border-bottom: 1px solid #ddd; font-size: 13px;">Clusters (temporary)</div>
+                    <div id="panel6-seg-list" style="flex: 1; overflow-y: auto; padding: 8px 10px;">
+                        <div style="color: #999; padding: 10px; text-align: center;">Run segmentation to see clusters</div>
+                    </div>
+                    <button id="panel6-promote-all-btn" style="margin: 8px; padding: 8px; background: #667eea; color: white; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 12px; display: none;">Promote All &#8594;</button>
+                </div>
+                <!-- Right: Saved Labels -->
+                <div style="flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.95); border-radius: 4px; margin: 4px; overflow: hidden;">
+                    <div style="padding: 6px 10px; font-weight: 600; color: #333; border-bottom: 1px solid #ddd; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>Saved Labels</span>
+                        <button id="panel6-toggle-all-btn" style="padding: 2px 8px; background: #e8f0ff; border: 1px solid #b0d4ff; border-radius: 3px; cursor: pointer; font-size: 11px; color: #0066cc; font-weight: 600; display: none;">Hide All</button>
+                    </div>
+                    <div id="panel6-labels-list" style="flex: 1; overflow-y: auto; padding: 8px 10px;">
+                        <div style="color: #999; font-size: 12px; padding: 10px;">No labels yet.</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -741,11 +802,22 @@
         let umapData = null;                  // UMAP/PCA coordinates cache
         let umapCanvasLayer = null;           // 3D scatter plot layer (Three.js scene)
         let currentDimReduction = 'pca';      // 'pca' or 'umap' - default to PCA (fast)
+        let currentPanelMode = 'simple';       // 'simple', 'change-detection', or 'labelling'
+        let heatmapSatelliteLayer = null;      // Satellite tiles for panel 5 in labelling mode
         let heatmapCanvasLayer = null;        // Distance heatmap layer
         let explorerCanvasLayer2 = null;      // Explorer viz for Panel 6
 
         // Local vector data for client-side similarity search
         let localVectors = null;  // {embeddings: Float32Array, coords: Int32Array, metadata: Object, pixelLookup: Map, numVectors: number, dim: number, viewport: string, year: string}
+
+        // ===== K-means segmentation state =====
+        let segWorker = null;
+        let segAssignments = null;   // Int32Array, length N
+        let segK = 5;
+        let segOverlay = null;       // L.imageOverlay instance
+        let segLabels = [];          // [{id, color, name, count}, ...]
+        let segRunning = false;      // prevent concurrent runs
+        let segVectors = null;       // vectors used for current segmentation (may differ from localVectors)
 
         // ===== DECLARATIVE PANEL DEPENDENCY SYSTEM =====
         // Single source of truth for viewport readiness, polled from /api/viewports/{name}/is-ready
@@ -857,12 +929,20 @@
                     if (savedLabels.length > 0) {
                         recomputeLabelPixels();
                     }
+                    // Enable segmentation controls and populate year dropdown
+                    document.getElementById('seg-k-slider').disabled = false;
+                    document.getElementById('seg-run-btn').disabled = false;
+                    document.getElementById('seg-controls').style.opacity = '1';
                 },
                 onNotReady: () => {
                     document.getElementById('similarity-threshold').disabled = true;
                     document.getElementById('similarity-controls').style.opacity = '0.4';
                     document.getElementById('label-controls-bar').style.opacity = '0.4';
                     document.querySelectorAll('#label-controls-bar button').forEach(b => b.disabled = true);
+                    // Disable segmentation controls
+                    document.getElementById('seg-k-slider').disabled = true;
+                    document.getElementById('seg-run-btn').disabled = true;
+                    document.getElementById('seg-controls').style.opacity = '0.4';
                 },
                 satisfied: false
             },
@@ -1564,6 +1644,7 @@
                 // Re-extract embeddings from THIS year's data at each source pixel
                 const searches = [];
                 for (const l of labelGroup) {
+                    if (!l.source_pixel) continue;
                     const emb = extractFromData(data, l.source_pixel.lat, l.source_pixel.lon);
                     if (emb) {
                         searches.push({ embedding: emb, threshSq: l.threshold * l.threshold });
@@ -1578,6 +1659,11 @@
         async function showLabelTimeline(labelName) {
             const labelGroup = savedLabels.filter(l => l.name === labelName);
             if (labelGroup.length === 0) return;
+            // Static labels (from segmentation) have no source_pixel — timeline not supported
+            if (!labelGroup.some(l => l.source_pixel)) {
+                alert('Timeline is not available for segmentation labels.');
+                return;
+            }
             const label = labelGroup[0];
 
             const overlay = document.getElementById('timeline-modal-overlay');
@@ -1770,6 +1856,15 @@
                         crossOrigin: 'anonymous'
                     });
                     satelliteTileLayer.addTo(maps.rgb);
+
+                    // Sync panel 5 satellite layer (used in labelling mode)
+                    const wasOnHeatmap = maps.heatmap && maps.heatmap.hasLayer(heatmapSatelliteLayer);
+                    if (wasOnHeatmap) maps.heatmap.removeLayer(heatmapSatelliteLayer);
+                    heatmapSatelliteLayer = L.tileLayer(src.url, {
+                        attribution: src.attribution, opacity: 1.0,
+                        maxZoom: 18, minZoom: 6, crossOrigin: 'anonymous'
+                    });
+                    if (wasOnHeatmap) heatmapSatelliteLayer.addTo(maps.heatmap);
                 });
             }
 
@@ -1792,7 +1887,11 @@
             });
             L.control.zoom({position: 'bottomright'}).addTo(maps.heatmap);
 
-            // No background layer for heatmap - pure color visualization
+            // Satellite layer for panel 5 (used in labelling mode only — not added to map yet)
+            heatmapSatelliteLayer = L.tileLayer(satelliteSources[currentSatelliteSource].url, {
+                attribution: satelliteSources[currentSatelliteSource].attribution,
+                opacity: 1.0, maxZoom: 18, minZoom: 6, crossOrigin: 'anonymous'
+            });
 
             if (viewportBounds) {
                 maps.heatmap.setMaxBounds(viewportBounds);
@@ -1910,6 +2009,9 @@
             window.embeddingLayer.addTo(maps.embedding);
             console.log(`✓ Switched to year ${year}`);
 
+            // Clear stale segmentation from previous year
+            clearSegmentation();
+
             // Mark vectors as needing re-download for new year
             viewportStatus.vectors_downloaded = false;
             viewportStatus.pca_loaded = false;
@@ -1961,6 +2063,7 @@
 
             for (const label of savedLabels) {
                 try {
+                    if (label.static || !label.source_pixel) continue;
                     const embedding = localExtract(label.source_pixel.lat, label.source_pixel.lon);
                     if (!embedding) {
                         console.warn(`[LABEL] No embedding for ${label.name} at source pixel`);
@@ -2710,62 +2813,109 @@
         // SIMILARITY SEARCH FUNCTIONS
         // =====================================================================
 
-        // Update threshold display when slider changes
-        // Panel layout: 3 or 6 panels
-        function setPanelLayout(numPanels) {
+        // Panel layout: simple / change-detection / labelling
+        function setPanelLayout(mode) {
             const container = document.getElementById('map-container');
             const select = document.getElementById('panel-layout-select');
+            const title = document.getElementById('panel5-title');
+            const waitMsg = document.getElementById('heatmap-waiting-message');
+            const sameMsg = document.getElementById('heatmap-same-year-message');
 
-            if (numPanels === '6' || numPanels === 6) {
-                container.classList.remove('three-panel');
-                select.value = '6';
+            // Remove old mode class, add new one
+            container.classList.remove('mode-simple', 'mode-change-detection', 'mode-labelling');
+            container.classList.add('mode-' + mode);
+            select.value = mode;
+            currentPanelMode = mode;
+
+            if (mode === 'labelling') {
+                // Panel 5 = satellite base + seg overlay
+                if (title) title.textContent = 'Segmentation';
+                // Add satellite tiles
+                if (heatmapSatelliteLayer && maps.heatmap && !maps.heatmap.hasLayer(heatmapSatelliteLayer)) {
+                    heatmapSatelliteLayer.addTo(maps.heatmap);
+                }
+                // Remove heatmap canvas
+                if (heatmapCanvasLayer && maps.heatmap && maps.heatmap.hasLayer(heatmapCanvasLayer)) {
+                    maps.heatmap.removeLayer(heatmapCanvasLayer);
+                }
+                // Hide heatmap messages
+                if (waitMsg) waitMsg.style.display = 'none';
+                if (sameMsg) sameMsg.style.display = 'none';
+                // Restore seg overlay if it exists
+                if (segOverlay && maps.heatmap && !maps.heatmap.hasLayer(segOverlay)) {
+                    segOverlay.addTo(maps.heatmap);
+                }
+                // Panel 6 → label management split view
+                const p6header = document.getElementById('panel6-header-text');
+                if (p6header) p6header.textContent = 'Labels';
+                document.getElementById('embedding-year-selector-2').style.display = 'none';
+                // Hide floating popups — panel 6 replaces them
+                document.getElementById('seg-results-panel').style.display = 'none';
+                document.getElementById('labels-details-panel').style.display = 'none';
+                // Refresh both columns with current data
+                renderSegListInto(document.getElementById('panel6-seg-list'));
+                renderLabelsInto(document.getElementById('panel6-labels-list'));
+                const p6btn = document.getElementById('panel6-promote-all-btn');
+                if (p6btn) p6btn.style.display = segLabels.length > 0 ? '' : 'none';
+            } else if (mode === 'change-detection') {
+                // Panel 5 = heatmap
+                if (title) title.textContent = 'Change Heatmap';
+                // Remove satellite tiles
+                if (heatmapSatelliteLayer && maps.heatmap && maps.heatmap.hasLayer(heatmapSatelliteLayer)) {
+                    maps.heatmap.removeLayer(heatmapSatelliteLayer);
+                }
+                // Remove seg overlay (keep variable)
+                if (segOverlay && maps.heatmap && maps.heatmap.hasLayer(segOverlay)) {
+                    maps.heatmap.removeLayer(segOverlay);
+                }
+                // Re-add heatmap canvas if it exists
+                if (heatmapCanvasLayer && maps.heatmap && !maps.heatmap.hasLayer(heatmapCanvasLayer)) {
+                    heatmapCanvasLayer.addTo(maps.heatmap);
+                }
+                // Trigger heatmap computation
+                loadHeatmap();
+                // Panel 6 → restore embedding map
+                const p6header2 = document.getElementById('panel6-header-text');
+                if (p6header2) p6header2.textContent = 'Tessera Embeddings';
             } else {
-                container.classList.add('three-panel');
-                select.value = '3';
+                // Simple mode
+                if (title) title.textContent = 'Change Heatmap';
+                // Remove satellite tiles
+                if (heatmapSatelliteLayer && maps.heatmap && maps.heatmap.hasLayer(heatmapSatelliteLayer)) {
+                    maps.heatmap.removeLayer(heatmapSatelliteLayer);
+                }
+                // Panel 6 → restore embedding map (not visible in simple but reset state)
+                const p6header3 = document.getElementById('panel6-header-text');
+                if (p6header3) p6header3.textContent = 'Tessera Embeddings';
             }
 
-            // Leaflet maps and Three.js scene need resize after container resize
+            // Leaflet maps and Three.js scene need resize after CSS transition
             setTimeout(() => {
                 Object.values(maps).forEach(map => {
                     if (map && map.invalidateSize) {
                         map.invalidateSize();
                     }
                 });
-                // Resize Three.js scene (Panel 4)
                 if (umapCanvasLayer && umapCanvasLayer.resize) {
                     umapCanvasLayer.resize();
                 }
-                // Force-refresh tile layers for panels that were hidden (display:none)
-                // GridLayer won't have loaded tiles while invisible
-                if (numPanels === '6' || numPanels === 6) {
+                // Force-refresh tile layers for panels that were hidden
+                if (mode === 'change-detection') {
                     if (window.embedding2Layer && maps.embedding2) {
                         refreshEmbeddingTileLayer('embedding2', currentEmbeddingYear2);
                     }
-                    if (heatmapCanvasLayer && typeof loadHeatmap === 'function') {
-                        loadHeatmap();
-                    }
                 }
-            }, 350);  // Wait for CSS transition
+            }, 350);
 
-            // Save preference
-            localStorage.setItem('panelMode', numPanels.toString());
+            localStorage.setItem('panelMode', mode);
         }
 
         // Restore panel mode preference on load
         function restorePanelMode() {
-            const container = document.getElementById('map-container');
-            const select = document.getElementById('panel-layout-select');
             const saved = localStorage.getItem('panelMode');
-
-            if (saved === '6') {
-                // User prefers 6 panels
-                container.classList.remove('three-panel');
-                select.value = '6';
-            } else {
-                // Default to 3 panels
-                container.classList.add('three-panel');
-                select.value = '3';
-            }
+            const validModes = ['simple', 'change-detection', 'labelling'];
+            const mode = validModes.includes(saved) ? saved : 'simple';
+            setPanelLayout(mode);
         }
 
         function updateThresholdDisplay() {
@@ -3417,6 +3567,455 @@
 
         // ===== END UMAP AND HEATMAP LAYERS =====
 
+        // ===== K-MEANS SEGMENTATION =====
+
+        // Inline Web Worker for k-means clustering (K-means++ init, early stopping, subsampling)
+        const segWorkerBlob = new Blob([`
+            self.onmessage = function(e) {
+                const {N, dim, k, maxIter} = e.data;
+                const embeddings = new Float32Array(e.data.embeddings);
+                const sampleIdx = e.data.sampleIdx ? new Uint32Array(e.data.sampleIdx) : null;
+                const S = sampleIdx ? sampleIdx.length : N;
+                const assignments = new Int32Array(N);
+                const centroids = new Float32Array(k * dim);
+
+                // --- K-means++ initialization (on sample) ---
+                // Pick first centroid randomly from sample
+                const firstPt = sampleIdx ? sampleIdx[Math.floor(Math.random() * S)] : Math.floor(Math.random() * N);
+                centroids.set(embeddings.subarray(firstPt * dim, (firstPt + 1) * dim), 0);
+
+                const minDist2 = new Float64Array(S);
+                minDist2.fill(Infinity);
+
+                for (let c = 1; c < k; c++) {
+                    // Update min distances to nearest existing centroid
+                    let totalWeight = 0;
+                    for (let si = 0; si < S; si++) {
+                        const idx = sampleIdx ? sampleIdx[si] : si;
+                        const base = idx * dim;
+                        const cBase = (c - 1) * dim;
+                        let dist = 0;
+                        for (let d = 0; d < dim; d++) {
+                            const diff = embeddings[base + d] - centroids[cBase + d];
+                            dist += diff * diff;
+                        }
+                        if (dist < minDist2[si]) minDist2[si] = dist;
+                        totalWeight += minDist2[si];
+                    }
+                    // Weighted random selection
+                    let r = Math.random() * totalWeight;
+                    let chosen = 0;
+                    for (let si = 0; si < S; si++) {
+                        r -= minDist2[si];
+                        if (r <= 0) { chosen = si; break; }
+                    }
+                    const chosenIdx = sampleIdx ? sampleIdx[chosen] : chosen;
+                    centroids.set(embeddings.subarray(chosenIdx * dim, (chosenIdx + 1) * dim), c * dim);
+                }
+
+                // --- Iterative refinement on sample only ---
+                const sampleAssign = new Int32Array(S);
+                const counts = new Int32Array(k);
+                const sums = new Float64Array(k * dim);
+
+                for (let iter = 0; iter < maxIter; iter++) {
+                    let changed = 0;
+                    for (let si = 0; si < S; si++) {
+                        const idx = sampleIdx ? sampleIdx[si] : si;
+                        const base = idx * dim;
+                        let bestC = 0, bestDist = Infinity;
+                        for (let c = 0; c < k; c++) {
+                            let dist = 0;
+                            const cBase = c * dim;
+                            for (let d = 0; d < dim; d++) {
+                                const diff = embeddings[base + d] - centroids[cBase + d];
+                                dist += diff * diff;
+                            }
+                            if (dist < bestDist) { bestDist = dist; bestC = c; }
+                        }
+                        if (sampleAssign[si] !== bestC) changed++;
+                        sampleAssign[si] = bestC;
+                    }
+
+                    // Recompute centroids
+                    sums.fill(0);
+                    counts.fill(0);
+                    for (let si = 0; si < S; si++) {
+                        const idx = sampleIdx ? sampleIdx[si] : si;
+                        const c = sampleAssign[si];
+                        counts[c]++;
+                        const base = idx * dim;
+                        const cBase = c * dim;
+                        for (let d = 0; d < dim; d++) {
+                            sums[cBase + d] += embeddings[base + d];
+                        }
+                    }
+                    for (let c = 0; c < k; c++) {
+                        if (counts[c] === 0) {
+                            const ri = sampleIdx ? sampleIdx[Math.floor(Math.random() * S)] : Math.floor(Math.random() * N);
+                            centroids.set(embeddings.subarray(ri * dim, (ri + 1) * dim), c * dim);
+                        } else {
+                            const cBase = c * dim;
+                            for (let d = 0; d < dim; d++) {
+                                centroids[cBase + d] = sums[cBase + d] / counts[c];
+                            }
+                        }
+                    }
+
+                    // Early stopping: converged if <0.5% of sample changed
+                    if (changed < S * 0.005) break;
+                }
+
+                // --- Final full assignment pass over ALL N vectors ---
+                const nearestIdx = new Int32Array(k);
+                const nearestDist = new Float64Array(k);
+                const maxDist = new Float64Array(k);
+                nearestDist.fill(Infinity);
+
+                for (let i = 0; i < N; i++) {
+                    let bestC = 0, bestDist = Infinity;
+                    const base = i * dim;
+                    for (let c = 0; c < k; c++) {
+                        let dist = 0;
+                        const cBase = c * dim;
+                        for (let d = 0; d < dim; d++) {
+                            const diff = embeddings[base + d] - centroids[cBase + d];
+                            dist += diff * diff;
+                        }
+                        if (dist < bestDist) { bestDist = dist; bestC = c; }
+                    }
+                    assignments[i] = bestC;
+                    const dist = Math.sqrt(bestDist);
+                    if (dist > maxDist[bestC]) maxDist[bestC] = dist;
+                    if (bestDist < nearestDist[bestC]) { nearestDist[bestC] = bestDist; nearestIdx[bestC] = i; }
+                }
+
+                self.postMessage({
+                    assignments: assignments.buffer,
+                    centroids: centroids.buffer,
+                    nearestIdx: nearestIdx.buffer,
+                    maxDist: maxDist.buffer
+                }, [assignments.buffer, centroids.buffer, nearestIdx.buffer, maxDist.buffer]);
+            };
+        `], {type: 'application/javascript'});
+        const segWorkerURL = URL.createObjectURL(segWorkerBlob);
+
+        async function runKMeans() {
+            if (!localVectors || segRunning) return;
+            segRunning = true;
+            const btn = document.getElementById('seg-run-btn');
+            btn.textContent = 'Segmenting...';
+            btn.disabled = true;
+
+            // Clear old overlay immediately so user sees a clean map during recomputation
+            if (segOverlay && maps.heatmap && maps.heatmap.hasLayer(segOverlay)) {
+                maps.heatmap.removeLayer(segOverlay);
+            }
+            segOverlay = null;
+            segLabels = [];
+            showSegmentationPanel(); // clears both floating popup and panel 6
+
+            // Always segment the year shown in panel 3
+            const segYear = document.getElementById('embedding-year-selector').value || localVectors.year;
+
+            // Load vectors for selected year (may differ from localVectors)
+            if (String(segYear) !== String(localVectors.year)) {
+                const saved = localVectors;
+                try {
+                    await downloadVectorData(currentViewportName, segYear);
+                    segVectors = localVectors;
+                } finally {
+                    localVectors = saved;
+                }
+            } else {
+                segVectors = localVectors;
+            }
+
+            const N = segVectors.numVectors;
+            const dim = segVectors.dim;
+            segK = parseInt(document.getElementById('seg-k-slider').value);
+
+            // Slice to avoid detaching segVectors.embeddings
+            const embCopy = segVectors.embeddings.buffer.slice(0);
+
+            // Build subsample indices (10% of N, clamped to [2000, 50000])
+            let sampleBuf = null;
+            const transferables = [embCopy];
+            if (N > 2000) {
+                const sampleSize = Math.max(2000, Math.min(50000, Math.floor(N * 0.1)));
+                const indices = new Uint32Array(sampleSize);
+                // Fisher-Yates partial shuffle to pick sampleSize unique indices
+                const pool = new Uint32Array(N);
+                for (let i = 0; i < N; i++) pool[i] = i;
+                for (let i = 0; i < sampleSize; i++) {
+                    const j = i + Math.floor(Math.random() * (N - i));
+                    const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+                    indices[i] = pool[i];
+                }
+                sampleBuf = indices.buffer;
+                transferables.push(sampleBuf);
+            }
+
+            if (segWorker) segWorker.terminate();
+            segWorker = new Worker(segWorkerURL);
+
+            segWorker.onerror = (err) => {
+                console.error('[SEG] Worker error:', err);
+                alert('Segmentation failed: ' + (err.message || 'unknown error'));
+                segRunning = false;
+                btn.textContent = 'Segment';
+                btn.disabled = false;
+            };
+
+            segWorker.onmessage = (e) => {
+                segAssignments = new Int32Array(e.data.assignments);
+                const centroids = new Float32Array(e.data.centroids);
+                const nearestIdxArr = new Int32Array(e.data.nearestIdx);
+                const maxDistArr = new Float64Array(e.data.maxDist);
+
+                // Compute cluster counts and build palette
+                const counts = new Int32Array(segK);
+                for (let i = 0; i < N; i++) counts[segAssignments[i]]++;
+
+                const gt = segVectors.metadata.geotransform;
+                segLabels = [];
+                for (let c = 0; c < segK; c++) {
+                    if (counts[c] === 0) continue;
+                    const hue = Math.round((c / segK) * 360);
+                    const color = `hsl(${hue}, 70%, 50%)`;
+                    const hex = hslToHex(hue, 70, 50);
+                    const ni = nearestIdxArr[c];
+                    const px = segVectors.coords[ni * 2], py = segVectors.coords[ni * 2 + 1];
+                    segLabels.push({
+                        id: c, color, hex, name: `Cluster ${c + 1}`, count: counts[c],
+                        embedding: Array.from(segVectors.embeddings.subarray(ni * dim, (ni + 1) * dim)),
+                        sourcePixel: { lat: gt.f + py * gt.e, lon: gt.c + px * gt.a },
+                        threshold: maxDistArr[c],
+                        centroid: Array.from(centroids.subarray(c * dim, (c + 1) * dim))
+                    });
+                }
+
+                showSegmentationOverlay();
+                showSegmentationPanel();
+
+                segRunning = false;
+                btn.textContent = 'Segment';
+                btn.disabled = false;
+                document.getElementById('seg-clear-btn').style.display = '';
+            };
+
+            segWorker.postMessage(
+                {embeddings: embCopy, N, dim, k: segK, maxIter: 20, sampleIdx: sampleBuf},
+                transferables
+            );
+        }
+
+        function hslToHex(h, s, l) {
+            s /= 100; l /= 100;
+            const k = n => (n + h / 30) % 12;
+            const a = s * Math.min(l, 1 - l);
+            const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+            const toHex = x => Math.round(255 * f(x)).toString(16).padStart(2, '0');
+            return '#' + toHex(0) + toHex(8) + toHex(4);
+        }
+
+        function showSegmentationOverlay() {
+            if (!segAssignments || !segVectors) return;
+            const coords = segVectors.coords;
+            const N = segVectors.numVectors;
+            const gt = segVectors.metadata.geotransform;
+
+            // Find pixel bounding box
+            let minPx = Infinity, maxPx = -Infinity, minPy = Infinity, maxPy = -Infinity;
+            for (let i = 0; i < N; i++) {
+                const px = coords[i * 2], py = coords[i * 2 + 1];
+                if (px < minPx) minPx = px;
+                if (px > maxPx) maxPx = px;
+                if (py < minPy) minPy = py;
+                if (py > maxPy) maxPy = py;
+            }
+
+            const width = maxPx - minPx + 1;
+            const height = maxPy - minPy + 1;
+
+            // Build colour lookup from segLabels
+            const colorLookup = new Map();
+            for (const cl of segLabels) {
+                // Parse HSL to RGB
+                const hex = cl.hex;
+                const r = parseInt(hex.slice(1, 3), 16);
+                const g = parseInt(hex.slice(3, 5), 16);
+                const b = parseInt(hex.slice(5, 7), 16);
+                colorLookup.set(cl.id, [r, g, b]);
+            }
+
+            // Create RGBA image
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            const imgData = ctx.createImageData(width, height);
+            const data = imgData.data;
+
+            for (let i = 0; i < N; i++) {
+                const gx = coords[i * 2] - minPx;
+                const gy = coords[i * 2 + 1] - minPy;
+                const idx = (gy * width + gx) * 4;
+                const rgb = colorLookup.get(segAssignments[i]);
+                if (rgb) {
+                    data[idx] = rgb[0];
+                    data[idx + 1] = rgb[1];
+                    data[idx + 2] = rgb[2];
+                    data[idx + 3] = 153; // ~60% opacity
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+
+            // Compute geographic bounds from pixel corners via geotransform
+            // gt: c=originX(lon), a=pixelWidth, f=originY(lat), e=pixelHeight(negative)
+            const lonMin = gt.c + minPx * gt.a;
+            const lonMax = gt.c + (maxPx + 1) * gt.a;
+            const latMin = gt.f + (maxPy + 1) * gt.e;  // e is negative, so maxPy gives smaller lat
+            const latMax = gt.f + minPy * gt.e;
+
+            // Remove old overlay
+            if (segOverlay && maps.heatmap.hasLayer(segOverlay)) {
+                maps.heatmap.removeLayer(segOverlay);
+            }
+
+            const dataURL = canvas.toDataURL();
+            segOverlay = L.imageOverlay(dataURL, [[latMin, lonMin], [latMax, lonMax]]);
+            segOverlay.addTo(maps.heatmap);
+
+            // Set pixelated rendering on the image element
+            segOverlay.getElement().style.imageRendering = 'pixelated';
+        }
+
+        function clearSegmentation() {
+            if (segOverlay && maps.heatmap && maps.heatmap.hasLayer(segOverlay)) {
+                maps.heatmap.removeLayer(segOverlay);
+            }
+            segOverlay = null;
+            segAssignments = null;
+            segVectors = null;
+            segLabels = [];
+            document.getElementById('seg-clear-btn').style.display = 'none';
+            showSegmentationPanel(); // clears both floating popup and panel 6
+        }
+
+        function renderSegListInto(container) {
+            if (!container) return;
+            const total = segAssignments ? segAssignments.length : 0;
+            if (segLabels.length === 0) {
+                container.innerHTML = '<div style="color: #999; padding: 10px; text-align: center;">Run segmentation to see clusters</div>';
+                return;
+            }
+            container.innerHTML = '';
+            for (const cl of segLabels) {
+                const pct = total > 0 ? ((cl.count / total) * 100).toFixed(1) : '0.0';
+                const row = document.createElement('div');
+                row.className = 'seg-cluster-row';
+                row.innerHTML = `
+                    <span class="seg-color-swatch" style="background: ${cl.color};"></span>
+                    <input type="text" placeholder="Label name" data-cluster-id="${cl.id}"
+                        style="width: 90px; padding: 3px 6px; border: none; border-bottom: 1px solid #ccc; border-radius: 0; font-size: 12px; color: #333; background: transparent; outline: none;">
+                    <span style="color: #555; font-size: 11px; white-space: nowrap;">${cl.count.toLocaleString()} (${pct}%)</span>
+                    <button title="Promote to saved label" data-promote-id="${cl.id}"
+                        style="background: none; border: 1px solid #667eea; border-radius: 3px; color: #667eea; cursor: pointer; font-size: 11px; padding: 1px 5px; margin-left: 4px; line-height: 1.2;">&#8594;</button>
+                `;
+                row.querySelector('[data-promote-id]').addEventListener('click', () => saveClusterAsLabel(cl.id));
+                container.appendChild(row);
+            }
+        }
+
+        function showSegmentationPanel() {
+            // Render into floating popup
+            renderSegListInto(document.getElementById('seg-cluster-list'));
+            // Render into panel 6 left column
+            renderSegListInto(document.getElementById('panel6-seg-list'));
+
+            // Show floating popup only if clusters exist and not in labelling mode
+            const segPanel = document.getElementById('seg-results-panel');
+            if (segLabels.length > 0 && currentPanelMode !== 'labelling') {
+                segPanel.style.display = '';
+            } else {
+                segPanel.style.display = 'none';
+            }
+
+            // Show/hide promote-all button in panel 6
+            const p6btn = document.getElementById('panel6-promote-all-btn');
+            if (p6btn) p6btn.style.display = segLabels.length > 0 ? '' : 'none';
+        }
+
+        function saveClusterAsLabel(clusterId) {
+            if (!segAssignments || !segVectors) return;
+            const cluster = segLabels.find(c => c.id === clusterId);
+            if (!cluster) return;
+
+            // Read name from the active container (panel 6 in labelling mode, floating popup otherwise)
+            const containerSel = currentPanelMode === 'labelling' ? '#panel6-seg-list' : '#seg-cluster-list';
+            const input = document.querySelector(`${containerSel} input[data-cluster-id="${clusterId}"]`);
+            const name = (input && input.value.trim()) ? input.value.trim() : cluster.name;
+
+            const coords = segVectors.coords;
+            const gt = segVectors.metadata.geotransform;
+            const N = segVectors.numVectors;
+
+            // Collect pixels and compact pixel_coords
+            const pixels = [];
+            const pixel_coords = [];
+            for (let i = 0; i < N; i++) {
+                if (segAssignments[i] !== clusterId) continue;
+                const px = coords[i * 2], py = coords[i * 2 + 1];
+                pixel_coords.push(px, py);
+                pixels.push({
+                    lat: gt.f + py * gt.e,
+                    lon: gt.c + px * gt.a,
+                    distance: 0
+                });
+            }
+
+            const label = {
+                id: 'label_' + Date.now(),
+                name,
+                color: cluster.hex,
+                threshold: cluster.threshold || 0,
+                source_pixel: cluster.sourcePixel || null,
+                embedding: cluster.embedding || null,
+                static: false,
+                pixel_coords,
+                pixels,
+                pixel_count: pixels.length,
+                created: new Date().toISOString(),
+                visible: true
+            };
+
+            savedLabels.push(label);
+            labelsExportedSinceChange = false;
+            persistLabels();
+            updateOverlay();
+            updateLabelsUI();
+
+            // Remove promoted cluster from seg panel
+            segLabels = segLabels.filter(c => c.id !== clusterId);
+            if (segLabels.length === 0) {
+                if (segOverlay && maps.heatmap && maps.heatmap.hasLayer(segOverlay)) {
+                    maps.heatmap.removeLayer(segOverlay);
+                }
+                segOverlay = null;
+            }
+            showSegmentationPanel(); // refreshes both floating popup and panel 6
+        }
+
+        function saveAllClustersAsLabels() {
+            if (!segAssignments || !segVectors) return;
+            // Snapshot ids before iterating — saveClusterAsLabel mutates segLabels
+            const ids = segLabels.map(cl => cl.id);
+            for (const id of ids) {
+                saveClusterAsLabel(id);
+            }
+        }
+
         // ===== UMAP AND HEATMAP LOADING FUNCTIONS =====
 
         // Compute PCA from locally-downloaded vectors (no server round-trip)
@@ -3696,6 +4295,8 @@
 
         // Load distance heatmap for Panel 5 (client-side computation)
         async function loadHeatmap() {
+            if (currentPanelMode !== 'change-detection') return;
+
             const waitMsg = document.getElementById('heatmap-waiting-message');
             const sameMsg = document.getElementById('heatmap-same-year-message');
 
@@ -3868,7 +4469,7 @@
 
             // Then create maps with correct viewport
             createMaps();
-            restorePanelMode();  // Restore 3/6 panel preference
+            restorePanelMode();  // Restore panel mode preference
 
             // Invalidate map sizes after layout is applied
             setTimeout(() => {
@@ -3999,6 +4600,24 @@
             }
             for (const label of savedLabels) {
                 try {
+                    // Static labels (from segmentation): rebuild pixels from pixel_coords
+                    if (label.static) {
+                        if (label.pixel_coords && localVectors) {
+                            const gt = localVectors.metadata.geotransform;
+                            const pc = label.pixel_coords;
+                            label.pixels = [];
+                            for (let i = 0; i < pc.length; i += 2) {
+                                label.pixels.push({
+                                    lat: gt.f + pc[i + 1] * gt.e,
+                                    lon: gt.c + pc[i] * gt.a,
+                                    distance: 0
+                                });
+                            }
+                            label.pixel_count = label.pixels.length;
+                        }
+                        continue;
+                    }
+
                     // Use stored embedding if available (exact match to original search),
                     // otherwise fall back to re-extracting from source pixel
                     let embedding = label.embedding;
@@ -4029,10 +4648,9 @@
 
         // Update labels UI list
         let labelsExportedSinceChange = false;
-        function updateLabelsUI() {
-            const listEl = document.getElementById('labels-list');
-            const countEl = document.getElementById('label-count');
 
+        function renderLabelsInto(container) {
+            if (!container) return;
             // Group labels by name
             const groups = new Map();
             for (const label of savedLabels) {
@@ -4042,6 +4660,49 @@
                 groups.get(label.name).push(label);
             }
 
+            if (savedLabels.length === 0) {
+                container.innerHTML = '<div style="color: #999; font-size: 12px; padding: 10px;">No labels yet.</div>';
+                return;
+            }
+
+            container.innerHTML = Array.from(groups.entries()).map(([name, members]) => renderLabelGroup(name, members)).join('');
+
+            // Attach event listeners
+            container.querySelectorAll('.timeline-label-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const labelName = e.currentTarget.dataset.labelName;
+                    showLabelTimeline(labelName);
+                });
+            });
+            container.querySelectorAll('.toggle-label-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const labelName = e.currentTarget.dataset.labelName;
+                    const members = savedLabels.filter(l => l.name === labelName);
+                    const newVisible = !members.some(l => l.visible);
+                    members.forEach(l => l.visible = newVisible);
+                    updateOverlay();
+                    updateLabelsUI();
+                });
+            });
+            container.querySelectorAll('.delete-label-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const labelName = e.currentTarget.dataset.labelName;
+                    deleteLabelGroup(labelName);
+                });
+            });
+        }
+
+        function updateLabelsUI() {
+            const countEl = document.getElementById('label-count');
+
+            // Group labels by name (for count)
+            const groups = new Map();
+            for (const label of savedLabels) {
+                if (!groups.has(label.name)) {
+                    groups.set(label.name, []);
+                }
+                groups.get(label.name).push(label);
+            }
             countEl.textContent = groups.size;
 
             // Highlight export button and show warning when unexported labels exist
@@ -4055,38 +4716,22 @@
                 warning.style.display = 'none';
             }
 
-            if (savedLabels.length === 0) {
-                listEl.innerHTML = '<div style="color: #999; font-size: 12px; padding: 10px;">No labels yet. Click a pixel to search and save results.</div>';
-                return;
+            // Render into floating popup
+            renderLabelsInto(document.getElementById('labels-list'));
+            // Render into panel 6 right column
+            renderLabelsInto(document.getElementById('panel6-labels-list'));
+
+            // Update panel 6 "Show All / Hide All" button
+            const toggleAllBtn = document.getElementById('panel6-toggle-all-btn');
+            if (toggleAllBtn) {
+                if (savedLabels.length === 0) {
+                    toggleAllBtn.style.display = 'none';
+                } else {
+                    toggleAllBtn.style.display = '';
+                    const allVisible = savedLabels.every(l => l.visible);
+                    toggleAllBtn.textContent = allVisible ? 'Hide All' : 'Show All';
+                }
             }
-
-            listEl.innerHTML = Array.from(groups.entries()).map(([name, members]) => renderLabelGroup(name, members)).join('');
-
-            // Attach event listeners
-            listEl.querySelectorAll('.timeline-label-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const labelName = e.currentTarget.dataset.labelName;
-                    showLabelTimeline(labelName);
-                });
-            });
-
-            listEl.querySelectorAll('.toggle-label-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const labelName = e.currentTarget.dataset.labelName;
-                    const members = savedLabels.filter(l => l.name === labelName);
-                    const newVisible = !members.some(l => l.visible);
-                    members.forEach(l => l.visible = newVisible);
-                    updateOverlay();
-                    updateLabelsUI();
-                });
-            });
-
-            listEl.querySelectorAll('.delete-label-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const labelName = e.currentTarget.dataset.labelName;
-                    deleteLabelGroup(labelName);
-                });
-            });
         }
 
         function escapeHtml(s) {
@@ -4101,20 +4746,24 @@
             const markerNote = markerCount > 1 ? ` (${markerCount} markers)` : '';
             const anyVisible = members.some(l => l.visible);
             const toggleText = anyVisible ? 'Hide' : 'Show';
+            const hasSourcePixel = members.some(l => l.source_pixel);
+            const thresholdStr = hasSourcePixel ? `, threshold: ${parseFloat(members[0].threshold.toPrecision(3))}` : '';
             return `
                 <div class="label-item" style="padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; background: white; border-left: 4px solid ${color};">
                   <div style="display: flex; align-items: flex-start; justify-content: space-between;">
-                    <div style="flex: 1;">
+                    <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; align-items: center; margin-bottom: 4px;">
-                        <div style="width: 14px; height: 14px; background: ${color}; border-radius: 2px; margin-right: 8px;"></div>
-                        <div style="font-weight: 600; font-size: 13px; color: #333;">${escapeHtml(name)}${markerNote}</div>
+                        <div style="width: 14px; height: 14px; background: ${color}; border-radius: 2px; margin-right: 8px; flex-shrink: 0;"></div>
+                        <div style="font-weight: 600; font-size: 13px; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(name)}${markerNote}</div>
                       </div>
-                      <div style="font-size: 11px; color: #999; margin-left: 22px;">${totalPixels.toLocaleString()} pixels, threshold: ${members[0].threshold}</div>
+                      <div style="font-size: 11px; color: #999; margin-left: 22px;">${totalPixels.toLocaleString()} pixels${thresholdStr}</div>
                     </div>
-                    <div style="display: flex; gap: 6px;">
-                      <button class="timeline-label-btn" data-label-name="${escapeHtml(name)}" style="padding: 5px 8px; background: #f0f0ff; border: 1px solid #b0b0ff; border-radius: 3px; cursor: pointer; font-size: 12px; color: #5500cc; font-weight: 600;" title="Show coverage timeline across years">Timeline</button>
-                      <button class="toggle-label-btn" data-label-name="${escapeHtml(name)}" style="padding: 5px 8px; background: #e8f0ff; border: 1px solid #b0d4ff; border-radius: 3px; cursor: pointer; font-size: 12px; color: #0066cc; font-weight: 600;" title="Toggle visibility">${toggleText}</button>
-                      <button class="delete-label-btn" data-label-name="${escapeHtml(name)}" style="padding: 5px 8px; background: #ffe8e8; border: 1px solid #ffb0b0; border-radius: 3px; cursor: pointer; font-size: 12px; color: #cc0000; font-weight: 600;" title="Delete label">Delete</button>
+                    <div style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;">
+                      <div style="display: flex; gap: 4px;">
+                        ${hasSourcePixel ? `<button class="timeline-label-btn" data-label-name="${escapeHtml(name)}" style="padding: 4px 7px; background: #f0f0ff; border: 1px solid #b0b0ff; border-radius: 3px; cursor: pointer; font-size: 11px; color: #5500cc; font-weight: 600;" title="Show coverage timeline across years">Timeline</button>` : ''}
+                        <button class="delete-label-btn" data-label-name="${escapeHtml(name)}" style="padding: 4px 6px; background: #ffe8e8; border: 1px solid #ffb0b0; border-radius: 3px; cursor: pointer; font-size: 13px; color: #cc0000; line-height: 1;" title="Delete label">&#128465;</button>
+                      </div>
+                      <button class="toggle-label-btn" data-label-name="${escapeHtml(name)}" style="padding: 4px 7px; background: #e8f0ff; border: 1px solid #b0d4ff; border-radius: 3px; cursor: pointer; font-size: 11px; color: #0066cc; font-weight: 600;" title="Toggle visibility">${toggleText}</button>
                     </div>
                   </div>
                 </div>
@@ -4324,54 +4973,74 @@
                 alert('GeoJSON export requires locations. Uncheck "Hide label locations" to use this format.');
                 return;
             }
-            if (!maps.rgb) {
-                alert('Map not ready.');
+            if (!localVectors) {
+                alert('Vector data not loaded. Load embeddings first.');
                 return;
             }
-            const map = maps.rgb;
-            const MAX_ZOOM = 18;
+            const gt = localVectors.metadata.geotransform;
             const features = [];
             for (const label of savedLabels) {
                 if (!label.pixels || label.pixels.length === 0) continue;
-                for (const pixel of label.pixels) {
-                    const pb = calculatePixelBounds(pixel.lat, pixel.lon);
-                    // Project to zoom-18 pixel coords (same as JPG export)
-                    const swPx = map.project(L.latLng(pb[0][0], pb[0][1]), MAX_ZOOM);
-                    const nePx = map.project(L.latLng(pb[1][0], pb[1][1]), MAX_ZOOM);
-                    // Match JPG export +1 pixel coverage
-                    const x0 = swPx.x;
-                    const y0 = nePx.y;            // top (north)
-                    const x1 = nePx.x + 1;
-                    const y1 = swPx.y + 1;         // bottom (south)
-                    // Unproject back to geographic coords
-                    const sw = map.unproject(L.point(x0, y1), MAX_ZOOM);
-                    const ne = map.unproject(L.point(x1, y0), MAX_ZOOM);
+
+                // Build {px, py} array from pixel_coords or pixels
+                const pxArr = [];
+                if (label.pixel_coords) {
+                    const pc = label.pixel_coords;
+                    for (let i = 0; i < pc.length; i += 2) {
+                        pxArr.push({px: pc[i], py: pc[i + 1]});
+                    }
+                } else {
+                    for (const p of label.pixels) {
+                        pxArr.push({
+                            px: Math.round((p.lon - gt.c) / gt.a),
+                            py: Math.round((p.lat - gt.f) / gt.e)
+                        });
+                    }
+                }
+
+                // Sort by (py, px) for row-run encoding
+                pxArr.sort((a, b) => a.py - b.py || a.px - b.px);
+
+                // Merge into horizontal runs
+                const runs = [];
+                let runStart = pxArr[0].px, runEnd = pxArr[0].px, runY = pxArr[0].py;
+                for (let i = 1; i < pxArr.length; i++) {
+                    const p = pxArr[i];
+                    if (p.py === runY && p.px === runEnd + 1) {
+                        runEnd = p.px;
+                    } else {
+                        runs.push({px_start: runStart, px_end: runEnd, py: runY});
+                        runStart = p.px;
+                        runEnd = p.px;
+                        runY = p.py;
+                    }
+                }
+                runs.push({px_start: runStart, px_end: runEnd, py: runY});
+
+                // Convert each run to a geographic rectangle
+                for (const run of runs) {
+                    const lonL = gt.c + run.px_start * gt.a;
+                    const lonR = gt.c + (run.px_end + 1) * gt.a;
+                    const latT = gt.f + run.py * gt.e;
+                    const latB = gt.f + (run.py + 1) * gt.e;
+
                     features.push({
                         type: 'Feature',
+                        properties: {
+                            label_name: label.name,
+                            label_color: label.color
+                        },
                         geometry: {
                             type: 'Polygon',
                             coordinates: [[
-                                [sw.lng, sw.lat],
-                                [ne.lng, sw.lat],
-                                [ne.lng, ne.lat],
-                                [sw.lng, ne.lat],
-                                [sw.lng, sw.lat]
+                                [lonL, latT], [lonR, latT], [lonR, latB], [lonL, latB], [lonL, latT]
                             ]]
-                        },
-                        properties: {
-                            label_name: label.name,
-                            label_color: label.color,
-                            distance: pixel.distance,
-                            threshold: label.threshold
                         }
                     });
                 }
             }
-            const geojson = {
-                type: 'FeatureCollection',
-                features: features
-            };
-            const blob = new Blob([JSON.stringify(geojson, null, 2)], {type: 'application/geo+json'});
+            const geojson = {type: 'FeatureCollection', features};
+            const blob = new Blob([JSON.stringify(geojson)], {type: 'application/geo+json'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -4397,7 +5066,7 @@
                     const existingIds = new Set(savedLabels.map(l => l.id));
                     let added = 0;
                     for (const label of imported) {
-                        if (!label.id || !label.name || !label.source_pixel) continue;
+                        if (!label.id || !label.name) continue;
                         if (existingIds.has(label.id)) continue;
                         label.visible = true;
                         label.pixels = [];
@@ -4522,23 +5191,23 @@
 
         // Update the overlay visualization
         function updateOverlay() {
-            if (!maps.rgb) return;
+            if (!maps.heatmap) return;
 
             const visibleLabels = savedLabels.filter(l => l.visible);
 
             if (visibleLabels.length > 0) {
                 // If overlay exists, update it in place (avoids remove/re-add timing issues)
-                if (labelOverlay && maps.rgb.hasLayer(labelOverlay)) {
+                if (labelOverlay && maps.heatmap.hasLayer(labelOverlay)) {
                     labelOverlay.updateLabels(savedLabels);
                 } else {
                     // Create new overlay if it doesn't exist yet
                     labelOverlay = new PersistentLabelOverlay(savedLabels);
-                    labelOverlay.addTo(maps.rgb);
+                    labelOverlay.addTo(maps.heatmap);
                 }
             } else {
                 // No visible labels - remove overlay if it exists
-                if (labelOverlay && maps.rgb.hasLayer(labelOverlay)) {
-                    maps.rgb.removeLayer(labelOverlay);
+                if (labelOverlay && maps.heatmap.hasLayer(labelOverlay)) {
+                    maps.heatmap.removeLayer(labelOverlay);
                     labelOverlay = null;
                 }
             }
@@ -4792,8 +5461,9 @@
                 }
             });
 
-            // Labels toggle button
+            // Labels toggle button (skip in labelling mode — panel 6 shows labels inline)
             document.getElementById('labels-toggle-btn').addEventListener('click', function() {
+                if (currentPanelMode === 'labelling') return;
                 const panel = document.getElementById('labels-details-panel');
                 panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
             });
@@ -4802,6 +5472,78 @@
             document.getElementById('labels-close-btn').addEventListener('click', function() {
                 document.getElementById('labels-details-panel').style.display = 'none';
             });
+
+            // Segmentation event wiring
+            document.getElementById('seg-k-slider').addEventListener('input', function() {
+                document.getElementById('seg-k-display').textContent = this.value;
+            });
+            document.getElementById('seg-run-btn').addEventListener('click', runKMeans);
+            document.getElementById('seg-clear-btn').addEventListener('click', clearSegmentation);
+            document.getElementById('seg-export-btn').addEventListener('click', saveAllClustersAsLabels);
+            document.getElementById('panel6-promote-all-btn').addEventListener('click', saveAllClustersAsLabels);
+            document.getElementById('panel6-toggle-all-btn').addEventListener('click', toggleAllOverlays);
+            document.getElementById('seg-panel-close-btn').addEventListener('click', function() {
+                document.getElementById('seg-results-panel').style.display = 'none';
+            });
+
+            // Make segmentation panel draggable by header
+            (function() {
+                const panel = document.getElementById('seg-results-panel');
+                const header = document.getElementById('seg-panel-header');
+                let dragging = false, startX, startY, startLeft, startTop;
+                header.addEventListener('mousedown', (e) => {
+                    if (e.target.tagName === 'BUTTON') return;
+                    dragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    const rect = panel.getBoundingClientRect();
+                    startLeft = rect.left;
+                    startTop = rect.top;
+                    header.style.cursor = 'grabbing';
+                    e.preventDefault();
+                });
+                document.addEventListener('mousemove', (e) => {
+                    if (!dragging) return;
+                    panel.style.left = (startLeft + e.clientX - startX) + 'px';
+                    panel.style.top = (startTop + e.clientY - startY) + 'px';
+                    panel.style.right = 'auto';
+                });
+                document.addEventListener('mouseup', () => {
+                    if (!dragging) return;
+                    dragging = false;
+                    header.style.cursor = 'grab';
+                });
+            })();
+
+            // Make labels panel draggable by header
+            (function() {
+                const panel = document.getElementById('labels-details-panel');
+                const header = document.getElementById('labels-panel-header');
+                let dragging = false, startX, startY, startLeft, startTop;
+                header.addEventListener('mousedown', (e) => {
+                    if (e.target.tagName === 'BUTTON') return;
+                    dragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    const rect = panel.getBoundingClientRect();
+                    startLeft = rect.left;
+                    startTop = rect.top;
+                    header.style.cursor = 'grabbing';
+                    e.preventDefault();
+                });
+                document.addEventListener('mousemove', (e) => {
+                    if (!dragging) return;
+                    panel.style.left = (startLeft + e.clientX - startX) + 'px';
+                    panel.style.top = (startTop + e.clientY - startY) + 'px';
+                    panel.style.right = 'auto';
+                    panel.style.bottom = 'auto';
+                });
+                document.addEventListener('mouseup', () => {
+                    if (!dragging) return;
+                    dragging = false;
+                    header.style.cursor = 'grab';
+                });
+            })();
 
             // Help button toggle
             function toggleHelpPopup() {
