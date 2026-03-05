@@ -2356,6 +2356,74 @@
 
             // Highlight nearest point in Panel 4 (PCA/UMAP)
             highlightUMAPPoint(lat, lon);
+
+            // Highlight matching label row in panel 6
+            if (currentPanelMode === 'labelling') {
+                highlightLabelAtPixel(lat, lon);
+            }
+        }
+
+        function highlightLabelAtPixel(lat, lon) {
+            if (!localVectors) return;
+
+            // Convert lat/lon to pixel coords
+            const gt = localVectors.metadata.geotransform;
+            const px = Math.trunc((lon - gt.c) / gt.a);
+            const py = Math.trunc((lat - gt.f) / gt.e);
+
+            // --- Highlight matching saved label ---
+            const labelsContainer = document.getElementById('panel6-labels-list');
+            if (labelsContainer) {
+                let matchName = null;
+                for (const label of savedLabels) {
+                    if (!label.pixel_coords) continue;
+                    for (let i = 0; i < label.pixel_coords.length; i += 2) {
+                        if (label.pixel_coords[i] === px && label.pixel_coords[i + 1] === py) {
+                            matchName = label.name;
+                            break;
+                        }
+                    }
+                    if (matchName) break;
+                }
+
+                labelsContainer.querySelectorAll('.label-item').forEach(el => {
+                    el.style.outline = '';
+                    el.style.outlineOffset = '';
+                });
+
+                if (matchName) {
+                    const item = labelsContainer.querySelector(`.label-item[data-label-name="${CSS.escape(matchName)}"]`);
+                    if (item) {
+                        item.style.outline = '2px solid #667eea';
+                        item.style.outlineOffset = '-2px';
+                        item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                    }
+                }
+            }
+
+            // --- Highlight matching seg cluster ---
+            const segContainer = document.getElementById('panel6-seg-list');
+            if (segContainer && segAssignments && segVectors) {
+                const idx = segVectors.pixelLookup ? segVectors.pixelLookup.get(`${px},${py}`) : undefined;
+                const clusterId = idx !== undefined ? segAssignments[idx] : -1;
+
+                segContainer.querySelectorAll('.seg-cluster-row').forEach(el => {
+                    el.style.outline = '';
+                    el.style.outlineOffset = '';
+                });
+
+                if (clusterId >= 0) {
+                    const promoteBtn = segContainer.querySelector(`[data-promote-id="${clusterId}"]`);
+                    if (promoteBtn) {
+                        const row = promoteBtn.closest('.seg-cluster-row');
+                        if (row) {
+                            row.style.outline = '2px solid #667eea';
+                            row.style.outlineOffset = '-2px';
+                            row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                        }
+                    }
+                }
+            }
         }
 
         // Double-click handler: triggers similarity search, shows results on Panel 2 AND Panel 4
@@ -3975,10 +4043,14 @@
                 });
             }
 
+            // Reuse color from existing label with the same name, if any
+            const existingWithName = savedLabels.find(l => l.name === name);
+            const color = existingWithName ? existingWithName.color : cluster.hex;
+
             const label = {
                 id: 'label_' + Date.now(),
                 name,
-                color: cluster.hex,
+                color,
                 threshold: cluster.threshold || 0,
                 source_pixel: cluster.sourcePixel || null,
                 embedding: cluster.embedding || null,
@@ -4749,7 +4821,7 @@
             const hasSourcePixel = members.some(l => l.source_pixel);
             const thresholdStr = hasSourcePixel ? `, threshold: ${parseFloat(members[0].threshold.toPrecision(3))}` : '';
             return `
-                <div class="label-item" style="padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; background: white; border-left: 4px solid ${color};">
+                <div class="label-item" data-label-name="${escapeHtml(name)}" style="padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; background: white; border-left: 4px solid ${color};">
                   <div style="display: flex; align-items: flex-start; justify-content: space-between;">
                     <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; align-items: center; margin-bottom: 4px;">
