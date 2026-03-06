@@ -627,8 +627,6 @@
         <div class="panel">
             <div class="panel-header" style="background: #2C5282; color: white; padding: 8px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
                 <span id="panel6-header-text">Tessera Embeddings</span>
-                <select id="embedding-year-selector-2" style="display: none; margin-left: 10px; padding: 4px 8px; border: 1px solid #555; border-radius: 3px; background: #333; color: #fff; font-size: 13px;">
-                </select>
             </div>
             <div id="map-embedding2" class="map"></div>
             <!-- Label management split view (labelling mode only) -->
@@ -636,13 +634,15 @@
                 <!-- Left: Clusters (temporary) -->
                 <div style="flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.95); border-radius: 4px; margin: 4px; overflow: hidden;">
                     <div id="seg-controls" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #e8ecf0; border-bottom: 1px solid #ddd; opacity: 0.4; flex-wrap: wrap;">
-                        <label style="margin: 0; font-size: 12px; color: #333;">k:</label>
-                        <input type="range" id="seg-k-slider" min="2" max="20" value="5" style="width: 70px; cursor: pointer;" disabled>
-                        <span id="seg-k-display" style="font-size: 12px; min-width: 18px; text-align: center; color: #333;">5</span>
-                        <button id="seg-run-btn" style="padding: 4px 8px; background: #38a169; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" disabled>Segment</button>
+                        <button id="seg-run-btn" style="padding: 4px 8px; background: #38a169; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" disabled>Go</button>
+                        <span id="seg-k-adjust" style="display:none; align-items: center; gap: 4px;">
+                            <button id="seg-k-minus" style="padding: 2px 7px; background: #555; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 13px; font-weight: 700; line-height: 1;">&#8722;</button>
+                            <span id="seg-k-display" style="font-size: 12px; min-width: 30px; text-align: center; color: #333; font-weight: 600;">k=5</span>
+                            <button id="seg-k-plus" style="padding: 2px 7px; background: #555; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 13px; font-weight: 700; line-height: 1;">+</button>
+                        </span>
                         <button id="seg-clear-btn" style="display:none; padding: 4px 8px; background: #e53e3e; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;">Clear</button>
                     </div>
-                    <div style="padding: 8px 10px; font-weight: 600; color: #333; border-bottom: 1px solid #ddd; font-size: 13px;">Clusters (temporary)</div>
+                    <div style="padding: 8px 10px; font-weight: 600; color: #333; border-bottom: 1px solid #ddd; font-size: 13px;">Clusters</div>
                     <div id="panel6-seg-list" style="flex: 1; overflow-y: auto; padding: 8px 10px;">
                         <div style="color: #999; padding: 10px; text-align: center;">Run segmentation to see clusters</div>
                     </div>
@@ -887,7 +887,8 @@
                         const alt = s.years_available.find(y => String(y) !== currentEmbeddingYear);
                         if (alt) {
                             currentEmbeddingYear2 = String(alt);
-                            document.getElementById('embedding-year-selector-2').value = currentEmbeddingYear2;
+                            const sel2el = document.getElementById('embedding-year-selector-2');
+                            if (sel2el) sel2el.value = currentEmbeddingYear2;
                         }
                     }
                     refreshEmbeddingTileLayer('embedding2', currentEmbeddingYear2);
@@ -910,7 +911,8 @@
                 },
                 onNotReady: () => {
                     document.getElementById('embedding-year-selector').style.display = 'none';
-                    document.getElementById('embedding-year-selector-2').style.display = 'none';
+                    const sel2hide = document.getElementById('embedding-year-selector-2');
+                    if (sel2hide) sel2hide.style.display = 'none';
                 },
                 satisfied: false
             },
@@ -949,7 +951,6 @@
                         recomputeLabelPixels();
                     }
                     // Enable segmentation controls and populate year dropdown
-                    document.getElementById('seg-k-slider').disabled = false;
                     document.getElementById('seg-run-btn').disabled = false;
                     document.getElementById('seg-controls').style.opacity = '1';
                 },
@@ -959,7 +960,6 @@
                     document.getElementById('label-controls-bar').style.opacity = '0.4';
                     document.querySelectorAll('#label-controls-bar button').forEach(b => b.disabled = true);
                     // Disable segmentation controls
-                    document.getElementById('seg-k-slider').disabled = true;
                     document.getElementById('seg-run-btn').disabled = true;
                     document.getElementById('seg-controls').style.opacity = '0.4';
                 },
@@ -2933,8 +2933,7 @@
                 }
                 // Panel 6 → label management split view
                 const p6header = document.getElementById('panel6-header-text');
-                if (p6header) p6header.textContent = 'Labels';
-                document.getElementById('embedding-year-selector-2').style.display = 'none';
+                if (p6header) p6header.textContent = 'Auto-label';
                 // Hide floating popups — panel 6 replaces them
                 document.getElementById('seg-results-panel').style.display = 'none';
                 document.getElementById('labels-details-panel').style.display = 'none';
@@ -3666,7 +3665,6 @@
                 const centroids = new Float32Array(k * dim);
 
                 // --- K-means++ initialization (on sample) ---
-                // Pick first centroid randomly from sample
                 const firstPt = sampleIdx ? sampleIdx[Math.floor(Math.random() * S)] : Math.floor(Math.random() * N);
                 centroids.set(embeddings.subarray(firstPt * dim, (firstPt + 1) * dim), 0);
 
@@ -3674,7 +3672,6 @@
                 minDist2.fill(Infinity);
 
                 for (let c = 1; c < k; c++) {
-                    // Update min distances to nearest existing centroid
                     let totalWeight = 0;
                     for (let si = 0; si < S; si++) {
                         const idx = sampleIdx ? sampleIdx[si] : si;
@@ -3688,7 +3685,6 @@
                         if (dist < minDist2[si]) minDist2[si] = dist;
                         totalWeight += minDist2[si];
                     }
-                    // Weighted random selection
                     let r = Math.random() * totalWeight;
                     let chosen = 0;
                     for (let si = 0; si < S; si++) {
@@ -3723,7 +3719,6 @@
                         sampleAssign[si] = bestC;
                     }
 
-                    // Recompute centroids
                     sums.fill(0);
                     counts.fill(0);
                     for (let si = 0; si < S; si++) {
@@ -3748,7 +3743,6 @@
                         }
                     }
 
-                    // Early stopping: converged if <0.5% of sample changed
                     if (changed < S * 0.005) break;
                 }
 
@@ -3836,11 +3830,34 @@
         const MAX_UMAP_POINTS = 10000;
         const MAX_PCA_POINTS = 4 * MAX_UMAP_POINTS;
 
-        async function runKMeans() {
+        // Build Fisher-Yates partial-shuffle sample of given size from [0..N)
+        function buildSample(N, size) {
+            if (size >= N) return null; // no subsampling needed
+            const indices = new Uint32Array(size);
+            const pool = new Uint32Array(N);
+            for (let i = 0; i < N; i++) pool[i] = i;
+            for (let i = 0; i < size; i++) {
+                const j = i + Math.floor(Math.random() * (N - i));
+                const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+                indices[i] = pool[i];
+            }
+            return indices;
+        }
+
+        // 20 maximally-distinct colours (Kelly 1965 + Tableau, pastels avoided)
+        const SEG_PALETTE = [
+            '#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4',
+            '#42d4f4', '#f032e6', '#ffe119', '#469990', '#e6beff',
+            '#9a6324', '#800000', '#aaffc3', '#808000', '#000075',
+            '#fabebe', '#bfef45', '#ffd8b1', '#a9a9a9', '#dcbeff',
+        ];
+
+        async function runKMeans(k) {
             if (!localVectors || segRunning) return;
             segRunning = true;
+            segK = k;
             const btn = document.getElementById('seg-run-btn');
-            btn.textContent = 'Segmenting...';
+            btn.textContent = 'Clustering\u2026';
             btn.disabled = true;
 
             // Clear old overlay immediately so user sees a clean map during recomputation
@@ -3869,28 +3886,15 @@
 
             const N = segVectors.numVectors;
             const dim = segVectors.dim;
-            segK = parseInt(document.getElementById('seg-k-slider').value);
 
             // Slice to avoid detaching segVectors.embeddings
             const embCopy = segVectors.embeddings.buffer.slice(0);
-
-            // Build subsample indices (10% of N, clamped to [2000, 50000])
-            let sampleBuf = null;
             const transferables = [embCopy];
-            if (N > 2000) {
-                const sampleSize = Math.max(2000, Math.min(50000, Math.floor(N * 0.1)));
-                const indices = new Uint32Array(sampleSize);
-                // Fisher-Yates partial shuffle to pick sampleSize unique indices
-                const pool = new Uint32Array(N);
-                for (let i = 0; i < N; i++) pool[i] = i;
-                for (let i = 0; i < sampleSize; i++) {
-                    const j = i + Math.floor(Math.random() * (N - i));
-                    const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
-                    indices[i] = pool[i];
-                }
-                sampleBuf = indices.buffer;
-                transferables.push(sampleBuf);
-            }
+
+            const sampleSize = Math.max(2000, Math.min(50000, Math.floor(N * 0.1)));
+            const sample = buildSample(N, sampleSize);
+            const sampleBuf = sample ? sample.buffer : null;
+            if (sampleBuf) transferables.push(sampleBuf);
 
             if (segWorker) segWorker.terminate();
             segWorker = new Worker(segWorkerURL);
@@ -3899,7 +3903,7 @@
                 console.error('[SEG] Worker error:', err);
                 alert('Segmentation failed: ' + (err.message || 'unknown error'));
                 segRunning = false;
-                btn.textContent = 'Segment';
+                btn.textContent = 'Go';
                 btn.disabled = false;
             };
 
@@ -3909,17 +3913,15 @@
                 const nearestIdxArr = new Int32Array(e.data.nearestIdx);
                 const maxDistArr = new Float64Array(e.data.maxDist);
 
-                // Compute cluster counts and build palette
-                const counts = new Int32Array(segK);
+                const counts = new Int32Array(k);
                 for (let i = 0; i < N; i++) counts[segAssignments[i]]++;
 
                 const gt = segVectors.metadata.geotransform;
                 segLabels = [];
-                for (let c = 0; c < segK; c++) {
+                for (let c = 0; c < k; c++) {
                     if (counts[c] === 0) continue;
-                    const hue = Math.round((c / segK) * 360);
-                    const color = `hsl(${hue}, 70%, 50%)`;
-                    const hex = hslToHex(hue, 70, 50);
+                    const hex = SEG_PALETTE[c % SEG_PALETTE.length];
+                    const color = hex;
                     const ni = nearestIdxArr[c];
                     const px = segVectors.coords[ni * 2], py = segVectors.coords[ni * 2 + 1];
                     segLabels.push({
@@ -3934,25 +3936,22 @@
                 showSegmentationOverlay();
                 showSegmentationPanel();
 
+                // Show +/- controls and update display
+                document.getElementById('seg-k-adjust').style.display = 'inline-flex';
+                document.getElementById('seg-k-display').textContent = `k=${k}`;
+                document.getElementById('seg-k-minus').disabled = (k <= 2);
+                document.getElementById('seg-k-plus').disabled = (k >= 20);
+
                 segRunning = false;
-                btn.textContent = 'Segment';
+                btn.textContent = 'Go';
                 btn.disabled = false;
                 document.getElementById('seg-clear-btn').style.display = '';
             };
 
             segWorker.postMessage(
-                {embeddings: embCopy, N, dim, k: segK, maxIter: 20, sampleIdx: sampleBuf},
+                {embeddings: embCopy, N, dim, k, maxIter: 20, sampleIdx: sampleBuf},
                 transferables
             );
-        }
-
-        function hslToHex(h, s, l) {
-            s /= 100; l /= 100;
-            const k = n => (n + h / 30) % 12;
-            const a = s * Math.min(l, 1 - l);
-            const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-            const toHex = x => Math.round(255 * f(x)).toString(16).padStart(2, '0');
-            return '#' + toHex(0) + toHex(8) + toHex(4);
         }
 
         function showSegmentationOverlay() {
@@ -3977,7 +3976,6 @@
             // Build colour lookup from segLabels
             const colorLookup = new Map();
             for (const cl of segLabels) {
-                // Parse HSL to RGB
                 const hex = cl.hex;
                 const r = parseInt(hex.slice(1, 3), 16);
                 const g = parseInt(hex.slice(3, 5), 16);
@@ -4036,6 +4034,7 @@
             segVectors = null;
             segLabels = [];
             document.getElementById('seg-clear-btn').style.display = 'none';
+            document.getElementById('seg-k-adjust').style.display = 'none';
             showSegmentationPanel(); // clears both floating popup and panel 6
         }
 
@@ -5662,10 +5661,13 @@
             });
 
             // Segmentation event wiring
-            document.getElementById('seg-k-slider').addEventListener('input', function() {
-                document.getElementById('seg-k-display').textContent = this.value;
+            document.getElementById('seg-run-btn').addEventListener('click', () => runKMeans(5));
+            document.getElementById('seg-k-minus').addEventListener('click', () => {
+                if (segK > 2 && !segRunning) runKMeans(segK - 1);
             });
-            document.getElementById('seg-run-btn').addEventListener('click', runKMeans);
+            document.getElementById('seg-k-plus').addEventListener('click', () => {
+                if (segK < 20 && !segRunning) runKMeans(segK + 1);
+            });
             document.getElementById('seg-clear-btn').addEventListener('click', clearSegmentation);
             document.getElementById('seg-export-btn').addEventListener('click', saveAllClustersAsLabels);
             document.getElementById('panel6-promote-all-btn').addEventListener('click', saveAllClustersAsLabels);
