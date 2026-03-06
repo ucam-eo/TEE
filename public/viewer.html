@@ -4166,25 +4166,44 @@
 
         // Compute PCA from locally-downloaded vectors (no server round-trip)
         function computePCAFromLocal(lv) {
-            const n = lv.numVectors;
+            const N = lv.numVectors;
             const dim = lv.dim; // 128
-            const emb = lv.embeddings; // Float32Array, n * dim
-            const coords = lv.coords;  // Int32Array, n * 2
+            const emb = lv.embeddings; // Float32Array, N * dim
+            const allCoords = lv.coords;  // Int32Array, N * 2
             const gt = lv.metadata.geotransform;
+
+            // Subsample for scatter plot (same limit as UMAP)
+            let n, subEmb, subCoords;
+            if (N > MAX_UMAP_POINTS) {
+                const stride = Math.ceil(N / MAX_UMAP_POINTS);
+                n = Math.floor(N / stride);
+                subEmb = new Float32Array(n * dim);
+                subCoords = new Int32Array(n * 2);
+                for (let i = 0, si = 0; si < n; i += stride, si++) {
+                    subEmb.set(emb.subarray(i * dim, (i + 1) * dim), si * dim);
+                    subCoords[si * 2] = allCoords[i * 2];
+                    subCoords[si * 2 + 1] = allCoords[i * 2 + 1];
+                }
+                console.log(`[PCA] Subsampled ${N} -> ${n} points (stride ${stride})`);
+            } else {
+                n = N;
+                subEmb = emb;
+                subCoords = allCoords;
+            }
 
             // 1. Compute per-dimension mean
             const mean = new Float64Array(dim);
             for (let i = 0; i < n; i++) {
                 const off = i * dim;
-                for (let d = 0; d < dim; d++) mean[d] += emb[off + d];
+                for (let d = 0; d < dim; d++) mean[d] += subEmb[off + d];
             }
             for (let d = 0; d < dim; d++) mean[d] /= n;
 
-            // 2. Center data (in-place copy)
+            // 2. Center data
             const centered = new Float32Array(n * dim);
             for (let i = 0; i < n; i++) {
                 const off = i * dim;
-                for (let d = 0; d < dim; d++) centered[off + d] = emb[off + d] - mean[d];
+                for (let d = 0; d < dim; d++) centered[off + d] = subEmb[off + d] - mean[d];
             }
 
             // 3. Compute 128x128 covariance matrix (upper triangle, then mirror)
@@ -4249,8 +4268,8 @@
             const points = new Array(n);
             for (let i = 0; i < n; i++) {
                 const off = i * dim;
-                const px = coords[i * 2];
-                const py = coords[i * 2 + 1];
+                const px = subCoords[i * 2];
+                const py = subCoords[i * 2 + 1];
                 const lon = gt.c + gt.a * px + gt.b * py;
                 const lat = gt.f + gt.d * px + gt.e * py;
 

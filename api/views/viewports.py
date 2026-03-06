@@ -546,7 +546,7 @@ def is_ready(request, viewport_name):
         vectors_dir = VECTORS_DIR / viewport_name
         if vectors_dir.exists():
             for year_dir in vectors_dir.glob("*"):
-                if year_dir.is_dir() and _year_matches(year_dir.name) and ((year_dir / "all_embeddings.npy").exists() or (year_dir / "all_embeddings_uint8.npy.gz").exists()):
+                if year_dir.is_dir() and _year_matches(year_dir.name) and (year_dir / "metadata.json").exists() and ((year_dir / "all_embeddings.npy").exists() or (year_dir / "all_embeddings_uint8.npy.gz").exists()):
                     has_vectors = True
                     break
 
