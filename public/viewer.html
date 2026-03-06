@@ -3835,6 +3835,7 @@
         }
 
         const MAX_UMAP_POINTS = 10000;
+        const MAX_PCA_POINTS = 4 * MAX_UMAP_POINTS;
 
         async function runKMeans() {
             if (!localVectors || segRunning) return;
@@ -4172,10 +4173,10 @@
             const allCoords = lv.coords;  // Int32Array, N * 2
             const gt = lv.metadata.geotransform;
 
-            // Subsample for scatter plot (same limit as UMAP)
+            // Subsample for scatter plot (PCA is fast, so allow 4x more points than UMAP)
             let n, subEmb, subCoords;
-            if (N > MAX_UMAP_POINTS) {
-                const stride = Math.ceil(N / MAX_UMAP_POINTS);
+            if (N > MAX_PCA_POINTS) {
+                const stride = Math.ceil(N / MAX_PCA_POINTS);
                 n = Math.floor(N / stride);
                 subEmb = new Float32Array(n * dim);
                 subCoords = new Int32Array(n * 2);
