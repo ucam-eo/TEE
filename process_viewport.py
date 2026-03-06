@@ -270,12 +270,48 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
     mosaic = None
     for attempt in range(1, max_retries + 1):
         try:
-            mosaic, transform, crs = tessera.fetch_mosaic_for_region(
-                bbox=bounds,
-                year=year,
-                target_crs='EPSG:4326',
-                auto_download=True,
-            )
+            # Run fetch in a thread so we can report download progress
+            import threading as _threading
+            _fetch_result = [None, None, None, None]  # mosaic, transform, crs, error
+            def _do_fetch():
+                try:
+                    m, t, c = tessera.fetch_mosaic_for_region(
+                        bbox=bounds, year=year,
+                        target_crs='EPSG:4326', auto_download=True,
+                    )
+                    _fetch_result[:3] = [m, t, c]
+                except Exception as ex:
+                    _fetch_result[3] = ex
+
+            # Snapshot embeddings dir size before fetch
+            def _dir_size(path):
+                total = 0
+                try:
+                    for entry in os.scandir(path):
+                        if entry.is_file(follow_symlinks=False):
+                            total += entry.stat().st_size
+                        elif entry.is_dir(follow_symlinks=False):
+                            total += _dir_size(entry.path)
+                except OSError:
+                    pass
+                return total
+            size_before = _dir_size(str(EMBEDDINGS_DIR))
+
+            ft = _threading.Thread(target=_do_fetch, daemon=True)
+            ft.start()
+            tick = 0
+            while ft.is_alive():
+                ft.join(timeout=2)
+                if ft.is_alive():
+                    tick += 1
+                    downloaded_mb = (_dir_size(str(EMBEDDINGS_DIR)) - size_before) / (1024 * 1024)
+                    elapsed = _time.monotonic() - t0
+                    # Asymptotic percentage (0→55%) so the bar keeps moving
+                    fetch_pct = int(55 * (1 - 1 / (1 + tick * 0.15)))
+                    _progress(fetch_pct, f"[{year}] Fetching mosaic ({downloaded_mb:.1f} MB, {elapsed:.0f}s)")
+            if _fetch_result[3] is not None:
+                raise _fetch_result[3]
+            mosaic, transform, crs = _fetch_result[0], _fetch_result[1], _fetch_result[2]
             break
         except Exception as e:
             if attempt < max_retries:
