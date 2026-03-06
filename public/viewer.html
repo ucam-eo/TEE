@@ -3891,7 +3891,7 @@
             const embCopy = segVectors.embeddings.buffer.slice(0);
             const transferables = [embCopy];
 
-            const sampleSize = Math.max(2000, Math.min(50000, Math.floor(N * 0.1)));
+            const sampleSize = Math.min(1000, N);
             const sample = buildSample(N, sampleSize);
             const sampleBuf = sample ? sample.buffer : null;
             if (sampleBuf) transferables.push(sampleBuf);
