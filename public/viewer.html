@@ -438,8 +438,9 @@
         .seg-cluster-row {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             padding: 4px 0;
+            overflow: hidden;
         }
         .seg-color-swatch {
             width: 16px;
@@ -601,7 +602,7 @@
             <div class="panel-header" style="background: #4A5568; color: white; padding: 8px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
                 <span id="panel4-title">PCA (Embedding Space)</span>
                 <select id="dim-reduction-selector" style="padding: 2px 6px; border: 1px solid #666; border-radius: 3px; background: #333; color: #fff; font-size: 12px; cursor: pointer;">
-                    <option value="pca" selected>PCA (fast)</option>
+                    <option value="pca" selected>PCA</option>
                     <option value="umap">UMAP</option>
                 </select>
             </div>
@@ -777,7 +778,7 @@
         let viewportBounds = null;  // Will be set from updateMapViewport()
 
         // Current embedding year
-        let currentEmbeddingYear = '2024';
+        let currentEmbeddingYear = '2025';
         let currentViewportName = 'tile_aligned';
 
         // Storage for labels: {panel: [[lat, lon, label], ...]}
@@ -798,10 +799,10 @@
         let maps = {};
 
         // New state variables for 6-panel viewer
-        let currentEmbeddingYear2 = '2024';  // Second year selector
+        let currentEmbeddingYear2 = '2025';  // Second year selector
         let umapData = null;                  // UMAP/PCA coordinates cache
         let umapCanvasLayer = null;           // 3D scatter plot layer (Three.js scene)
-        let currentDimReduction = 'pca';      // 'pca' or 'umap' - default to PCA (fast)
+        let currentDimReduction = 'pca';      // 'pca' or 'umap' - default to PCA
         let currentPanelMode = 'simple';       // 'simple', 'change-detection', or 'labelling'
         let heatmapSatelliteLayer = null;      // Satellite tiles for panel 5 in labelling mode
         let heatmapCanvasLayer = null;        // Distance heatmap layer
@@ -1103,10 +1104,11 @@
             const selector = document.getElementById(selectorId);
             if (!selector) return currentYear;
 
-            // Preserve user selection if still valid
+            // Preserve user selection if still valid, otherwise pick latest year
+            const sorted = [...years].map(String).sort();
             const yearToUse = years.includes(parseInt(currentYear)) || years.includes(String(currentYear))
                 ? String(currentYear)
-                : (years.includes(2024) || years.includes('2024') ? '2024' : String(years[0]));
+                : sorted[sorted.length - 1];
 
             // Populate dropdown
             selector.innerHTML = '';
@@ -1467,10 +1469,6 @@
                     throw new Error(`Unsupported embedding dtype: ${embParsed.dtype}`);
                 }
 
-                status.textContent = 'Building lookup index...';
-                bar.style.width = '97%';
-                percent.textContent = '97%';
-
                 const numVectors = embeddingsData.length / embDim;
 
                 // Validate embeddings aren't all zeros (indicates corrupt source data)
@@ -1487,16 +1485,16 @@
                 // Grid lookup: O(1) arithmetic, no Map needed
                 const grid = buildGridLookup(coordsData, numVectors);
 
-                // Store in IndexedDB (grid rebuilt on load from coords)
-                await VectorCache.put(viewport, year, {
-                    embeddings: embeddingsData,
-                    coords: coordsData,
-                    metadata
-                });
-
                 bar.style.width = '100%';
                 percent.textContent = '100%';
                 status.textContent = `Ready! ${numVectors.toLocaleString()} vectors loaded.`;
+
+                // Cache in IndexedDB off the critical path (don't block UI)
+                VectorCache.put(viewport, year, {
+                    embeddings: embeddingsData,
+                    coords: coordsData,
+                    metadata
+                }).catch(e => console.warn('[VECTORS] Cache write failed:', e));
 
                 localVectors = {
                     embeddings: embeddingsData,
@@ -3836,7 +3834,7 @@
             return umapWorkerURL;
         }
 
-        const MAX_UMAP_POINTS = 5000;
+        const MAX_UMAP_POINTS = 10000;
 
         async function runKMeans() {
             if (!localVectors || segRunning) return;
@@ -4056,10 +4054,10 @@
                 row.innerHTML = `
                     <span class="seg-color-swatch" style="background: ${cl.color};"></span>
                     <input type="text" placeholder="Label name" data-cluster-id="${cl.id}"
-                        style="width: 90px; padding: 3px 6px; border: none; border-bottom: 1px solid #ccc; border-radius: 0; font-size: 12px; color: #333; background: transparent; outline: none;">
-                    <span style="color: #555; font-size: 11px; white-space: nowrap;">${cl.count.toLocaleString()} (${pct}%)</span>
+                        style="min-width: 0; flex: 1 1 60px; padding: 3px 6px; border: none; border-bottom: 1px solid #ccc; border-radius: 0; font-size: 12px; color: #333; background: transparent; outline: none;">
+                    <span style="color: #555; font-size: 11px; white-space: nowrap; flex-shrink: 0;">${cl.count.toLocaleString()} (${pct}%)</span>
                     <button title="Promote to saved label" data-promote-id="${cl.id}"
-                        style="background: none; border: 1px solid #667eea; border-radius: 3px; color: #667eea; cursor: pointer; font-size: 11px; padding: 1px 5px; margin-left: 4px; line-height: 1.2;">&#8594;</button>
+                        style="flex-shrink: 0; background: none; border: 1px solid #667eea; border-radius: 3px; color: #667eea; cursor: pointer; font-size: 11px; padding: 1px 5px; line-height: 1.2;">&#8594;</button>
                 `;
                 row.querySelector('[data-promote-id]').addEventListener('click', () => saveClusterAsLabel(cl.id));
                 container.appendChild(row);
@@ -4317,7 +4315,7 @@
                         viewportStatus.vectors_downloaded = true;
                     }
 
-                    umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">Computing UMAP in browser...</div>`;
+                    umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">Computing UMAP...</div>`;
                     await new Promise(resolve => setTimeout(resolve, 50));
 
                     const N = localVectors.numVectors;
