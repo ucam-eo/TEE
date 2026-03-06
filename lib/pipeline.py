@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Pipeline stage progress allocation (must sum to 100)
 STAGE_PROGRESS = {
-    'process': (0, 98),     # 0-98%: Download tiles + pyramids + vectors + UMAP
+    'process': (0, 98),     # 0-98%: Download tiles + pyramids + vectors
     'satellite': (98, 100), # 98-100%: Satellite pyramids (quick)
 }
 
@@ -257,7 +257,7 @@ class PipelineRunner:
         return False
 
     def stage_1_process_viewport(self, viewport_name, years_str):
-        """Stage 1: Process viewport — download tiles, create pyramids + vectors + UMAP."""
+        """Stage 1: Process viewport — download tiles, create pyramids + vectors."""
         logger.info(f"[PIPELINE] STAGE 1/2: Processing viewport '{viewport_name}' (years: {years_str})...")
         logger.info(f"[PIPELINE]   Python: {self.venv_python}")
 

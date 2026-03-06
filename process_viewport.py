@@ -234,7 +234,8 @@ def save_vectors(quantized, coords, dim_min, dim_max, transform, height, width,
 
 # ---------- Per-year processing ----------
 
-def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir):
+def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
+                 progress=None, year_idx=0, num_years=1):
     """Process a single year: fetch mosaic -> pyramids -> vectors.
 
     All data stays in memory; no intermediate GeoTIFF files are created.
@@ -242,6 +243,14 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir):
     Returns:
         (year, success: bool, message: str)
     """
+    def _progress(pct, msg):
+        """Report progress scaled to this year's slice of the overall 5-95% range."""
+        if not progress:
+            return
+        # Each year gets an equal slice of 5-95%
+        per_year = 90 / num_years  # e.g. 90% for 1 year, 45% for 2
+        overall = 5 + year_idx * per_year + pct / 100 * per_year
+        progress.update("processing", msg, percent=int(overall))
     year_pyramids_dir = pyramids_dir / str(year)
     year_vectors_dir = vectors_dir / str(year)
 
@@ -253,6 +262,7 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir):
         return (year, True, "already exists")
 
     # --- FETCH MOSAIC ---
+    _progress(0, f"[{year}] Fetching mosaic...")
     print(f"  [{year}] Fetching mosaic...")
     t0 = _time.monotonic()
 
@@ -284,6 +294,7 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir):
 
     # --- PYRAMIDS (bands 0-2 -> RGB) ---
     if not pyramids_ok:
+        _progress(60, f"[{year}] Creating pyramids...")
         print(f"  [{year}] Creating pyramids...")
         rgb = np.stack([
             percentile_normalize(mosaic[:, :, 0]),
@@ -302,6 +313,7 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir):
 
     # --- VECTORS (all 128 bands) ---
     if not vectors_ok:
+        _progress(70, f"[{year}] Extracting vectors...")
         print(f"  [{year}] Creating vectors...")
         all_embeddings = mosaic.reshape(-1, EMBEDDING_DIM)
 
@@ -323,6 +335,7 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir):
         dim_scale[dim_scale == 0] = 1
         quantized = ((all_embeddings - dim_min) / dim_scale * 255).astype(np.uint8)
 
+        _progress(80, f"[{year}] Saving vectors...")
         save_vectors(quantized, coords, dim_min, dim_max, transform,
                      height, width, viewport_id, year, year_vectors_dir)
         del quantized, coords, dim_min, dim_max
@@ -332,6 +345,7 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir):
     del mosaic
     gc.collect()
 
+    _progress(100, f"[{year}] Done")
     print(f"  [{year}] Done")
     return (year, True, "processed")
 
@@ -410,12 +424,13 @@ def main():
 
     progress.update("processing", f"Processing {len(years_to_process)} year(s)...", percent=5)
 
+    n = len(years_to_process)
     if max_workers == 1:
         # Single year: run in main process to avoid subprocess overhead
         tessera = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
         results = [
             process_year(tessera, viewport_id, bounds, years_to_process[0],
-                         pyramids_dir, vectors_dir)
+                         pyramids_dir, vectors_dir, progress=progress)
         ]
     else:
         print(f"Using {max_workers} parallel workers")
