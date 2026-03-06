@@ -132,18 +132,15 @@ def _render_tile(tif_path, z, x, y, _mtime=0):
         tile_x_start = max(0, -col_off)
         tile_y_start = max(0, -row_off)
 
-        full_data = np.zeros((4, height, width), dtype=np.uint8)
+        full_data = np.zeros((3, height, width), dtype=np.uint8)
         full_data[
-            :3,
+            :,
             tile_y_start:tile_y_start + read_height,
             tile_x_start:tile_x_start + read_width,
         ] = rgb
-        # Make pixels opaque where any RGB channel is non-zero; black = transparent
-        alpha = np.any(full_data[:3] > 0, axis=0).astype(np.uint8) * 255
-        full_data[3] = alpha
 
-        rgba_t = np.transpose(full_data, (1, 2, 0))
-        img = Image.fromarray(rgba_t.astype(np.uint8), mode='RGBA')
+        rgb_t = np.transpose(full_data, (1, 2, 0))
+        img = Image.fromarray(rgb_t.astype(np.uint8), mode='RGB')
         img = img.resize((TILE_SIZE, TILE_SIZE), Image.NEAREST)
 
         buf = io.BytesIO()
