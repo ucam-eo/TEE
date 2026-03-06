@@ -4409,6 +4409,17 @@
                     }
                 }
 
+                // Filter out points outside viewport bounds (mosaic can extend beyond viewport due to tile alignment)
+                if (points && viewportBounds) {
+                    const [[latMin, lonMin], [latMax, lonMax]] = viewportBounds;
+                    const before = points.length;
+                    points = points.filter(p =>
+                        p.lat >= latMin && p.lat <= latMax && p.lon >= lonMin && p.lon <= lonMax);
+                    if (points.length < before) {
+                        console.log(`[${methodUpper}] Filtered ${before - points.length} out-of-bounds points (${before} → ${points.length})`);
+                    }
+                }
+
                 if (points) {
                     console.log(`[${methodUpper}] Got ${points.length} points, initializing Three.js scene...`);
                     umapData = points;
@@ -5811,6 +5822,7 @@
         window.clearCrossPanelMarkers = clearCrossPanelMarkers;
         window.setCrossPanelMarker = setCrossPanelMarker;
         window.maps = maps;
+        window.getViewportBounds = () => viewportBounds;
     </script>
 
     <!-- ===== Pixelated Canvas Tile Layer ===== -->
@@ -6236,7 +6248,7 @@
                 if (window.maps && window.maps.osm) {
                     window.maps.osm.panTo([hitPoint.lat, hitPoint.lon]);
                 }
-                console.log(`[UMAPScene] Click → lat=${hitPoint.lat.toFixed(6)} lon=${hitPoint.lon.toFixed(6)}`);
+                console.log(`[UMAPScene] Click → idx=${idx}/${this.points.length} lat=${hitPoint.lat.toFixed(6)} lon=${hitPoint.lon.toFixed(6)}`);
             }
         }
 
