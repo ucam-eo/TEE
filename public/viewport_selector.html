@@ -1744,11 +1744,22 @@
             }
 
             try {
-                const response = await fetch('/api/viewports/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name })
-                });
+                let response;
+                try {
+                    response = await fetch('/api/viewports/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name })
+                    });
+                } catch (e) {
+                    // Retry once on transient network failure
+                    await new Promise(r => setTimeout(r, 500));
+                    response = await fetch('/api/viewports/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name })
+                    });
+                }
 
                 const data = await response.json();
 

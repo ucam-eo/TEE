@@ -440,7 +440,6 @@
             align-items: center;
             gap: 6px;
             padding: 4px 0;
-            overflow: hidden;
         }
         .seg-color-swatch {
             width: 16px;
@@ -636,7 +635,7 @@
             <div id="panel6-label-view" style="position: absolute; top: 45px; left: 0; right: 0; bottom: 0; flex-direction: row; gap: 2px; background: #2a2a2a; font-size: 12px;">
                 <!-- Left: Clusters (temporary) -->
                 <div style="flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.95); border-radius: 4px; margin: 4px; overflow: hidden;">
-                    <div id="seg-controls" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #e8ecf0; border-bottom: 1px solid #ddd; opacity: 0.4;">
+                    <div id="seg-controls" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #e8ecf0; border-bottom: 1px solid #ddd; opacity: 0.4; flex-wrap: wrap;">
                         <label style="margin: 0; font-size: 12px; color: #333;">k:</label>
                         <input type="range" id="seg-k-slider" min="2" max="20" value="5" style="width: 70px; cursor: pointer;" disabled>
                         <span id="seg-k-display" style="font-size: 12px; min-width: 18px; text-align: center; color: #333;">5</span>
@@ -4050,13 +4049,14 @@
             container.innerHTML = '';
             for (const cl of segLabels) {
                 const pct = total > 0 ? ((cl.count / total) * 100).toFixed(1) : '0.0';
+                const countStr = cl.count >= 1000 ? (cl.count / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : String(cl.count);
                 const row = document.createElement('div');
                 row.className = 'seg-cluster-row';
                 row.innerHTML = `
                     <span class="seg-color-swatch" style="background: ${cl.color};"></span>
                     <input type="text" placeholder="Label name" data-cluster-id="${cl.id}"
-                        style="min-width: 0; flex: 1 1 60px; padding: 3px 6px; border: none; border-bottom: 1px solid #ccc; border-radius: 0; font-size: 12px; color: #333; background: transparent; outline: none;">
-                    <span style="color: #555; font-size: 11px; white-space: nowrap; flex-shrink: 0;">${cl.count.toLocaleString()} (${pct}%)</span>
+                        style="min-width: 0; flex: 1 1 60px; padding: 3px 6px; border: none; border-bottom: 1px solid #ccc; border-radius: 0; font-size: 12px; color: #333; background: transparent; outline: none; overflow: hidden; text-overflow: ellipsis;">
+                    <span style="color: #555; font-size: 10px; white-space: nowrap; flex-shrink: 0;" title="${cl.count.toLocaleString()} pixels">${countStr} ${pct}%</span>
                     <button title="Promote to saved label" data-promote-id="${cl.id}"
                         style="flex-shrink: 0; background: none; border: 1px solid #667eea; border-radius: 3px; color: #667eea; cursor: pointer; font-size: 11px; padding: 1px 5px; line-height: 1.2;">&#8594;</button>
                 `;
