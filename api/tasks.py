@@ -36,7 +36,6 @@ def trigger_data_download_and_processing(viewport_name, years=None):
             success, error = runner.run_full_pipeline(
                 viewport_name=viewport_name,
                 years_str=years_str,
-                compute_umap=True,
                 cancel_check=is_cancelled
             )
 

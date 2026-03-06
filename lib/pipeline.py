@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Shared pipeline orchestration for viewport data processing.
-Single source of truth for: Download → RGB → Pyramids → Vectors → UMAP
+Single source of truth for: Process viewport → Satellite pyramids
 Used by both web_server.py and setup_viewport.py
 """
 
@@ -15,17 +15,14 @@ from pathlib import Path
 import time
 
 from lib.progress_tracker import ProgressTracker
-from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, VECTORS_DIR, PROGRESS_DIR
+from lib.config import PYRAMIDS_DIR, VECTORS_DIR, PROGRESS_DIR
 
 logger = logging.getLogger(__name__)
 
 # Pipeline stage progress allocation (must sum to 100)
 STAGE_PROGRESS = {
-    'download': (0, 95),    # 0-95%: Downloading embeddings (dominates wall time)
-    'rgb': (95, 96),        # 95-96%: Creating RGB
-    'pyramids': (96, 97),   # 96-97%: Creating pyramids
-    'vectors': (97, 99),    # 97-99%: Extracting vectors
-    'umap': (99, 100),      # 99-100%: Computing UMAP (optional)
+    'process': (0, 98),     # 0-98%: Download tiles + pyramids + vectors + UMAP
+    'satellite': (98, 100), # 98-100%: Satellite pyramids (quick)
 }
 
 # Global registry of active pipeline processes (for cancellation)
@@ -86,7 +83,7 @@ class PipelineRunner:
         """Update unified pipeline progress (monotonically increasing).
 
         Args:
-            stage: Stage name ('download', 'rgb', 'pyramids', 'vectors', 'umap')
+            stage: Stage name ('process', 'satellite')
             stage_percent: Progress within this stage (0-100)
             message: Status message
             current_file: File currently being processed
@@ -164,7 +161,6 @@ class PipelineRunner:
             logger.info(f"[PIPELINE]   PID: {proc.pid}")
 
             # Stream stdout/stderr to log in real-time via reader threads.
-            # This ensures output is captured even if the process is killed.
             stdout_lines = []
             stderr_lines = []
             stdout_thread = threading.Thread(
@@ -260,16 +256,17 @@ class PipelineRunner:
 
         return False
 
-    def stage_1_download_embeddings(self, viewport_name, years_str):
-        """Stage 1: Download embeddings from GeoTessera."""
-        logger.info(f"[PIPELINE] STAGE 1/5: Downloading embeddings for '{viewport_name}' (years: {years_str})...")
+    def stage_1_process_viewport(self, viewport_name, years_str):
+        """Stage 1: Process viewport — download tiles, create pyramids + vectors + UMAP."""
+        logger.info(f"[PIPELINE] STAGE 1/2: Processing viewport '{viewport_name}' (years: {years_str})...")
         logger.info(f"[PIPELINE]   Python: {self.venv_python}")
-        logger.info(f"[PIPELINE]   $ python download_embeddings.py --years {years_str}")
 
         if years_str:
-            result = self.run_script('download_embeddings.py', '--years', years_str)
+            logger.info(f"[PIPELINE]   $ python process_viewport.py --years {years_str}")
+            result = self.run_script('process_viewport.py', '--years', years_str)
         else:
-            result = self.run_script('download_embeddings.py')
+            logger.info(f"[PIPELINE]   $ python process_viewport.py")
+            result = self.run_script('process_viewport.py')
 
         if result.returncode != 0:
             stderr_text = result.stderr.strip() if result.stderr else '(no stderr output)'
@@ -279,281 +276,73 @@ class PipelineRunner:
             else:
                 kill_hint = ""
             error_msg = (
-                f"Stage 1 failed - Embeddings download (exit code {result.returncode}{kill_hint}):\n"
+                f"Stage 1 failed - Process viewport (exit code {result.returncode}{kill_hint}):\n"
                 f"  stderr: {stderr_text[:1000]}\n"
                 f"  last stdout: {stdout_tail[:500]}"
             )
-            logger.error(f"[PIPELINE] ✗ {error_msg}")
+            logger.error(f"[PIPELINE] {error_msg}")
             return False, error_msg
 
-        # Verify embeddings exist
-        mosaics_dir = MOSAICS_DIR
-        embedding_files = list(mosaics_dir.glob(f"{viewport_name}_embeddings_*.tif"))
-        if not embedding_files:
-            logger.warning(f"[PIPELINE] ⚠️  Stage 1: No embeddings files found — no data available for requested years")
-            return True, None  # Not an error — region may lack coverage for those years
+        # Verify pyramids + vectors exist for at least one year
+        pyramids_dir = PYRAMIDS_DIR / viewport_name
+        vectors_dir = VECTORS_DIR / viewport_name
 
-        embeddings_file = embedding_files[0]
-        if not self.wait_for_file(embeddings_file, min_size_bytes=1024*1024):
-            error_msg = "Stage 1 verification failed - Embeddings file incomplete/missing"
-            logger.error(f"[PIPELINE] ✗ {error_msg}")
-            return False, error_msg
+        has_pyramids = False
+        has_vectors = False
+        if pyramids_dir.exists():
+            for year_dir in pyramids_dir.iterdir():
+                if year_dir.is_dir() and year_dir.name != 'satellite':
+                    if (year_dir / 'level_0.tif').exists():
+                        has_pyramids = True
+                        break
+        if vectors_dir.exists():
+            for year_dir in vectors_dir.iterdir():
+                if year_dir.is_dir() and (year_dir / 'all_embeddings_uint8.npy.gz').exists():
+                    has_vectors = True
+                    break
 
-        logger.info(f"[PIPELINE] ✓ Stage 1 complete: {len(embedding_files)} year(s)")
+        if not has_pyramids and not has_vectors:
+            logger.warning(f"[PIPELINE] Stage 1: No pyramids or vectors found — no data available")
+            return True, None  # Not an error — region may lack coverage
+
+        logger.info(f"[PIPELINE] Stage 1 complete: pyramids={has_pyramids}, vectors={has_vectors}")
         return True, None
 
-    def stage_2_create_rgb(self, viewport_name):
-        """Stage 2: Create RGB visualization from embeddings."""
-        logger.info(f"[PIPELINE] STAGE 2/5: Creating RGB visualization for '{viewport_name}'...")
-        logger.info(f"[PIPELINE]   $ python create_rgb_embeddings.py")
-
-        result = self.run_script('create_rgb_embeddings.py')
-
-        if result.returncode != 0:
-            error_msg = f"Stage 2 failed - RGB creation:\n{result.stderr[:500]}"
-            logger.error(f"[PIPELINE] ✗ {error_msg}")
-            return False, error_msg
-
-        # Verify RGB files exist
-        mosaics_dir = MOSAICS_DIR
-        rgb_dir = mosaics_dir / "rgb"
-        rgb_files = list(rgb_dir.glob(f"{viewport_name}_*_rgb.tif")) if rgb_dir.exists() else []
-
-        if not rgb_files:
-            logger.warning(f"[PIPELINE] ⚠️  Stage 2: No RGB files found — no data available for requested years")
-            return True, None
-
-        rgb_file = rgb_files[0]
-        if not self.wait_for_file(rgb_file, min_size_bytes=512*1024):
-            error_msg = "Stage 2 verification failed - RGB file incomplete/missing"
-            logger.error(f"[PIPELINE] ✗ {error_msg}")
-            return False, error_msg
-
-        logger.info(f"[PIPELINE] ✓ Stage 2 complete: RGB visualization created")
-        return True, None
-
-    def stage_3_create_pyramids(self, viewport_name):
-        """Stage 3: Create pyramid tiles for web viewing."""
-        logger.info(f"[PIPELINE] STAGE 3/5: Creating pyramid tiles for '{viewport_name}'...")
+    def stage_2_satellite_pyramids(self, viewport_name):
+        """Stage 2: Create satellite pyramids (if satellite file exists)."""
+        logger.info(f"[PIPELINE] STAGE 2/2: Creating satellite pyramids for '{viewport_name}'...")
         logger.info(f"[PIPELINE]   $ python create_pyramids.py")
 
         result = self.run_script('create_pyramids.py')
 
         if result.returncode != 0:
-            error_msg = f"Stage 3 failed - Pyramid creation:\n{result.stderr[:500]}"
-            logger.error(f"[PIPELINE] ✗ {error_msg}")
-            return False, error_msg
-
-        # Verify pyramids exist
-        pyramids_dir = PYRAMIDS_DIR
-        viewport_pyramids_dir = pyramids_dir / viewport_name
-
-        if not viewport_pyramids_dir.exists():
-            logger.warning(f"[PIPELINE] ⚠️  Stage 3: No pyramid directory — no data available for requested years")
-            return True, None
-
-        # Find year directory with pyramids
-        pyramid_year_dir = None
-        for year_dir in viewport_pyramids_dir.glob("*"):
-            if year_dir.is_dir() and year_dir.name not in ['satellite', 'rgb']:
-                level_0_file = year_dir / "level_0.tif"
-                if level_0_file.exists():
-                    pyramid_year_dir = year_dir
-                    break
-
-        if not pyramid_year_dir:
-            logger.warning(f"[PIPELINE] ⚠️  Stage 3: No pyramid levels found — no data available for requested years")
-            return True, None
-
-        level_0_file = pyramid_year_dir / "level_0.tif"
-        if not self.wait_for_file(level_0_file, min_size_bytes=512*1024):
-            error_msg = "Stage 3 verification failed - Pyramid level_0 incomplete/missing"
-            logger.error(f"[PIPELINE] ✗ {error_msg}")
-            return False, error_msg
-
-        pyramid_levels = list(pyramid_year_dir.glob("level_*.tif"))
-        if len(pyramid_levels) < 3:
-            error_msg = f"Stage 3 verification failed - Only {len(pyramid_levels)} levels created (expected >= 3)"
-            logger.error(f"[PIPELINE] ✗ {error_msg}")
-            return False, error_msg
-
-        logger.info(f"[PIPELINE] ✓ Stage 3 complete: {len(pyramid_levels)} pyramid levels created")
-        return True, None
-
-    def stage_4_extract_vectors(self, viewport_name):
-        """Stage 4: Extract vectors from embeddings."""
-        logger.info(f"[PIPELINE] STAGE 4/5: Extracting vectors for '{viewport_name}'...")
-        logger.info(f"[PIPELINE]   $ python extract_vectors.py")
-
-        result = self.run_script('extract_vectors.py')
-
-        if result.returncode != 0:
-            error_msg = f"Stage 4 failed - Vector extraction:\n{result.stderr[:500]}"
-            logger.error(f"[PIPELINE] ✗ {error_msg}")
-            return False, error_msg
-
-        # Verify vectors exist (year-specific)
-        vectors_viewport_dir = VECTORS_DIR / viewport_name
-
-        if not vectors_viewport_dir.exists():
-            logger.warning(f"[PIPELINE] ⚠️  Stage 4: No vectors directory — no data available for requested years")
-            return True, None
-
-        vectors_found = False
-        vectors_year_dir = None
-        for year_dir in vectors_viewport_dir.glob("*"):
-            if year_dir.is_dir():
-                if ((year_dir / "all_embeddings.npy").exists() or
-                    (year_dir / "all_embeddings_uint8.npy.gz").exists()):
-                    vectors_found = True
-                    vectors_year_dir = year_dir
-                    break
-
-        if not vectors_found:
-            logger.warning(f"[PIPELINE] ⚠️  Stage 4: No vectors found — no data available for requested years")
-            return True, None
-
-        # Verify supporting files
-        required_files = ["pixel_coords.npy", "metadata.json"]
-        missing_files = [f for f in required_files if not (vectors_year_dir / f).exists()]
-        if (not (vectors_year_dir / "all_embeddings.npy").exists() and
-            not (vectors_year_dir / "all_embeddings_uint8.npy.gz").exists()):
-            missing_files.append("all_embeddings{.npy,.uint8.npy.gz}")
-        if missing_files:
-            logger.warning(f"[PIPELINE] Stage 4 warning - Missing files: {missing_files}")
-
-        logger.info(f"[PIPELINE] ✓ Stage 4 complete: Vectors extracted")
-
-        # Cleanup: Delete GeoTIFF mosaics now that vectors have the embeddings
-        self.cleanup_mosaics(viewport_name)
-
-        return True, None
-
-    def cleanup_mosaics(self, viewport_name):
-        """Delete GeoTIFF mosaic files after vector extraction to save disk space.
-
-        After vectors are extracted, the following are no longer needed:
-        - {viewport}_embeddings_{year}.tif (~100-200MB each)
-        - {viewport}_rgb_{year}.tif (~50MB each)
-
-        The vectors directory contains all necessary data:
-        - all_embeddings.npy (128D vectors)
-        - pixel_coords.npy (x,y coordinates)
-        - metadata.json (geotransform for lat/lon conversion)
-        """
-        try:
-            deleted_files = []
-            total_saved_mb = 0
-
-            # Delete embedding mosaics
-            for mosaic_file in MOSAICS_DIR.glob(f"{viewport_name}_embeddings_*.tif"):
-                size_mb = mosaic_file.stat().st_size / (1024 * 1024)
-                mosaic_file.unlink()
-                deleted_files.append(mosaic_file.name)
-                total_saved_mb += size_mb
-                logger.info(f"[PIPELINE] Deleted mosaic: {mosaic_file.name} ({size_mb:.1f} MB)")
-
-            # Delete RGB mosaics (pattern: {viewport}_{year}_rgb.tif)
-            rgb_dir = MOSAICS_DIR / "rgb"
-            if rgb_dir.exists():
-                for rgb_file in rgb_dir.glob(f"{viewport_name}_*_rgb.tif"):
-                    size_mb = rgb_file.stat().st_size / (1024 * 1024)
-                    rgb_file.unlink()
-                    deleted_files.append(rgb_file.name)
-                    total_saved_mb += size_mb
-                    logger.info(f"[PIPELINE] Deleted RGB mosaic: {rgb_file.name} ({size_mb:.1f} MB)")
-
-            if deleted_files:
-                logger.info(f"[PIPELINE] ✓ Cleanup complete: Deleted {len(deleted_files)} files, saved {total_saved_mb:.1f} MB")
-            else:
-                logger.info(f"[PIPELINE] No mosaic files to clean up for '{viewport_name}'")
-
-        except Exception as e:
-            # Non-critical - log but don't fail pipeline
-            logger.warning(f"[PIPELINE] Cleanup warning: {e}")
-
-    def _cleanup_uncompressed_embeddings(self, viewport_name):
-        """Delete uncompressed all_embeddings.npy files now that UMAP is done.
-
-        The uint8 quantized version (all_embeddings_uint8.npy.gz) is kept for
-        serving to browsers. The uncompressed float32 file is only needed by
-        compute_umap.py during the pipeline.
-        """
-        vectors_dir = VECTORS_DIR / viewport_name
-        if not vectors_dir.exists():
-            return
-        for year_dir in sorted(vectors_dir.iterdir()):
-            if not year_dir.is_dir():
-                continue
-            npy = year_dir / "all_embeddings.npy"
-            if npy.exists() and (year_dir / "all_embeddings_uint8.npy.gz").exists():
-                size_mb = npy.stat().st_size / (1024 * 1024)
-                npy.unlink()
-                logger.info(f"[PIPELINE] Deleted uncompressed all_embeddings.npy for {year_dir.name} ({size_mb:.1f} MB)")
-            # Also remove legacy float32 .gz if present
-            legacy_gz = year_dir / "all_embeddings.npy.gz"
-            if legacy_gz.exists():
-                size_mb = legacy_gz.stat().st_size / (1024 * 1024)
-                legacy_gz.unlink()
-                logger.info(f"[PIPELINE] Deleted legacy all_embeddings.npy.gz for {year_dir.name} ({size_mb:.1f} MB)")
-
-    def stage_5_compute_umap(self, viewport_name, umap_year):
-        """Stage 5: Compute UMAP 2D projection (optional)."""
-        logger.info(f"[PIPELINE] STAGE 5/5: Computing UMAP for '{viewport_name}' (year: {umap_year})...")
-        logger.info(f"[PIPELINE]   $ python compute_umap.py {viewport_name} {umap_year}")
-
-        result = self.run_script('compute_umap.py', viewport_name, umap_year)
-
-        if result.returncode != 0:
-            # UMAP is optional - warn but don't fail
-            logger.warning(f"[PIPELINE] ⚠️  Stage 5 warning - UMAP computation failed (may need: pip install umap-learn)")
-            logger.warning(f"[PIPELINE]   Error: {result.stderr[:200]}")
+            # Satellite pyramids are not critical — warn but don't fail
+            logger.warning(f"[PIPELINE] Stage 2 warning - Satellite pyramid creation failed")
+            logger.warning(f"[PIPELINE]   Error: {result.stderr[:200] if result.stderr else '(no stderr)'}")
             return True, None  # Don't fail pipeline
 
-        # Verify UMAP coordinates file exists
-        umap_file = VECTORS_DIR / viewport_name / str(umap_year) / "umap_coords.npy"
-
-        if not self.wait_for_file(umap_file, min_size_bytes=100):
-            logger.warning(f"[PIPELINE] ⚠️  Stage 5 warning - UMAP file not found")
-            return True, None  # Don't fail pipeline
-
-        logger.info(f"[PIPELINE] ✓ Stage 5 complete: UMAP computed")
+        logger.info(f"[PIPELINE] Stage 2 complete: Satellite pyramids created")
         return True, None
 
-    def run_full_pipeline(self, viewport_name, years_str=None, compute_umap=True, umap_year=None, cancel_check=None):
+    def run_full_pipeline(self, viewport_name, years_str=None, cancel_check=None, **kwargs):
         """
-        Run complete pipeline in PARALLEL PER YEAR:
-        - Download multiple years in parallel (one script call with all years)
-        - As each year completes download, process RGB → Pyramids → Vectors per-year
-        - Compute UMAP from first completed year
+        Run complete 2-stage pipeline:
+        1. Process viewport: download + pyramids + vectors (per year)
+        2. Satellite pyramids
 
         Args:
             viewport_name: Name of viewport
             years_str: Comma-separated years (e.g., "2023,2024") or None for all available
-            compute_umap: Whether to compute UMAP (default: True)
-            umap_year: Which year to compute UMAP for (default: first to complete)
             cancel_check: Optional callable that returns True if pipeline should be cancelled
+            **kwargs: Accepted for backward compatibility
 
         Returns:
             (success: bool, error_message: str or None)
-
-        PIPELINE STAGES (Per-Year Parallel):
-        1. Download embeddings (all years in one call - downloads in parallel internally)
-        2. Create RGB (all years in one call - processes in parallel)
-        3. Create pyramids (all years in one call - processes in parallel)
-        4. Extract vectors (all years in one call - processes in parallel)
-        5. Compute UMAP (from first year to complete, if enabled)
-
-        KEY GUARANTEES:
-        - Viewer can switch as soon as ANY year has pyramids (Stage 3)
-        - Labeling available as soon as ANY year has vectors (Stage 4)
-        - UMAP available once computed (Stage 5)
         """
         logger.info(f"\n{'=' * 70}")
-        logger.info(f"🚀 PARALLEL PIPELINE START: {viewport_name}")
+        logger.info(f"PIPELINE START: {viewport_name}")
         logger.info(f"{'=' * 70}")
         logger.info(f"   Years: {years_str or 'all available'}")
-        logger.info(f"   Compute UMAP: {compute_umap}")
         logger.info(f"{'=' * 70}\n")
 
         # Register this pipeline for cancellation support
@@ -566,117 +355,48 @@ class PipelineRunner:
 
         # Helper to check cancellation (uses both callback and global registry)
         def check_cancelled():
-            # Check global cancellation registry
             if is_pipeline_cancelled(viewport_name):
-                logger.info(f"[PIPELINE] ❌ Cancelled by user (registry): {viewport_name}")
+                logger.info(f"[PIPELINE] Cancelled by user (registry): {viewport_name}")
                 self.progress.error("Cancelled by user")
                 return True
-            # Check callback
             if cancel_check and cancel_check():
-                logger.info(f"[PIPELINE] ❌ Cancelled by user (callback): {viewport_name}")
+                logger.info(f"[PIPELINE] Cancelled by user (callback): {viewport_name}")
                 self.progress.error("Cancelled by user")
                 return True
             return False
 
-        # Stage 1: Download embeddings (all years in parallel)
-        # This single call downloads all requested years in parallel
-        self.update_progress('download', 0, "Downloading embeddings...")
-        self._active_stage = ('download', viewport_name)
-        success, error = self.stage_1_download_embeddings(viewport_name, years_str or "")
+        # Stage 1: Process viewport (download + pyramids + vectors + UMAP)
+        self.update_progress('process', 0, "Processing viewport...")
+        self._active_stage = ('process', viewport_name)
+        success, error = self.stage_1_process_viewport(viewport_name, years_str or "")
         self._active_stage = None
         if not success:
-            self.progress.error(f"Download failed: {error}")
+            self.progress.error(f"Processing failed: {error}")
             return False, error
         if check_cancelled():
             return False, "Cancelled by user"
-        self.update_progress('download', 100, "Embeddings downloaded")
+        self.update_progress('process', 100, "Viewport processed")
 
-        # Stage 2: Create RGB (all years in parallel)
+        # Stage 2: Satellite pyramids
         if check_cancelled():
             return False, "Cancelled by user"
-        self.update_progress('rgb', 0, "Creating RGB visualizations...")
-        self._active_stage = ('rgb', viewport_name)
-        success, error = self.stage_2_create_rgb(viewport_name)
+        self.update_progress('satellite', 0, "Creating satellite pyramids...")
+        self._active_stage = ('satellite', viewport_name)
+        success, error = self.stage_2_satellite_pyramids(viewport_name)
         self._active_stage = None
-        if not success:
-            self.progress.error(f"RGB creation failed: {error}")
-            return False, error
-        if check_cancelled():
-            return False, "Cancelled by user"
-        self.update_progress('rgb', 100, "RGB created")
-
-        # Stage 3: Create pyramids (all years in parallel) - CRITICAL for viewer
-        # ✓ After this stage, viewer CAN SWITCH (pyramids available for at least one year)
-        if check_cancelled():
-            return False, "Cancelled by user"
-        self.update_progress('pyramids', 0, "Creating tile pyramids...")
-        self._active_stage = ('pyramids', viewport_name)
-        success, error = self.stage_3_create_pyramids(viewport_name)
-        self._active_stage = None
-        if not success:
-            self.progress.error(f"Pyramid creation failed: {error}")
-            return False, error
-        if check_cancelled():
-            return False, "Cancelled by user"
-        self.update_progress('pyramids', 100, "Pyramids created")
-
-        # Stage 4: Extract vectors (all years in parallel)
-        # ✓ After this stage, labeling controls BECOME AVAILABLE
-        if check_cancelled():
-            return False, "Cancelled by user"
-        self.update_progress('vectors', 0, "Extracting vectors...")
-        self._active_stage = ('vectors', viewport_name)
-        success, error = self.stage_4_extract_vectors(viewport_name)
-        self._active_stage = None
-        if not success:
-            self.progress.error(f"Vector extraction failed: {error}")
-            return False, error
-        if check_cancelled():
-            return False, "Cancelled by user"
-        self.update_progress('vectors', 100, "Vectors ready")
-
-        # Stage 5: Compute UMAP (optional)
-        # ✓ After this stage, UMAP visualization BECOMES AVAILABLE
-        if check_cancelled():
-            return False, "Cancelled by user"
-        if compute_umap:
-            effective_umap_year = umap_year
-            if not effective_umap_year and years_str:
-                effective_umap_year = years_str.split(',')[0].strip()
-            if not effective_umap_year:
-                # No year specified — pick the first year that has vector data
-                vectors_vp_dir = VECTORS_DIR / viewport_name
-                if vectors_vp_dir.exists():
-                    year_dirs = sorted(d.name for d in vectors_vp_dir.iterdir()
-                                       if d.is_dir() and ((d / 'all_embeddings.npy').exists() or (d / 'all_embeddings_uint8.npy.gz').exists()))
-                    if year_dirs:
-                        effective_umap_year = year_dirs[0]
-                        logger.info(f"[PIPELINE] Auto-selected year {effective_umap_year} for UMAP")
-            if effective_umap_year:
-                self.update_progress('umap', 0, "Computing UMAP projection...")
-                self._active_stage = ('umap', viewport_name)
-                success, error = self.stage_5_compute_umap(viewport_name, effective_umap_year)
-                self._active_stage = None
-                self.update_progress('umap', 100, "UMAP complete")
-            else:
-                logger.warning(f"[PIPELINE] ⚠️  Stage 5 skipped - no vector data found for UMAP")
-        else:
-            logger.info(f"[PIPELINE] Stage 5 skipped (compute_umap=False)")
+        self.update_progress('satellite', 100, "Satellite pyramids complete")
 
         if check_cancelled():
             return False, "Cancelled by user"
-
-        # Delete uncompressed all_embeddings.npy — .npy.gz exists for client downloads
-        self._cleanup_uncompressed_embeddings(viewport_name)
 
         logger.info(f"\n{'=' * 70}")
-        logger.info(f"✅ PARALLEL PIPELINE COMPLETE: {viewport_name}")
+        logger.info(f"PIPELINE COMPLETE: {viewport_name}")
         logger.info(f"{'=' * 70}\n")
 
         self.progress.complete(f"Pipeline complete for {viewport_name}")
 
         # Clean up per-stage progress files (subprocess temp files)
-        for stage in ('download', 'rgb', 'pyramids', 'vectors', 'umap'):
+        for stage in ('process', 'satellite'):
             stage_file = PROGRESS_DIR / f"{viewport_name}_{stage}_progress.json"
             try:
                 if stage_file.exists():

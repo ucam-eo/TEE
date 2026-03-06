@@ -29,18 +29,13 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Complete viewport setup: download embeddings → RGB → pyramids → vectors → UMAP'
+        description='Complete viewport setup: download embeddings → RGB → pyramids → vectors'
     )
     parser.add_argument(
         '--years',
         type=str,
         required=True,
         help='Comma-separated years (e.g., 2022,2023,2024)'
-    )
-    parser.add_argument(
-        '--umap-year',
-        type=str,
-        help='Year to compute UMAP from (default: last year in --years)'
     )
 
     args = parser.parse_args()
@@ -49,10 +44,6 @@ def main():
     years = [y.strip() for y in args.years.split(',')]
     logger.info(f"\n🎯 Viewport Setup Workflow")
     logger.info(f"   Years to download: {', '.join(years)}")
-
-    # Determine UMAP year
-    umap_year = args.umap_year if args.umap_year else years[-1]
-    logger.info(f"   UMAP year: {umap_year}")
 
     # Get active viewport
     try:
@@ -70,8 +61,6 @@ def main():
     success, error = runner.run_full_pipeline(
         viewport_name=viewport_name,
         years_str=args.years,
-        compute_umap=True,
-        umap_year=umap_year
     )
 
     if not success:
@@ -84,11 +73,9 @@ def main():
     logger.info(f"   Years downloaded: {args.years}")
     logger.info(f"   Pyramids: Created for web viewing")
     logger.info(f"   Vectors: Extracted for each year")
-    logger.info(f"   UMAP: Computed for {umap_year}")
     logger.info(f"\n🚀 Next steps:")
     logger.info(f"   1. Run: bash restart.sh")
-    logger.info(f"   2. Open: http://localhost:8001")
-    logger.info(f"   3. Panel 4 will show UMAP visualization\n")
+    logger.info(f"   2. Open: http://localhost:8001\n")
 
     return 0
 

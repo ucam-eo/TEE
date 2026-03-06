@@ -546,7 +546,7 @@
         <!-- Labels Details Panel - drops down below header -->
         <div id="labels-details-panel" style="position: fixed; bottom: 40px; right: 20px; width: 300px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-radius: 8px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 999; max-height: 450px; overflow-y: auto; font-size: 12px; display: none;">
             <div id="labels-panel-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; cursor: grab;">
-                <div style="font-weight: 600;">📋 Saved Labels</div>
+                <div style="font-weight: 600;">📋 Labels</div>
                 <button id="labels-close-btn" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px;">✕</button>
             </div>
             <div id="labels-list" style="max-height: 350px; overflow-y: auto;">
@@ -602,7 +602,7 @@
                 <span id="panel4-title">PCA (Embedding Space)</span>
                 <select id="dim-reduction-selector" style="padding: 2px 6px; border: 1px solid #666; border-radius: 3px; background: #333; color: #fff; font-size: 12px; cursor: pointer;">
                     <option value="pca" selected>PCA (fast)</option>
-                    <option value="umap">UMAP (slow)</option>
+                    <option value="umap">UMAP</option>
                 </select>
             </div>
             <div id="map-umap" class="map"><div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:16px;color:#999;">Waiting for vectors...</div></div>
@@ -648,10 +648,10 @@
                     </div>
                     <button id="panel6-promote-all-btn" style="margin: 8px; padding: 8px; background: #667eea; color: white; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 12px; display: none;">Promote All &#8594;</button>
                 </div>
-                <!-- Right: Saved Labels -->
+                <!-- Right: Labels -->
                 <div style="flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.95); border-radius: 4px; margin: 4px; overflow: hidden;">
                     <div style="padding: 6px 10px; font-weight: 600; color: #333; border-bottom: 1px solid #ddd; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
-                        <span>Saved Labels</span>
+                        <span>Labels</span>
                         <button id="panel6-toggle-all-btn" style="padding: 2px 8px; background: #e8f0ff; border: 1px solid #b0d4ff; border-radius: 3px; cursor: pointer; font-size: 11px; color: #0066cc; font-weight: 600; display: none;">Hide All</button>
                     </div>
                     <div id="panel6-labels-list" style="flex: 1; overflow-y: auto; padding: 8px 10px;">
@@ -808,7 +808,26 @@
         let explorerCanvasLayer2 = null;      // Explorer viz for Panel 6
 
         // Local vector data for client-side similarity search
-        let localVectors = null;  // {embeddings: Float32Array, coords: Int32Array, metadata: Object, pixelLookup: Map, numVectors: number, dim: number, viewport: string, year: string}
+        let localVectors = null;  // {embeddings: Float32Array, coords: Int32Array, metadata: Object, gridLookup: {minX,minY,w,h}, numVectors: number, dim: number, viewport: string, year: string}
+
+        // Grid-based pixel lookup: O(1) arithmetic instead of Map with string keys
+        function buildGridLookup(coordsData, numVectors) {
+            // Find grid bounds from first/last coords (regular meshgrid)
+            const minX = coordsData[0], minY = coordsData[1];
+            // Find gridWidth: count consecutive coords with same Y
+            let gridWidth = 1;
+            for (let i = 1; i < numVectors; i++) {
+                if (coordsData[i * 2 + 1] !== minY) break;
+                gridWidth++;
+            }
+            const gridHeight = numVectors / gridWidth;
+            return { minX, minY, w: gridWidth, h: gridHeight };
+        }
+        function gridLookupIndex(grid, px, py) {
+            const rx = px - grid.minX, ry = py - grid.minY;
+            if (rx < 0 || ry < 0 || rx >= grid.w || ry >= grid.h) return -1;
+            return ry * grid.w + rx;
+        }
 
         // ===== K-means segmentation state =====
         let segWorker = null;
@@ -958,7 +977,7 @@
             },
             {
                 id: 'panel4-umap',
-                test: (s) => s.has_umap && !s.umap_loaded && currentDimReduction === 'umap',
+                test: (s) => s.vectors_downloaded && !s.umap_loaded && currentDimReduction === 'umap',
                 onReady: async () => {
                     console.log('[DEP] panel4-umap: loading UMAP visualization');
                     await loadDimReduction('umap');
@@ -1268,15 +1287,12 @@
                 if (cacheValid) {
                     console.log(`[VECTORS] Cache hit for ${viewport}/${year}`);
                     const numVectors = cached.embeddings.length / 128;
-                    const pixelLookup = new Map();
-                    for (let i = 0; i < numVectors; i++) {
-                        pixelLookup.set(`${cached.coords[i * 2]},${cached.coords[i * 2 + 1]}`, i);
-                    }
+                    const grid = buildGridLookup(cached.coords, numVectors);
                     localVectors = {
                         embeddings: cached.embeddings,
                         coords: cached.coords,
                         metadata: cached.metadata,
-                        pixelLookup,
+                        gridLookup: grid,
                         numVectors,
                         dim: 128,
                         viewport,
@@ -1398,20 +1414,27 @@
                     const N = embParsed.shape[0];
                     embeddingsData = new Float32Array(N * embDim);
                     if (quantParams) {
-                        // Dequantize using per-dimension min/max
-                        const dimMin = quantParams.dim_min;
-                        const dimMax = quantParams.dim_max;
-                        status.textContent = 'Dequantizing embeddings...';
+                        // Pre-compute per-dimension scale/offset for row-major dequant
+                        const scales = new Float32Array(embDim);
+                        const mins = new Float32Array(embDim);
                         for (let d = 0; d < embDim; d++) {
-                            const scale = (dimMax[d] - dimMin[d]) / 255.0;
-                            const minVal = dimMin[d];
-                            if (embParsed.fortranOrder) {
-                                for (let i = 0; i < N; i++) {
-                                    embeddingsData[i * embDim + d] = raw[d * N + i] * scale + minVal;
+                            scales[d] = (quantParams.dim_max[d] - quantParams.dim_min[d]) / 255.0;
+                            mins[d] = quantParams.dim_min[d];
+                        }
+                        status.textContent = 'Dequantizing embeddings...';
+                        if (embParsed.fortranOrder) {
+                            for (let i = 0; i < N; i++) {
+                                const outBase = i * embDim;
+                                for (let d = 0; d < embDim; d++) {
+                                    embeddingsData[outBase + d] = raw[d * N + i] * scales[d] + mins[d];
                                 }
-                            } else {
-                                for (let i = 0; i < N; i++) {
-                                    embeddingsData[i * embDim + d] = raw[i * embDim + d] * scale + minVal;
+                            }
+                        } else {
+                            // Row-major: sequential reads and writes for cache efficiency
+                            for (let i = 0; i < N; i++) {
+                                const base = i * embDim;
+                                for (let d = 0; d < embDim; d++) {
+                                    embeddingsData[base + d] = raw[base + d] * scales[d] + mins[d];
                                 }
                             }
                         }
@@ -1461,12 +1484,10 @@
                     throw new Error(`Embeddings for ${year} are all zeros`);
                 }
 
-                const pixelLookup = new Map();
-                for (let i = 0; i < numVectors; i++) {
-                    pixelLookup.set(`${coordsData[i * 2]},${coordsData[i * 2 + 1]}`, i);
-                }
+                // Grid lookup: O(1) arithmetic, no Map needed
+                const grid = buildGridLookup(coordsData, numVectors);
 
-                // Store in IndexedDB (without pixelLookup — rebuilt on load)
+                // Store in IndexedDB (grid rebuilt on load from coords)
                 await VectorCache.put(viewport, year, {
                     embeddings: embeddingsData,
                     coords: coordsData,
@@ -1481,7 +1502,7 @@
                     embeddings: embeddingsData,
                     coords: coordsData,
                     metadata,
-                    pixelLookup,
+                    gridLookup: grid,
                     numVectors,
                     dim: 128,
                     viewport,
@@ -1505,21 +1526,22 @@
         function localExtract(lat, lon) {
             if (!localVectors) return null;
             const gt = localVectors.metadata.geotransform;
+            const grid = localVectors.gridLookup;
             // Affine transform: c=originX, a=pixelWidth, f=originY, e=pixelHeight(negative)
             const px = Math.trunc((lon - gt.c) / gt.a);
             const py = Math.trunc((lat - gt.f) / gt.e);
 
             // Try exact match first
-            let idx = localVectors.pixelLookup.get(`${px},${py}`);
+            let idx = gridLookupIndex(grid, px, py);
             // Try 8-neighborhood if not found
-            if (idx === undefined) {
+            if (idx < 0) {
                 const offsets = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
                 for (const [dx, dy] of offsets) {
-                    idx = localVectors.pixelLookup.get(`${px+dx},${py+dy}`);
-                    if (idx !== undefined) break;
+                    idx = gridLookupIndex(grid, px + dx, py + dy);
+                    if (idx >= 0) break;
                 }
             }
-            if (idx === undefined) return null;
+            if (idx < 0) return null;
 
             // Return 128-dim embedding slice
             return localVectors.embeddings.slice(idx * 128, (idx + 1) * 128);
@@ -1610,22 +1632,20 @@
             const gt = data.metadata.geotransform;
             const px = Math.trunc((lon - gt.c) / gt.a);
             const py = Math.trunc((lat - gt.f) / gt.e);
-            const N = data.numVectors;
-            const coords = data.coords;
-            let neighborIdx = -1;
-            for (let i = 0; i < N; i++) {
-                const cx = coords[i * 2], cy = coords[i * 2 + 1];
-                if (cx === px && cy === py) {
-                    return data.embeddings.slice(i * 128, (i + 1) * 128);
-                }
-                if (neighborIdx === -1 && Math.abs(cx - px) <= 1 && Math.abs(cy - py) <= 1) {
-                    neighborIdx = i;
+            // Build grid on demand if not cached on this data object
+            if (!data.gridLookup) {
+                data.gridLookup = buildGridLookup(data.coords, data.numVectors);
+            }
+            let idx = gridLookupIndex(data.gridLookup, px, py);
+            if (idx < 0) {
+                const offsets = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
+                for (const [dx, dy] of offsets) {
+                    idx = gridLookupIndex(data.gridLookup, px + dx, py + dy);
+                    if (idx >= 0) break;
                 }
             }
-            if (neighborIdx !== -1) {
-                return data.embeddings.slice(neighborIdx * 128, (neighborIdx + 1) * 128);
-            }
-            return null;
+            if (idx < 0) return null;
+            return data.embeddings.slice(idx * 128, (idx + 1) * 128);
         }
 
         function getAvailableYears() {
@@ -2016,6 +2036,7 @@
             viewportStatus.vectors_downloaded = false;
             viewportStatus.pca_loaded = false;
             viewportStatus.umap_loaded = false;
+            if (umapWorker) { umapWorker.terminate(); umapWorker = null; }
 
             // Always reload vector data for the new year (needed for similarity search)
             if (localVectors && localVectors.year !== String(year)) {
@@ -2404,8 +2425,8 @@
             // --- Highlight matching seg cluster ---
             const segContainer = document.getElementById('panel6-seg-list');
             if (segContainer && segAssignments && segVectors) {
-                const idx = segVectors.pixelLookup ? segVectors.pixelLookup.get(`${px},${py}`) : undefined;
-                const clusterId = idx !== undefined ? segAssignments[idx] : -1;
+                const idx = segVectors.gridLookup ? gridLookupIndex(segVectors.gridLookup, px, py) : -1;
+                const clusterId = idx >= 0 ? segAssignments[idx] : -1;
 
                 segContainer.querySelectorAll('.seg-cluster-row').forEach(el => {
                     el.style.outline = '';
@@ -3768,6 +3789,55 @@
         `], {type: 'application/javascript'});
         const segWorkerURL = URL.createObjectURL(segWorkerBlob);
 
+        // Inline Web Worker for UMAP (uses umap-js library)
+        let umapWorker = null;
+        let umapWorkerURL = null;
+
+        async function getUmapWorkerURL() {
+            if (umapWorkerURL) return umapWorkerURL;
+            // Fetch the umap-js library source and prepend it to worker code
+            const resp = await fetch('/lib/umap-js.min.js');
+            const umapLib = await resp.text();
+            const workerCode = umapLib + `\n;
+            self.onmessage = function(e) {
+                const {n, dim, nComponents} = e.data;
+                const embeddings = new Float32Array(e.data.embeddings);
+
+                // Reshape flat array into 2D array for UMAP
+                const data = [];
+                for (let i = 0; i < n; i++) {
+                    data.push(Array.from(embeddings.subarray(i * dim, (i + 1) * dim)));
+                }
+
+                try {
+                    const umap = new UMAP.UMAP({
+                        nNeighbors: 15,
+                        minDist: 0.1,
+                        nComponents: nComponents || 3,
+                        nEpochs: 200
+                    });
+                    const result = umap.fit(data);
+
+                    // Flatten result back to Float32Array
+                    const nc = nComponents || 3;
+                    const flat = new Float32Array(n * nc);
+                    for (let i = 0; i < n; i++) {
+                        for (let j = 0; j < nc; j++) {
+                            flat[i * nc + j] = result[i][j];
+                        }
+                    }
+                    self.postMessage({coords: flat.buffer}, [flat.buffer]);
+                } catch (err) {
+                    self.postMessage({error: err.message || String(err)});
+                }
+            };`;
+            const blob = new Blob([workerCode], {type: 'application/javascript'});
+            umapWorkerURL = URL.createObjectURL(blob);
+            return umapWorkerURL;
+        }
+
+        const MAX_UMAP_POINTS = 5000;
+
         async function runKMeans() {
             if (!localVectors || segRunning) return;
             segRunning = true;
@@ -4059,7 +4129,13 @@
                 pixels,
                 pixel_count: pixels.length,
                 created: new Date().toISOString(),
-                visible: true
+                visible: true,
+                _clusterInfo: {
+                    id: cluster.id, color: cluster.color, hex: cluster.hex,
+                    count: cluster.count, threshold: cluster.threshold,
+                    sourcePixel: cluster.sourcePixel, embedding: cluster.embedding,
+                    centroid: cluster.centroid
+                }
             };
 
             savedLabels.push(label);
@@ -4231,64 +4307,86 @@
                     points = computePCAFromLocal(localVectors);
                     console.log(`[PCA] Computed in ${((performance.now() - t0) / 1000).toFixed(2)}s`);
                 } else {
-                    // UMAP: use existing server-side flow
-                    console.log(`[${methodUpper}] Checking status for ${currentViewportName}/${currentEmbeddingYear}...`);
+                    // UMAP: compute client-side in Web Worker
+                    const umapContainer = document.getElementById('map-umap');
 
-                    let statusResp = await fetch(`/api/viewports/${currentViewportName}/${dimMethod}-status`);
-                    let status = await statusResp.json();
+                    // Ensure vectors are downloaded first
+                    if (!localVectors || localVectors.viewport !== currentViewportName || localVectors.year !== String(currentEmbeddingYear)) {
+                        umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">Downloading vectors...</div>`;
+                        await downloadVectorData(currentViewportName, currentEmbeddingYear);
+                        viewportStatus.vectors_downloaded = true;
+                    }
 
-                    if (status.waiting) {
-                        console.log(`[${methodUpper}] Waiting for embeddings (vector extraction in progress)...`);
-                        const umapContainer = document.getElementById('map-umap');
-                        umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">⏳ ${status.message || 'Waiting for data...'}</div>`;
+                    umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">Computing UMAP in browser...</div>`;
+                    await new Promise(resolve => setTimeout(resolve, 50));
 
-                        while (status.waiting) {
-                            await new Promise(resolve => setTimeout(resolve, 2000));
-                            statusResp = await fetch(`/api/viewports/${currentViewportName}/${dimMethod}-status`);
-                            status = await statusResp.json();
+                    const N = localVectors.numVectors;
+                    const dim = localVectors.dim;
+                    const gt = localVectors.metadata.geotransform;
+                    const emb = localVectors.embeddings;
+                    const coords = localVectors.coords;
+                    const nComponents = 3;
+
+                    // Subsample if too many points
+                    let subN, subEmb, subCoords;
+                    if (N > MAX_UMAP_POINTS) {
+                        const stride = Math.ceil(N / MAX_UMAP_POINTS);
+                        subN = Math.floor(N / stride);
+                        subEmb = new Float32Array(subN * dim);
+                        subCoords = new Int32Array(subN * 2);
+                        for (let i = 0, si = 0; si < subN; i += stride, si++) {
+                            subEmb.set(emb.subarray(i * dim, (i + 1) * dim), si * dim);
+                            subCoords[si * 2] = coords[i * 2];
+                            subCoords[si * 2 + 1] = coords[i * 2 + 1];
                         }
-                        console.log(`[${methodUpper}] Embeddings ready, proceeding...`);
-                    }
-
-                    if (status.computing || !status.exists) {
-                        const waitMsg = 'Computing UMAP (this may take a few minutes)...';
-                        console.log(`[${methodUpper}] ${status.computing ? 'Already computing' : 'Starting computation'}... (operation: ${status.operation_id})`);
-
-                        const umapContainer = document.getElementById('map-umap');
-                        umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">⏳ ${waitMsg}</div>`;
-
-                        await waitForDimReduction(status.operation_id, dimMethod);
-                        console.log(`[${methodUpper}] Computation complete`);
-                    }
-
-                    console.log(`[${methodUpper}] Loading coordinates...`);
-                    const response = await fetch(`/api/viewports/${currentViewportName}/compute-${dimMethod}`, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({})
-                    });
-
-                    let data = await response.json();
-
-                    if (data.computing && data.operation_id) {
-                        console.log(`[${methodUpper}] Computation triggered on-demand, waiting...`);
-                        const umapContainer = document.getElementById('map-umap');
-                        umapContainer.innerHTML = `<div id="umap-progress" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:18px;color:#666;">⏳ Computing ${methodUpper}...</div>`;
-                        await waitForDimReduction(data.operation_id, dimMethod);
-                        const retryResp = await fetch(`/api/viewports/${currentViewportName}/compute-${dimMethod}`, {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({})
-                        });
-                        data = await retryResp.json();
-                    }
-
-                    if (data.success) {
-                        points = data.points;
+                        console.log(`[UMAP] Subsampled ${N} -> ${subN} points (stride ${stride})`);
                     } else {
-                        console.error(`[${methodUpper}] Error: ${data.error}`);
-                        const umapContainer = document.getElementById('map-umap');
-                        umapContainer.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:16px;color:#e74c3c;">Error: ${data.error}</div>`;
+                        subN = N;
+                        subEmb = emb.slice(0);
+                        subCoords = coords;
+                    }
+
+                    try {
+                        const workerURL = await getUmapWorkerURL();
+                        if (umapWorker) umapWorker.terminate();
+                        umapWorker = new Worker(workerURL);
+
+                        const t0 = performance.now();
+                        points = await new Promise((resolve, reject) => {
+                            umapWorker.onmessage = (e) => {
+                                if (e.data.error) {
+                                    reject(new Error(e.data.error));
+                                    return;
+                                }
+                                const flat = new Float32Array(e.data.coords);
+                                const pts = new Array(subN);
+                                for (let i = 0; i < subN; i++) {
+                                    const px = subCoords[i * 2];
+                                    const py = subCoords[i * 2 + 1];
+                                    pts[i] = {
+                                        lat: gt.f + gt.d * px + gt.e * py,
+                                        lon: gt.c + gt.a * px + gt.b * py,
+                                        x: flat[i * nComponents],
+                                        y: flat[i * nComponents + 1],
+                                        z: flat[i * nComponents + 2]
+                                    };
+                                }
+                                resolve(pts);
+                            };
+                            umapWorker.onerror = (err) => {
+                                reject(new Error(err.message || 'UMAP worker error'));
+                            };
+                            umapWorker.postMessage({
+                                embeddings: subEmb.buffer,
+                                n: subN,
+                                dim: dim,
+                                nComponents: nComponents
+                            }, [subEmb.buffer]);
+                        });
+                        console.log(`[UMAP] Computed ${subN} points in ${((performance.now() - t0) / 1000).toFixed(1)}s`);
+                    } catch (err) {
+                        console.error('[UMAP] Worker error:', err);
+                        umapContainer.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:16px;color:#e74c3c;">Error: ${err.message}</div>`;
                         return;
                     }
                 }
@@ -4329,40 +4427,6 @@
         // Backward-compatible alias
         async function loadUMAP() {
             await loadDimReduction(currentDimReduction);
-        }
-
-        // Poll for dimensionality reduction completion with progress updates
-        async function waitForDimReduction(operationId, method = 'umap') {
-            const methodUpper = method.toUpperCase();
-            return new Promise(resolve => {
-                const poll = async () => {
-                    try {
-                        const resp = await fetch(`/api/operations/progress/${operationId}`);
-                        const prog = await resp.json();
-
-                        // Update progress display
-                        const progressDiv = document.getElementById('umap-progress');
-                        if (progressDiv && prog.percent !== undefined) {
-                            const message = prog.message || `Computing ${methodUpper}`;
-                            progressDiv.textContent = `⏳ ${message} (${prog.percent}%)`;
-                        }
-
-                        if (prog.status === 'complete' || prog.status === 'error') {
-                            resolve();
-                        } else {
-                            setTimeout(poll, 500);  // Poll faster for PCA (it's quick)
-                        }
-                    } catch (e) {
-                        setTimeout(poll, 1000);
-                    }
-                };
-                poll();
-            });
-        }
-
-        // Backward-compatible alias
-        async function waitForUMAP(operationId) {
-            return waitForDimReduction(operationId, 'umap');
         }
 
         // Load distance heatmap for Panel 5 (client-side computation)
@@ -4642,7 +4706,7 @@
         // Persist labels to localStorage (metadata only, no pixel arrays)
         function persistLabels() {
             const toStore = savedLabels.map(l => {
-                const {pixels, visible, ...meta} = l;
+                const {pixels, visible, _clusterInfo, ...meta} = l;
                 return meta;
             });
             localStorage.setItem('tee_labels_' + currentViewportName, JSON.stringify(toStore));
@@ -4979,6 +5043,10 @@
             const members = savedLabels.filter(l => l.name === name);
             if (!confirm(`Delete "${name}" (${members.length} marker${members.length > 1 ? 's' : ''})?`)) return;
             const ids = new Set(members.map(l => l.id));
+
+            // Collect cluster info from promoted labels before removing them
+            const restorable = members.filter(l => l._clusterInfo && segAssignments);
+
             savedLabels = savedLabels.filter(l => !ids.has(l.id));
             labelsExportedSinceChange = false;
             persistentLabelMarkers = persistentLabelMarkers.filter(entry => {
@@ -4991,6 +5059,25 @@
                 return true;
             });
             persistLabels();
+
+            // Restore promoted clusters back to temporary seg list
+            if (restorable.length > 0) {
+                for (const label of restorable) {
+                    const ci = label._clusterInfo;
+                    // Only restore if this cluster id isn't already in segLabels
+                    if (!segLabels.some(c => c.id === ci.id)) {
+                        segLabels.push({
+                            id: ci.id, color: ci.color, hex: ci.hex,
+                            name: label.name, count: ci.count,
+                            threshold: ci.threshold, sourcePixel: ci.sourcePixel,
+                            embedding: ci.embedding, centroid: ci.centroid
+                        });
+                    }
+                }
+                showSegmentationPanel();
+                showSegmentationOverlay();
+            }
+
             updateLabelsUI();
             updateOverlay();
             console.log(`✓ Deleted label group: ${name} (${ids.size} markers)`);
@@ -5015,7 +5102,7 @@
                 viewport: currentViewportName,
                 year: currentEmbeddingYear,
                 labels: savedLabels.map(l => {
-                    const {pixels, visible, ...meta} = l;
+                    const {pixels, visible, _clusterInfo, ...meta} = l;
                     if (hideLocations) {
                         delete meta.source_pixel;
                     }

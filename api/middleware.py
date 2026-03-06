@@ -132,8 +132,6 @@ def _is_write_endpoint(path):
         return True
     if path.startswith('/api/viewports/') and path.endswith('/add-years'):
         return True
-    if path.startswith('/api/viewports/') and path.endswith('/compute-umap'):
-        return True
     return False
 
 

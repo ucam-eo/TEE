@@ -565,13 +565,8 @@ def is_ready(request, viewport_name):
                         has_pyramids = True
                         years_available.append(year_dir.name)
 
-        # Check UMAP — only for requested years
-        has_umap = False
-        if vectors_dir.exists():
-            for year_dir in vectors_dir.glob("*"):
-                if year_dir.is_dir() and _year_matches(year_dir.name) and (year_dir / 'umap_coords.npy').exists():
-                    has_umap = True
-                    break
+        # UMAP is computed client-side from vectors
+        has_umap = has_vectors
 
         is_ready_flag = has_pyramids
         missing_years = sorted(set(years_requested) - set(years_available))
