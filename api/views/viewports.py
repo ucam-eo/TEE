@@ -16,7 +16,7 @@ from lib.viewport_utils import (
 from lib.viewport_writer import set_active_viewport, clear_active_viewport, create_viewport_from_bounds
 from lib.pipeline import cancel_pipeline
 from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, VIEWPORTS_DIR, PROGRESS_DIR
-from lib.config import VECTORS_DIR
+from lib.config import VECTORS_DIR, pyramid_exists
 from api.helpers import (
     MIN_YEAR,
     MAX_YEAR,
@@ -41,7 +41,7 @@ def _get_pyramid_years(viewport_name):
     viewport_pyramids_dir = PYRAMIDS_DIR / viewport_name
     if viewport_pyramids_dir.exists():
         for year in range(MIN_YEAR, MAX_YEAR + 1):
-            if (viewport_pyramids_dir / str(year) / "level_0.tif").exists():
+            if pyramid_exists(viewport_pyramids_dir / str(year)):
                 years.append(year)
     return sorted(years, reverse=True)
 
@@ -561,7 +561,7 @@ def is_ready(request, viewport_name):
         if pyramid_dir.exists():
             for year_dir in pyramid_dir.glob("*"):
                 if year_dir.is_dir() and year_dir.name not in ['satellite', 'rgb']:
-                    if _year_matches(year_dir.name) and (year_dir / "level_0.tif").exists():
+                    if _year_matches(year_dir.name) and pyramid_exists(year_dir):
                         has_pyramids = True
                         years_available.append(year_dir.name)
 

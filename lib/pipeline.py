@@ -15,7 +15,7 @@ from pathlib import Path
 import time
 
 from lib.progress_tracker import ProgressTracker
-from lib.config import PYRAMIDS_DIR, VECTORS_DIR, PROGRESS_DIR
+from lib.config import PYRAMIDS_DIR, VECTORS_DIR, PROGRESS_DIR, pyramid_exists
 
 logger = logging.getLogger(__name__)
 
@@ -292,7 +292,7 @@ class PipelineRunner:
         if pyramids_dir.exists():
             for year_dir in pyramids_dir.iterdir():
                 if year_dir.is_dir() and year_dir.name != 'satellite':
-                    if (year_dir / 'level_0.tif').exists():
+                    if pyramid_exists(year_dir):
                         has_pyramids = True
                         break
         if vectors_dir.exists():

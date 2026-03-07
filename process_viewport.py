@@ -31,9 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 try:
     import numpy as np
-    import rasterio
-    from rasterio.enums import Resampling
-    from scipy.ndimage import zoom
+    from affine import Affine
     import geotessera as gt
 except ImportError as e:
     print(f"IMPORT ERROR: {e}", file=sys.stderr)
@@ -43,7 +41,7 @@ except ImportError as e:
 try:
     from lib.viewport_utils import get_active_viewport
     from lib.progress_tracker import ProgressTracker
-    from lib.config import DATA_DIR, EMBEDDINGS_DIR, PYRAMIDS_DIR, VECTORS_DIR
+    from lib.config import DATA_DIR, EMBEDDINGS_DIR, PYRAMIDS_DIR, VECTORS_DIR, pyramid_exists
 except ImportError as e:
     print(f"LIB IMPORT ERROR: {e}", file=sys.stderr)
     traceback.print_exc(file=sys.stderr)
@@ -54,7 +52,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_YEARS = range(2017, 2026)
 EMBEDDING_DIM = 128
 NUM_ZOOM_LEVELS = 6
-TARGET_BASE = 4408
 
 
 # ---------- Pyramid helpers (ported from create_pyramids.py) ----------
@@ -78,85 +75,70 @@ def percentile_normalize(band_data):
     return ((clipped - p2) / (p98 - p2) * 255).astype(np.uint8)
 
 
-def create_pyramid_level(input_file, output_file, scale_factor, target_width, target_height):
-    """Create a single pyramid level: 2x downsample then upscale to target dims."""
-    with rasterio.open(input_file) as src:
-        intermediate_height = max(1, int(src.height / 2))
-        intermediate_width = max(1, int(src.width / 2))
-
-        downsampled = src.read(
-            out_shape=(src.count, intermediate_height, intermediate_width),
-            resampling=Resampling.nearest
-        )
-
-        scale_y = target_height / downsampled.shape[1]
-        scale_x = target_width / downsampled.shape[2]
-        final_data = zoom(downsampled, (1, scale_y, scale_x), order=0)
-
-        transform = src.transform * src.transform.scale(
-            (src.width / intermediate_width) * (intermediate_width / target_width),
-            (src.height / intermediate_height) * (intermediate_height / target_height)
-        )
-
-        profile = src.profile.copy()
-        profile.update({
-            'height': target_height,
-            'width': target_width,
-            'transform': transform
-        })
-
-        with rasterio.open(output_file, 'w', **profile) as dst:
-            dst.write(final_data)
-
-    spatial_scale = 10 * (2 ** scale_factor)
-    size_kb = output_file.stat().st_size / 1024
-    print(f"    Level {scale_factor}: {target_width}x{target_height} @ {spatial_scale}m/pixel ({size_kb:.1f} KB)")
-
-
-def write_pyramid_levels(rgb_upscaled, up_transform, crs, output_dir):
-    """Write level_0 from in-memory array, then create downsampled levels.
+def write_pyramid_levels(rgb, transform, crs, output_dir):
+    """Write PNG pyramid levels + pyramid_meta.json.
 
     Args:
-        rgb_upscaled: (3, H, W) uint8 array (already 3x upscaled)
-        up_transform: Affine transform for the upscaled image
+        rgb: (3, H, W) uint8 array (native resolution, no upscale)
+        transform: Affine transform for the image
         crs: CRS string
         output_dir: Path to year-specific pyramids directory
     """
+    from PIL import Image as PILImage
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Level 0: write full-resolution upscaled image
-    level_0 = output_dir / "level_0.tif"
-    _, source_height, source_width = rgb_upscaled.shape
-    profile = {
-        'driver': 'GTiff',
-        'dtype': 'uint8',
-        'count': 3,
-        'height': source_height,
-        'width': source_width,
-        'crs': crs,
-        'transform': up_transform,
-        'compress': 'lzw',
-    }
-    with rasterio.open(level_0, 'w', **profile) as dst:
-        dst.write(rgb_upscaled)
+    _, source_height, source_width = rgb.shape
 
-    size_kb = level_0.stat().st_size / 1024
+    # Level 0: write full-resolution PNG
+    level_0_path = output_dir / "level_0.png"
+    img_0 = PILImage.fromarray(np.transpose(rgb, (1, 2, 0)), mode='RGB')
+    img_0.save(level_0_path, format='PNG')
+
+    size_kb = level_0_path.stat().st_size / 1024
     print(f"    Level 0: {source_width}x{source_height} @ 10m/pixel ({size_kb:.1f} KB)")
 
-    # Calculate rectangular target dims
-    if source_width >= source_height:
-        target_width = TARGET_BASE
-        target_height = int(TARGET_BASE * source_height / source_width)
-    else:
-        target_height = TARGET_BASE
-        target_width = int(TARGET_BASE * source_width / source_height)
+    def _transform_dict(t):
+        return {"a": t.a, "b": t.b, "c": t.c, "d": t.d, "e": t.e, "f": t.f}
 
-    # Downsample levels
-    prev_level = level_0
+    meta = {
+        "crs": str(crs),
+        "levels": [{
+            "file": "level_0.png",
+            "width": source_width,
+            "height": source_height,
+            "transform": _transform_dict(transform),
+        }],
+    }
+
+    # Create downsampled levels 1-5 (halve dimensions each level)
     for level in range(1, NUM_ZOOM_LEVELS):
-        level_file = output_dir / f"level_{level}.tif"
-        create_pyramid_level(prev_level, level_file, level, target_width, target_height)
-        prev_level = level_file
+        lw = max(1, source_width >> level)
+        lh = max(1, source_height >> level)
+
+        level_img = img_0.resize((lw, lh), PILImage.NEAREST)
+        level_path = output_dir / f"level_{level}.png"
+        level_img.save(level_path, format='PNG')
+
+        # Transform: scale pixel size to match reduced resolution
+        level_transform = transform * Affine.scale(
+            source_width / lw, source_height / lh
+        )
+
+        meta["levels"].append({
+            "file": f"level_{level}.png",
+            "width": lw,
+            "height": lh,
+            "transform": _transform_dict(level_transform),
+        })
+
+        spatial_scale = 10 * (2 ** level)
+        size_kb = level_path.stat().st_size / 1024
+        print(f"    Level {level}: {lw}x{lh} @ {spatial_scale}m/pixel ({size_kb:.1f} KB)")
+
+    # Write metadata
+    with open(output_dir / "pyramid_meta.json", 'w') as f:
+        json.dump(meta, f, indent=2)
 
     print(f"  Created {NUM_ZOOM_LEVELS} pyramid levels in {output_dir}")
 
@@ -255,7 +237,7 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
     year_vectors_dir = vectors_dir / str(year)
 
     # Skip check: pyramids AND vectors must both exist
-    pyramids_ok = (year_pyramids_dir / 'level_0.tif').exists()
+    pyramids_ok = pyramid_exists(year_pyramids_dir)
     vectors_ok = (year_vectors_dir / 'all_embeddings_uint8.npy.gz').exists()
     if pyramids_ok and vectors_ok:
         print(f"  [{year}] Already processed (pyramids + vectors exist), skipping")
@@ -328,6 +310,17 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
     elapsed = _time.monotonic() - t0
     print(f"  [{year}] Fetched {width}x{height} mosaic ({elapsed:.1f}s)")
 
+    # Crop mosaic to exact viewport bounds (grid tiles may extend beyond ROI)
+    col_start = max(0, int(np.floor((bounds[0] - transform.c) / transform.a)))
+    col_end = min(width, int(np.ceil((bounds[2] - transform.c) / transform.a)))
+    row_start = max(0, int(np.floor((bounds[3] - transform.f) / transform.e)))
+    row_end = min(height, int(np.ceil((bounds[1] - transform.f) / transform.e)))
+    if col_start > 0 or row_start > 0 or col_end < width or row_end < height:
+        mosaic = mosaic[row_start:row_end, col_start:col_end, :]
+        transform = transform * Affine.translation(col_start, row_start)
+        height, width = mosaic.shape[:2]
+        print(f"  [{year}] Cropped to viewport: {width}x{height}")
+
     # --- PYRAMIDS (bands 0-2 -> RGB) ---
     if not pyramids_ok:
         _progress(60, f"[{year}] Creating pyramids...")
@@ -338,12 +331,8 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
             percentile_normalize(mosaic[:, :, 2]),
         ], axis=0)  # (3, H, W) uint8
 
-        # Upscale 3x for crisp pixel boundaries
-        rgb_upscaled = np.repeat(np.repeat(rgb, 3, axis=1), 3, axis=2)
-        up_transform = transform * transform.scale(1/3, 1/3)
-
-        write_pyramid_levels(rgb_upscaled, up_transform, crs, year_pyramids_dir)
-        del rgb, rgb_upscaled
+        write_pyramid_levels(rgb, transform, crs, year_pyramids_dir)
+        del rgb
     else:
         print(f"  [{year}] Pyramids already exist, skipping")
 
@@ -437,7 +426,7 @@ def main():
     # Filter to years that need processing
     years_to_process = []
     for year in years:
-        pyramids_ok = (pyramids_dir / str(year) / 'level_0.tif').exists()
+        pyramids_ok = pyramid_exists(pyramids_dir / str(year))
         vectors_ok = (vectors_dir / str(year) / 'all_embeddings_uint8.npy.gz').exists()
         if pyramids_ok and vectors_ok:
             print(f"  [{year}] Already complete, skipping")

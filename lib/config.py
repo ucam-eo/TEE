@@ -23,6 +23,11 @@ APP_DIR = Path(os.environ.get('TEE_APP_DIR', Path(__file__).resolve().parent.par
 VIEWPORTS_DIR = APP_DIR / 'viewports'
 
 
+def pyramid_exists(year_dir):
+    """Check if pyramid level_0 exists in either PNG or GeoTIFF format."""
+    return (year_dir / 'level_0.png').exists() or (year_dir / 'level_0.tif').exists()
+
+
 def ensure_dirs():
     """Create all required directories if they don't exist."""
     for d in [DATA_DIR, MOSAICS_DIR, PYRAMIDS_DIR, VECTORS_DIR, EMBEDDINGS_DIR, PROGRESS_DIR, VIEWPORTS_DIR]:

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from django.http import JsonResponse
 
-from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, VECTORS_DIR, EMBEDDINGS_DIR, VIEWPORTS_DIR
+from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, VECTORS_DIR, EMBEDDINGS_DIR, VIEWPORTS_DIR, pyramid_exists
 from lib.viewport_utils import list_viewports, read_viewport_file
 
 logger = logging.getLogger(__name__)
@@ -169,8 +169,7 @@ def check_viewport_pyramids_exist(viewport_name):
         return False
     for year_dir in viewport_pyramids_dir.glob("*"):
         if year_dir.is_dir() and year_dir.name not in ['satellite', 'rgb']:
-            level_0_file = year_dir / "level_0.tif"
-            if level_0_file.exists():
+            if pyramid_exists(year_dir):
                 return True
     return False
 
