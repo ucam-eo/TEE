@@ -1254,6 +1254,11 @@
         }
 
         async function downloadVectorData(viewport, year) {
+            // Skip if already loaded in memory for this viewport/year
+            if (localVectors && localVectors.viewport === viewport && localVectors.year === String(year)) {
+                return localVectors;
+            }
+
             // Fetch metadata first (small, needed for cache validation)
             const metaResp0 = await fetch(`/api/vector-data/${viewport}/${year}/metadata.json`);
             const serverMetadata = metaResp0.ok ? await metaResp0.json() : null;
