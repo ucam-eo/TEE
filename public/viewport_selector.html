@@ -2055,40 +2055,35 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             });
         }
 
-        // Switch to viewport (retries once on transient network failure)
+        // Switch to viewport
         async function switchViewport(name) {
-            for (let attempt = 0; attempt < 2; attempt++) {
-                try {
-                    const response = await fetch('/api/viewports/switch', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name })
-                    });
+            try {
+                const response = await fetch('/api/viewports/switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
 
-                    const data = await response.json();
-
-                    if (data.success) {
-                        currentViewport = data.viewport;
-                        updateCurrentViewportDisplay();
-                        drawViewportBox();
-                        loadViewports(); // Refresh list to show active indicator
-
-                        // Check and display data status
-                        await checkAndDisplayDataStatus(name);
-                        return;
-                    } else {
-                        alert(`Error: ${data.error}`);
-                        return;
-                    }
-                } catch (error) {
-                    if (attempt === 0) {
-                        console.warn('Viewport switch failed, retrying...', error);
-                        await new Promise(r => setTimeout(r, 500));
-                    } else {
-                        console.error('Error switching viewport:', error);
-                        alert('Error switching viewport. Check console for details.');
-                    }
+                const text = await response.text();
+                let data;
+                try { data = JSON.parse(text); } catch {
+                    alert(`Switch failed (${response.status}): ${text.slice(0, 200)}`);
+                    return;
                 }
+
+                if (!data.success) {
+                    alert(`Error: ${data.error}`);
+                    return;
+                }
+
+                currentViewport = data.viewport;
+                updateCurrentViewportDisplay();
+                drawViewportBox();
+                loadViewports();
+                await checkAndDisplayDataStatus(name);
+            } catch (error) {
+                console.error('Error switching viewport:', error);
+                alert(`Error switching viewport: ${error.message}`);
             }
         }
 
