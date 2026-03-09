@@ -212,6 +212,96 @@
         #map-container.mode-labelling #map-embedding2 { display: none; }
         #map-container.mode-labelling #panel6-label-view { display: flex; }
 
+        /* Validation: panel 4 = controls, panel 5 = chart (spans 2 cols), panel 6 hidden */
+        #map-container.mode-validation { grid-template-rows: 1fr 1fr; }
+        #map-container.mode-validation .panel:nth-child(4) { overflow-y: auto; }
+        #map-container.mode-validation .panel:nth-child(5) { grid-column: 2 / 4; }
+        #map-container.mode-validation .panel:nth-child(6) { display: none; }
+        #validation-controls { display: none; }
+        #validation-chart-panel { display: none; }
+        #map-container.mode-validation #map-umap { display: none; }
+        #map-container.mode-validation #validation-controls { display: block; }
+        #map-container.mode-validation #map-heatmap { display: none; }
+        #map-container.mode-validation #validation-chart-panel { display: flex; }
+
+        .validation-panel {
+            padding: 16px;
+            color: #333;
+            font-size: 13px;
+        }
+        .validation-panel h3 {
+            margin: 0 0 12px 0;
+            font-size: 15px;
+            color: #fff;
+        }
+        .validation-panel label {
+            display: block;
+            margin: 10px 0 4px;
+            font-weight: 600;
+            color: #ccc;
+        }
+        .validation-panel select {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background: #333;
+            color: #fff;
+            font-size: 13px;
+        }
+        .validation-drop-zone {
+            border: 2px dashed #555;
+            border-radius: 8px;
+            padding: 24px 16px;
+            text-align: center;
+            color: #888;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .validation-drop-zone.dragover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+        .validation-drop-zone.uploaded {
+            border-color: #28a745;
+            color: #28a745;
+        }
+        .validation-checkboxes {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-top: 6px;
+        }
+        .validation-checkboxes label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0;
+            font-weight: normal;
+            color: #ddd;
+            cursor: pointer;
+        }
+        .validation-run-btn {
+            width: 100%;
+            padding: 10px;
+            margin-top: 14px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .validation-run-btn:hover { background: #5a6fd6; }
+        .validation-run-btn:disabled { background: #555; cursor: not-allowed; }
+        .validation-status {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #888;
+        }
+
         .panel {
             position: relative;
             background: #2a2a2a;
@@ -461,6 +551,7 @@
                 <option value="simple">Simple</option>
                 <option value="change-detection">Change Detection</option>
                 <option value="labelling">Labelling</option>
+                <option value="validation">Validation</option>
             </select>
             <button id="help-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;">? Help</button>
         </div>
@@ -606,6 +697,31 @@
                 </select>
             </div>
             <div id="map-umap" class="map"><div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:16px;color:#999;">Waiting for vectors...</div></div>
+            <!-- Validation controls (shown only in validation mode) -->
+            <div id="validation-controls" class="validation-panel">
+                <h3>Upload Ground Truth</h3>
+                <div id="val-drop-zone" class="validation-drop-zone">
+                    Drop .zip here or click to browse
+                    <input type="file" id="val-file-input" accept=".zip" style="display:none;">
+                </div>
+
+                <label for="val-field-select">Class field</label>
+                <select id="val-field-select" disabled>
+                    <option value="">-- upload shapefile first --</option>
+                </select>
+                <div id="val-class-summary" style="margin-top: 6px; color: #999; font-size: 12px;"></div>
+
+                <label>Classifiers</label>
+                <div class="validation-checkboxes">
+                    <label><input type="checkbox" value="nn" checked> NN</label>
+                    <label><input type="checkbox" value="rf" checked> RF</label>
+                    <label><input type="checkbox" value="xgboost" checked> XGBoost</label>
+                    <label><input type="checkbox" value="mlp" checked> MLP</label>
+                </div>
+
+                <button id="val-run-btn" class="validation-run-btn" disabled>Run Evaluation</button>
+                <div id="val-status" class="validation-status"></div>
+            </div>
         </div>
 
         <!-- Panel 5: Distance Heatmap -->
@@ -614,6 +730,10 @@
                 <span id="panel5-title">Change Heatmap</span>
             </div>
             <div id="map-heatmap" class="map"></div>
+            <!-- Validation chart (shown only in validation mode) -->
+            <div id="validation-chart-panel" style="align-items:center;justify-content:center;width:100%;height:100%;background:#1e1e2e;padding:20px;">
+                <canvas id="val-chart"></canvas>
+            </div>
             <!-- Message when years are the same -->
             <div id="heatmap-same-year-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 20px 30px; border-radius: 8px; font-size: 14px; z-index: 1000; white-space: nowrap; display: none;">
                 Select different years in panels 3 and 6
@@ -2913,7 +3033,7 @@
             const sameMsg = document.getElementById('heatmap-same-year-message');
 
             // Remove old mode class, add new one
-            container.classList.remove('mode-simple', 'mode-change-detection', 'mode-labelling');
+            container.classList.remove('mode-simple', 'mode-change-detection', 'mode-labelling', 'mode-validation');
             container.classList.add('mode-' + mode);
             select.value = mode;
             currentPanelMode = mode;
@@ -2967,6 +3087,12 @@
                 // Panel 6 → restore embedding map
                 const p6header2 = document.getElementById('panel6-header-text');
                 if (p6header2) p6header2.textContent = 'Tessera Embeddings';
+            } else if (mode === 'validation') {
+                // Panel 4 = validation controls, Panel 5 = chart (CSS handles visibility)
+                if (title) title.textContent = 'Learning Curves';
+                // Hide heatmap messages
+                if (waitMsg) waitMsg.style.display = 'none';
+                if (sameMsg) sameMsg.style.display = 'none';
             } else {
                 // Simple mode
                 if (title) title.textContent = 'Change Heatmap';
@@ -3003,7 +3129,7 @@
         // Restore panel mode preference on load
         function restorePanelMode() {
             const saved = localStorage.getItem('panelMode');
-            const validModes = ['simple', 'change-detection', 'labelling'];
+            const validModes = ['simple', 'change-detection', 'labelling', 'validation'];
             const mode = validModes.includes(saved) ? saved : 'simple';
             setPanelLayout(mode);
         }
@@ -3896,7 +4022,7 @@
             const embCopy = segVectors.embeddings.buffer.slice(0);
             const transferables = [embCopy];
 
-            const sampleSize = Math.min(1000, N);
+            const sampleSize = Math.min(Math.max(5000, k * 500), N);
             const sample = buildSample(N, sampleSize);
             const sampleBuf = sample ? sample.buffer : null;
             if (sampleBuf) transferables.push(sampleBuf);
@@ -6416,6 +6542,298 @@
         document.getElementById('changePasswordModal').addEventListener('click', function(e) {
             if (e.target === this) hideChangePassword();
         });
+    </script>
+
+    <!-- Chart.js for validation learning curves -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+    // =====================================================================
+    // VALIDATION PANEL — learning-curve evaluation
+    // =====================================================================
+    (function() {
+        let valChart = null;
+        let valFieldData = null;  // fields array from upload response
+        let valGeoJsonLayer = null;  // polygon overlay on satellite map
+        let valGeoJsonData = null;  // raw geojson for re-styling on field change
+
+        // Distinct colours for up to ~20 classes; cycles for more
+        const CLASS_PALETTE = [
+            '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+            '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4',
+            '#469990', '#dcbeff', '#9A6324', '#fffac8', '#800000',
+            '#aaffc3', '#808000', '#ffd8b1', '#000075', '#a9a9a9',
+        ];
+
+        function buildClassColorMap(geojson, fieldName) {
+            const unique = [...new Set(
+                geojson.features
+                    .map(f => f.properties[fieldName])
+                    .filter(v => v != null)
+            )].sort();
+            const map = {};
+            unique.forEach((cls, i) => { map[cls] = CLASS_PALETTE[i % CLASS_PALETTE.length]; });
+            return map;
+        }
+
+        function addValGeoJsonLayer() {
+            if (valGeoJsonLayer && maps.rgb) maps.rgb.removeLayer(valGeoJsonLayer);
+            if (!valGeoJsonData || !maps.rgb) return;
+            const fieldName = document.getElementById('val-field-select').value;
+            const colorMap = fieldName ? buildClassColorMap(valGeoJsonData, fieldName) : {};
+            valGeoJsonLayer = L.geoJSON(valGeoJsonData, {
+                style: function() {
+                    return { color: '#ff0000', weight: 1.5, fillOpacity: 0.15, fillColor: '#ff0000' };
+                },
+                onEachFeature: function(feature, layer) {
+                    if (fieldName && feature.properties[fieldName] != null) {
+                        layer.bindTooltip(String(feature.properties[fieldName]), {
+                            sticky: true, className: 'val-tooltip',
+                        });
+                    }
+                },
+            }).addTo(maps.rgb);
+        }
+
+        const CLASSIFIER_COLORS = {
+            nn:      { line: 'rgba(255, 159, 64, 1)',  fill: 'rgba(255, 159, 64, 0.15)' },
+            rf:      { line: 'rgba(75, 192, 192, 1)',  fill: 'rgba(75, 192, 192, 0.15)' },
+            xgboost: { line: 'rgba(153, 102, 255, 1)', fill: 'rgba(153, 102, 255, 0.15)' },
+            mlp:     { line: 'rgba(255, 99, 132, 1)',  fill: 'rgba(255, 99, 132, 0.15)' },
+        };
+        const CLASSIFIER_LABELS = { nn: 'k-NN', rf: 'Random Forest', xgboost: 'XGBoost', mlp: 'MLP' };
+
+        // --- Drop zone ---
+        const dropZone = document.getElementById('val-drop-zone');
+        const fileInput = document.getElementById('val-file-input');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) uploadShapefile(file);
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files[0]) uploadShapefile(fileInput.files[0]);
+        });
+
+        // --- Upload shapefile ---
+        async function uploadShapefile(file) {
+            const status = document.getElementById('val-status');
+            status.textContent = 'Uploading...';
+            status.style.color = '#888';
+            dropZone.classList.remove('uploaded');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const resp = await fetch('/api/evaluation/upload-shapefile', { method: 'POST', body: formData });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    status.textContent = data.error || 'Upload failed';
+                    status.style.color = '#dc3545';
+                    return;
+                }
+
+                valFieldData = data.fields;
+                dropZone.textContent = file.name;
+                dropZone.classList.add('uploaded');
+
+                // Populate field dropdown
+                const sel = document.getElementById('val-field-select');
+                sel.innerHTML = '';
+                data.fields.forEach(f => {
+                    const opt = document.createElement('option');
+                    opt.value = f.name;
+                    opt.textContent = `${f.name} (${f.unique_count} classes)`;
+                    sel.appendChild(opt);
+                });
+                sel.disabled = false;
+                updateClassSummary();
+                document.getElementById('val-run-btn').disabled = false;
+                status.textContent = `${data.fields.length} fields found`;
+                status.style.color = '#28a745';
+
+                // Show polygons coloured by class on satellite map (panel 2)
+                valGeoJsonData = data.geojson;
+                addValGeoJsonLayer();
+            } catch (e) {
+                status.textContent = 'Network error: ' + e.message;
+                status.style.color = '#dc3545';
+            }
+        }
+
+        // --- Field selection ---
+        document.getElementById('val-field-select').addEventListener('change', updateClassSummary);
+
+        function updateClassSummary() {
+            const fieldName = document.getElementById('val-field-select').value;
+            const summary = document.getElementById('val-class-summary');
+            if (!valFieldData || !fieldName) { summary.textContent = ''; return; }
+            const field = valFieldData.find(f => f.name === fieldName);
+            if (field) {
+                summary.textContent = `${field.unique_count} classes — samples: ${field.samples.slice(0, 5).join(', ')}`;
+            }
+            // Re-colour polygons for the newly selected field
+            addValGeoJsonLayer();
+        }
+
+        // --- Run evaluation ---
+        document.getElementById('val-run-btn').addEventListener('click', runEvaluation);
+
+        async function runEvaluation() {
+            const field = document.getElementById('val-field-select').value;
+            if (!field) return;
+
+            const checkboxes = document.querySelectorAll('.validation-checkboxes input:checked');
+            const classifiers = Array.from(checkboxes).map(cb => cb.value);
+            if (classifiers.length === 0) {
+                document.getElementById('val-status').textContent = 'Select at least one classifier';
+                document.getElementById('val-status').style.color = '#dc3545';
+                return;
+            }
+
+            const btn = document.getElementById('val-run-btn');
+            const status = document.getElementById('val-status');
+            btn.disabled = true;
+            btn.textContent = 'Running...';
+            status.style.color = '#888';
+
+            // Elapsed timer
+            const t0 = Date.now();
+            const timer = setInterval(() => {
+                const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
+                status.textContent = `Running... ${elapsed}s`;
+            }, 1000);
+
+            try {
+                const resp = await fetch('/api/evaluation/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        viewport: currentViewportName,
+                        year: currentEmbeddingYear,
+                        field: field,
+                        classifiers: classifiers,
+                    }),
+                    signal: AbortSignal.timeout(300000),
+                });
+                clearInterval(timer);
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    status.textContent = data.error || 'Evaluation failed';
+                    status.style.color = '#dc3545';
+                    btn.disabled = false;
+                    btn.textContent = 'Run Evaluation';
+                    return;
+                }
+
+                status.textContent = `Done in ${data.elapsed_seconds}s — ${data.total_labelled_pixels.toLocaleString()} pixels, ${data.classes.length} classes`;
+                status.style.color = '#28a745';
+                btn.disabled = false;
+                btn.textContent = 'Run Evaluation';
+
+                renderChart(data);
+            } catch (e) {
+                clearInterval(timer);
+                status.textContent = 'Error: ' + e.message;
+                status.style.color = '#dc3545';
+                btn.disabled = false;
+                btn.textContent = 'Run Evaluation';
+            }
+        }
+
+        // --- Chart rendering ---
+        function renderChart(data) {
+            const ctx = document.getElementById('val-chart').getContext('2d');
+
+            if (valChart) valChart.destroy();
+
+            const datasets = [];
+            for (const [name, values] of Object.entries(data.classifiers)) {
+                const color = CLASSIFIER_COLORS[name] || { line: '#888', fill: 'rgba(136,136,136,0.15)' };
+
+                // Mean line
+                datasets.push({
+                    label: CLASSIFIER_LABELS[name] || name,
+                    data: data.training_sizes.map((x, i) => ({ x, y: values.mean_f1[i] })),
+                    borderColor: color.line,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2.5,
+                    pointRadius: 4,
+                    pointBackgroundColor: color.line,
+                    tension: 0.3,
+                });
+
+                // +1 std band (no legend)
+                datasets.push({
+                    label: name + '_upper',
+                    data: data.training_sizes.map((x, i) => ({
+                        x, y: Math.min(1, values.mean_f1[i] + values.std_f1[i])
+                    })),
+                    borderColor: 'transparent',
+                    backgroundColor: 'transparent',
+                    pointRadius: 0,
+                    fill: false,
+                });
+
+                // -1 std band, fill to upper
+                datasets.push({
+                    label: name + '_lower',
+                    data: data.training_sizes.map((x, i) => ({
+                        x, y: Math.max(0, values.mean_f1[i] - values.std_f1[i])
+                    })),
+                    borderColor: 'transparent',
+                    backgroundColor: color.fill,
+                    pointRadius: 0,
+                    fill: '-1',
+                });
+            }
+
+            valChart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                color: '#ddd',
+                                filter: item => !item.text.includes('_upper') && !item.text.includes('_lower'),
+                            },
+                        },
+                        title: {
+                            display: true,
+                            text: 'Learning Curves — Macro F1 vs Training Pixels',
+                            color: '#eee',
+                            font: { size: 15, weight: 'bold' },
+                        },
+                    },
+                    scales: {
+                        x: {
+                            type: 'logarithmic',
+                            title: { display: true, text: 'Training pixels', color: '#aaa' },
+                            ticks: { color: '#aaa' },
+                            grid: { color: 'rgba(255,255,255,0.08)' },
+                        },
+                        y: {
+                            min: 0, max: 1,
+                            title: { display: true, text: 'Macro-average F1', color: '#aaa' },
+                            ticks: { color: '#aaa' },
+                            grid: { color: 'rgba(255,255,255,0.08)' },
+                        },
+                    },
+                },
+            });
+        }
+    })();
     </script>
 </body>
 </html>

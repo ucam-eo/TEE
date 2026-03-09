@@ -6,6 +6,7 @@ from .views.pipeline import (
     operations_progress, pipeline_status, cancel_processing)
 from .views.vector_data import serve_vector_data
 from .views.config import get_config
+from .views.evaluation import upload_shapefile, run_evaluation
 
 urlpatterns = [
     # Auth
@@ -30,4 +31,7 @@ urlpatterns = [
     path('vector-data/<str:viewport>/<str:year>/<str:filename>', serve_vector_data),
     # Config
     path('config', get_config),
+    # Evaluation
+    path('evaluation/upload-shapefile', upload_shapefile),
+    path('evaluation/run', run_evaluation),
 ]
