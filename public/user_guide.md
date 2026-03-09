@@ -32,7 +32,7 @@ All three panels are synchronized — panning or zooming one pans/zooms all.
 
 ### 6-Panel Layout (Advanced)
 
-Click the **3/6 Panel** toggle in the header to switch to the advanced layout:
+Use the **layout dropdown** in the header to switch between modes:
 
 | Panel | Content |
 |-------|---------|
@@ -42,6 +42,10 @@ Click the **3/6 Panel** toggle in the header to switch to the advanced layout:
 | 4. **UMAP / PCA** | Dimensionality reduction visualization |
 | 5. **Heatmap** | Temporal distance heatmap (Y1 vs Y2) |
 | 6. **Embeddings Y2** | Second year's embeddings for comparison |
+
+Additional modes:
+- **Labelling** — replaces panel 6 with a split view for segmentation clusters and saved labels
+- **Validation** — replaces the bottom row with ground-truth upload controls and a learning-curve chart (see [Validation](#validation-learning-curves))
 
 ### Switching Years
 
@@ -115,6 +119,58 @@ Promoted labels are fully functional saved labels:
 ### Clearing Segmentation
 
 Click **Clear** to remove the seg overlay and panel. This does not affect any already-promoted labels.
+
+## Validation (Learning Curves)
+
+The **Validation** panel lets you evaluate how well classifiers can distinguish habitat classes using Tessera embeddings as features, given expert-labelled ground-truth polygons.
+
+### Setup
+
+1. Switch the layout dropdown to **Validation**
+2. The bottom row changes to a controls panel (left) and a chart panel (right)
+
+### Uploading Ground Truth
+
+1. Prepare a `.zip` file containing a shapefile (`.shp`, `.dbf`, `.shx`, `.prj`)
+2. Drag and drop the zip onto the upload zone (or click to browse)
+3. The shapefile polygons appear as red outlines on the **satellite panel** (panel 2) with hover tooltips
+4. The **Class field** dropdown is populated with the shapefile's attribute columns
+
+### Running an Evaluation
+
+1. Select a **Class field** — this determines what's being classified (e.g. broad habitat groups vs fine-grained types). The summary shows the number of classes and sample values.
+2. Check the **classifiers** you want to compare:
+   - **k-NN** — k-Nearest Neighbours (default k=5, Euclidean distance)
+   - **RF** — Random Forest (default 100 trees)
+   - **XGBoost** — Gradient boosted trees (default 100 rounds, max depth 6)
+   - **MLP** — Multi-layer perceptron (default 64-32 hidden layers)
+3. *(Optional)* Click the **`...`** button next to any classifier to expand its hyperparameters:
+   - **k-NN**: k (1–50), weights (uniform or distance-weighted)
+   - **Random Forest**: number of trees (10–500), max depth (leave empty for unlimited)
+   - **XGBoost**: boosting rounds (10–500), max depth (1–15), learning rate (0.01–1.0)
+   - **MLP**: hidden layer architecture (64,32 / 128,64 / 256,128,64), max iterations (50–1000)
+4. *(Optional)* Adjust **Max training pixels** (default 10,000). Increase this if your ground truth has dense coverage — training sizes are log-spaced from 10 up to this value (e.g. 30,000 gives sizes 10, 30, 100, 300, 1000, 3000, 10000, 30000).
+5. Click **Run Evaluation** — the server trains each classifier at each training size with 5 random repeats. An elapsed timer shows progress. Typical runtime is 60–120 seconds for 4 classifiers at the default max.
+6. Results appear as a **learning curve chart**:
+   - X axis: number of training pixels (log scale)
+   - Y axis: macro-average F1 score (0–1)
+   - One line per classifier with shaded ±1 standard deviation bands
+   - Expect F1 to rise from ~0.1 at 10 pixels to ~0.5–0.7 at 10,000 pixels
+
+### Interpreting Results
+
+- **Steeper curves** indicate embeddings that separate classes well even with few training samples
+- **RF and XGBoost** typically outperform k-NN at small sample sizes
+- **MLP** may need more training data to converge (it has more parameters to learn)
+- Classes with fewer than 50 labelled pixels are automatically excluded
+- At large training sizes, rare classes contribute fewer samples (capped at 80% of their count) to ensure test data remains available
+
+### Notes
+
+- The evaluation uses the current viewport's embeddings (128D float32 vectors) as features and the shapefile's class labels as targets
+- All computation runs server-side; runtime scales with max training pixels and number of classifiers
+- Changing the class field updates the polygon hover tooltips on the satellite panel
+- Re-running with different hyperparameters or a different field does not require re-uploading the shapefile
 
 ## Export Options
 

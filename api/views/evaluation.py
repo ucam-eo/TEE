@@ -108,6 +108,8 @@ def run_evaluation(request):
     year = body.get("year")
     field = body.get("field")
     classifiers = body.get("classifiers", ["nn", "rf"])
+    classifier_params = body.get("params", {})
+    max_train = int(body.get("max_train", 10000))
 
     if not all([viewport, year, field]):
         return JsonResponse({"error": "viewport, year, and field are required"}, status=400)
@@ -184,9 +186,14 @@ def run_evaluation(request):
                 f"{len(valid_classes)} classes, classifiers={classifiers}")
 
     # 4. Run learning curve
-    training_sizes = [10, 30, 100, 300, 1000, 3000, 10000]
+    # Build log-spaced training sizes up to max_train
+    all_sizes = [10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000]
+    training_sizes = [s for s in all_sizes if s <= max_train]
+    if not training_sizes or training_sizes[-1] < max_train:
+        training_sizes.append(max_train)
     results = _run_learning_curve(
-        labelled_embeddings, labelled_labels, classifiers, training_sizes, repeats=5
+        labelled_embeddings, labelled_labels, classifiers, training_sizes,
+        repeats=5, classifier_params=classifier_params
     )
 
     elapsed = time.time() - t0
@@ -259,7 +266,8 @@ def _rasterize_shapefile(gdf, field, transform, width, height):
     return class_raster
 
 
-def _run_learning_curve(embeddings, labels, classifier_names, training_sizes, repeats=5):
+def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
+                        repeats=5, classifier_params=None):
     """Run learning curve evaluation. Returns dict with mean/std F1 per classifier."""
     # Suppress sklearn warnings about small training sets (expected at low sample sizes)
     warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
@@ -269,14 +277,9 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes, re
     n_samples = len(labels)
     n_classes = len(np.unique(labels))
 
-    # Cap training sizes at 80% of smallest class count
-    class_counts = np.bincount(labels)
-    class_counts = class_counts[class_counts > 0]
-    max_train = int(0.8 * class_counts.min()) * n_classes
-
-    valid_sizes = [s for s in training_sizes if s <= max_train]
-    if not valid_sizes:
-        valid_sizes = [min(training_sizes)]
+    # Use all requested training sizes — the stratified sampler below
+    # caps per-class at what's available, so large sizes still work
+    valid_sizes = training_sizes
 
     results = {name: {"mean_f1": [], "std_f1": []} for name in classifier_names}
 
@@ -286,12 +289,14 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes, re
         for seed in range(repeats):
             rng = np.random.RandomState(seed)
 
-            # Stratified sample: equal per class
+            # Stratified sample: target per_class pixels from each class,
+            # capped at 80% of that class's count to leave test data
             per_class = max(1, size // n_classes)
             train_idx = []
             for cls in range(n_classes):
                 cls_indices = np.where(labels == cls)[0]
-                n_take = min(per_class, len(cls_indices))
+                n_take = min(per_class, int(0.8 * len(cls_indices)))
+                n_take = max(1, n_take)
                 chosen = rng.choice(cls_indices, size=n_take, replace=False)
                 train_idx.extend(chosen)
             train_idx = np.array(train_idx)
@@ -307,7 +312,7 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes, re
             X_test, y_test = embeddings[test_idx], labels[test_idx]
 
             for name in classifier_names:
-                clf = _make_classifier(name)
+                clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
                 try:
                     clf.fit(X_train, y_train)
                     y_pred = clf.predict(X_test)
@@ -325,20 +330,43 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes, re
     return {"training_sizes": valid_sizes, "classifiers": results}
 
 
-def _make_classifier(name):
-    """Create a classifier instance by name."""
+def _make_classifier(name, params=None):
+    """Create a classifier instance by name with optional hyperparameters."""
+    p = params or {}
     if name == "nn":
-        return KNeighborsClassifier(n_neighbors=5, metric="euclidean")
+        return KNeighborsClassifier(
+            n_neighbors=int(p.get("n_neighbors", 5)),
+            weights=p.get("weights", "uniform"),
+            metric="euclidean",
+        )
     elif name == "rf":
-        return RandomForestClassifier(n_estimators=100, n_jobs=-1, random_state=42)
+        max_depth = p.get("max_depth")
+        if max_depth is not None:
+            max_depth = int(max_depth)
+        return RandomForestClassifier(
+            n_estimators=int(p.get("n_estimators", 100)),
+            max_depth=max_depth,
+            n_jobs=-1, random_state=42,
+        )
     elif name == "xgboost":
         from xgboost import XGBClassifier
         return XGBClassifier(
-            n_estimators=100, max_depth=6, n_jobs=-1,
-            random_state=42, use_label_encoder=False, eval_metric="mlogloss",
-            verbosity=0,
+            n_estimators=int(p.get("n_estimators", 100)),
+            max_depth=int(p.get("max_depth", 6)),
+            learning_rate=float(p.get("learning_rate", 0.3)),
+            n_jobs=-1, random_state=42,
+            use_label_encoder=False, eval_metric="mlogloss", verbosity=0,
         )
     elif name == "mlp":
-        return MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=200, random_state=42)
+        layers_str = p.get("hidden_layers", "64,32")
+        if isinstance(layers_str, str):
+            hidden = tuple(int(x) for x in layers_str.split(","))
+        else:
+            hidden = (64, 32)
+        return MLPClassifier(
+            hidden_layer_sizes=hidden,
+            max_iter=int(p.get("max_iter", 200)),
+            random_state=42,
+        )
     else:
         raise ValueError(f"Unknown classifier: {name}")
