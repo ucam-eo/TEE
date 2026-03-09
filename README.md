@@ -15,6 +15,7 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - **Enables** temporal analysis by switching between years
 
 ![TEE Screenshot](tee-screen.png)
+![TEE Screenshot 2](tee-screen2.png)
 
 ## Features
 
