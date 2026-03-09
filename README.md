@@ -45,6 +45,12 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - Real-time threshold slider for instant local filtering
 - Labels and search are fully private — only tile images are fetched from the server
 
+### Segmentation (K-Means Clustering)
+- **Auto-cluster** the viewport into k groups using K-means on the embedding space — runs entirely in a Web Worker
+- Segmentation results appear as a **temporary preview** overlay with a floating panel
+- **Promote** individual clusters (or all at once) to permanent saved labels with full metadata (embedding, source pixel, threshold)
+- Promoted labels support timeline analysis, cross-viewport re-matching, and all other label features
+
 ### Cross-Year Label Timeline
 - **Track how label coverage changes over time** — click "Timeline" on any saved label to see pixel counts across all available years (2017–2025)
 - Uses the label's stored embedding and threshold for consistent comparison

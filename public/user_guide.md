@@ -89,6 +89,33 @@ Labels are portable — they use embedding distance rather than coordinates, so 
 - **Import** — use the Import button to load a previously exported JSON file
 - **Export** — see Export Options below
 
+## Segmentation (K-Means Clustering)
+
+TEE can automatically segment the viewport into distinct clusters using K-means clustering on the embedding space. Segmentation clusters are **temporary previews** — they appear in a floating panel but are not saved until you promote them.
+
+### Running Segmentation
+
+1. Set the number of clusters using the **k slider** in the toolbar (2–20)
+2. Click **Segment** — clustering runs in a Web Worker and results appear as a colored overlay on the heatmap panel
+3. The **Segmentation (temporary preview)** panel lists each cluster with its color, pixel count, and percentage
+
+### Promoting Clusters to Labels
+
+Segmentation clusters are temporary — they disappear when you re-segment or clear. To make them permanent:
+
+- **Promote one cluster** — click the **↗** button on a cluster row. It moves from the seg panel to your saved labels.
+- **Promote all** — click **Promote All to Labels** to save every cluster at once.
+- **Name before promoting** — type a label name in the text field next to a cluster before promoting; otherwise it defaults to "Cluster N".
+
+Promoted labels are fully functional saved labels:
+- They have an embedding and source pixel, so they support **Timeline** analysis across years
+- They can be **re-matched** on other viewports via import/export
+- They appear in the **Labels** panel and persist across page reloads
+
+### Clearing Segmentation
+
+Click **Clear** to remove the seg overlay and panel. This does not affect any already-promoted labels.
+
 ## Export Options
 
 The **Export** dropdown in the header provides three formats:

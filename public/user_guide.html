@@ -188,6 +188,36 @@
     <li><strong>Export</strong> &mdash; see Export Options below</li>
 </ul>
 
+<h2>Segmentation (K-Means Clustering)</h2>
+
+<p>TEE can automatically segment the viewport into distinct clusters using K-means clustering on the embedding space. Segmentation clusters are <strong>temporary previews</strong> &mdash; they appear in a floating panel but are not saved until you promote them.</p>
+
+<h3>Running Segmentation</h3>
+
+<ol>
+    <li>Set the number of clusters using the <strong>k slider</strong> in the toolbar (2&ndash;20)</li>
+    <li>Click <strong>Segment</strong> &mdash; clustering runs in a Web Worker and results appear as a colored overlay on the heatmap panel</li>
+    <li>The <strong>Segmentation (temporary preview)</strong> panel lists each cluster with its color, pixel count, and percentage</li>
+</ol>
+
+<h3>Promoting Clusters to Labels</h3>
+
+<p>Segmentation clusters are temporary &mdash; they disappear when you re-segment or clear. To make them permanent:</p>
+
+<ul>
+    <li><strong>Promote one cluster</strong> &mdash; click the <strong>&#8599;</strong> button on a cluster row. It moves from the seg panel to your saved labels.</li>
+    <li><strong>Promote all</strong> &mdash; click <strong>Promote All to Labels</strong> to save every cluster at once.</li>
+    <li><strong>Name before promoting</strong> &mdash; type a label name in the text field next to a cluster before promoting; otherwise it defaults to "Cluster N".</li>
+</ul>
+
+<div class="note">
+    Promoted labels are fully functional: they have an embedding and source pixel, so they support <strong>Timeline</strong> analysis across years and can be <strong>re-matched</strong> on other viewports via import/export.
+</div>
+
+<h3>Clearing Segmentation</h3>
+
+<p>Click <strong>Clear</strong> to remove the seg overlay and panel. This does not affect any already-promoted labels.</p>
+
 <h2>Export Options</h2>
 
 <p>The <strong>Export</strong> dropdown in the header provides three formats:</p>
