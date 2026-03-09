@@ -34,6 +34,12 @@ requests>=2.28.0
 umap-learn>=0.5.0
 
 # =============================================================================
+# OPTIONAL: Evaluation / learning curves (Validation panel)
+# =============================================================================
+scikit-learn>=1.2.0
+xgboost>=1.7.0
+
+# =============================================================================
 # OPTIONAL: Data download sources (only needed for creating new viewports)
 # =============================================================================
 # Uncomment if using Google Earth Engine:
