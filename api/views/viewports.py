@@ -108,6 +108,8 @@ def current_viewport(request):
             'success': True,
             'viewport': viewport
         })
+    except FileNotFoundError:
+        return JsonResponse({'success': False, 'error': 'No active viewport'})
     except Exception as e:
         logger.error(f"Error getting current viewport: {e}")
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
