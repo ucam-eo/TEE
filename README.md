@@ -1,6 +1,6 @@
 # TEE: Tessera Embeddings Explorer
 
-**Version 2.2.0** | [Docker Hub](https://hub.docker.com/r/sk818/tee) | [User Guide](public/user_guide.md)
+**Version 3.0.0** | [Docker Hub](https://hub.docker.com/r/sk818/tee) | [User Guide](public/user_guide.md)
 
 A system for downloading, processing, and visualizing Sentinel-2 satellite embeddings (2017-2025) with an interactive web interface.
 
@@ -54,6 +54,20 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - **Promote** individual clusters (or all at once) to permanent saved labels with full metadata (embedding, source pixel, threshold)
 - Promoted labels support timeline analysis, cross-viewport re-matching, and all other label features
 
+### Validation (Learning Curves)
+- Upload a ground-truth shapefile (.zip) with expert habitat labels
+- Select a class field and choose classifiers: k-NN, Random Forest, XGBoost, MLP
+- **Tunable hyperparameters** per classifier (expand with `...` button):
+  - **k-NN**: k (1–50), weights (uniform/distance)
+  - **Random Forest**: number of trees (10–500), max depth
+  - **XGBoost**: boosting rounds (10–500), max depth (1–15), learning rate (0.01–1.0)
+  - **MLP**: hidden layer architecture (64,32 / 128,64 / 256,128,64), max iterations (50–1000)
+- **Configurable max training pixels** (default 10,000) — increase up to 100,000 for denser ground truth
+- Runs stratified learning-curve evaluation server-side with log-spaced training sizes (10 up to max) and 5 random repeats each
+- Results rendered as a Chart.js line chart with macro-average F1 vs training pixels (log scale) and shaded ±1 std bands
+- Ground-truth polygons are overlaid on the satellite panel in red with hover tooltips showing class labels
+- Useful for benchmarking how well Tessera embeddings separate habitat classes at different sample sizes
+
 ### Cross-Year Label Timeline
 - **Track how label coverage changes over time** — click "Timeline" on any saved label to see pixel counts across all available years (2017–2025)
 - Uses the label's stored embedding and threshold for consistent comparison
@@ -72,7 +86,9 @@ The viewer includes a **6-panel layout** toggle for advanced analysis:
 5. **Heatmap** — Temporal distance heatmap (Y1 vs Y2 pixel-by-pixel differences)
 6. **Embeddings Y2** — Second year embeddings for temporal comparison
 
-Key capabilities: one-click similarity search, real-time threshold control, persistent colored label overlays, cross-panel synchronized markers, UMAP visualization with satellite RGB coloring, temporal distance heatmap, year-based label updates, and cross-year label timeline analysis.
+A **Validation** mode replaces the bottom row with a controls panel and a learning-curve chart for evaluating classifier performance on uploaded ground-truth shapefiles.
+
+Key capabilities: one-click similarity search, real-time threshold control, persistent colored label overlays, cross-panel synchronized markers, UMAP visualization with satellite RGB coloring, temporal distance heatmap, year-based label updates, cross-year label timeline analysis, and ground-truth validation with learning curves.
 
 Labels are stored in browser localStorage (private, survive reloads). Labels can be exported/imported as compact JSON files for sharing — they are portable across viewports since matching uses embedding distance, not coordinates.
 
@@ -435,6 +451,38 @@ Content-Type: application/json
 {"current_password": "old", "new_password": "new"}
 ```
 
+### Evaluation
+
+**Upload ground-truth shapefile:**
+```
+POST /api/evaluation/upload-shapefile
+Content-Type: multipart/form-data
+
+file: <.zip containing .shp/.dbf/.shx/.prj>
+```
+Returns: `{fields: [{name, unique_count, samples}], geojson: <GeoJSON>}`
+
+**Run learning-curve evaluation:**
+```
+POST /api/evaluation/run
+Content-Type: application/json
+
+{
+  "viewport": "cumbria",
+  "year": "2024",
+  "field": "Group_Name",
+  "classifiers": ["nn", "rf", "xgboost", "mlp"],
+  "max_train": 10000,
+  "params": {
+    "nn": {"n_neighbors": 5, "weights": "uniform"},
+    "rf": {"n_estimators": 100, "max_depth": null},
+    "xgboost": {"n_estimators": 100, "max_depth": 6, "learning_rate": 0.3},
+    "mlp": {"hidden_layers": "64,32", "max_iter": 200}
+  }
+}
+```
+Returns: `{training_sizes, classifiers: {<name>: {mean_f1, std_f1}}, classes, total_labelled_pixels, elapsed_seconds}`
+
 ## Project Structure
 
 ```
@@ -466,6 +514,7 @@ TEE/
 │       ├── compute.py                 # UMAP, distance heatmap
 │       ├── tiles.py                   # Tile serving with LRU cache and ETag support
 │       ├── vector_data.py             # Vector data serving
+│       ├── evaluation.py              # Validation: shapefile upload, learning curves
 │       └── config.py                  # Health, static files, client config
 │
 ├── public/                            # Web interface

@@ -301,6 +301,31 @@
             font-size: 12px;
             color: #888;
         }
+        .val-classifiers { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+        .val-clf-block { background: rgba(255,255,255,0.05); border-radius: 4px; }
+        .val-clf-header {
+            display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+            margin: 0; font-weight: normal; color: #ddd; cursor: pointer;
+        }
+        .val-clf-header span { flex: 1; }
+        .val-toggle-params {
+            background: rgba(255,255,255,0.1); border: 1px solid #555; border-radius: 3px;
+            color: #aaa; font-size: 11px; padding: 1px 6px; cursor: pointer; line-height: 1;
+        }
+        .val-toggle-params:hover { background: rgba(255,255,255,0.2); }
+        .val-params {
+            display: none; padding: 4px 8px 8px 28px;
+            flex-direction: column; gap: 4px;
+        }
+        .val-params.open { display: flex; }
+        .val-params label {
+            display: flex; align-items: center; gap: 6px; margin: 0;
+            font-weight: normal; color: #aaa; font-size: 12px; white-space: nowrap;
+        }
+        .val-params input[type="number"], .val-params select {
+            width: 80px; padding: 3px 5px; border: 1px solid #555; border-radius: 3px;
+            background: #333; color: #fff; font-size: 12px;
+        }
 
         .panel {
             position: relative;
@@ -712,12 +737,65 @@
                 <div id="val-class-summary" style="margin-top: 6px; color: #999; font-size: 12px;"></div>
 
                 <label>Classifiers</label>
-                <div class="validation-checkboxes">
-                    <label><input type="checkbox" value="nn" checked> NN</label>
-                    <label><input type="checkbox" value="rf" checked> RF</label>
-                    <label><input type="checkbox" value="xgboost" checked> XGBoost</label>
-                    <label><input type="checkbox" value="mlp" checked> MLP</label>
+                <div class="val-classifiers">
+                    <!-- NN -->
+                    <div class="val-clf-block">
+                        <label class="val-clf-header">
+                            <input type="checkbox" value="nn" checked>
+                            <span>k-NN</span>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                        </label>
+                        <div class="val-params">
+                            <label>k <input type="number" data-clf="nn" data-param="n_neighbors" value="5" min="1" max="50"></label>
+                            <label>Weights <select data-clf="nn" data-param="weights"><option value="uniform">uniform</option><option value="distance">distance</option></select></label>
+                        </div>
+                    </div>
+                    <!-- RF -->
+                    <div class="val-clf-block">
+                        <label class="val-clf-header">
+                            <input type="checkbox" value="rf" checked>
+                            <span>Random Forest</span>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                        </label>
+                        <div class="val-params">
+                            <label>Trees <input type="number" data-clf="rf" data-param="n_estimators" value="100" min="10" max="500" step="10"></label>
+                            <label>Max depth <input type="number" data-clf="rf" data-param="max_depth" value="" min="1" max="50" placeholder="None"></label>
+                        </div>
+                    </div>
+                    <!-- XGBoost -->
+                    <div class="val-clf-block">
+                        <label class="val-clf-header">
+                            <input type="checkbox" value="xgboost" checked>
+                            <span>XGBoost</span>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                        </label>
+                        <div class="val-params">
+                            <label>Rounds <input type="number" data-clf="xgboost" data-param="n_estimators" value="100" min="10" max="500" step="10"></label>
+                            <label>Max depth <input type="number" data-clf="xgboost" data-param="max_depth" value="6" min="1" max="15"></label>
+                            <label>Learn rate <input type="number" data-clf="xgboost" data-param="learning_rate" value="0.3" min="0.01" max="1" step="0.01"></label>
+                        </div>
+                    </div>
+                    <!-- MLP -->
+                    <div class="val-clf-block">
+                        <label class="val-clf-header">
+                            <input type="checkbox" value="mlp" checked>
+                            <span>MLP</span>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                        </label>
+                        <div class="val-params">
+                            <label>Layers <select data-clf="mlp" data-param="hidden_layers">
+                                <option value="64,32" selected>64, 32</option>
+                                <option value="128,64">128, 64</option>
+                                <option value="256,128,64">256, 128, 64</option>
+                            </select></label>
+                            <label>Max iter <input type="number" data-clf="mlp" data-param="max_iter" value="200" min="50" max="1000" step="50"></label>
+                        </div>
+                    </div>
                 </div>
+
+                <label>Max training pixels</label>
+                <input type="number" id="val-max-train" value="10000" min="100" max="100000" step="1000"
+                    style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
 
                 <button id="val-run-btn" class="validation-run-btn" disabled>Run Evaluation</button>
                 <div id="val-status" class="validation-status"></div>
@@ -6688,13 +6766,28 @@
             const field = document.getElementById('val-field-select').value;
             if (!field) return;
 
-            const checkboxes = document.querySelectorAll('.validation-checkboxes input:checked');
+            const checkboxes = document.querySelectorAll('.val-clf-header input:checked');
             const classifiers = Array.from(checkboxes).map(cb => cb.value);
             if (classifiers.length === 0) {
                 document.getElementById('val-status').textContent = 'Select at least one classifier';
                 document.getElementById('val-status').style.color = '#dc3545';
                 return;
             }
+
+            // Collect hyperparameters for each selected classifier
+            const params = {};
+            document.querySelectorAll('.val-params input, .val-params select').forEach(el => {
+                const clf = el.dataset.clf;
+                const param = el.dataset.param;
+                if (!clf || !param) return;
+                if (!classifiers.includes(clf)) return;
+                if (!params[clf]) params[clf] = {};
+                const val = el.value.trim();
+                if (val === '') return; // skip empty (e.g. "None" max_depth)
+                // Numbers stay as numbers, strings stay as strings
+                const num = Number(val);
+                params[clf][param] = isNaN(num) ? val : num;
+            });
 
             const btn = document.getElementById('val-run-btn');
             const status = document.getElementById('val-status');
@@ -6718,6 +6811,8 @@
                         year: currentEmbeddingYear,
                         field: field,
                         classifiers: classifiers,
+                        params: params,
+                        max_train: parseInt(document.getElementById('val-max-train').value) || 10000,
                     }),
                     signal: AbortSignal.timeout(300000),
                 });

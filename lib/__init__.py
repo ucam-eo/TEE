@@ -1,3 +1,3 @@
 """Blore project library utilities."""
 
-__version__ = "1.2.0"
+__version__ = "3.0.0"
