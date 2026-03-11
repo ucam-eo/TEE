@@ -71,6 +71,36 @@
             margin-bottom: 14px;
             display: none;
         }
+        .disclaimer {
+            background: #fff9e6;
+            border: 1px solid #e8d48a;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 18px;
+            font-size: 12px;
+            line-height: 1.5;
+            color: #555;
+        }
+        .disclaimer h3 {
+            font-size: 13px;
+            color: #b8860b;
+            margin-bottom: 8px;
+        }
+        .disclaimer ul {
+            margin: 8px 0 0 16px;
+            padding: 0;
+        }
+        .disclaimer li { margin-bottom: 4px; }
+        .accept-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #333;
+            font-weight: 600;
+        }
+        .accept-row input { margin-top: 2px; width: 16px; height: 16px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -80,6 +110,19 @@
             <p>Tessera Embeddings Explorer</p>
         </div>
         <div class="login-body">
+            <div class="disclaimer">
+                <h3>Disclaimer</h3>
+                <p>This software is provided for <strong>research purposes only</strong>, on an "as is" basis, without warranties or conditions of any kind, either express or implied. The authors make no guarantees regarding the correctness, completeness, or reliability of any results produced.</p>
+                <ul>
+                    <li>This is experimental research code under active development.</li>
+                    <li>Do not rely on outputs for operational or safety-critical decisions.</li>
+                    <li>The <strong>Validation</strong> feature uploads ground-truth labels to the server for processing. If you do not wish to share label data, do not use the Validation feature.</li>
+                </ul>
+                <div class="accept-row">
+                    <input type="checkbox" id="acceptTerms">
+                    <label for="acceptTerms" style="font-weight:600; cursor:pointer;">I understand and accept these terms</label>
+                </div>
+            </div>
             <div id="error" class="error-msg"></div>
             <form id="loginForm">
                 <div class="form-group">
@@ -90,7 +133,7 @@
                     <label for="password">Password</label>
                     <input type="password" id="password" name="password" autocomplete="current-password" required>
                 </div>
-                <button type="submit" class="login-btn" id="loginBtn">Sign in</button>
+                <button type="submit" class="login-btn" id="loginBtn" disabled>Sign in</button>
             </form>
             <div style="text-align: center; margin-top: 16px;">
                 <a href="/" style="color: #888; font-size: 13px; text-decoration: none;">Continue in demo mode</a>
@@ -99,8 +142,14 @@
     </div>
 
     <script>
+        // Enable sign-in only after accepting terms
+        document.getElementById('acceptTerms').addEventListener('change', function() {
+            document.getElementById('loginBtn').disabled = !this.checked;
+        });
+
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (!document.getElementById('acceptTerms').checked) return;
             const btn = document.getElementById('loginBtn');
             const errEl = document.getElementById('error');
             errEl.style.display = 'none';
