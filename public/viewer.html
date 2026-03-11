@@ -723,7 +723,7 @@
         </div>
 
         <!-- Labels Details Panel - drops down below header -->
-        <div id="labels-details-panel" style="position: fixed; bottom: 40px; right: 20px; width: 300px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-radius: 8px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 999; max-height: 450px; overflow-y: auto; font-size: 12px; display: none;">
+        <div id="labels-details-panel" style="position: fixed; bottom: 40px; right: 20px; width: 300px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-radius: 8px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 2000; max-height: 450px; overflow-y: auto; font-size: 12px; display: none;">
             <div id="labels-panel-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; cursor: grab;">
                 <div style="font-weight: 600;">📋 Labels</div>
                 <button id="labels-close-btn" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px;">✕</button>
@@ -5918,9 +5918,12 @@
 
             // Labels toggle button (skip in labelling mode — panel 6 shows labels inline)
             document.getElementById('labels-toggle-btn').addEventListener('click', function() {
-                if (currentPanelMode === 'labelling') return;
                 const panel = document.getElementById('labels-details-panel');
-                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                const show = panel.style.display === 'none';
+                panel.style.display = show ? 'block' : 'none';
+                if (show) {
+                    renderLabelsInto(document.getElementById('labels-list'));
+                }
             });
 
             // Labels close button
