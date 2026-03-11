@@ -829,6 +829,9 @@
         <div class="panel">
             <div class="panel-header" style="background: #2C5282; color: white; padding: 8px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
                 <span id="panel6-header-text">Tessera Embeddings</span>
+                <select id="embedding-year-selector-2" style="display: none; margin-left: 10px; padding: 4px 8px; border: 1px solid #555; border-radius: 3px; background: #333; color: #fff; font-size: 13px;">
+                    <option value="2024">2024</option>
+                </select>
             </div>
             <div id="map-embedding2" class="map"></div>
             <!-- Validation controls (shown only in validation mode) -->
@@ -2733,10 +2736,10 @@
         async function handleSimilaritySearch(lat, lon) {
             console.log(`[DBLCLICK] Similarity search at ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
 
-            // First, place markers at the search location
+            // Place markers at the search location on all panels
             handleUnifiedClick(lat, lon);
 
-            // Then trigger similarity search (results shown on Panel 2)
+            // Trigger similarity search (results shown on Panel 2)
             await explorerClick(lat, lon);
 
             // Panel 4 highlighting is handled by updateExplorerVisualization()
@@ -3300,9 +3303,6 @@
             // Hide stats overlay
             const statsEl = document.getElementById('explorer-stats-overlay');
             if (statsEl) statsEl.style.display = 'none';
-
-            // Clear cross-panel triangle markers
-            clearCrossPanelMarkers();
 
             // Clear UMAP highlight marker and similarity highlighting
             if (umapCanvasLayer) {
@@ -5307,8 +5307,9 @@
             updateLabelsUI();
             updateOverlay();
 
-            // Clear the explorer preview (yellow overlay)
+            // Clear the explorer preview (yellow overlay) and search markers
             clearExplorerResults();
+            clearCrossPanelMarkers();
 
             // Place persistent colored markers at the source pixel location on all panels
             const coloredIcon = makeColoredTriangleIcon(color);
@@ -6907,7 +6908,13 @@
         function renderChart(data, metric) {
             lastChartData = data;
             if (!metric) metric = document.getElementById('val-metric-select').value;
-            const isWeighted = metric === 'weighted';
+            // Fall back to macro if weighted data not available (old response)
+            const firstClf = Object.values(data.classifiers)[0];
+            const hasWeighted = firstClf && firstClf.mean_f1w;
+            const isWeighted = metric === 'weighted' && hasWeighted;
+            if (metric === 'weighted' && !hasWeighted) {
+                document.getElementById('val-metric-select').value = 'macro';
+            }
             const meanKey = isWeighted ? 'mean_f1w' : 'mean_f1';
             const stdKey = isWeighted ? 'std_f1w' : 'std_f1';
             const metricLabel = isWeighted ? 'Weighted F1' : 'Macro F1';
