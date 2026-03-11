@@ -1093,6 +1093,7 @@
         let umapData = null;                  // UMAP/PCA coordinates cache
         let umapCanvasLayer = null;           // 3D scatter plot layer (Three.js scene)
         let currentDimReduction = 'pca';      // 'pca' or 'umap' - default to PCA
+        const _dimReductionCache = {};        // Cache: "viewport/year/method" → points array
         let currentPanelMode = 'simple';       // 'simple', 'change-detection', or 'labelling'
         let heatmapSatelliteLayer = null;      // Satellite tiles for panel 5 in labelling mode
         let heatmapCanvasLayer = null;        // Distance heatmap layer
@@ -4576,6 +4577,20 @@
                     document.getElementById('panel4-title').textContent = `${methodUpper} (Embedding Space)`;
                 }
 
+                // Check cache for previously computed results
+                const cacheKey = `${currentViewportName}/${currentEmbeddingYear}/${dimMethod}`;
+                if (_dimReductionCache[cacheKey]) {
+                    console.log(`[${methodUpper}] Cache hit for ${cacheKey}`);
+                    const points = _dimReductionCache[cacheKey];
+                    umapData = points;
+                    if (umapCanvasLayer) { umapCanvasLayer.dispose(); umapCanvasLayer = null; }
+                    umapCanvasLayer = new window.UMAPScene('map-umap', umapData);
+                    setTimeout(() => { if (umapCanvasLayer && umapCanvasLayer.resize) umapCanvasLayer.resize(); }, 50);
+                    if (savedLabels && savedLabels.length > 0) updateUMAPColorsFromLabels();
+                    console.log(`✓ ${methodUpper} restored from cache: ${points.length} points`);
+                    return;
+                }
+
                 let points = null;
 
                 if (dimMethod === 'pca') {
@@ -4695,6 +4710,8 @@
                 }
 
                 if (points) {
+                    // Cache the computed points for instant restore on re-selection
+                    _dimReductionCache[cacheKey] = points;
                     console.log(`[${methodUpper}] Got ${points.length} points, initializing Three.js scene...`);
                     umapData = points;
 
@@ -4933,13 +4950,23 @@
                 dimSelector.addEventListener('change', async (e) => {
                     currentDimReduction = e.target.value;
                     console.log(`[DimReduction] Switching to ${currentDimReduction.toUpperCase()}`);
-                    // Reset loaded flag so dependency system re-triggers
-                    if (currentDimReduction === 'pca') {
-                        viewportStatus.pca_loaded = false;
+                    // Check if this method was already computed (cached);
+                    // only reset the loaded flag when there's no cache hit,
+                    // so the dependency system re-triggers computation.
+                    const key = `${currentViewportName}/${currentEmbeddingYear}/${currentDimReduction}`;
+                    if (_dimReductionCache[key]) {
+                        // Cached — loadDimReduction will restore instantly
+                        await loadDimReduction(currentDimReduction);
+                        if (currentDimReduction === 'pca') viewportStatus.pca_loaded = true;
+                        else viewportStatus.umap_loaded = true;
                     } else {
-                        viewportStatus.umap_loaded = false;
+                        if (currentDimReduction === 'pca') {
+                            viewportStatus.pca_loaded = false;
+                        } else {
+                            viewportStatus.umap_loaded = false;
+                        }
+                        evaluateDependencies();
                     }
-                    evaluateDependencies();
                 });
             }
 
