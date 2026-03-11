@@ -1,6 +1,6 @@
 # TEE: Tessera Embeddings Explorer
 
-**Version 3.0.0** | [Docker Hub](https://hub.docker.com/r/sk818/tee) | [User Guide](public/user_guide.md)
+**Version 3.0.1** | [Docker Hub](https://hub.docker.com/r/sk818/tee) | [User Guide](public/user_guide.md)
 
 A system for downloading, processing, and visualizing Sentinel-2 satellite embeddings (2017-2025) with an interactive web interface.
 
@@ -481,7 +481,13 @@ Content-Type: application/json
   }
 }
 ```
-Returns: `{training_sizes, classifiers: {<name>: {mean_f1, std_f1}}, classes, total_labelled_pixels, elapsed_seconds}`
+Returns: `{training_sizes, classifiers: {<name>: {mean_f1, std_f1}}, classes, total_labelled_pixels, elapsed_seconds, models_available}`
+
+**Download trained model:**
+```
+GET /api/evaluation/download-model/<classifier>
+```
+Returns: `.joblib` file containing `{model, class_names}` trained on all labelled data
 
 ## Project Structure
 

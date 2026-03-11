@@ -11,10 +11,11 @@ import zipfile
 from pathlib import Path
 
 import geopandas as gpd
+import joblib
 import numpy as np
 import rasterio.features
 from affine import Affine
-from django.http import JsonResponse
+from django.http import FileResponse, JsonResponse
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix, f1_score
 from sklearn.neighbors import KNeighborsClassifier
@@ -27,6 +28,9 @@ logger = logging.getLogger(__name__)
 
 # Module-level cache for uploaded shapefile path (per-process; fine for single-user)
 _uploaded_shapefile = {"path": None, "gdf": None}
+
+# Cache for trained model files: classifier name → temp file path
+_trained_models = {}
 
 
 def upload_shapefile(request):
@@ -207,6 +211,21 @@ def run_evaluation(request):
         repeats=5, classifier_params=classifier_params
     )
 
+    # Retrain each classifier on ALL labelled data and cache for download
+    _trained_models.clear()
+    for name in classifiers:
+        try:
+            clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
+            clf.fit(labelled_embeddings, labelled_labels)
+            tmp = tempfile.NamedTemporaryFile(
+                suffix=".joblib", prefix=f"{name}_model_", delete=False
+            )
+            joblib.dump({"model": clf, "class_names": valid_class_names}, tmp.name)
+            _trained_models[name] = tmp.name
+            logger.info(f"Trained and cached model '{name}' → {tmp.name}")
+        except Exception as e:
+            logger.warning(f"Failed to retrain {name} on full data: {e}")
+
     elapsed = time.time() - t0
 
     return JsonResponse({
@@ -217,6 +236,7 @@ def run_evaluation(request):
         "classes": class_info,
         "total_labelled_pixels": total_labelled,
         "elapsed_seconds": round(elapsed, 1),
+        "models_available": list(_trained_models.keys()),
     })
 
 
@@ -399,3 +419,19 @@ def _make_classifier(name, params=None):
         )
     else:
         raise ValueError(f"Unknown classifier: {name}")
+
+
+def download_model(request, classifier):
+    """Serve a trained model joblib file for download."""
+    path = _trained_models.get(classifier)
+    if not path or not Path(path).exists():
+        return JsonResponse(
+            {"error": f"No trained model for '{classifier}'. Run evaluation first."},
+            status=404,
+        )
+    return FileResponse(
+        open(path, "rb"),
+        content_type="application/octet-stream",
+        as_attachment=True,
+        filename=f"{classifier}_model.joblib",
+    )

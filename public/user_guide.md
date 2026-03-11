@@ -127,14 +127,31 @@ The **Validation** panel lets you evaluate how well classifiers can distinguish 
 ### Setup
 
 1. Switch the layout dropdown to **Validation**
-2. The bottom row changes to a controls panel (left) and a chart panel (right)
+2. The bottom row changes to: a controls panel (left), a learning-curve chart (centre), and a confusion matrix panel (right)
+
+### Preparing a Ground-Truth Shapefile
+
+TEE accepts a **zipped ESRI shapefile**. The `.zip` must contain at least four files with the same base name:
+
+| Extension | Purpose |
+|-----------|---------|
+| `.shp` | Geometry (polygons or multipolygons) |
+| `.dbf` | Attribute table |
+| `.shx` | Spatial index |
+| `.prj` | Coordinate reference system |
+
+The shapefile should cover (or overlap) the current viewport area. Each polygon needs an attribute column whose values represent the class labels (e.g. a `Habitat` field with values like "Woodland", "Grassland", "Urban"). Any coordinate reference system is accepted — TEE reprojects to EPSG:4326 automatically.
+
+**Tip:** You can produce a suitable shapefile from QGIS, ArcGIS, or any GIS tool. Export your labelled polygons as a shapefile and zip the four files together:
+```bash
+zip ground_truth.zip polygons.shp polygons.dbf polygons.shx polygons.prj
+```
 
 ### Uploading Ground Truth
 
-1. Prepare a `.zip` file containing a shapefile (`.shp`, `.dbf`, `.shx`, `.prj`)
-2. Drag and drop the zip onto the upload zone (or click to browse)
-3. The shapefile polygons appear as red outlines on the **satellite panel** (panel 2) with hover tooltips
-4. The **Class field** dropdown is populated with the shapefile's attribute columns
+1. Drag and drop the `.zip` onto the upload zone (or click to browse)
+2. The shapefile polygons appear as **red outlines** on the satellite panel (panel 2) with hover tooltips showing class labels
+3. The **Class field** dropdown is populated with the shapefile's attribute columns — each shows the number of unique values and sample entries to help you pick the right one
 
 ### Running an Evaluation
 
@@ -151,11 +168,47 @@ The **Validation** panel lets you evaluate how well classifiers can distinguish 
    - **MLP**: hidden layer architecture (64,32 / 128,64 / 256,128,64), max iterations (50–1000)
 4. *(Optional)* Adjust **Max training pixels** (default 10,000). Increase this if your ground truth has dense coverage — training sizes are log-spaced from 10 up to this value (e.g. 30,000 gives sizes 10, 30, 100, 300, 1000, 3000, 10000, 30000).
 5. Click **Run Evaluation** — the server trains each classifier at each training size with 5 random repeats. An elapsed timer shows progress. Typical runtime is 60–120 seconds for 4 classifiers at the default max.
-6. Results appear as a **learning curve chart**:
-   - X axis: number of training pixels (log scale)
-   - Y axis: macro-average F1 score (0–1)
-   - One line per classifier with shaded ±1 standard deviation bands
-   - Expect F1 to rise from ~0.1 at 10 pixels to ~0.5–0.7 at 10,000 pixels
+
+### Learning Curve Chart
+
+Results appear as a line chart in the centre panel:
+
+- **X axis**: number of training pixels (log scale)
+- **Y axis**: F1 score (0–1)
+- One line per classifier with shaded ±1 standard deviation bands
+- Use the **Macro F1 / Weighted F1** dropdown (top-right of chart) to switch metrics:
+  - **Macro F1** — unweighted average across classes (treats all classes equally)
+  - **Weighted F1** — weighted by class frequency (reflects overall accuracy better when classes are imbalanced)
+- Expect F1 to rise from ~0.1 at 10 pixels to ~0.5–0.7 at 10,000 pixels
+
+### Confusion Matrix
+
+After the evaluation finishes, the right panel shows a **confusion matrix** for the largest training size:
+
+- Rows are the **true** class, columns are the **predicted** class
+- Cells are colour-coded: diagonal (correct predictions) in blue, off-diagonal (errors) in red
+- Use the **classifier dropdown** to switch between classifiers
+- Click the **%** button to toggle between raw pixel counts and row-normalised percentages
+- A note at the top lists any classes that were excluded for having fewer than 50 labelled pixels
+
+### Exporting Results
+
+Two export options are available in the confusion matrix header:
+
+- **Export Results** — downloads the full evaluation data as a JSON file (training sizes, F1 scores, confusion matrices, class info)
+- **Download Models** — downloads `.joblib` files for each trained classifier. After the evaluation, each classifier is retrained on **all** labelled data and saved. Each `.joblib` file contains a dict with:
+  - `model` — the fitted sklearn/xgboost classifier object
+  - `class_names` — list of class name strings (matching the prediction order)
+
+  You can load a downloaded model in Python:
+  ```python
+  import joblib
+  d = joblib.load("rf_model.joblib")
+  clf = d["model"]          # the trained classifier
+  names = d["class_names"]  # e.g. ["Grassland", "Urban", "Woodland"]
+  predictions = clf.predict(embeddings)  # embeddings shape: (N, 128)
+  predicted_names = [names[i] for i in predictions]
+  ```
 
 ### Interpreting Results
 
@@ -171,6 +224,7 @@ The **Validation** panel lets you evaluate how well classifiers can distinguish 
 - All computation runs server-side; runtime scales with max training pixels and number of classifiers
 - Changing the class field updates the polygon hover tooltips on the satellite panel
 - Re-running with different hyperparameters or a different field does not require re-uploading the shapefile
+- Downloaded models are trained on **all** labelled pixels (not a train/test split), so they represent the best possible fit for deployment
 
 ## Export Options
 

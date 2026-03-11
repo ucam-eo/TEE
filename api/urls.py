@@ -6,7 +6,7 @@ from .views.pipeline import (
     operations_progress, pipeline_status, cancel_processing)
 from .views.vector_data import serve_vector_data
 from .views.config import get_config
-from .views.evaluation import upload_shapefile, run_evaluation
+from .views.evaluation import upload_shapefile, run_evaluation, download_model
 
 urlpatterns = [
     # Auth
@@ -34,4 +34,5 @@ urlpatterns = [
     # Evaluation
     path('evaluation/upload-shapefile', upload_shapefile),
     path('evaluation/run', run_evaluation),
+    path('evaluation/download-model/<str:classifier>', download_model),
 ]
