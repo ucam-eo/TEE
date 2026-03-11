@@ -16,7 +16,7 @@ import rasterio.features
 from affine import Affine
 from django.http import JsonResponse
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import f1_score
+from sklearn.metrics import confusion_matrix, f1_score
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import LabelEncoder
@@ -88,8 +88,13 @@ def upload_shapefile(request):
             "samples": samples,
         })
 
-    # Build GeoJSON for map overlay
-    geojson = json.loads(gdf.to_json())
+    # Build GeoJSON for map overlay (cap at 10k features to avoid browser crash)
+    MAX_OVERLAY = 10_000
+    if len(gdf) > MAX_OVERLAY:
+        geojson = json.loads(gdf.iloc[:MAX_OVERLAY].to_json())
+        geojson["truncated"] = len(gdf)
+    else:
+        geojson = json.loads(gdf.to_json())
 
     return JsonResponse({"fields": fields, "geojson": geojson})
 
@@ -181,6 +186,12 @@ def run_evaluation(request):
     label_encoder_final = LabelEncoder()
     labelled_labels = label_encoder_final.fit_transform(labelled_labels)
 
+    # Map re-encoded labels back to original class names
+    valid_class_names = []
+    for enc_label in label_encoder_final.classes_:
+        name = class_names[enc_label - 1] if enc_label <= len(class_names) else f"Class {enc_label}"
+        valid_class_names.append(str(name))
+
     total_labelled = len(labelled_labels)
     logger.info(f"Evaluation: {total_labelled} labelled pixels, "
                 f"{len(valid_classes)} classes, classifiers={classifiers}")
@@ -201,6 +212,8 @@ def run_evaluation(request):
     return JsonResponse({
         "training_sizes": results["training_sizes"],
         "classifiers": results["classifiers"],
+        "confusion_matrices": results["confusion_matrices"],
+        "confusion_matrix_labels": valid_class_names,
         "classes": class_info,
         "total_labelled_pixels": total_labelled,
         "elapsed_seconds": round(elapsed, 1),
@@ -281,10 +294,14 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
     # caps per-class at what's available, so large sizes still work
     valid_sizes = training_sizes
 
-    results = {name: {"mean_f1": [], "std_f1": []} for name in classifier_names}
+    results = {name: {"mean_f1": [], "std_f1": [], "mean_f1w": [], "std_f1w": []} for name in classifier_names}
+    # Accumulate confusion matrices at the largest training size
+    cm_accum = {name: np.zeros((n_classes, n_classes), dtype=np.int64) for name in classifier_names}
 
     for size in valid_sizes:
         f1_scores = {name: [] for name in classifier_names}
+        f1w_scores = {name: [] for name in classifier_names}
+        is_largest = (size == valid_sizes[-1])
 
         for seed in range(repeats):
             rng = np.random.RandomState(seed)
@@ -317,17 +334,29 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
                     clf.fit(X_train, y_train)
                     y_pred = clf.predict(X_test)
                     f1 = f1_score(y_test, y_pred, average="macro", zero_division=0)
+                    f1w = f1_score(y_test, y_pred, average="weighted", zero_division=0)
                     f1_scores[name].append(f1)
+                    f1w_scores[name].append(f1w)
+                    if is_largest:
+                        cm = confusion_matrix(y_test, y_pred, labels=np.arange(n_classes))
+                        cm_accum[name] += cm
                 except Exception as e:
                     logger.warning(f"Classifier {name} failed at size {size}: {e}")
                     f1_scores[name].append(0.0)
+                    f1w_scores[name].append(0.0)
 
         for name in classifier_names:
             scores = f1_scores[name]
             results[name]["mean_f1"].append(round(float(np.mean(scores)), 4) if scores else 0.0)
             results[name]["std_f1"].append(round(float(np.std(scores)), 4) if scores else 0.0)
+            scoresw = f1w_scores[name]
+            results[name]["mean_f1w"].append(round(float(np.mean(scoresw)), 4) if scoresw else 0.0)
+            results[name]["std_f1w"].append(round(float(np.std(scoresw)), 4) if scoresw else 0.0)
 
-    return {"training_sizes": valid_sizes, "classifiers": results}
+    # Convert accumulated CMs to lists for JSON serialization
+    confusion_matrices = {name: cm_accum[name].tolist() for name in classifier_names}
+
+    return {"training_sizes": valid_sizes, "classifiers": results, "confusion_matrices": confusion_matrices}
 
 
 def _make_classifier(name, params=None):

@@ -41,6 +41,10 @@ vectors/
 *.npy
 *.index
 
+# Shapefiles / ground-truth data
+Cumbria_naddle/
+*.zip
+
 # Private planning files
 CANVAS_HANDOFF_TO_SONNET.md
 DEBUG_IMPORT.md

@@ -214,15 +214,17 @@
 
         /* Validation: panel 4 = controls, panel 5 = chart (spans 2 cols), panel 6 hidden */
         #map-container.mode-validation { grid-template-rows: 1fr 1fr; }
-        #map-container.mode-validation .panel:nth-child(4) { overflow-y: auto; }
-        #map-container.mode-validation .panel:nth-child(5) { grid-column: 2 / 4; }
-        #map-container.mode-validation .panel:nth-child(6) { display: none; }
+        #map-container.mode-validation .panel:nth-child(4) > .panel-header { display: none !important; }
+        #map-container.mode-validation .panel:nth-child(5) { background: #1a1a2e; }
+        #map-container.mode-validation .panel:nth-child(5) > .panel-header { display: none; }
+        #map-container.mode-validation .panel:nth-child(6) { overflow-y: auto; }
         #validation-controls { display: none; }
         #validation-chart-panel { display: none; }
         #map-container.mode-validation #map-umap { display: none; }
-        #map-container.mode-validation #validation-controls { display: block; }
         #map-container.mode-validation #map-heatmap { display: none; }
+        #map-container.mode-validation #map-embedding2 { display: none; }
         #map-container.mode-validation #validation-chart-panel { display: flex; }
+        #map-container.mode-validation #validation-controls { display: block; }
 
         .validation-panel {
             padding: 16px;
@@ -326,6 +328,67 @@
             width: 80px; padding: 3px 5px; border: 1px solid #555; border-radius: 3px;
             background: #333; color: #fff; font-size: 12px;
         }
+
+        /* Confusion Matrix panel (panel 5 in validation mode) */
+        #val-cm-panel { display: none; flex-direction: column; width: 100%; height: 100%; background: #1e1e2e; }
+        #map-container.mode-validation #val-cm-panel { display: flex; }
+        .cm-header {
+            display: flex; align-items: center; gap: 10px; padding: 10px 16px 6px;
+            flex-shrink: 0;
+        }
+        .cm-header h3 { margin: 0; font-size: 14px; color: #eee; white-space: nowrap; }
+        .cm-header select {
+            padding: 4px 8px; border: 1px solid #555; border-radius: 4px;
+            background: #333; color: #fff; font-size: 12px;
+        }
+        .cm-toggle-pct {
+            padding: 4px 10px; border: 1px solid #555; border-radius: 4px;
+            background: #333; color: #aaa; font-size: 12px; font-weight: 700;
+            cursor: pointer; line-height: 1;
+        }
+        .cm-toggle-pct:hover { background: #444; }
+        .cm-toggle-pct.active { background: #667eea; color: #fff; border-color: #667eea; }
+        .cm-header .cm-export-btn {
+            margin-left: auto; padding: 5px 12px; border: none; border-radius: 4px;
+            background: #007bff; color: #fff; font-size: 12px; font-weight: 600;
+            cursor: pointer; white-space: nowrap;
+        }
+        .cm-header .cm-export-btn:hover { background: #0056b3; }
+        .cm-scroll { flex: 1; overflow: auto; padding: 0 16px 16px; display: flex; align-items: flex-start; justify-content: center; }
+        .cm-wrapper { position: relative; display: inline-block; }
+        .cm-axis-label {
+            position: absolute; color: #aaa; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .cm-axis-label.y-axis {
+            left: -4px; top: 50%; transform: translate(-100%, -50%) rotate(-90deg); transform-origin: center center;
+        }
+        .cm-axis-label.x-axis { bottom: -20px; left: 50%; transform: translateX(-50%); }
+        .confusion-matrix { border-collapse: collapse; margin: 24px 8px 24px 28px; }
+        .confusion-matrix th, .confusion-matrix td {
+            padding: 0; text-align: center; font-size: 11px; border: 1px solid rgba(255,255,255,0.1);
+        }
+        .confusion-matrix th {
+            color: #ccc; font-weight: 600; background: transparent; padding: 4px 6px;
+        }
+        .confusion-matrix th.cm-row-label { text-align: right; padding-right: 8px; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .confusion-matrix th.cm-col-label {
+            writing-mode: vertical-lr; text-orientation: mixed;
+            padding: 8px 4px; max-height: 100px; overflow: hidden; text-overflow: ellipsis;
+        }
+        .confusion-matrix td {
+            min-width: 44px; height: 44px; font-weight: 600; position: relative; cursor: default;
+        }
+        .confusion-matrix td::after {
+            content: attr(data-tip);
+            position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.92); color: #fff; font-size: 11px; font-weight: 400;
+            padding: 5px 8px; border-radius: 4px; white-space: pre; pointer-events: none;
+            opacity: 0; transition: opacity 0.15s; z-index: 100;
+        }
+        .confusion-matrix td:hover::after { opacity: 1; }
+        .confusion-matrix td .cm-count { display: block; font-size: 12px; }
+        .confusion-matrix td .cm-pct { display: block; font-size: 10px; opacity: 0.7; }
+        .cm-placeholder { color: #666; font-size: 14px; padding: 40px; text-align: center; }
 
         .panel {
             position: relative;
@@ -722,6 +785,52 @@
                 </select>
             </div>
             <div id="map-umap" class="map"><div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:16px;color:#999;">Waiting for vectors...</div></div>
+            <!-- Validation chart (shown only in validation mode) -->
+            <div id="validation-chart-panel" style="align-items:center;justify-content:center;width:100%;height:100%;background:#1e1e2e;padding:20px;">
+                <div style="position:absolute;top:8px;right:12px;z-index:10;">
+                    <select id="val-metric-select" style="padding:3px 8px;border:1px solid #555;border-radius:4px;background:#333;color:#fff;font-size:12px;cursor:pointer;">
+                        <option value="macro" selected>Macro F1</option>
+                        <option value="weighted">Weighted F1</option>
+                    </select>
+                </div>
+                <canvas id="val-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- Panel 5: Distance Heatmap -->
+        <div class="panel">
+            <div class="panel-header" style="background: #805AD5; color: white; padding: 8px; font-weight: 600; font-size: 14px;">
+                <span id="panel5-title">Change Heatmap</span>
+            </div>
+            <div id="map-heatmap" class="map"></div>
+            <!-- Message when years are the same -->
+            <div id="heatmap-same-year-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 20px 30px; border-radius: 8px; font-size: 14px; z-index: 1000; white-space: nowrap; display: none;">
+                Select different years in panels 3 and 6
+            </div>
+            <div id="heatmap-waiting-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 20px 30px; border-radius: 8px; font-size: 14px; z-index: 1000; white-space: nowrap; display: none;">
+                Waiting for embedding extraction...
+            </div>
+            <!-- Confusion Matrix (shown only in validation mode) -->
+            <div id="val-cm-panel">
+                <div class="cm-header">
+                    <h3>Confusion Matrix</h3>
+                    <select id="cm-classifier-select"></select>
+                    <button class="cm-toggle-pct" id="cm-toggle-pct" title="Toggle counts / percentages">%</button>
+                    <button class="cm-export-btn" id="cm-export-btn">Export Results</button>
+                </div>
+                <div id="cm-filtered-note" style="display:none; padding: 0 16px 4px; font-size: 11px; color: #e8a838;"></div>
+                <div class="cm-scroll">
+                    <div class="cm-placeholder">Run an evaluation to see the confusion matrix.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel 6: Second Year Embeddings / Label Management -->
+        <div class="panel">
+            <div class="panel-header" style="background: #2C5282; color: white; padding: 8px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
+                <span id="panel6-header-text">Tessera Embeddings</span>
+            </div>
+            <div id="map-embedding2" class="map"></div>
             <!-- Validation controls (shown only in validation mode) -->
             <div id="validation-controls" class="validation-panel">
                 <h3>Upload Ground Truth</h3>
@@ -741,7 +850,7 @@
                     <!-- NN -->
                     <div class="val-clf-block">
                         <label class="val-clf-header">
-                            <input type="checkbox" value="nn" checked>
+                            <input type="checkbox" value="nn">
                             <span>k-NN</span>
                             <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
                         </label>
@@ -753,7 +862,7 @@
                     <!-- RF -->
                     <div class="val-clf-block">
                         <label class="val-clf-header">
-                            <input type="checkbox" value="rf" checked>
+                            <input type="checkbox" value="rf">
                             <span>Random Forest</span>
                             <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
                         </label>
@@ -765,7 +874,7 @@
                     <!-- XGBoost -->
                     <div class="val-clf-block">
                         <label class="val-clf-header">
-                            <input type="checkbox" value="xgboost" checked>
+                            <input type="checkbox" value="xgboost">
                             <span>XGBoost</span>
                             <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
                         </label>
@@ -778,7 +887,7 @@
                     <!-- MLP -->
                     <div class="val-clf-block">
                         <label class="val-clf-header">
-                            <input type="checkbox" value="mlp" checked>
+                            <input type="checkbox" value="mlp">
                             <span>MLP</span>
                             <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
                         </label>
@@ -800,33 +909,6 @@
                 <button id="val-run-btn" class="validation-run-btn" disabled>Run Evaluation</button>
                 <div id="val-status" class="validation-status"></div>
             </div>
-        </div>
-
-        <!-- Panel 5: Distance Heatmap -->
-        <div class="panel">
-            <div class="panel-header" style="background: #805AD5; color: white; padding: 8px; font-weight: 600; font-size: 14px;">
-                <span id="panel5-title">Change Heatmap</span>
-            </div>
-            <div id="map-heatmap" class="map"></div>
-            <!-- Validation chart (shown only in validation mode) -->
-            <div id="validation-chart-panel" style="align-items:center;justify-content:center;width:100%;height:100%;background:#1e1e2e;padding:20px;">
-                <canvas id="val-chart"></canvas>
-            </div>
-            <!-- Message when years are the same -->
-            <div id="heatmap-same-year-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 20px 30px; border-radius: 8px; font-size: 14px; z-index: 1000; white-space: nowrap; display: none;">
-                Select different years in panels 3 and 6
-            </div>
-            <div id="heatmap-waiting-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 20px 30px; border-radius: 8px; font-size: 14px; z-index: 1000; white-space: nowrap; display: none;">
-                Waiting for embedding extraction...
-            </div>
-        </div>
-
-        <!-- Panel 6: Second Year Embeddings / Label Management -->
-        <div class="panel">
-            <div class="panel-header" style="background: #2C5282; color: white; padding: 8px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
-                <span id="panel6-header-text">Tessera Embeddings</span>
-            </div>
-            <div id="map-embedding2" class="map"></div>
             <!-- Label management split view (labelling mode only) -->
             <div id="panel6-label-view" style="position: absolute; top: 45px; left: 0; right: 0; bottom: 0; flex-direction: row; gap: 2px; background: #2a2a2a; font-size: 12px;">
                 <!-- Left: Clusters (temporary) -->
@@ -3106,7 +3188,6 @@
         function setPanelLayout(mode) {
             const container = document.getElementById('map-container');
             const select = document.getElementById('panel-layout-select');
-            const title = document.getElementById('panel5-title');
             const waitMsg = document.getElementById('heatmap-waiting-message');
             const sameMsg = document.getElementById('heatmap-same-year-message');
 
@@ -3116,88 +3197,66 @@
             select.value = mode;
             currentPanelMode = mode;
 
+            // Static panel titles per mode
+            const titles = {
+                'simple':           { p4: 'PCA (Embedding Space)', p5: 'Change Heatmap',  p6: 'Tessera Embeddings' },
+                'change-detection': { p4: 'PCA (Embedding Space)', p5: 'Change Heatmap',  p6: 'Tessera Embeddings' },
+                'labelling':        { p4: 'PCA (Embedding Space)', p5: 'Segmentation',    p6: 'Auto-label' },
+                'validation':       { p4: 'Performance',           p5: 'Confusion Matrix', p6: 'Controls' },
+            };
+            const t = titles[mode] || titles['simple'];
+            document.getElementById('panel4-title').textContent = t.p4;
+            document.getElementById('panel5-title').textContent = t.p5;
+            document.getElementById('panel6-header-text').textContent = t.p6;
+
+            // Mode-specific layer setup
             if (mode === 'labelling') {
-                // Panel 5 = satellite base + seg overlay
-                if (title) title.textContent = 'Segmentation';
-                // Add satellite tiles
                 if (heatmapSatelliteLayer && maps.heatmap && !maps.heatmap.hasLayer(heatmapSatelliteLayer)) {
                     heatmapSatelliteLayer.addTo(maps.heatmap);
                 }
-                // Remove heatmap canvas
                 if (heatmapCanvasLayer && maps.heatmap && maps.heatmap.hasLayer(heatmapCanvasLayer)) {
                     maps.heatmap.removeLayer(heatmapCanvasLayer);
                 }
-                // Hide heatmap messages
                 if (waitMsg) waitMsg.style.display = 'none';
                 if (sameMsg) sameMsg.style.display = 'none';
-                // Restore seg overlay if it exists
                 if (segOverlay && maps.heatmap && !maps.heatmap.hasLayer(segOverlay)) {
                     segOverlay.addTo(maps.heatmap);
                 }
-                // Panel 6 → label management split view
-                const p6header = document.getElementById('panel6-header-text');
-                if (p6header) p6header.textContent = 'Auto-label';
-                // Hide floating popups — panel 6 replaces them
                 document.getElementById('seg-results-panel').style.display = 'none';
                 document.getElementById('labels-details-panel').style.display = 'none';
-                // Refresh both columns with current data
                 renderSegListInto(document.getElementById('panel6-seg-list'));
                 renderLabelsInto(document.getElementById('panel6-labels-list'));
                 const p6btn = document.getElementById('panel6-promote-all-btn');
                 if (p6btn) p6btn.style.display = segLabels.length > 0 ? '' : 'none';
             } else if (mode === 'change-detection') {
-                // Panel 5 = heatmap
-                if (title) title.textContent = 'Change Heatmap';
-                // Remove satellite tiles
                 if (heatmapSatelliteLayer && maps.heatmap && maps.heatmap.hasLayer(heatmapSatelliteLayer)) {
                     maps.heatmap.removeLayer(heatmapSatelliteLayer);
                 }
-                // Remove seg overlay (keep variable)
                 if (segOverlay && maps.heatmap && maps.heatmap.hasLayer(segOverlay)) {
                     maps.heatmap.removeLayer(segOverlay);
                 }
-                // Re-add heatmap canvas if it exists
                 if (heatmapCanvasLayer && maps.heatmap && !maps.heatmap.hasLayer(heatmapCanvasLayer)) {
                     heatmapCanvasLayer.addTo(maps.heatmap);
                 }
-                // Trigger heatmap computation
                 loadHeatmap();
-                // Panel 6 → restore embedding map
-                const p6header2 = document.getElementById('panel6-header-text');
-                if (p6header2) p6header2.textContent = 'Tessera Embeddings';
             } else if (mode === 'validation') {
-                // Panel 4 = validation controls, Panel 5 = chart (CSS handles visibility)
-                if (title) title.textContent = 'Learning Curves';
-                // Hide heatmap messages
                 if (waitMsg) waitMsg.style.display = 'none';
                 if (sameMsg) sameMsg.style.display = 'none';
             } else {
                 // Simple mode
-                if (title) title.textContent = 'Change Heatmap';
-                // Remove satellite tiles
                 if (heatmapSatelliteLayer && maps.heatmap && maps.heatmap.hasLayer(heatmapSatelliteLayer)) {
                     maps.heatmap.removeLayer(heatmapSatelliteLayer);
                 }
-                // Panel 6 → restore embedding map (not visible in simple but reset state)
-                const p6header3 = document.getElementById('panel6-header-text');
-                if (p6header3) p6header3.textContent = 'Tessera Embeddings';
             }
 
             // Leaflet maps and Three.js scene need resize after CSS transition
             setTimeout(() => {
                 Object.values(maps).forEach(map => {
-                    if (map && map.invalidateSize) {
-                        map.invalidateSize();
-                    }
+                    if (map && map.invalidateSize) map.invalidateSize();
                 });
-                if (umapCanvasLayer && umapCanvasLayer.resize) {
-                    umapCanvasLayer.resize();
-                }
-                // Force-refresh tile layers for panels that were hidden
-                if (mode === 'change-detection') {
-                    if (window.embedding2Layer && maps.embedding2) {
-                        refreshEmbeddingTileLayer('embedding2', currentEmbeddingYear2);
-                    }
+                if (umapCanvasLayer && umapCanvasLayer.resize) umapCanvasLayer.resize();
+                if (mode === 'change-detection' && window.embedding2Layer && maps.embedding2) {
+                    refreshEmbeddingTileLayer('embedding2', currentEmbeddingYear2);
                 }
             }, 350);
 
@@ -4504,10 +4563,9 @@
             try {
                 console.log(`[${methodUpper}] Loading for ${currentViewportName}/${currentEmbeddingYear}...`);
 
-                // Update panel title
-                const titleEl = document.getElementById('panel4-title');
-                if (titleEl) {
-                    titleEl.textContent = `${methodUpper} (Embedding Space)`;
+                // Update panel title (validation mode has its own static title)
+                if (currentPanelMode !== 'validation') {
+                    document.getElementById('panel4-title').textContent = `${methodUpper} (Embedding Space)`;
                 }
 
                 let points = null;
@@ -6833,6 +6891,7 @@
                 btn.textContent = 'Run Evaluation';
 
                 renderChart(data);
+                renderConfusionMatrix(data);
             } catch (e) {
                 clearInterval(timer);
                 status.textContent = 'Error: ' + e.message;
@@ -6843,7 +6902,16 @@
         }
 
         // --- Chart rendering ---
-        function renderChart(data) {
+        let lastChartData = null;
+
+        function renderChart(data, metric) {
+            lastChartData = data;
+            if (!metric) metric = document.getElementById('val-metric-select').value;
+            const isWeighted = metric === 'weighted';
+            const meanKey = isWeighted ? 'mean_f1w' : 'mean_f1';
+            const stdKey = isWeighted ? 'std_f1w' : 'std_f1';
+            const metricLabel = isWeighted ? 'Weighted F1' : 'Macro F1';
+
             const ctx = document.getElementById('val-chart').getContext('2d');
 
             if (valChart) valChart.destroy();
@@ -6855,7 +6923,7 @@
                 // Mean line
                 datasets.push({
                     label: CLASSIFIER_LABELS[name] || name,
-                    data: data.training_sizes.map((x, i) => ({ x, y: values.mean_f1[i] })),
+                    data: data.training_sizes.map((x, i) => ({ x, y: values[meanKey][i] })),
                     borderColor: color.line,
                     backgroundColor: 'transparent',
                     borderWidth: 2.5,
@@ -6868,7 +6936,7 @@
                 datasets.push({
                     label: name + '_upper',
                     data: data.training_sizes.map((x, i) => ({
-                        x, y: Math.min(1, values.mean_f1[i] + values.std_f1[i])
+                        x, y: Math.min(1, values[meanKey][i] + values[stdKey][i])
                     })),
                     borderColor: 'transparent',
                     backgroundColor: 'transparent',
@@ -6880,7 +6948,7 @@
                 datasets.push({
                     label: name + '_lower',
                     data: data.training_sizes.map((x, i) => ({
-                        x, y: Math.max(0, values.mean_f1[i] - values.std_f1[i])
+                        x, y: Math.max(0, values[meanKey][i] - values[stdKey][i])
                     })),
                     borderColor: 'transparent',
                     backgroundColor: color.fill,
@@ -6906,7 +6974,7 @@
                         },
                         title: {
                             display: true,
-                            text: 'Learning Curves — Macro F1 vs Training Pixels',
+                            text: `Learning Curves — ${metricLabel} vs Training Pixels`,
                             color: '#eee',
                             font: { size: 15, weight: 'bold' },
                         },
@@ -6920,7 +6988,7 @@
                         },
                         y: {
                             min: 0, max: 1,
-                            title: { display: true, text: 'Macro-average F1', color: '#aaa' },
+                            title: { display: true, text: metricLabel, color: '#aaa' },
                             ticks: { color: '#aaa' },
                             grid: { color: 'rgba(255,255,255,0.08)' },
                         },
@@ -6928,6 +6996,137 @@
                 },
             });
         }
+
+        document.getElementById('val-metric-select').addEventListener('change', function() {
+            if (lastChartData) renderChart(lastChartData, this.value);
+        });
+        // --- Confusion Matrix ---
+        let lastEvalData = null;
+        let cmShowPct = false;
+
+        function renderConfusionMatrix(data) {
+            lastEvalData = data;
+            const panel = document.getElementById('val-cm-panel');
+            const sel = document.getElementById('cm-classifier-select');
+            const scroll = panel.querySelector('.cm-scroll');
+            const note = document.getElementById('cm-filtered-note');
+
+            if (!data.confusion_matrices) {
+                scroll.innerHTML = '<div class="cm-placeholder">No confusion matrix data available.</div>';
+                note.style.display = 'none';
+                return;
+            }
+
+            // Show note about filtered classes
+            const cmLabels = data.confusion_matrix_labels || [];
+            const allClasses = data.classes || [];
+            const filtered = allClasses.filter(c => !cmLabels.includes(c.name));
+            if (filtered.length > 0) {
+                const names = filtered.map(c => `${c.name} (${c.pixels}px)`).join(', ');
+                note.textContent = `${filtered.length} class${filtered.length > 1 ? 'es' : ''} excluded (<50 pixels): ${names}`;
+                note.style.display = 'block';
+            } else {
+                note.style.display = 'none';
+            }
+
+            // Populate classifier dropdown
+            const names2 = Object.keys(data.confusion_matrices);
+            sel.innerHTML = '';
+            names2.forEach(n => {
+                const opt = document.createElement('option');
+                opt.value = n;
+                opt.textContent = CLASSIFIER_LABELS[n] || n;
+                sel.appendChild(opt);
+            });
+            sel.style.display = names2.length > 1 ? '' : 'none';
+            sel.onchange = () => renderCMTable(sel.value, data);
+
+            renderCMTable(names2[0], data);
+        }
+
+        function renderCMTable(classifierName, data) {
+            const cm = data.confusion_matrices[classifierName];
+            const labels = data.confusion_matrix_labels || [];
+            const scroll = document.querySelector('#val-cm-panel .cm-scroll');
+            if (!cm) { scroll.innerHTML = '<div class="cm-placeholder">No data.</div>'; return; }
+
+            const n = cm.length;
+            const compact = n > 8;
+
+            // Compute row sums for normalization
+            const rowSums = cm.map(row => row.reduce((a, b) => a + b, 0));
+
+            let html = '<div class="cm-wrapper">';
+            html += '<div class="cm-axis-label y-axis">Actual</div>';
+            html += '<div class="cm-axis-label x-axis">Predicted</div>';
+            html += '<table class="confusion-matrix">';
+
+            // Column headers
+            html += '<tr><th></th>';
+            for (let j = 0; j < n; j++) {
+                const lbl = labels[j] || `C${j}`;
+                html += `<th class="cm-col-label" title="${lbl}">${compact ? lbl.slice(0, 4) : lbl}</th>`;
+            }
+            html += '</tr>';
+
+            // Data rows
+            for (let i = 0; i < n; i++) {
+                const rowLabel = labels[i] || `C${i}`;
+                html += `<tr><th class="cm-row-label" title="${rowLabel}">${compact ? rowLabel.slice(0, 6) : rowLabel}</th>`;
+                for (let j = 0; j < n; j++) {
+                    const count = cm[i][j];
+                    const pct = rowSums[i] > 0 ? (count / rowSums[i] * 100) : 0;
+                    const isDiag = i === j;
+
+                    // Color: green on diagonal, red off-diagonal, intensity by row-normalized %
+                    const intensity = Math.min(pct / 100, 1);
+                    let bg;
+                    if (isDiag) {
+                        bg = `rgba(40, 167, 69, ${0.15 + intensity * 0.7})`;
+                    } else {
+                        bg = intensity > 0.01 ? `rgba(220, 53, 69, ${0.1 + intensity * 0.6})` : 'transparent';
+                    }
+
+                    const textColor = intensity > 0.5 ? '#fff' : '#ccc';
+                    const tip = `Actual: ${rowLabel}\nPredicted: ${labels[j] || `C${j}`}\n${count} (${pct.toFixed(1)}%)`;
+                    const cellText = cmShowPct ? `${pct.toFixed(1)}%` : count;
+
+                    if (compact) {
+                        html += `<td style="background:${bg};color:${textColor}" data-tip="${tip}"><span class="cm-count">${cellText}</span></td>`;
+                    } else {
+                        const secondary = cmShowPct ? count : `${pct.toFixed(1)}%`;
+                        html += `<td style="background:${bg};color:${textColor}" data-tip="${tip}"><span class="cm-count">${cellText}</span><span class="cm-pct">${secondary}</span></td>`;
+                    }
+                }
+                html += '</tr>';
+            }
+            html += '</table></div>';
+            scroll.innerHTML = html;
+        }
+
+        function exportEvalResults() {
+            if (!lastEvalData) return;
+            const blob = new Blob([JSON.stringify(lastEvalData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `eval_results_${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        document.getElementById('cm-export-btn').addEventListener('click', exportEvalResults);
+
+        document.getElementById('cm-toggle-pct').addEventListener('click', function() {
+            cmShowPct = !cmShowPct;
+            this.classList.toggle('active', cmShowPct);
+            this.textContent = cmShowPct ? '#' : '%';
+            this.title = cmShowPct ? 'Show counts' : 'Show percentages';
+            if (lastEvalData && lastEvalData.confusion_matrices) {
+                const sel = document.getElementById('cm-classifier-select');
+                renderCMTable(sel.value, lastEvalData);
+            }
+        });
     })();
     </script>
 </body>
