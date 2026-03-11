@@ -758,11 +758,8 @@
                                 <input type="text" id="viewportName" placeholder="e.g., bangalore_south" class="form-group input" required>
                             </div>
                             <div style="margin-top: 12px; padding: 0;">
-                                <label style="font-weight: 600; margin-bottom: 8px; display: block; font-size: 14px;">Download years (2017-2025):</label>
+                                <label style="font-weight: 600; margin-bottom: 8px; display: block; font-size: 14px;">Download years (2018-2025):</label>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-                                    <label style="display: flex; align-items: center; font-weight: normal; font-size: 13px; white-space: nowrap;">
-                                        <input type="checkbox" id="year2017" class="year-checkbox" value="2017" style="width: 16px; height: 16px; margin-right: 8px; cursor: pointer;"> 2017
-                                    </label>
                                     <label style="display: flex; align-items: center; font-weight: normal; font-size: 13px; white-space: nowrap;">
                                         <input type="checkbox" id="year2018" class="year-checkbox" value="2018" style="width: 16px; height: 16px; margin-right: 8px; cursor: pointer;"> 2018
                                     </label>
@@ -2435,7 +2432,7 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
 
             const grid = document.getElementById('addYearGrid');
             grid.innerHTML = '';
-            for (let year = 2017; year <= 2025; year++) {
+            for (let year = 2018; year <= 2025; year++) {
                 const isConfigured = allConfigured.has(year);
                 const label = document.createElement('label');
                 if (isConfigured) label.className = 'disabled';

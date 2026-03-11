@@ -12,7 +12,7 @@ A **viewport** is a 5km x 5km geographic area for which TEE downloads and proces
    - **Search** — type a place name (e.g. "Cambridge") or coordinates (e.g. "52.2, 0.12") in the search bar
    - **Click the map** — a 5km preview box follows the cursor; click to lock it in place
    - **Reposition** — after clicking, click again to move the box
-4. Enter a **viewport name** and select which **years** to process (2017-2025)
+4. Enter a **viewport name** and select which **years** to process (2018-2025)
 5. Click **Create** — processing runs in the background with a progress bar
 6. The viewer opens automatically when processing completes
 

@@ -23,7 +23,7 @@ if not VENV_PYTHON.exists():
 logger.info(f"Using Python: {VENV_PYTHON}")
 
 # Year range constant (used in multiple views)
-MIN_YEAR = 2017
+MIN_YEAR = 2018
 MAX_YEAR = 2025
 
 # Per-user disk quota default (2 GB); overridable in passwd file

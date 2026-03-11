@@ -21,8 +21,8 @@ from lib.viewport_utils import validate_viewport_name
 logger = logging.getLogger(__name__)
 
 PYRAMIDS_BASE_DIR = PYRAMIDS_DIR
-YEARS = [str(y) for y in range(2017, 2026)] + ['satellite']
-_VALID_MAP_IDS = {str(y) for y in range(2017, 2026)} | {'satellite', 'rgb'}
+YEARS = [str(y) for y in range(2018, 2026)] + ['satellite']
+_VALID_MAP_IDS = {str(y) for y in range(2018, 2026)} | {'satellite', 'rgb'}
 
 # Cache for tile reader paths
 _readers = {}

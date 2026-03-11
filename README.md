@@ -2,7 +2,7 @@
 
 **Version 3.0.1** | [Docker Hub](https://hub.docker.com/r/sk818/tee) | [User Guide](public/user_guide.md)
 
-A system for downloading, processing, and visualizing Sentinel-2 satellite embeddings (2017-2025) with an interactive web interface.
+A system for downloading, processing, and visualizing Sentinel-2 satellite embeddings (2018-2025) with an interactive web interface.
 
 ## Overview
 
@@ -20,7 +20,7 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 ## Features
 
 ### Multi-Year Support
-- Download embeddings for years 2017-2025 (depending on data availability)
+- Download embeddings for years 2018-2025 (depending on data availability)
 - Select which years to process during viewport creation
 - Switch between years instantly in the viewer
 - Temporal coherence in similarity search through year-specific vector data
@@ -69,7 +69,7 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - Useful for benchmarking how well Tessera embeddings separate habitat classes at different sample sizes
 
 ### Cross-Year Label Timeline
-- **Track how label coverage changes over time** — click "Timeline" on any saved label to see pixel counts across all available years (2017–2025)
+- **Track how label coverage changes over time** — click "Timeline" on any saved label to see pixel counts across all available years (2018–2025)
 - Uses the label's stored embedding and threshold for consistent comparison
 - Results displayed in a modal with a proportional **bar chart** (colored with the label's color) and a **percentage change summary** (e.g. "33% decrease from 2019 to 2023")
 - Loads each year's vector data from IndexedDB cache (or downloads in background) without disrupting the current session
@@ -324,7 +324,7 @@ Each stage processes **all selected years in parallel**:
 
 #### 1. Download Embeddings
 ```bash
-python3 download_embeddings.py --years 2017,2021,2025
+python3 download_embeddings.py --years 2019,2021,2025
 ```
 - Downloads Sentinel-2 embeddings from GeoTessera (all years concurrently)
 - Saves as GeoTIFF files in `~/data/mosaics/`
@@ -406,7 +406,7 @@ Content-Type: application/json
 {
   "bounds": "min_lon,min_lat,max_lon,max_lat",
   "name": "My Viewport",
-  "years": ["2017", "2024"]  // Optional: default is [2024]
+  "years": ["2021", "2024"]  // Optional: default is [2024]
 }
 ```
 
