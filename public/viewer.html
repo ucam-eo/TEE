@@ -936,14 +936,15 @@
                 </p>
             </div>
             <!-- Validation chart (shown only in validation mode) -->
-            <div id="validation-chart-panel" style="align-items:center;justify-content:center;width:100%;height:100%;background:#1e1e2e;padding:20px;">
+            <div id="validation-chart-panel" style="align-items:center;justify-content:center;width:100%;height:100%;background:#1e1e2e;padding:20px;flex-direction:column;">
                 <div style="position:absolute;top:8px;right:12px;z-index:10;">
                     <select id="val-metric-select" style="padding:3px 8px;border:1px solid #555;border-radius:4px;background:#333;color:#fff;font-size:12px;cursor:pointer;">
                         <option value="macro" selected>Macro F1</option>
                         <option value="weighted">Weighted F1</option>
                     </select>
                 </div>
-                <canvas id="val-chart"></canvas>
+                <canvas id="val-chart" style="flex:1;min-height:0;"></canvas>
+                <div id="val-finish-btns" style="display:none;margin-top:8px;gap:6px;flex-wrap:wrap;justify-content:center;flex-shrink:0;"></div>
             </div>
         </div>
 
@@ -989,7 +990,7 @@
             <div id="validation-controls" class="validation-panel">
                 <h3>Upload Ground Truth</h3>
                 <div id="val-drop-zone" class="validation-drop-zone">
-                    Drop .zip here or click to browse
+                    Drop ESRI format .zip here (.shp, .dbf, .shx, .prj)
                     <input type="file" id="val-file-input" accept=".zip" style="display:none;">
                 </div>
 
@@ -7166,9 +7167,216 @@
             table.style.display = '';
         }
 
-        // --- Run evaluation ---
+        // --- Run evaluation (streaming NDJSON) ---
         let evalAbortController = null;
         document.getElementById('val-run-btn').addEventListener('click', runEvaluation);
+
+        // Accumulated streaming data (matches old response shape for renderChart/renderConfusionMatrix)
+        let lastChartData = null;
+        // Map from classifier name → dataset index (into valChart.data.datasets)
+        let streamDatasetMap = {};
+
+        function createStreamChart(classifierNames) {
+            const ctx = document.getElementById('val-chart').getContext('2d');
+            if (valChart) valChart.destroy();
+
+            const datasets = [];
+            streamDatasetMap = {};
+            classifierNames.forEach(name => {
+                const color = CLASSIFIER_COLORS[name] || { line: '#888', fill: 'rgba(136,136,136,0.15)' };
+                const baseIdx = datasets.length;
+                streamDatasetMap[name] = baseIdx;
+
+                // Mean line
+                datasets.push({
+                    label: CLASSIFIER_LABELS[name] || name,
+                    data: [],
+                    borderColor: color.line,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2.5,
+                    pointRadius: 4,
+                    pointBackgroundColor: color.line,
+                    tension: 0.3,
+                });
+                // +1 std band
+                datasets.push({
+                    label: name + '_upper',
+                    data: [],
+                    borderColor: 'transparent',
+                    backgroundColor: 'transparent',
+                    pointRadius: 0,
+                    fill: false,
+                });
+                // -1 std band, fill to upper
+                datasets.push({
+                    label: name + '_lower',
+                    data: [],
+                    borderColor: 'transparent',
+                    backgroundColor: color.fill,
+                    pointRadius: 0,
+                    fill: '-1',
+                });
+            });
+
+            const metric = document.getElementById('val-metric-select').value;
+            const metricLabel = metric === 'weighted' ? 'Weighted F1' : 'Macro F1';
+
+            valChart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 300 },
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                color: '#ddd',
+                                filter: item => !item.text.includes('_upper') && !item.text.includes('_lower'),
+                            },
+                        },
+                        title: {
+                            display: true,
+                            text: `Learning Curves — ${metricLabel} vs Training Pixels`,
+                            color: '#eee',
+                            font: { size: 15, weight: 'bold' },
+                        },
+                    },
+                    scales: {
+                        x: {
+                            type: 'logarithmic',
+                            title: { display: true, text: 'Training pixels', color: '#aaa' },
+                            ticks: { color: '#aaa' },
+                            grid: { color: 'rgba(255,255,255,0.08)' },
+                        },
+                        y: {
+                            min: 0, max: 1,
+                            title: { display: true, text: metricLabel, color: '#aaa' },
+                            ticks: { color: '#aaa' },
+                            grid: { color: 'rgba(255,255,255,0.08)' },
+                        },
+                    },
+                },
+            });
+        }
+
+        function showFinishButtons(classifierNames) {
+            const container = document.getElementById('val-finish-btns');
+            container.innerHTML = '';
+            container.style.display = 'flex';
+            classifierNames.forEach(name => {
+                const color = CLASSIFIER_COLORS[name] || { line: '#888' };
+                const btn = document.createElement('button');
+                btn.id = 'finish-' + name;
+                btn.textContent = 'Finish ' + (CLASSIFIER_LABELS[name] || name);
+                btn.style.cssText = `padding:4px 12px;border:1px solid ${color.line};border-radius:12px;background:transparent;color:${color.line};font-size:12px;cursor:pointer;`;
+                btn.onclick = () => {
+                    fetch('/api/evaluation/finish-classifier', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({classifier: name}),
+                    });
+                    btn.disabled = true;
+                    btn.textContent = 'Finishing...';
+                    btn.style.opacity = '0.6';
+                    btn.style.cursor = 'default';
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function hideFinishButtons() {
+            const container = document.getElementById('val-finish-btns');
+            container.style.display = 'none';
+            container.innerHTML = '';
+        }
+
+        function handleStreamEvent(ev) {
+            const status = document.getElementById('val-status');
+            const metric = document.getElementById('val-metric-select').value;
+            const meanKey = metric === 'weighted' ? 'mean_f1w' : 'mean_f1';
+            const stdKey = metric === 'weighted' ? 'std_f1w' : 'std_f1';
+
+            if (ev.event === 'start') {
+                // Initialize accumulated data structure
+                lastChartData = {
+                    training_sizes: [],
+                    classifiers: {},
+                    classes: ev.classes,
+                    total_labelled_pixels: ev.total_labelled_pixels,
+                    confusion_matrix_labels: ev.confusion_matrix_labels,
+                    confusion_matrices: null,
+                    models_available: [],
+                };
+                ev.classifiers.forEach(name => {
+                    lastChartData.classifiers[name] = {
+                        mean_f1: [], std_f1: [], mean_f1w: [], std_f1w: [],
+                    };
+                });
+                createStreamChart(ev.classifiers);
+                showFinishButtons(ev.classifiers);
+
+                if (ev.classes) {
+                    const names = ev.classes.map(c => c.name);
+                    populateValClassTable(names, ev.classes);
+                }
+
+            } else if (ev.event === 'progress') {
+                lastChartData.training_sizes.push(ev.size);
+
+                for (const [name, vals] of Object.entries(ev.classifiers)) {
+                    const acc = lastChartData.classifiers[name];
+                    acc.mean_f1.push(vals.mean_f1);
+                    acc.std_f1.push(vals.std_f1);
+                    acc.mean_f1w.push(vals.mean_f1w);
+                    acc.std_f1w.push(vals.std_f1w);
+
+                    // Update chart datasets
+                    const baseIdx = streamDatasetMap[name];
+                    if (baseIdx !== undefined && valChart) {
+                        const mean = vals[meanKey];
+                        const std = vals[stdKey];
+                        valChart.data.datasets[baseIdx].data.push({ x: ev.size, y: mean });
+                        valChart.data.datasets[baseIdx + 1].data.push({ x: ev.size, y: Math.min(1, mean + std) });
+                        valChart.data.datasets[baseIdx + 2].data.push({ x: ev.size, y: Math.max(0, mean - std) });
+                    }
+                }
+                if (valChart) valChart.update();
+                status.textContent = `Training size ${ev.size.toLocaleString()}...`;
+
+            } else if (ev.event === 'model_ready') {
+                const btn = document.getElementById('finish-' + ev.classifier);
+                if (btn) {
+                    btn.textContent = '\u2713 Saved';
+                    btn.disabled = true;
+                    btn.style.opacity = '1';
+                    btn.style.borderColor = '#28a745';
+                    btn.style.color = '#28a745';
+                }
+                if (!lastChartData.models_available.includes(ev.classifier)) {
+                    lastChartData.models_available.push(ev.classifier);
+                }
+
+            } else if (ev.event === 'confusion_matrices') {
+                lastChartData.confusion_matrices = ev.confusion_matrices;
+                renderConfusionMatrix(lastChartData);
+
+            } else if (ev.event === 'done') {
+                lastChartData.elapsed_seconds = ev.elapsed_seconds;
+                lastChartData.models_available = ev.models_available;
+                status.textContent = `Done in ${ev.elapsed_seconds}s — ${lastChartData.total_labelled_pixels.toLocaleString()} pixels, ${lastChartData.classes.length} classes`;
+                status.style.color = '#28a745';
+                const dlBtn = document.getElementById('cm-download-btn');
+                dlBtn.disabled = !(ev.models_available && ev.models_available.length);
+                hideFinishButtons();
+
+            } else if (ev.event === 'error') {
+                status.textContent = ev.message || 'Evaluation error';
+                status.style.color = '#dc3545';
+            }
+        }
 
         async function runEvaluation() {
             const field = document.getElementById('val-field-select').value;
@@ -7191,8 +7399,7 @@
                 if (!classifiers.includes(clf)) return;
                 if (!params[clf]) params[clf] = {};
                 const val = el.value.trim();
-                if (val === '') return; // skip empty (e.g. "None" max_depth)
-                // Numbers stay as numbers, strings stay as strings
+                if (val === '') return;
                 const num = Number(val);
                 params[clf][param] = isNaN(num) ? val : num;
             });
@@ -7205,17 +7412,22 @@
             cancelBtn.style.display = '';
             status.style.color = '#888';
 
+            // Reset chart and accumulated data
+            lastChartData = null;
+            if (valChart) { valChart.destroy(); valChart = null; }
+            hideFinishButtons();
+
             evalAbortController = new AbortController();
             let userCancelled = false;
 
-            // 10-minute timeout (spatial MLP can be slow)
             const evalTimeout = setTimeout(() => evalAbortController.abort(), 600000);
 
-            // Elapsed timer
             const t0 = Date.now();
             const timer = setInterval(() => {
-                const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
-                status.textContent = `Running... ${elapsed}s`;
+                if (!lastChartData) {
+                    const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
+                    status.textContent = `Starting... ${elapsed}s`;
+                }
             }, 1000);
 
             function resetButtons() {
@@ -7227,7 +7439,6 @@
                 evalAbortController = null;
             }
 
-            // Override cancel to set flag
             cancelBtn.onclick = () => { userCancelled = true; evalAbortController.abort(); };
 
             try {
@@ -7244,28 +7455,45 @@
                     }),
                     signal: evalAbortController.signal,
                 });
-                const data = await resp.json();
-                resetButtons();
 
+                // Non-streaming error responses (4xx) come as JSON
                 if (!resp.ok) {
+                    const data = await resp.json();
+                    resetButtons();
+                    hideFinishButtons();
                     status.textContent = data.error || 'Evaluation failed';
                     status.style.color = '#dc3545';
                     return;
                 }
 
-                status.textContent = `Done in ${data.elapsed_seconds}s — ${data.total_labelled_pixels.toLocaleString()} pixels, ${data.classes.length} classes`;
-                status.style.color = '#28a745';
-
-                renderChart(data);
-                renderConfusionMatrix(data);
-
-                // Update Panel 1 class table with actual pixel counts
-                if (data.classes) {
-                    const names = data.classes.map(c => c.name);
-                    populateValClassTable(names, data.classes);
+                // Stream NDJSON
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            handleStreamEvent(JSON.parse(line));
+                        } catch (parseErr) {
+                            console.warn('NDJSON parse error:', parseErr, line);
+                        }
+                    }
                 }
+                // Process any remaining buffer
+                if (buffer.trim()) {
+                    try { handleStreamEvent(JSON.parse(buffer)); } catch(e) {}
+                }
+                resetButtons();
+
             } catch (e) {
                 resetButtons();
+                hideFinishButtons();
                 const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
                 if (e.name === 'AbortError') {
                     if (userCancelled) {
@@ -7284,13 +7512,11 @@
             }
         }
 
-        // --- Chart rendering ---
-        let lastChartData = null;
+        // --- Chart rendering (full rebuild from lastChartData, used by metric toggle) ---
 
         function renderChart(data, metric) {
             lastChartData = data;
             if (!metric) metric = document.getElementById('val-metric-select').value;
-            // Fall back to macro if weighted data not available (old response)
             const firstClf = Object.values(data.classifiers)[0];
             const hasWeighted = firstClf && firstClf.mean_f1w;
             const isWeighted = metric === 'weighted' && hasWeighted;
@@ -7306,10 +7532,11 @@
             if (valChart) valChart.destroy();
 
             const datasets = [];
+            streamDatasetMap = {};
             for (const [name, values] of Object.entries(data.classifiers)) {
                 const color = CLASSIFIER_COLORS[name] || { line: '#888', fill: 'rgba(136,136,136,0.15)' };
+                streamDatasetMap[name] = datasets.length;
 
-                // Mean line
                 datasets.push({
                     label: CLASSIFIER_LABELS[name] || name,
                     data: data.training_sizes.map((x, i) => ({ x, y: values[meanKey][i] })),
@@ -7321,7 +7548,6 @@
                     tension: 0.3,
                 });
 
-                // +1 std band (no legend)
                 datasets.push({
                     label: name + '_upper',
                     data: data.training_sizes.map((x, i) => ({
@@ -7333,7 +7559,6 @@
                     fill: false,
                 });
 
-                // -1 std band, fill to upper
                 datasets.push({
                     label: name + '_lower',
                     data: data.training_sizes.map((x, i) => ({

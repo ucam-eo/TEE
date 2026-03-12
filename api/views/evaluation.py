@@ -15,7 +15,7 @@ import joblib
 import numpy as np
 import rasterio.features
 from affine import Affine
-from django.http import FileResponse, JsonResponse
+from django.http import FileResponse, JsonResponse, StreamingHttpResponse
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix, f1_score
 from sklearn.neighbors import KNeighborsClassifier
@@ -31,6 +31,9 @@ _uploaded_shapefile = {"path": None, "gdf": None}
 
 # Cache for trained model files: classifier name → temp file path
 _trained_models = {}
+
+# Classifiers the user has marked "done" mid-stream (cleared at stream start)
+_finish_classifiers = set()
 
 
 def upload_shapefile(request):
@@ -153,8 +156,24 @@ def class_pixel_counts(request):
     return JsonResponse({"classes": classes})
 
 
+def finish_classifier(request):
+    """Mark a classifier as finished so the stream stops evaluating it early."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    name = body.get("classifier")
+    if not name:
+        return JsonResponse({"error": "classifier is required"}, status=400)
+    _finish_classifiers.add(name)
+    logger.info(f"Classifier '{name}' marked for early finish")
+    return JsonResponse({"ok": True})
+
+
 def run_evaluation(request):
-    """Run learning-curve evaluation with selected classifiers."""
+    """Run learning-curve evaluation, streaming NDJSON events."""
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -180,9 +199,7 @@ def run_evaluation(request):
     if field not in gdf.columns:
         return JsonResponse({"error": f"Field '{field}' not found in shapefile"}, status=400)
 
-    t0 = time.time()
-
-    # 1. Load vectors
+    # 1. Load vectors (do this before streaming so errors return clean JSON)
     try:
         embeddings, coords, metadata = _load_vectors(viewport, str(year))
     except FileNotFoundError as e:
@@ -197,10 +214,8 @@ def run_evaluation(request):
     class_raster = _rasterize_shapefile(gdf, field, transform, width, height)
 
     # 3. Build class labels per pixel
-    # coords is (N, 2) with (x, y) = (col, row)
     pixel_labels = class_raster[coords[:, 1], coords[:, 0]]
 
-    # Filter out unlabelled pixels (value 0 = no data)
     labelled_mask = pixel_labels > 0
     labelled_embeddings = embeddings[labelled_mask]
     labelled_labels = pixel_labels[labelled_mask]
@@ -210,20 +225,16 @@ def run_evaluation(request):
             "error": "No pixels overlap with the shapefile. Check that the shapefile covers the viewport area."
         }, status=400)
 
-    # Build class name mapping
     le = LabelEncoder()
     le.fit(gdf[field].dropna().unique())
-    # class_raster used 1-based indexing matching le.classes_ order
     class_names = le.classes_.tolist()
 
-    # Count pixels per class
     unique_labels, counts = np.unique(labelled_labels, return_counts=True)
     class_info = []
     for lbl, cnt in zip(unique_labels, counts):
         name = class_names[lbl - 1] if lbl <= len(class_names) else f"Class {lbl}"
         class_info.append({"name": str(name), "pixels": int(cnt)})
 
-    # Filter classes with < 50 pixels
     min_pixels = 50
     valid_classes = set(lbl for lbl, cnt in zip(unique_labels, counts) if cnt >= min_pixels)
     if len(valid_classes) < 2:
@@ -236,11 +247,9 @@ def run_evaluation(request):
     labelled_embeddings = labelled_embeddings[valid_mask]
     labelled_labels = labelled_labels[valid_mask]
 
-    # Re-encode labels to contiguous 0..N-1
     label_encoder_final = LabelEncoder()
     labelled_labels = label_encoder_final.fit_transform(labelled_labels)
 
-    # Map re-encoded labels back to original class names
     valid_class_names = []
     for enc_label in label_encoder_final.classes_:
         name = class_names[enc_label - 1] if enc_label <= len(class_names) else f"Class {enc_label}"
@@ -250,62 +259,112 @@ def run_evaluation(request):
     logger.info(f"Evaluation: {total_labelled} labelled pixels, "
                 f"{len(valid_classes)} classes, classifiers={classifiers}")
 
-    # 4. Run learning curve
-    # Build spatial features for spatial_mlp if requested
     spatial_embeddings = None
     if "spatial_mlp" in classifiers:
         spatial_features_all = _gather_spatial_features(embeddings, coords, width, height)
         spatial_embeddings = spatial_features_all[labelled_mask][valid_mask]
 
-    # Build log-spaced training sizes up to max_train
     all_sizes = [10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000]
     training_sizes = [s for s in all_sizes if s <= max_train]
     if not training_sizes or training_sizes[-1] < max_train:
         training_sizes.append(max_train)
-    results = _run_learning_curve(
-        labelled_embeddings, labelled_labels, classifiers, training_sizes,
-        repeats=5, classifier_params=classifier_params,
-        spatial_embeddings=spatial_embeddings,
-    )
 
-    # Retrain each classifier on ALL labelled data and cache for download.
-    # Build into a local dict so prior models survive until all new ones are ready.
-    new_models = {}
-    for name in classifiers:
-        try:
-            X_full = spatial_embeddings if name == "spatial_mlp" else labelled_embeddings
-            clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
-            clf.fit(X_full, labelled_labels)
-            tmp = tempfile.NamedTemporaryFile(
-                suffix=".joblib", prefix=f"{name}_model_", delete=False
-            )
-            joblib.dump({"model": clf, "class_names": valid_class_names}, tmp.name)
-            new_models[name] = tmp.name
-            logger.info(f"Trained and cached model '{name}' → {tmp.name}")
-        except Exception as e:
-            logger.warning(f"Failed to retrain {name} on full data: {e}")
+    def stream():
+        _finish_classifiers.clear()
 
-    # Atomically swap: clean up old temp files, then replace
-    for old_path in _trained_models.values():
-        try:
-            Path(old_path).unlink(missing_ok=True)
-        except OSError:
-            pass
-    _trained_models.clear()
-    _trained_models.update(new_models)
+        # Clean up old models
+        for old_path in _trained_models.values():
+            try:
+                Path(old_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+        _trained_models.clear()
 
-    elapsed = time.time() - t0
+        t0 = time.time()
 
-    return JsonResponse({
-        "training_sizes": results["training_sizes"],
-        "classifiers": results["classifiers"],
-        "confusion_matrices": results["confusion_matrices"],
-        "confusion_matrix_labels": valid_class_names,
-        "classes": class_info,
-        "total_labelled_pixels": total_labelled,
-        "elapsed_seconds": round(elapsed, 1),
-        "models_available": list(_trained_models.keys()),
-    })
+        # start event
+        yield json.dumps({
+            "event": "start",
+            "classifiers": classifiers,
+            "classes": class_info,
+            "total_labelled_pixels": total_labelled,
+            "confusion_matrix_labels": valid_class_names,
+            "training_sizes": training_sizes,
+        }) + "\n"
+
+        # Run learning curve as generator
+        active_classifiers = list(classifiers)
+        for event in _run_learning_curve(
+            labelled_embeddings, labelled_labels, classifiers, training_sizes,
+            repeats=5, classifier_params=classifier_params,
+            spatial_embeddings=spatial_embeddings,
+        ):
+            if event["type"] == "progress":
+                yield json.dumps({
+                    "event": "progress",
+                    "size": event["size"],
+                    "classifiers": event["classifiers"],
+                }) + "\n"
+
+                # Check for newly finished classifiers and retrain them
+                for name in list(active_classifiers):
+                    if name in _finish_classifiers and name not in _trained_models:
+                        try:
+                            X_full = spatial_embeddings if name == "spatial_mlp" else labelled_embeddings
+                            clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
+                            clf.fit(X_full, labelled_labels)
+                            tmp = tempfile.NamedTemporaryFile(
+                                suffix=".joblib", prefix=f"{name}_model_", delete=False
+                            )
+                            joblib.dump({"model": clf, "class_names": valid_class_names}, tmp.name)
+                            _trained_models[name] = tmp.name
+                            logger.info(f"Early-finish: trained '{name}' → {tmp.name}")
+                            yield json.dumps({
+                                "event": "model_ready",
+                                "classifier": name,
+                            }) + "\n"
+                        except Exception as e:
+                            logger.warning(f"Early-finish retrain failed for {name}: {e}")
+                        active_classifiers.remove(name)
+
+            elif event["type"] == "confusion_matrices":
+                yield json.dumps({
+                    "event": "confusion_matrices",
+                    "confusion_matrices": event["confusion_matrices"],
+                }) + "\n"
+
+        # Retrain classifiers that weren't finished early
+        for name in active_classifiers:
+            if name not in _trained_models:
+                try:
+                    X_full = spatial_embeddings if name == "spatial_mlp" else labelled_embeddings
+                    clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
+                    clf.fit(X_full, labelled_labels)
+                    tmp = tempfile.NamedTemporaryFile(
+                        suffix=".joblib", prefix=f"{name}_model_", delete=False
+                    )
+                    joblib.dump({"model": clf, "class_names": valid_class_names}, tmp.name)
+                    _trained_models[name] = tmp.name
+                    logger.info(f"Trained and cached model '{name}' → {tmp.name}")
+                    yield json.dumps({
+                        "event": "model_ready",
+                        "classifier": name,
+                    }) + "\n"
+                except Exception as e:
+                    logger.warning(f"Failed to retrain {name} on full data: {e}")
+
+        elapsed = time.time() - t0
+        yield json.dumps({
+            "event": "done",
+            "elapsed_seconds": round(elapsed, 1),
+            "models_available": list(_trained_models.keys()),
+        }) + "\n"
+
+    resp = StreamingHttpResponse(stream(), content_type="application/x-ndjson")
+    resp["Cache-Control"] = "no-cache"
+    # Prevent GZipMiddleware from buffering the stream
+    resp["Content-Encoding"] = "identity"
+    return resp
 
 
 def _load_vectors(viewport, year):
@@ -392,8 +451,7 @@ def _gather_spatial_features(embeddings, coords, width, height):
 
 def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
                         repeats=5, classifier_params=None, spatial_embeddings=None):
-    """Run learning curve evaluation. Returns dict with mean/std F1 per classifier."""
-    # Suppress sklearn warnings about small training sets (expected at low sample sizes)
+    """Generator that yields progress events after each training size."""
     warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
     warnings.filterwarnings("ignore", category=FutureWarning, module="sklearn")
     from sklearn.exceptions import ConvergenceWarning
@@ -401,24 +459,22 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
     n_samples = len(labels)
     n_classes = len(np.unique(labels))
 
-    # Use all requested training sizes — the stratified sampler below
-    # caps per-class at what's available, so large sizes still work
     valid_sizes = training_sizes
-
-    results = {name: {"mean_f1": [], "std_f1": [], "mean_f1w": [], "std_f1w": []} for name in classifier_names}
-    # Accumulate confusion matrices at the largest training size
     cm_accum = {name: np.zeros((n_classes, n_classes), dtype=np.int64) for name in classifier_names}
 
     for size in valid_sizes:
-        f1_scores = {name: [] for name in classifier_names}
-        f1w_scores = {name: [] for name in classifier_names}
+        # Only evaluate classifiers not yet finished
+        active = [n for n in classifier_names if n not in _finish_classifiers]
+        if not active:
+            break
+
+        f1_scores = {name: [] for name in active}
+        f1w_scores = {name: [] for name in active}
         is_largest = (size == valid_sizes[-1])
 
         for seed in range(repeats):
             rng = np.random.RandomState(seed)
 
-            # Stratified sample: target per_class pixels from each class,
-            # capped at 80% of that class's count to leave test data
             per_class = max(1, size // n_classes)
             train_idx = []
             for cls in range(n_classes):
@@ -429,7 +485,6 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
                 train_idx.extend(chosen)
             train_idx = np.array(train_idx)
 
-            # Test set = everything not in train
             all_idx = np.arange(n_samples)
             test_idx = np.setdiff1d(all_idx, train_idx)
 
@@ -439,7 +494,7 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
             X_train, y_train = embeddings[train_idx], labels[train_idx]
             X_test, y_test = embeddings[test_idx], labels[test_idx]
 
-            for name in classifier_names:
+            for name in active:
                 if name == "spatial_mlp" and spatial_embeddings is not None:
                     X_tr, X_te = spatial_embeddings[train_idx], spatial_embeddings[test_idx]
                 else:
@@ -460,18 +515,26 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
                     f1_scores[name].append(0.0)
                     f1w_scores[name].append(0.0)
 
-        for name in classifier_names:
+        size_results = {}
+        for name in active:
             scores = f1_scores[name]
-            results[name]["mean_f1"].append(round(float(np.mean(scores)), 4) if scores else 0.0)
-            results[name]["std_f1"].append(round(float(np.std(scores)), 4) if scores else 0.0)
             scoresw = f1w_scores[name]
-            results[name]["mean_f1w"].append(round(float(np.mean(scoresw)), 4) if scoresw else 0.0)
-            results[name]["std_f1w"].append(round(float(np.std(scoresw)), 4) if scoresw else 0.0)
+            size_results[name] = {
+                "mean_f1": round(float(np.mean(scores)), 4) if scores else 0.0,
+                "std_f1": round(float(np.std(scores)), 4) if scores else 0.0,
+                "mean_f1w": round(float(np.mean(scoresw)), 4) if scoresw else 0.0,
+                "std_f1w": round(float(np.std(scoresw)), 4) if scoresw else 0.0,
+            }
 
-    # Convert accumulated CMs to lists for JSON serialization
-    confusion_matrices = {name: cm_accum[name].tolist() for name in classifier_names}
+        yield {"type": "progress", "size": size, "classifiers": size_results}
 
-    return {"training_sizes": valid_sizes, "classifiers": results, "confusion_matrices": confusion_matrices}
+    # Confusion matrices from the largest size (only for classifiers that ran it)
+    confusion_matrices = {}
+    for name in classifier_names:
+        if cm_accum[name].any():
+            confusion_matrices[name] = cm_accum[name].tolist()
+    if confusion_matrices:
+        yield {"type": "confusion_matrices", "confusion_matrices": confusion_matrices}
 
 
 def _make_classifier(name, params=None):
