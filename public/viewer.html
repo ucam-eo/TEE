@@ -7169,11 +7169,6 @@
         // --- Run evaluation ---
         let evalAbortController = null;
         document.getElementById('val-run-btn').addEventListener('click', runEvaluation);
-        document.getElementById('val-cancel-btn').addEventListener('click', cancelEvaluation);
-
-        function cancelEvaluation() {
-            if (evalAbortController) evalAbortController.abort();
-        }
 
         async function runEvaluation() {
             const field = document.getElementById('val-field-select').value;
@@ -7211,6 +7206,10 @@
             status.style.color = '#888';
 
             evalAbortController = new AbortController();
+            let userCancelled = false;
+
+            // 10-minute timeout (spatial MLP can be slow)
+            const evalTimeout = setTimeout(() => evalAbortController.abort(), 600000);
 
             // Elapsed timer
             const t0 = Date.now();
@@ -7221,11 +7220,15 @@
 
             function resetButtons() {
                 clearInterval(timer);
+                clearTimeout(evalTimeout);
                 btn.disabled = false;
                 btn.textContent = 'Run Evaluation';
                 cancelBtn.style.display = 'none';
                 evalAbortController = null;
             }
+
+            // Override cancel to set flag
+            cancelBtn.onclick = () => { userCancelled = true; evalAbortController.abort(); };
 
             try {
                 const resp = await fetch('/api/evaluation/run', {
@@ -7263,9 +7266,17 @@
                 }
             } catch (e) {
                 resetButtons();
+                const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
                 if (e.name === 'AbortError') {
-                    status.textContent = 'Cancelled';
+                    if (userCancelled) {
+                        status.textContent = 'Cancelled by user';
+                    } else {
+                        status.textContent = `Timed out after ${elapsed}s — try fewer classifiers or lower max training pixels`;
+                    }
                     status.style.color = '#f0ad4e';
+                } else if (e.name === 'TypeError') {
+                    status.textContent = `Connection lost after ${elapsed}s — the server may have run out of memory`;
+                    status.style.color = '#dc3545';
                 } else {
                     status.textContent = 'Error: ' + e.message;
                     status.style.color = '#dc3545';
