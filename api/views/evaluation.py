@@ -259,10 +259,19 @@ def run_evaluation(request):
     logger.info(f"Evaluation: {total_labelled} labelled pixels, "
                 f"{len(valid_classes)} classes, classifiers={classifiers}")
 
+    # Combined mask: labelled AND valid class, on the full pixel array
+    subset_mask = np.zeros(len(embeddings), dtype=bool)
+    subset_mask[np.where(labelled_mask)[0][valid_mask]] = True
+
     spatial_embeddings = None
     if "spatial_mlp" in classifiers:
-        spatial_features_all = _gather_spatial_features(embeddings, coords, width, height)
-        spatial_embeddings = spatial_features_all[labelled_mask][valid_mask]
+        spatial_embeddings = _gather_spatial_features(
+            embeddings, coords, width, height, radius=1, subset_mask=subset_mask)
+
+    spatial_embeddings_5x5 = None
+    if "spatial_mlp_5x5" in classifiers:
+        spatial_embeddings_5x5 = _gather_spatial_features(
+            embeddings, coords, width, height, radius=2, subset_mask=subset_mask)
 
     all_sizes = [10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000]
     training_sizes = [s for s in all_sizes if s <= max_train]
@@ -298,6 +307,7 @@ def run_evaluation(request):
             labelled_embeddings, labelled_labels, classifiers, training_sizes,
             repeats=5, classifier_params=classifier_params,
             spatial_embeddings=spatial_embeddings,
+            spatial_embeddings_5x5=spatial_embeddings_5x5,
         ):
             if event["type"] == "progress":
                 yield json.dumps({
@@ -310,7 +320,12 @@ def run_evaluation(request):
                 for name in list(active_classifiers):
                     if name in _finish_classifiers and name not in _trained_models:
                         try:
-                            X_full = spatial_embeddings if name == "spatial_mlp" else labelled_embeddings
+                            if name == "spatial_mlp":
+                                X_full = spatial_embeddings
+                            elif name == "spatial_mlp_5x5":
+                                X_full = spatial_embeddings_5x5
+                            else:
+                                X_full = labelled_embeddings
                             clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
                             clf.fit(X_full, labelled_labels)
                             tmp = tempfile.NamedTemporaryFile(
@@ -337,7 +352,12 @@ def run_evaluation(request):
         for name in active_classifiers:
             if name not in _trained_models:
                 try:
-                    X_full = spatial_embeddings if name == "spatial_mlp" else labelled_embeddings
+                    if name == "spatial_mlp":
+                        X_full = spatial_embeddings
+                    elif name == "spatial_mlp_5x5":
+                        X_full = spatial_embeddings_5x5
+                    else:
+                        X_full = labelled_embeddings
                     clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
                     clf.fit(X_full, labelled_labels)
                     tmp = tempfile.NamedTemporaryFile(
@@ -426,21 +446,31 @@ def _rasterize_shapefile(gdf, field, transform, width, height):
     return class_raster
 
 
-def _gather_spatial_features(embeddings, coords, width, height):
-    """Build 3x3 neighbourhood features (N, 1152) from (N, 128) embeddings on a regular grid."""
+def _gather_spatial_features(embeddings, coords, width, height, radius=1,
+                             subset_mask=None):
+    """Build (2r+1)² neighbourhood features from (N, dim) embeddings on a regular grid.
+
+    If *subset_mask* (bool array, length N) is given, only compute features for
+    those pixels, drastically reducing memory for large viewports.
+    """
     dim = embeddings.shape[1]  # 128
-    # Build (row, col) → index lookup
+    window = 2 * radius + 1
+    # Build (row, col) → index lookup (uses all pixels for neighbour access)
     grid = np.full((height, width), -1, dtype=np.int32)
     grid[coords[:, 1], coords[:, 0]] = np.arange(len(coords))
 
-    offsets = [(-1, -1), (-1, 0), (-1, 1),
-               (0, -1),  (0, 0),  (0, 1),
-               (1, -1),  (1, 0),  (1, 1)]
-    spatial = np.zeros((len(coords), 9 * dim), dtype=np.float32)
+    if subset_mask is not None:
+        sub_coords = coords[subset_mask]
+    else:
+        sub_coords = coords
+
+    offsets = [(dr, dc) for dr in range(-radius, radius + 1)
+                        for dc in range(-radius, radius + 1)]
+    spatial = np.zeros((len(sub_coords), window * window * dim), dtype=np.float32)
 
     for i, (dr, dc) in enumerate(offsets):
-        nr = coords[:, 1] + dr   # neighbour rows
-        nc = coords[:, 0] + dc   # neighbour cols
+        nr = sub_coords[:, 1] + dr   # neighbour rows
+        nc = sub_coords[:, 0] + dc   # neighbour cols
         valid = (nr >= 0) & (nr < height) & (nc >= 0) & (nc < width)
         idx = np.where(valid, grid[np.clip(nr, 0, height - 1), np.clip(nc, 0, width - 1)], -1)
         has_neighbour = valid & (idx >= 0)
@@ -450,7 +480,8 @@ def _gather_spatial_features(embeddings, coords, width, height):
 
 
 def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
-                        repeats=5, classifier_params=None, spatial_embeddings=None):
+                        repeats=5, classifier_params=None, spatial_embeddings=None,
+                        spatial_embeddings_5x5=None):
     """Generator that yields progress events after each training size."""
     warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
     warnings.filterwarnings("ignore", category=FutureWarning, module="sklearn")
@@ -497,6 +528,8 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
             for name in active:
                 if name == "spatial_mlp" and spatial_embeddings is not None:
                     X_tr, X_te = spatial_embeddings[train_idx], spatial_embeddings[test_idx]
+                elif name == "spatial_mlp_5x5" and spatial_embeddings_5x5 is not None:
+                    X_tr, X_te = spatial_embeddings_5x5[train_idx], spatial_embeddings_5x5[test_idx]
                 else:
                     X_tr, X_te = X_train, X_test
                 clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
@@ -584,6 +617,17 @@ def _make_classifier(name, params=None):
         return MLPClassifier(
             hidden_layer_sizes=hidden,
             max_iter=int(p.get("max_iter", 300)),
+            random_state=42,
+        )
+    elif name == "spatial_mlp_5x5":
+        layers_str = p.get("hidden_layers", "512,256")
+        if isinstance(layers_str, str):
+            hidden = tuple(int(x) for x in layers_str.split(","))
+        else:
+            hidden = (512, 256)
+        return MLPClassifier(
+            hidden_layer_sizes=hidden,
+            max_iter=int(p.get("max_iter", 400)),
             random_state=42,
         )
     else:

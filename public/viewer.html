@@ -1071,6 +1071,22 @@
                             <label>Max iter <input type="number" data-clf="spatial_mlp" data-param="max_iter" value="300" min="50" max="1000" step="50"></label>
                         </div>
                     </div>
+                    <!-- Spatial MLP 5×5 -->
+                    <div class="val-clf-block">
+                        <label class="val-clf-header">
+                            <input type="checkbox" value="spatial_mlp_5x5">
+                            <span>Spatial MLP (5×5)</span>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                        </label>
+                        <div class="val-params">
+                            <label>Layers <select data-clf="spatial_mlp_5x5" data-param="hidden_layers">
+                                <option value="512,256" selected>512, 256</option>
+                                <option value="512,256,128">512, 256, 128</option>
+                                <option value="1024,512,256">1024, 512, 256</option>
+                            </select></label>
+                            <label>Max iter <input type="number" data-clf="spatial_mlp_5x5" data-param="max_iter" value="400" min="50" max="1000" step="50"></label>
+                        </div>
+                    </div>
                 </div>
 
                 <label>Max training pixels</label>
@@ -6999,8 +7015,9 @@
             xgboost:     { line: 'rgba(153, 102, 255, 1)', fill: 'rgba(153, 102, 255, 0.15)' },
             mlp:         { line: 'rgba(255, 99, 132, 1)',  fill: 'rgba(255, 99, 132, 0.15)' },
             spatial_mlp: { line: 'rgba(54, 162, 235, 1)',  fill: 'rgba(54, 162, 235, 0.15)' },
+            spatial_mlp_5x5: { line: 'rgba(255, 206, 86, 1)', fill: 'rgba(255, 206, 86, 0.15)' },
         };
-        const CLASSIFIER_LABELS = { nn: 'k-NN', rf: 'Random Forest', xgboost: 'XGBoost', mlp: 'MLP', spatial_mlp: 'Spatial MLP (3×3)' };
+        const CLASSIFIER_LABELS = { nn: 'k-NN', rf: 'Random Forest', xgboost: 'XGBoost', mlp: 'MLP', spatial_mlp: 'Spatial MLP (3×3)', spatial_mlp_5x5: 'Spatial MLP (5×5)' };
 
         // --- Drop zone ---
         const dropZone = document.getElementById('val-drop-zone');
