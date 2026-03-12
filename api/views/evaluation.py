@@ -273,6 +273,16 @@ def run_evaluation(request):
         spatial_embeddings_5x5 = _gather_spatial_features(
             embeddings, coords, width, height, radius=2, subset_mask=subset_mask)
 
+    embedding_grid = None
+    labelled_coords = None
+    if "unet" in classifiers:
+        from api.views.unet_model import build_embedding_grid, TORCH_MISSING_MSG
+        from api.views.unet_model import torch as _unet_torch
+        if _unet_torch is None:
+            return JsonResponse({"error": TORCH_MISSING_MSG}, status=400)
+        embedding_grid = build_embedding_grid(embeddings, coords, width, height)
+        labelled_coords = coords[np.where(labelled_mask)[0][valid_mask]]
+
     all_sizes = [10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000]
     training_sizes = [s for s in all_sizes if s <= max_train]
     if not training_sizes or training_sizes[-1] < max_train:
@@ -308,6 +318,8 @@ def run_evaluation(request):
             repeats=5, classifier_params=classifier_params,
             spatial_embeddings=spatial_embeddings,
             spatial_embeddings_5x5=spatial_embeddings_5x5,
+            embedding_grid=embedding_grid,
+            labelled_coords=labelled_coords,
         ):
             if event["type"] == "progress":
                 yield json.dumps({
@@ -320,19 +332,39 @@ def run_evaluation(request):
                 for name in list(active_classifiers):
                     if name in _finish_classifiers and name not in _trained_models:
                         try:
-                            if name == "spatial_mlp":
-                                X_full = spatial_embeddings
-                            elif name == "spatial_mlp_5x5":
-                                X_full = spatial_embeddings_5x5
+                            if name == "unet":
+                                import torch as _torch
+                                from api.views.unet_model import train_unet
+                                dim = labelled_embeddings.shape[1]
+                                n_cls = len(np.unique(labelled_labels))
+                                model = train_unet(
+                                    embedding_grid, labelled_coords, labelled_labels,
+                                    np.arange(len(labelled_labels)), n_cls,
+                                    (classifier_params or {}).get("unet", {}))
+                                tmp = tempfile.NamedTemporaryFile(
+                                    suffix=".pt", prefix=f"{name}_model_", delete=False)
+                                _torch.save({
+                                    "model_state": model.state_dict(),
+                                    "class_names": valid_class_names,
+                                    "in_channels": dim, "n_classes": n_cls,
+                                    "depth": int((classifier_params or {}).get("unet", {}).get("depth", 3)),
+                                    "base_filters": int((classifier_params or {}).get("unet", {}).get("base_filters", 64)),
+                                }, tmp.name)
+                                _trained_models[name] = tmp.name
                             else:
-                                X_full = labelled_embeddings
-                            clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
-                            clf.fit(X_full, labelled_labels)
-                            tmp = tempfile.NamedTemporaryFile(
-                                suffix=".joblib", prefix=f"{name}_model_", delete=False
-                            )
-                            joblib.dump({"model": clf, "class_names": valid_class_names}, tmp.name)
-                            _trained_models[name] = tmp.name
+                                if name == "spatial_mlp":
+                                    X_full = spatial_embeddings
+                                elif name == "spatial_mlp_5x5":
+                                    X_full = spatial_embeddings_5x5
+                                else:
+                                    X_full = labelled_embeddings
+                                clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
+                                clf.fit(X_full, labelled_labels)
+                                tmp = tempfile.NamedTemporaryFile(
+                                    suffix=".joblib", prefix=f"{name}_model_", delete=False
+                                )
+                                joblib.dump({"model": clf, "class_names": valid_class_names}, tmp.name)
+                                _trained_models[name] = tmp.name
                             logger.info(f"Early-finish: trained '{name}' → {tmp.name}")
                             yield json.dumps({
                                 "event": "model_ready",
@@ -352,19 +384,39 @@ def run_evaluation(request):
         for name in active_classifiers:
             if name not in _trained_models:
                 try:
-                    if name == "spatial_mlp":
-                        X_full = spatial_embeddings
-                    elif name == "spatial_mlp_5x5":
-                        X_full = spatial_embeddings_5x5
+                    if name == "unet":
+                        import torch as _torch
+                        from api.views.unet_model import train_unet
+                        dim = labelled_embeddings.shape[1]
+                        n_cls = len(np.unique(labelled_labels))
+                        model = train_unet(
+                            embedding_grid, labelled_coords, labelled_labels,
+                            np.arange(len(labelled_labels)), n_cls,
+                            (classifier_params or {}).get("unet", {}))
+                        tmp = tempfile.NamedTemporaryFile(
+                            suffix=".pt", prefix=f"{name}_model_", delete=False)
+                        _torch.save({
+                            "model_state": model.state_dict(),
+                            "class_names": valid_class_names,
+                            "in_channels": dim, "n_classes": n_cls,
+                            "depth": int((classifier_params or {}).get("unet", {}).get("depth", 3)),
+                            "base_filters": int((classifier_params or {}).get("unet", {}).get("base_filters", 64)),
+                        }, tmp.name)
+                        _trained_models[name] = tmp.name
                     else:
-                        X_full = labelled_embeddings
-                    clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
-                    clf.fit(X_full, labelled_labels)
-                    tmp = tempfile.NamedTemporaryFile(
-                        suffix=".joblib", prefix=f"{name}_model_", delete=False
-                    )
-                    joblib.dump({"model": clf, "class_names": valid_class_names}, tmp.name)
-                    _trained_models[name] = tmp.name
+                        if name == "spatial_mlp":
+                            X_full = spatial_embeddings
+                        elif name == "spatial_mlp_5x5":
+                            X_full = spatial_embeddings_5x5
+                        else:
+                            X_full = labelled_embeddings
+                        clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
+                        clf.fit(X_full, labelled_labels)
+                        tmp = tempfile.NamedTemporaryFile(
+                            suffix=".joblib", prefix=f"{name}_model_", delete=False
+                        )
+                        joblib.dump({"model": clf, "class_names": valid_class_names}, tmp.name)
+                        _trained_models[name] = tmp.name
                     logger.info(f"Trained and cached model '{name}' → {tmp.name}")
                     yield json.dumps({
                         "event": "model_ready",
@@ -481,7 +533,8 @@ def _gather_spatial_features(embeddings, coords, width, height, radius=1,
 
 def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
                         repeats=5, classifier_params=None, spatial_embeddings=None,
-                        spatial_embeddings_5x5=None):
+                        spatial_embeddings_5x5=None, embedding_grid=None,
+                        labelled_coords=None):
     """Generator that yields progress events after each training size."""
     warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
     warnings.filterwarnings("ignore", category=FutureWarning, module="sklearn")
@@ -502,6 +555,9 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
         f1_scores = {name: [] for name in active}
         f1w_scores = {name: [] for name in active}
         is_largest = (size == valid_sizes[-1])
+
+        # U-Net uses 1 repeat (gradient descent is deterministic enough)
+        unet_repeats = 1
 
         for seed in range(repeats):
             rng = np.random.RandomState(seed)
@@ -526,6 +582,33 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
             X_test, y_test = embeddings[test_idx], labels[test_idx]
 
             for name in active:
+                # U-Net only runs 1 repeat
+                if name == "unet" and seed >= unet_repeats:
+                    continue
+
+                if name == "unet" and embedding_grid is not None:
+                    try:
+                        from api.views.unet_model import train_unet, predict_unet
+                        model = train_unet(
+                            embedding_grid, labelled_coords, labels,
+                            train_idx, n_classes,
+                            (classifier_params or {}).get("unet", {}))
+                        preds = predict_unet(model, embedding_grid)
+                        y_pred = preds[labelled_coords[test_idx, 1],
+                                       labelled_coords[test_idx, 0]]
+                        f1 = f1_score(y_test, y_pred, average="macro", zero_division=0)
+                        f1w = f1_score(y_test, y_pred, average="weighted", zero_division=0)
+                        f1_scores[name].append(f1)
+                        f1w_scores[name].append(f1w)
+                        if is_largest:
+                            cm = confusion_matrix(y_test, y_pred, labels=np.arange(n_classes))
+                            cm_accum[name] += cm
+                    except Exception as e:
+                        logger.warning(f"U-Net failed at size {size}: {e}")
+                        f1_scores[name].append(0.0)
+                        f1w_scores[name].append(0.0)
+                    continue
+
                 if name == "spatial_mlp" and spatial_embeddings is not None:
                     X_tr, X_te = spatial_embeddings[train_idx], spatial_embeddings[test_idx]
                 elif name == "spatial_mlp_5x5" and spatial_embeddings_5x5 is not None:
@@ -630,21 +713,24 @@ def _make_classifier(name, params=None):
             max_iter=int(p.get("max_iter", 400)),
             random_state=42,
         )
+    elif name == "unet":
+        return None  # handled specially in the learning-curve loop
     else:
         raise ValueError(f"Unknown classifier: {name}")
 
 
 def download_model(request, classifier):
-    """Serve a trained model joblib file for download."""
+    """Serve a trained model file for download (.pt for U-Net, .joblib otherwise)."""
     path = _trained_models.get(classifier)
     if not path or not Path(path).exists():
         return JsonResponse(
             {"error": f"No trained model for '{classifier}'. Run evaluation first."},
             status=404,
         )
+    ext = ".pt" if classifier == "unet" else ".joblib"
     return FileResponse(
         open(path, "rb"),
         content_type="application/octet-stream",
         as_attachment=True,
-        filename=f"{classifier}_model.joblib",
+        filename=f"{classifier}_model{ext}",
     )

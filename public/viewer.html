@@ -1087,6 +1087,27 @@
                             <label>Max iter <input type="number" data-clf="spatial_mlp_5x5" data-param="max_iter" value="400" min="50" max="1000" step="50"></label>
                         </div>
                     </div>
+                    <!-- U-Net (GPU) -->
+                    <div class="val-clf-block">
+                        <label class="val-clf-header">
+                            <input type="checkbox" value="unet">
+                            <span>U-Net (GPU)</span>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                        </label>
+                        <div class="val-params">
+                            <label>Epochs <input type="number" data-clf="unet" data-param="epochs" value="50" min="5" max="500" step="5"></label>
+                            <label>Learning rate <input type="number" data-clf="unet" data-param="lr" value="0.001" min="0.0001" max="0.1" step="0.0001"></label>
+                            <label>Depth <select data-clf="unet" data-param="depth">
+                                <option value="3" selected>3</option>
+                                <option value="4">4</option>
+                            </select></label>
+                            <label>Base filters <select data-clf="unet" data-param="base_filters">
+                                <option value="32">32</option>
+                                <option value="64" selected>64</option>
+                                <option value="128">128</option>
+                            </select></label>
+                        </div>
+                    </div>
                 </div>
 
                 <label>Max training pixels</label>
@@ -7016,8 +7037,9 @@
             mlp:         { line: 'rgba(255, 99, 132, 1)',  fill: 'rgba(255, 99, 132, 0.15)' },
             spatial_mlp: { line: 'rgba(54, 162, 235, 1)',  fill: 'rgba(54, 162, 235, 0.15)' },
             spatial_mlp_5x5: { line: 'rgba(255, 206, 86, 1)', fill: 'rgba(255, 206, 86, 0.15)' },
+            unet:            { line: 'rgba(0, 200, 83, 1)',   fill: 'rgba(0, 200, 83, 0.15)' },
         };
-        const CLASSIFIER_LABELS = { nn: 'k-NN', rf: 'Random Forest', xgboost: 'XGBoost', mlp: 'MLP', spatial_mlp: 'Spatial MLP (3×3)', spatial_mlp_5x5: 'Spatial MLP (5×5)' };
+        const CLASSIFIER_LABELS = { nn: 'k-NN', rf: 'Random Forest', xgboost: 'XGBoost', mlp: 'MLP', spatial_mlp: 'Spatial MLP (3×3)', spatial_mlp_5x5: 'Spatial MLP (5×5)', unet: 'U-Net' };
 
         // --- Drop zone ---
         const dropZone = document.getElementById('val-drop-zone');
@@ -7755,7 +7777,8 @@
             lastEvalData.models_available.forEach(name => {
                 const a = document.createElement('a');
                 a.href = `/api/evaluation/download-model/${encodeURIComponent(name)}`;
-                a.download = `${name}_model.joblib`;
+                const ext = name === 'unet' ? '.pt' : '.joblib';
+                a.download = `${name}_model${ext}`;
                 a.click();
             });
         }
