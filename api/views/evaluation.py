@@ -103,6 +103,56 @@ def upload_shapefile(request):
     return JsonResponse({"fields": fields, "geojson": geojson})
 
 
+def class_pixel_counts(request):
+    """Return pixel counts per class for the uploaded shapefile (no ML, just rasterize)."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    viewport = body.get("viewport")
+    year = body.get("year")
+    field = body.get("field")
+
+    if not all([viewport, year, field]):
+        return JsonResponse({"error": "viewport, year, and field are required"}, status=400)
+
+    gdf = _uploaded_shapefile.get("gdf")
+    if gdf is None:
+        return JsonResponse({"error": "No shapefile uploaded."}, status=400)
+
+    if field not in gdf.columns:
+        return JsonResponse({"error": f"Field '{field}' not found"}, status=400)
+
+    try:
+        embeddings, coords, metadata = _load_vectors(viewport, str(year))
+    except FileNotFoundError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+    width = metadata["mosaic_width"]
+    height = metadata["mosaic_height"]
+    gt = metadata["geotransform"]
+    transform = Affine(gt["a"], gt["b"], gt["c"], gt["d"], gt["e"], gt["f"])
+
+    class_raster = _rasterize_shapefile(gdf, field, transform, width, height)
+    pixel_labels = class_raster[coords[:, 1], coords[:, 0]]
+
+    le = LabelEncoder()
+    le.fit(gdf[field].dropna().unique())
+    class_names = le.classes_.tolist()
+
+    unique_labels, counts = np.unique(pixel_labels[pixel_labels > 0], return_counts=True)
+    classes = []
+    for lbl, cnt in zip(unique_labels, counts):
+        name = class_names[lbl - 1] if lbl <= len(class_names) else f"Class {lbl}"
+        classes.append({"name": str(name), "pixels": int(cnt)})
+
+    return JsonResponse({"classes": classes})
+
+
 def run_evaluation(request):
     """Run learning-curve evaluation with selected classifiers."""
     if request.method != "POST":

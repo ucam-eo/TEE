@@ -204,13 +204,129 @@
         #map-container.mode-simple { grid-template-rows: 1fr; }
         #map-container.mode-simple .panel:nth-child(n+4) { display: none; }
 
-        /* Change Detection: blank panel 4, so panels 5+6 shift right */
-        #map-container.mode-change-detection .panel:nth-child(4) { visibility: hidden; }
+        /* Change Detection: grey out similarity + label bar */
+        body.mode-change-detection #similarity-controls { opacity: 0.4 !important; pointer-events: none; }
+        body.mode-change-detection #label-controls-bar { opacity: 0.4 !important; pointer-events: none; }
+
+        /* Change Detection: Panel 4 shows change-stats table instead of PCA/UMAP */
+        #map-container.mode-change-detection .panel:nth-child(4) { visibility: visible; }
+        #map-container.mode-change-detection #map-umap { display: none; }
+        #map-container.mode-change-detection #change-stats-panel { display: flex; }
+        #map-container.mode-change-detection #dim-reduction-selector { display: none; }
+
+        /* Change-stats panel styling */
+        #change-stats-panel {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            padding: 56px 20px 20px;
+            color: #ccc;
+        }
+        #change-stats-panel h3 {
+            margin: 0 0 16px 0;
+            font-size: 15px;
+            color: #fff;
+        }
+        #change-stats-panel table {
+            border-collapse: collapse;
+            width: 90%;
+            max-width: 400px;
+            font-size: 13px;
+        }
+        #change-stats-panel th,
+        #change-stats-panel td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        #change-stats-panel th {
+            color: #999;
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        #change-stats-panel td:nth-child(2),
+        #change-stats-panel td:nth-child(3) {
+            text-align: right;
+        }
+        #change-stats-panel th:nth-child(2),
+        #change-stats-panel th:nth-child(3) {
+            text-align: right;
+        }
+        #change-stats-panel .change-stats-placeholder {
+            color: #666;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        /* Labelling: suppress heatmap messages */
+        #map-container.mode-labelling #heatmap-waiting-message { display: none !important; }
+        #map-container.mode-labelling #heatmap-same-year-message { display: none !important; }
 
         /* Labelling: repurpose panel 6 as label-management split view */
         #panel6-label-view { display: none; }
         #map-container.mode-labelling #map-embedding2 { display: none; }
         #map-container.mode-labelling #panel6-label-view { display: flex; }
+
+        /* Validation: grey out similarity + label bar */
+        body.mode-validation #similarity-controls { opacity: 0.4 !important; pointer-events: none; }
+        body.mode-validation #label-controls-bar { opacity: 0.4 !important; pointer-events: none; }
+        /* Validation: hide Panel 6 year selector */
+        #map-container.mode-validation #embedding-year-selector-2 { display: none !important; }
+
+        /* Validation: Panel 1 shows class table instead of OSM */
+        #map-container.mode-validation #map-osm { display: none; }
+        #map-container.mode-validation #val-class-table-panel { display: flex; }
+
+        /* Validation class table styling */
+        #val-class-table-panel {
+            display: none;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            padding: 56px 16px 16px;
+            overflow-y: auto;
+            color: #ccc;
+        }
+        #val-class-table-panel h3 {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            color: #fff;
+        }
+        #val-class-table-panel table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 12px;
+        }
+        #val-class-table-panel th,
+        #val-class-table-panel td {
+            padding: 6px 10px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        #val-class-table-panel th {
+            color: #999;
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        #val-class-table-panel td:nth-child(2) { text-align: right; }
+        #val-class-table-panel th:nth-child(2) { text-align: right; }
+        #val-class-table-panel .val-class-excluded {
+            color: #e8a838;
+            font-size: 10px;
+        }
+        #val-class-table-panel .val-class-placeholder {
+            color: #666;
+            font-size: 13px;
+            text-align: center;
+            padding: 30px;
+        }
 
         /* Validation: panel 4 = controls, panel 5 = chart (spans 2 cols), panel 6 hidden */
         #map-container.mode-validation { grid-template-rows: 1fr 1fr; }
@@ -755,8 +871,19 @@
 
     <div id="map-container">
         <div class="panel">
-            <div class="panel-header">OpenStreetMap</div>
+            <div class="panel-header"><span id="panel1-title">OpenStreetMap</span></div>
             <div id="map-osm" class="map"></div>
+            <!-- Validation class table (shown only in validation mode) -->
+            <div id="val-class-table-panel">
+                <h3>Ground Truth Classes</h3>
+                <div class="val-class-placeholder">Upload a shapefile to see classes</div>
+                <table id="val-class-table" style="display: none;">
+                    <thead>
+                        <tr><th>Class</th><th>Pixels</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
         <div class="panel">
             <div class="panel-header" style="justify-content: space-between;">
@@ -771,7 +898,7 @@
         </div>
         <div class="panel">
             <div class="panel-header" style="justify-content: space-between;">
-                Tessera Embeddings
+                <span id="panel3-title">Tessera Embeddings</span>
                 <select id="embedding-year-selector" style="display: none; margin-left: 10px; padding: 4px 8px; border: 1px solid #555; border-radius: 3px; background: #333; color: #fff; font-size: 13px;">
                     <option value="2024">2024</option>
                 </select>
@@ -792,6 +919,17 @@
                 </select>
             </div>
             <div id="map-umap" class="map"><div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:16px;color:#999;">Waiting for vectors...</div></div>
+            <!-- Change distribution stats (shown only in change-detection mode) -->
+            <div id="change-stats-panel">
+                <h3>Change Distribution</h3>
+                <div class="change-stats-placeholder">Waiting for heatmap computation...</div>
+                <table id="change-stats-table" style="display: none;">
+                    <thead>
+                        <tr><th>Category</th><th>Pixels</th><th>%</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
             <!-- Validation chart (shown only in validation mode) -->
             <div id="validation-chart-panel" style="align-items:center;justify-content:center;width:100%;height:100%;background:#1e1e2e;padding:20px;">
                 <div style="position:absolute;top:8px;right:12px;z-index:10;">
@@ -2212,16 +2350,8 @@
                 maps.heatmap.options.maxBoundsViscosity = 1.0;
             }
 
-            // Recompute heatmap when zoom changes (to adjust sampling based on zoom level)
-            let heatmapZoomTimeout;
-            maps.heatmap.on('zoomend', () => {
-                clearTimeout(heatmapZoomTimeout);
-                heatmapZoomTimeout = setTimeout(() => {
-                    if (heatmapCanvasLayer && heatmapCanvasLayer.distances && heatmapCanvasLayer.distances.length > 0) {
-                        loadHeatmap();
-                    }
-                }, 500);  // Debounce to avoid rapid recomputes
-            });
+            // HeatmapCanvasLayer handles its own redraw on move/zoom/resize,
+            // so no need to recompute distances on zoom.
 
             // Panel 6: Second Year Embeddings (geographic, synced to OSM)
             maps.embedding2 = L.map('map-embedding2', {
@@ -3196,6 +3326,22 @@
         // SIMILARITY SEARCH FUNCTIONS
         // =====================================================================
 
+        // Declarative layer rules for maps.heatmap (Panel 5) per mode
+        // true = add layer if it exists, false = remove if present
+        const HEATMAP_LAYER_RULES = {
+            'simple':           { satellite: false, heatmapCanvas: true,  segOverlay: true  },
+            'change-detection': { satellite: false, heatmapCanvas: true,  segOverlay: false },
+            'labelling':        { satellite: true,  heatmapCanvas: false, segOverlay: true  },
+            'validation':       { satellite: false, heatmapCanvas: false, segOverlay: false },
+        };
+
+        function applyHeatmapLayerRule(layer, shouldShow) {
+            if (!layer || !maps.heatmap) return;
+            const onMap = maps.heatmap.hasLayer(layer);
+            if (shouldShow && !onMap) layer.addTo(maps.heatmap);
+            else if (!shouldShow && onMap) maps.heatmap.removeLayer(layer);
+        }
+
         // Panel layout: simple / change-detection / labelling
         function setPanelLayout(mode) {
             const container = document.getElementById('map-container');
@@ -3203,37 +3349,37 @@
             const waitMsg = document.getElementById('heatmap-waiting-message');
             const sameMsg = document.getElementById('heatmap-same-year-message');
 
-            // Remove old mode class, add new one
+            // Remove old mode class, add new one (on both container and body for toolbar CSS)
             container.classList.remove('mode-simple', 'mode-change-detection', 'mode-labelling', 'mode-validation');
             container.classList.add('mode-' + mode);
+            document.body.classList.remove('mode-simple', 'mode-change-detection', 'mode-labelling', 'mode-validation');
+            document.body.classList.add('mode-' + mode);
             select.value = mode;
             currentPanelMode = mode;
 
             // Static panel titles per mode
             const titles = {
-                'simple':           { p4: 'PCA (Embedding Space)', p5: 'Change Heatmap',  p6: 'Tessera Embeddings' },
-                'change-detection': { p4: 'PCA (Embedding Space)', p5: 'Change Heatmap',  p6: 'Tessera Embeddings' },
-                'labelling':        { p4: 'PCA (Embedding Space)', p5: 'Segmentation',    p6: 'Auto-label' },
-                'validation':       { p4: 'Performance',           p5: 'Confusion Matrix', p6: 'Controls' },
+                'simple':           { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'PCA (Embedding Space)', p5: 'Change Heatmap',  p6: 'Tessera Embeddings' },
+                'change-detection': { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'Change Distribution',    p5: 'Change Heatmap',  p6: 'Tessera Embeddings' },
+                'labelling':        { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'PCA (Embedding Space)', p5: 'Segmentation',    p6: 'Auto-label' },
+                'validation':       { p1: 'Classes',       p3: 'Evaluation year',    p4: 'Performance',           p5: 'Confusion Matrix', p6: 'Controls' },
             };
             const t = titles[mode] || titles['simple'];
+            document.getElementById('panel1-title').textContent = t.p1;
+            document.getElementById('panel3-title').textContent = t.p3;
             document.getElementById('panel4-title').textContent = t.p4;
             document.getElementById('panel5-title').textContent = t.p5;
             document.getElementById('panel6-header-text').textContent = t.p6;
 
-            // Mode-specific layer setup
+            const rules = HEATMAP_LAYER_RULES[mode] || HEATMAP_LAYER_RULES['simple'];
+            applyHeatmapLayerRule(heatmapSatelliteLayer, rules.satellite);
+            applyHeatmapLayerRule(heatmapCanvasLayer, rules.heatmapCanvas);
+            applyHeatmapLayerRule(segOverlay, rules.segOverlay);
+
+            // Mode-specific setup beyond layers
             if (mode === 'labelling') {
-                if (heatmapSatelliteLayer && maps.heatmap && !maps.heatmap.hasLayer(heatmapSatelliteLayer)) {
-                    heatmapSatelliteLayer.addTo(maps.heatmap);
-                }
-                if (heatmapCanvasLayer && maps.heatmap && maps.heatmap.hasLayer(heatmapCanvasLayer)) {
-                    maps.heatmap.removeLayer(heatmapCanvasLayer);
-                }
                 if (waitMsg) waitMsg.style.display = 'none';
                 if (sameMsg) sameMsg.style.display = 'none';
-                if (segOverlay && maps.heatmap && !maps.heatmap.hasLayer(segOverlay)) {
-                    segOverlay.addTo(maps.heatmap);
-                }
                 document.getElementById('seg-results-panel').style.display = 'none';
                 document.getElementById('labels-details-panel').style.display = 'none';
                 renderSegListInto(document.getElementById('panel6-seg-list'));
@@ -3241,24 +3387,10 @@
                 const p6btn = document.getElementById('panel6-promote-all-btn');
                 if (p6btn) p6btn.style.display = segLabels.length > 0 ? '' : 'none';
             } else if (mode === 'change-detection') {
-                if (heatmapSatelliteLayer && maps.heatmap && maps.heatmap.hasLayer(heatmapSatelliteLayer)) {
-                    maps.heatmap.removeLayer(heatmapSatelliteLayer);
-                }
-                if (segOverlay && maps.heatmap && maps.heatmap.hasLayer(segOverlay)) {
-                    maps.heatmap.removeLayer(segOverlay);
-                }
-                if (heatmapCanvasLayer && maps.heatmap && !maps.heatmap.hasLayer(heatmapCanvasLayer)) {
-                    heatmapCanvasLayer.addTo(maps.heatmap);
-                }
                 loadHeatmap();
             } else if (mode === 'validation') {
                 if (waitMsg) waitMsg.style.display = 'none';
                 if (sameMsg) sameMsg.style.display = 'none';
-            } else {
-                // Simple mode
-                if (heatmapSatelliteLayer && maps.heatmap && maps.heatmap.hasLayer(heatmapSatelliteLayer)) {
-                    maps.heatmap.removeLayer(heatmapSatelliteLayer);
-                }
             }
 
             // Leaflet maps and Three.js scene need resize after CSS transition
@@ -4296,10 +4428,13 @@
 
             const dataURL = canvas.toDataURL();
             segOverlay = L.imageOverlay(dataURL, [[latMin, lonMin], [latMax, lonMax]]);
-            segOverlay.addTo(maps.heatmap);
 
-            // Set pixelated rendering on the image element
-            segOverlay.getElement().style.imageRendering = 'pixelated';
+            // Consult the layer rules table — only add to map if current mode allows it
+            const segRules = HEATMAP_LAYER_RULES[currentPanelMode] || HEATMAP_LAYER_RULES['simple'];
+            if (segRules.segOverlay) {
+                segOverlay.addTo(maps.heatmap);
+                segOverlay.getElement().style.imageRendering = 'pixelated';
+            }
         }
 
         function clearSegmentation() {
@@ -4750,6 +4885,9 @@
         }
 
         // Load distance heatmap for Panel 5 (client-side computation)
+        // Cache: skip recomputation when viewport + years haven't changed
+        let _heatmapCacheKey = null;
+
         async function loadHeatmap() {
             if (currentPanelMode !== 'change-detection') return;
 
@@ -4776,6 +4914,16 @@
                 return;
             }
             sameMsg.style.display = 'none';
+
+            // Cache check: skip full recomputation if inputs unchanged
+            const cacheKey = `${currentViewportName}|${currentEmbeddingYear}|${currentEmbeddingYear2}`;
+            if (cacheKey === _heatmapCacheKey && heatmapCanvasLayer) {
+                // Layer already exists with correct data; ensure it's on the map
+                if (maps.heatmap && !maps.heatmap.hasLayer(heatmapCanvasLayer)) {
+                    heatmapCanvasLayer.addTo(maps.heatmap);
+                }
+                return;
+            }
 
             try {
                 // Save current localVectors so downloadVectorData side-effect doesn't clobber it
@@ -4848,11 +4996,57 @@
                 heatmapCanvasLayer = new HeatmapCanvasLayer(distances, stats);
                 heatmapCanvasLayer.addTo(maps.heatmap);
 
+                // Update cache key
+                _heatmapCacheKey = cacheKey;
+
                 console.log(`✓ Heatmap loaded (client-side): ${numVectors} distances (${stats.matched} matched)`);
                 console.log(`  Distance range: ${stats.min_distance.toFixed(3)} to ${stats.max_distance.toFixed(3)} (mean: ${stats.mean_distance.toFixed(3)}, median: ${stats.median_distance.toFixed(3)})`);
+
+                // Populate change-stats table with quartile bins
+                populateChangeStats(sorted, numVectors);
             } catch (error) {
                 console.error('Heatmap computation failed:', error);
             }
+        }
+
+        function populateChangeStats(sorted, n) {
+            const panel = document.getElementById('change-stats-panel');
+            const table = document.getElementById('change-stats-table');
+            const placeholder = panel.querySelector('.change-stats-placeholder');
+            if (!panel || !table || n === 0) return;
+
+            const q25 = sorted[Math.floor(n * 0.25)];
+            const q50 = sorted[Math.floor(n * 0.50)];
+            const q75 = sorted[Math.floor(n * 0.75)];
+            const minD = sorted[0];
+            const maxD = sorted[n - 1];
+
+            const bins = [
+                { label: 'Stable',          lo: minD, hi: q25, count: 0 },
+                { label: 'Minor change',    lo: q25,  hi: q50, count: 0 },
+                { label: 'Moderate change',  lo: q50,  hi: q75, count: 0 },
+                { label: 'Major change',    lo: q75,  hi: maxD, count: 0 },
+            ];
+
+            for (let i = 0; i < n; i++) {
+                const d = sorted[i];
+                if (d < q25) bins[0].count++;
+                else if (d < q50) bins[1].count++;
+                else if (d < q75) bins[2].count++;
+                else bins[3].count++;
+            }
+
+            const tbody = table.querySelector('tbody');
+            tbody.innerHTML = '';
+            for (const b of bins) {
+                const pct = ((b.count / n) * 100).toFixed(1);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${b.label} <span style="color:#777;font-size:11px;">(${b.lo.toFixed(1)}\u2013${b.hi.toFixed(1)})</span></td><td>${b.count.toLocaleString()}</td><td>${pct}%</td>`;
+                tbody.appendChild(tr);
+            }
+
+            placeholder.style.display = 'none';
+            table.style.display = '';
         }
 
         // Highlight a point in the UMAP scene by geographic lat/lon
@@ -6854,6 +7048,89 @@
             }
             // Re-colour polygons for the newly selected field
             addValGeoJsonLayer();
+            // Fetch pixel counts from server (rasterizes shapefile onto embedding grid)
+            fetchClassPixelCounts(fieldName);
+        }
+
+        async function fetchClassPixelCounts(fieldName) {
+            const panel = document.getElementById('val-class-table-panel');
+            const table = document.getElementById('val-class-table');
+            const placeholder = panel.querySelector('.val-class-placeholder');
+            // Show loading state
+            placeholder.textContent = 'Counting pixels...';
+            placeholder.style.display = '';
+            table.style.display = 'none';
+
+            try {
+                const resp = await fetch('/api/evaluation/class-counts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        viewport: currentViewportName,
+                        year: currentEmbeddingYear,
+                        field: fieldName,
+                    }),
+                });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    placeholder.textContent = data.error || 'Failed to count pixels';
+                    return;
+                }
+                if (data.classes && data.classes.length > 0) {
+                    const names = data.classes.map(c => c.name);
+                    populateValClassTable(names, data.classes);
+                } else {
+                    placeholder.textContent = 'No pixels overlap with shapefile';
+                }
+            } catch (e) {
+                placeholder.textContent = 'Error: ' + e.message;
+            }
+        }
+
+        // Populate the validation class table in Panel 1
+        function populateValClassTable(classNames, classData) {
+            const panel = document.getElementById('val-class-table-panel');
+            const table = document.getElementById('val-class-table');
+            const placeholder = panel.querySelector('.val-class-placeholder');
+            if (!panel || !table) return;
+
+            if (!classNames || classNames.length === 0) {
+                placeholder.style.display = '';
+                table.style.display = 'none';
+                return;
+            }
+
+            const tbody = table.querySelector('tbody');
+            tbody.innerHTML = '';
+
+            // Build a lookup from evaluation data if available
+            const pixelMap = {};
+            if (classData) {
+                for (const c of classData) {
+                    pixelMap[c.name] = c.pixels;
+                }
+            }
+
+            for (const name of classNames) {
+                const tr = document.createElement('tr');
+                const pixels = pixelMap[name];
+                const td1 = document.createElement('td');
+                td1.textContent = name;
+                if (pixels !== undefined && pixels < 50) {
+                    const note = document.createElement('span');
+                    note.className = 'val-class-excluded';
+                    note.textContent = ' (<50 px, excluded)';
+                    td1.appendChild(note);
+                }
+                const td2 = document.createElement('td');
+                td2.textContent = pixels !== undefined ? pixels.toLocaleString() : '\u2014';
+                tr.appendChild(td1);
+                tr.appendChild(td2);
+                tbody.appendChild(tr);
+            }
+
+            placeholder.style.display = 'none';
+            table.style.display = '';
         }
 
         // --- Run evaluation ---
@@ -6931,6 +7208,12 @@
 
                 renderChart(data);
                 renderConfusionMatrix(data);
+
+                // Update Panel 1 class table with actual pixel counts
+                if (data.classes) {
+                    const names = data.classes.map(c => c.name);
+                    populateValClassTable(names, data.classes);
+                }
             } catch (e) {
                 clearInterval(timer);
                 status.textContent = 'Error: ' + e.message;
