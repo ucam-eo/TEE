@@ -218,6 +218,17 @@
 
 <p>Click <strong>Clear</strong> to remove the seg overlay and panel. This does not affect any already-promoted labels.</p>
 
+<h3>Suggested Labelling Workflow</h3>
+
+<p>A practical workflow for building a complete land-cover label set:</p>
+
+<ol>
+    <li><strong>Auto-label with k-means</strong> &mdash; run segmentation with <strong>k&nbsp;=&nbsp;5</strong> or higher. Set k a bit higher than the number of classes you expect &mdash; it is easier to merge clusters than to split them later.</li>
+    <li><strong>Review on the heatmap</strong> &mdash; click on clusters in <strong>Panel 5</strong> (heatmap) to see where each cluster falls, then inspect the corresponding area in <strong>Panel 6</strong> (embeddings Y2). When a cluster looks correct, give it a name in the text field and click <strong>Promote</strong> to save it as a label.</li>
+    <li><strong>Merge related clusters</strong> &mdash; if two auto-labelled clusters represent the same land cover (e.g. two shades of grassland), type the <strong>same label name</strong> for both in Panel 6 before promoting. TEE merges them into a single label automatically.</li>
+    <li><strong>Fine-tune with pins</strong> &mdash; double-click to place a pin on a location that was missed or misclassified, then adjust the <strong>similarity slider</strong> until the highlighted area matches what you want. Save the result as a new label or extend an existing one.</li>
+</ol>
+
 <h2>Export Options</h2>
 
 <p>The <strong>Export</strong> dropdown in the header provides three formats:</p>

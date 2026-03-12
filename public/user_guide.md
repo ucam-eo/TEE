@@ -120,6 +120,15 @@ Promoted labels are fully functional saved labels:
 
 Click **Clear** to remove the seg overlay and panel. This does not affect any already-promoted labels.
 
+### Suggested Labelling Workflow
+
+A practical workflow for building a complete land-cover label set:
+
+1. **Auto-label with k-means** — run segmentation with **k = 5** or higher. Set k a bit higher than the number of classes you expect — it is easier to merge clusters than to split them later.
+2. **Review on the heatmap** — click on clusters in **Panel 5** (heatmap) to see where each cluster falls, then inspect the corresponding area in **Panel 6** (embeddings Y2). When a cluster looks correct, give it a name in the text field and click **Promote** to save it as a label.
+3. **Merge related clusters** — if two auto-labelled clusters represent the same land cover (e.g. two shades of grassland), type the **same label name** for both in Panel 6 before promoting. TEE merges them into a single label automatically.
+4. **Fine-tune with pins** — double-click to place a pin on a location that was missed or misclassified, then adjust the **similarity slider** until the highlighted area matches what you want. Save the result as a new label or extend an existing one.
+
 ## Validation (Learning Curves)
 
 The **Validation** panel lets you evaluate how well classifiers can distinguish habitat classes using Tessera embeddings as features, given expert-labelled ground-truth polygons.
