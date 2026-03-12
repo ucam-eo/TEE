@@ -204,9 +204,10 @@
         #map-container.mode-simple { grid-template-rows: 1fr; }
         #map-container.mode-simple .panel:nth-child(n+4) { display: none; }
 
-        /* Change Detection: grey out similarity + label bar */
+        /* Change Detection: grey out similarity + label bar, but keep Toggle Labels active */
         body.mode-change-detection #similarity-controls { opacity: 0.4 !important; pointer-events: none; }
         body.mode-change-detection #label-controls-bar { opacity: 0.4 !important; pointer-events: none; }
+        body.mode-change-detection #toggle-all-overlays { opacity: 1; pointer-events: auto; }
 
         /* Change Detection: Panel 4 shows change-stats table instead of PCA/UMAP */
         #map-container.mode-change-detection .panel:nth-child(4) { visibility: visible; }
@@ -929,6 +930,10 @@
                     </thead>
                     <tbody></tbody>
                 </table>
+                <p id="change-stats-note" style="display:none; margin-top:14px; font-size:11px; color:#777; max-width:400px; line-height:1.5; text-align:center;">
+                    Bins are set at 0.5&times;, 1&times;, and 1.5&times; the median L2 distance between the two years' embeddings.
+                    Pixels below half the median are effectively unchanged; those above 1.5&times; represent the strongest signal of change.
+                </p>
             </div>
             <!-- Validation chart (shown only in validation mode) -->
             <div id="validation-chart-panel" style="align-items:center;justify-content:center;width:100%;height:100%;background:#1e1e2e;padding:20px;">
@@ -1049,13 +1054,32 @@
                             <label>Max iter <input type="number" data-clf="mlp" data-param="max_iter" value="200" min="50" max="1000" step="50"></label>
                         </div>
                     </div>
+                    <!-- Spatial MLP -->
+                    <div class="val-clf-block">
+                        <label class="val-clf-header">
+                            <input type="checkbox" value="spatial_mlp">
+                            <span>Spatial MLP (3×3)</span>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                        </label>
+                        <div class="val-params">
+                            <label>Layers <select data-clf="spatial_mlp" data-param="hidden_layers">
+                                <option value="256,128" selected>256, 128</option>
+                                <option value="512,256">512, 256</option>
+                                <option value="512,256,128">512, 256, 128</option>
+                            </select></label>
+                            <label>Max iter <input type="number" data-clf="spatial_mlp" data-param="max_iter" value="300" min="50" max="1000" step="50"></label>
+                        </div>
+                    </div>
                 </div>
 
                 <label>Max training pixels</label>
                 <input type="number" id="val-max-train" value="10000" min="100" max="100000" step="1000"
                     style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
 
-                <button id="val-run-btn" class="validation-run-btn" disabled>Run Evaluation</button>
+                <div style="display:flex; gap:6px;">
+                    <button id="val-run-btn" class="validation-run-btn" disabled style="flex:1;">Run Evaluation</button>
+                    <button id="val-cancel-btn" class="validation-run-btn" style="flex:0 0 auto; background:#dc3545; display:none;">Cancel</button>
+                </div>
                 <div id="val-status" class="validation-status"></div>
             </div>
             <!-- Label management split view (labelling mode only) -->
@@ -5002,51 +5026,56 @@
                 console.log(`✓ Heatmap loaded (client-side): ${numVectors} distances (${stats.matched} matched)`);
                 console.log(`  Distance range: ${stats.min_distance.toFixed(3)} to ${stats.max_distance.toFixed(3)} (mean: ${stats.mean_distance.toFixed(3)}, median: ${stats.median_distance.toFixed(3)})`);
 
-                // Populate change-stats table with quartile bins
-                populateChangeStats(sorted, numVectors);
+                // Populate change-stats table
+                populateChangeStats(sorted, numVectors, stats);
             } catch (error) {
                 console.error('Heatmap computation failed:', error);
             }
         }
 
-        function populateChangeStats(sorted, n) {
+        function populateChangeStats(sorted, n, stats) {
             const panel = document.getElementById('change-stats-panel');
             const table = document.getElementById('change-stats-table');
             const placeholder = panel.querySelector('.change-stats-placeholder');
             if (!panel || !table || n === 0) return;
 
-            const q25 = sorted[Math.floor(n * 0.25)];
-            const q50 = sorted[Math.floor(n * 0.50)];
-            const q75 = sorted[Math.floor(n * 0.75)];
-            const minD = sorted[0];
+            // Use median-relative thresholds so bins reveal actual distribution shape
+            const median = stats.median_distance;
+            const t1 = median * 0.5;   // half-median
+            const t2 = median;          // median
+            const t3 = median * 1.5;    // 1.5x median
             const maxD = sorted[n - 1];
 
             const bins = [
-                { label: 'Stable',          lo: minD, hi: q25, count: 0 },
-                { label: 'Minor change',    lo: q25,  hi: q50, count: 0 },
-                { label: 'Moderate change',  lo: q50,  hi: q75, count: 0 },
-                { label: 'Major change',    lo: q75,  hi: maxD, count: 0 },
+                { label: 'Stable',          hi: t1,   count: 0 },
+                { label: 'Minor change',    hi: t2,   count: 0 },
+                { label: 'Moderate change', hi: t3,   count: 0 },
+                { label: 'Major change',    hi: maxD, count: 0 },
             ];
 
             for (let i = 0; i < n; i++) {
                 const d = sorted[i];
-                if (d < q25) bins[0].count++;
-                else if (d < q50) bins[1].count++;
-                else if (d < q75) bins[2].count++;
+                if (d < t1) bins[0].count++;
+                else if (d < t2) bins[1].count++;
+                else if (d < t3) bins[2].count++;
                 else bins[3].count++;
             }
 
             const tbody = table.querySelector('tbody');
             tbody.innerHTML = '';
+            let lo = 0;
             for (const b of bins) {
                 const pct = ((b.count / n) * 100).toFixed(1);
                 const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${b.label} <span style="color:#777;font-size:11px;">(${b.lo.toFixed(1)}\u2013${b.hi.toFixed(1)})</span></td><td>${b.count.toLocaleString()}</td><td>${pct}%</td>`;
+                tr.innerHTML = `<td>${b.label} <span style="color:#777;font-size:11px;">(${lo.toFixed(1)}\u2013${b.hi.toFixed(1)})</span></td><td>${b.count.toLocaleString()}</td><td>${pct}%</td>`;
                 tbody.appendChild(tr);
+                lo = b.hi;
             }
 
             placeholder.style.display = 'none';
             table.style.display = '';
+            const note = document.getElementById('change-stats-note');
+            if (note) note.style.display = '';
         }
 
         // Highlight a point in the UMAP scene by geographic lat/lon
@@ -6964,12 +6993,13 @@
         }
 
         const CLASSIFIER_COLORS = {
-            nn:      { line: 'rgba(255, 159, 64, 1)',  fill: 'rgba(255, 159, 64, 0.15)' },
-            rf:      { line: 'rgba(75, 192, 192, 1)',  fill: 'rgba(75, 192, 192, 0.15)' },
-            xgboost: { line: 'rgba(153, 102, 255, 1)', fill: 'rgba(153, 102, 255, 0.15)' },
-            mlp:     { line: 'rgba(255, 99, 132, 1)',  fill: 'rgba(255, 99, 132, 0.15)' },
+            nn:          { line: 'rgba(255, 159, 64, 1)',  fill: 'rgba(255, 159, 64, 0.15)' },
+            rf:          { line: 'rgba(75, 192, 192, 1)',  fill: 'rgba(75, 192, 192, 0.15)' },
+            xgboost:     { line: 'rgba(153, 102, 255, 1)', fill: 'rgba(153, 102, 255, 0.15)' },
+            mlp:         { line: 'rgba(255, 99, 132, 1)',  fill: 'rgba(255, 99, 132, 0.15)' },
+            spatial_mlp: { line: 'rgba(54, 162, 235, 1)',  fill: 'rgba(54, 162, 235, 0.15)' },
         };
-        const CLASSIFIER_LABELS = { nn: 'k-NN', rf: 'Random Forest', xgboost: 'XGBoost', mlp: 'MLP' };
+        const CLASSIFIER_LABELS = { nn: 'k-NN', rf: 'Random Forest', xgboost: 'XGBoost', mlp: 'MLP', spatial_mlp: 'Spatial MLP (3×3)' };
 
         // --- Drop zone ---
         const dropZone = document.getElementById('val-drop-zone');
@@ -7111,6 +7141,9 @@
                 }
             }
 
+            // Sort by pixel count descending
+            classNames.sort((a, b) => (pixelMap[b] || 0) - (pixelMap[a] || 0));
+
             for (const name of classNames) {
                 const tr = document.createElement('tr');
                 const pixels = pixelMap[name];
@@ -7134,7 +7167,13 @@
         }
 
         // --- Run evaluation ---
+        let evalAbortController = null;
         document.getElementById('val-run-btn').addEventListener('click', runEvaluation);
+        document.getElementById('val-cancel-btn').addEventListener('click', cancelEvaluation);
+
+        function cancelEvaluation() {
+            if (evalAbortController) evalAbortController.abort();
+        }
 
         async function runEvaluation() {
             const field = document.getElementById('val-field-select').value;
@@ -7164,10 +7203,14 @@
             });
 
             const btn = document.getElementById('val-run-btn');
+            const cancelBtn = document.getElementById('val-cancel-btn');
             const status = document.getElementById('val-status');
             btn.disabled = true;
             btn.textContent = 'Running...';
+            cancelBtn.style.display = '';
             status.style.color = '#888';
+
+            evalAbortController = new AbortController();
 
             // Elapsed timer
             const t0 = Date.now();
@@ -7175,6 +7218,14 @@
                 const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
                 status.textContent = `Running... ${elapsed}s`;
             }, 1000);
+
+            function resetButtons() {
+                clearInterval(timer);
+                btn.disabled = false;
+                btn.textContent = 'Run Evaluation';
+                cancelBtn.style.display = 'none';
+                evalAbortController = null;
+            }
 
             try {
                 const resp = await fetch('/api/evaluation/run', {
@@ -7188,23 +7239,19 @@
                         params: params,
                         max_train: parseInt(document.getElementById('val-max-train').value) || 10000,
                     }),
-                    signal: AbortSignal.timeout(300000),
+                    signal: evalAbortController.signal,
                 });
-                clearInterval(timer);
                 const data = await resp.json();
+                resetButtons();
 
                 if (!resp.ok) {
                     status.textContent = data.error || 'Evaluation failed';
                     status.style.color = '#dc3545';
-                    btn.disabled = false;
-                    btn.textContent = 'Run Evaluation';
                     return;
                 }
 
                 status.textContent = `Done in ${data.elapsed_seconds}s — ${data.total_labelled_pixels.toLocaleString()} pixels, ${data.classes.length} classes`;
                 status.style.color = '#28a745';
-                btn.disabled = false;
-                btn.textContent = 'Run Evaluation';
 
                 renderChart(data);
                 renderConfusionMatrix(data);
@@ -7215,11 +7262,14 @@
                     populateValClassTable(names, data.classes);
                 }
             } catch (e) {
-                clearInterval(timer);
-                status.textContent = 'Error: ' + e.message;
-                status.style.color = '#dc3545';
-                btn.disabled = false;
-                btn.textContent = 'Run Evaluation';
+                resetButtons();
+                if (e.name === 'AbortError') {
+                    status.textContent = 'Cancelled';
+                    status.style.color = '#f0ad4e';
+                } else {
+                    status.textContent = 'Error: ' + e.message;
+                    status.style.color = '#dc3545';
+                }
             }
         }
 

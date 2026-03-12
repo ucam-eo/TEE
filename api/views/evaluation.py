@@ -251,6 +251,12 @@ def run_evaluation(request):
                 f"{len(valid_classes)} classes, classifiers={classifiers}")
 
     # 4. Run learning curve
+    # Build spatial features for spatial_mlp if requested
+    spatial_embeddings = None
+    if "spatial_mlp" in classifiers:
+        spatial_features_all = _gather_spatial_features(embeddings, coords, width, height)
+        spatial_embeddings = spatial_features_all[labelled_mask][valid_mask]
+
     # Build log-spaced training sizes up to max_train
     all_sizes = [10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000]
     training_sizes = [s for s in all_sizes if s <= max_train]
@@ -258,23 +264,35 @@ def run_evaluation(request):
         training_sizes.append(max_train)
     results = _run_learning_curve(
         labelled_embeddings, labelled_labels, classifiers, training_sizes,
-        repeats=5, classifier_params=classifier_params
+        repeats=5, classifier_params=classifier_params,
+        spatial_embeddings=spatial_embeddings,
     )
 
-    # Retrain each classifier on ALL labelled data and cache for download
-    _trained_models.clear()
+    # Retrain each classifier on ALL labelled data and cache for download.
+    # Build into a local dict so prior models survive until all new ones are ready.
+    new_models = {}
     for name in classifiers:
         try:
+            X_full = spatial_embeddings if name == "spatial_mlp" else labelled_embeddings
             clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
-            clf.fit(labelled_embeddings, labelled_labels)
+            clf.fit(X_full, labelled_labels)
             tmp = tempfile.NamedTemporaryFile(
                 suffix=".joblib", prefix=f"{name}_model_", delete=False
             )
             joblib.dump({"model": clf, "class_names": valid_class_names}, tmp.name)
-            _trained_models[name] = tmp.name
+            new_models[name] = tmp.name
             logger.info(f"Trained and cached model '{name}' → {tmp.name}")
         except Exception as e:
             logger.warning(f"Failed to retrain {name} on full data: {e}")
+
+    # Atomically swap: clean up old temp files, then replace
+    for old_path in _trained_models.values():
+        try:
+            Path(old_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+    _trained_models.clear()
+    _trained_models.update(new_models)
 
     elapsed = time.time() - t0
 
@@ -349,8 +367,31 @@ def _rasterize_shapefile(gdf, field, transform, width, height):
     return class_raster
 
 
+def _gather_spatial_features(embeddings, coords, width, height):
+    """Build 3x3 neighbourhood features (N, 1152) from (N, 128) embeddings on a regular grid."""
+    dim = embeddings.shape[1]  # 128
+    # Build (row, col) → index lookup
+    grid = np.full((height, width), -1, dtype=np.int32)
+    grid[coords[:, 1], coords[:, 0]] = np.arange(len(coords))
+
+    offsets = [(-1, -1), (-1, 0), (-1, 1),
+               (0, -1),  (0, 0),  (0, 1),
+               (1, -1),  (1, 0),  (1, 1)]
+    spatial = np.zeros((len(coords), 9 * dim), dtype=np.float32)
+
+    for i, (dr, dc) in enumerate(offsets):
+        nr = coords[:, 1] + dr   # neighbour rows
+        nc = coords[:, 0] + dc   # neighbour cols
+        valid = (nr >= 0) & (nr < height) & (nc >= 0) & (nc < width)
+        idx = np.where(valid, grid[np.clip(nr, 0, height - 1), np.clip(nc, 0, width - 1)], -1)
+        has_neighbour = valid & (idx >= 0)
+        spatial[has_neighbour, i * dim:(i + 1) * dim] = embeddings[idx[has_neighbour]]
+
+    return spatial
+
+
 def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
-                        repeats=5, classifier_params=None):
+                        repeats=5, classifier_params=None, spatial_embeddings=None):
     """Run learning curve evaluation. Returns dict with mean/std F1 per classifier."""
     # Suppress sklearn warnings about small training sets (expected at low sample sizes)
     warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
@@ -399,10 +440,14 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
             X_test, y_test = embeddings[test_idx], labels[test_idx]
 
             for name in classifier_names:
+                if name == "spatial_mlp" and spatial_embeddings is not None:
+                    X_tr, X_te = spatial_embeddings[train_idx], spatial_embeddings[test_idx]
+                else:
+                    X_tr, X_te = X_train, X_test
                 clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
                 try:
-                    clf.fit(X_train, y_train)
-                    y_pred = clf.predict(X_test)
+                    clf.fit(X_tr, y_train)
+                    y_pred = clf.predict(X_te)
                     f1 = f1_score(y_test, y_pred, average="macro", zero_division=0)
                     f1w = f1_score(y_test, y_pred, average="weighted", zero_division=0)
                     f1_scores[name].append(f1)
@@ -465,6 +510,17 @@ def _make_classifier(name, params=None):
         return MLPClassifier(
             hidden_layer_sizes=hidden,
             max_iter=int(p.get("max_iter", 200)),
+            random_state=42,
+        )
+    elif name == "spatial_mlp":
+        layers_str = p.get("hidden_layers", "256,128")
+        if isinstance(layers_str, str):
+            hidden = tuple(int(x) for x in layers_str.split(","))
+        else:
+            hidden = (256, 128)
+        return MLPClassifier(
+            hidden_layer_sizes=hidden,
+            max_iter=int(p.get("max_iter", 300)),
             random_state=42,
         )
     else:
