@@ -530,6 +530,22 @@ def _gather_spatial_features(embeddings, coords, width, height, radius=1,
     return spatial
 
 
+def _augment_spatial(X, y, window, dim):
+    """4× data augmentation via horizontal/vertical flips of spatial patches.
+
+    Patches are orientation-invariant for land cover, so flipping is label-preserving.
+    """
+    n = len(X)
+    patches = X.reshape(n, window, window, dim)
+    augmented = [
+        X,
+        patches[:, :, ::-1, :].copy().reshape(n, -1),   # horizontal flip
+        patches[:, ::-1, :, :].copy().reshape(n, -1),   # vertical flip
+        patches[:, ::-1, ::-1, :].copy().reshape(n, -1),  # both
+    ]
+    return np.concatenate(augmented, axis=0), np.tile(y, 4)
+
+
 def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
                         repeats=5, classifier_params=None, spatial_embeddings=None,
                         spatial_embeddings_5x5=None, embedding_grid=None,
@@ -610,13 +626,16 @@ def _run_learning_curve(embeddings, labels, classifier_names, training_sizes,
 
                 if name == "spatial_mlp" and spatial_embeddings is not None:
                     X_tr, X_te = spatial_embeddings[train_idx], spatial_embeddings[test_idx]
+                    X_tr, y_tr_aug = _augment_spatial(X_tr, y_train, window=3, dim=embeddings.shape[1])
                 elif name == "spatial_mlp_5x5" and spatial_embeddings_5x5 is not None:
                     X_tr, X_te = spatial_embeddings_5x5[train_idx], spatial_embeddings_5x5[test_idx]
+                    X_tr, y_tr_aug = _augment_spatial(X_tr, y_train, window=5, dim=embeddings.shape[1])
                 else:
                     X_tr, X_te = X_train, X_test
+                    y_tr_aug = y_train
                 clf = _make_classifier(name, (classifier_params or {}).get(name, {}))
                 try:
-                    clf.fit(X_tr, y_train)
+                    clf.fit(X_tr, y_tr_aug)
                     y_pred = clf.predict(X_te)
                     f1 = f1_score(y_test, y_pred, average="macro", zero_division=0)
                     f1w = f1_score(y_test, y_pred, average="weighted", zero_division=0)
