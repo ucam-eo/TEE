@@ -1087,10 +1087,10 @@
                             <label>Max iter <input type="number" data-clf="spatial_mlp_5x5" data-param="max_iter" value="400" min="50" max="1000" step="50"></label>
                         </div>
                     </div>
-                    <!-- U-Net (GPU) -->
-                    <div class="val-clf-block">
+                    <!-- U-Net (GPU) — disabled when deployed with separate tile server -->
+                    <div class="val-clf-block" id="unet-clf-block">
                         <label class="val-clf-header">
-                            <input type="checkbox" value="unet">
+                            <input type="checkbox" value="unet" id="unet-checkbox">
                             <span>U-Net (GPU)</span>
                             <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
                         </label>
@@ -5179,6 +5179,14 @@
                 }
             } catch (e) {
                 console.warn('Failed to fetch config, using default tile server:', e);
+            }
+
+            // Disable U-Net when running with a separate tile server (deployed mode)
+            if (TILE_SERVER !== window.location.origin) {
+                const cb = document.getElementById('unet-checkbox');
+                const block = document.getElementById('unet-clf-block');
+                if (cb) { cb.disabled = true; cb.checked = false; }
+                if (block) { block.style.opacity = '0.4'; block.title = 'U-Net is only available in local mode'; }
             }
 
             // Load viewport info first (determines map center/zoom)
