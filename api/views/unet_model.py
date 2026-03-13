@@ -147,7 +147,9 @@ def train_unet(embedding_grid, labelled_coords, labelled_labels,
     base_filters = int(p.get("base_filters", 64))
 
     H, W, dim = embedding_grid.shape
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available()
+                          else "mps" if torch.backends.mps.is_available()
+                          else "cpu")
 
     # Build label grid: -1 means ignore
     label_grid = np.full((H, W), -1, dtype=np.int64)
@@ -187,7 +189,9 @@ def predict_unet(model, embedding_grid):
         (H, W) int array of predicted class indices.
     """
     _check_torch()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available()
+                          else "mps" if torch.backends.mps.is_available()
+                          else "cpu")
     model.to(device).eval()
 
     x = torch.from_numpy(
