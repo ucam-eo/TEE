@@ -9,113 +9,119 @@ try:
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
+    _HAS_TORCH = True
 except ImportError:
     torch = None
-    nn = None
-    F = None
+    _HAS_TORCH = False
 
 TORCH_MISSING_MSG = "U-Net requires PyTorch. Install with: pip install torch"
 
 
 def _check_torch():
-    if torch is None:
+    if not _HAS_TORCH:
         raise ImportError(TORCH_MISSING_MSG)
-
-
-class _ConvBlock(nn.Module):
-    """Two Conv3x3 → BN → ReLU layers."""
-
-    def __init__(self, in_ch, out_ch):
-        super().__init__()
-        self.block = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, 3, padding=1),
-            nn.BatchNorm2d(out_ch),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_ch, out_ch, 3, padding=1),
-            nn.BatchNorm2d(out_ch),
-            nn.ReLU(inplace=True),
-        )
-
-    def forward(self, x):
-        return self.block(x)
-
-
-class UNet(nn.Module):
-    """Lightweight U-Net for pixel classification on embedding grids."""
-
-    def __init__(self, in_channels=128, n_classes=2, depth=3, base_filters=64):
-        super().__init__()
-        self.depth = depth
-
-        # Encoder
-        self.encoders = nn.ModuleList()
-        self.pools = nn.ModuleList()
-        ch = in_channels
-        for i in range(depth):
-            out_ch = base_filters * (2 ** i)
-            self.encoders.append(_ConvBlock(ch, out_ch))
-            self.pools.append(nn.MaxPool2d(2))
-            ch = out_ch
-
-        # Bottleneck
-        self.bottleneck = _ConvBlock(ch, ch * 2)
-        ch = ch * 2
-
-        # Decoder
-        self.upconvs = nn.ModuleList()
-        self.decoders = nn.ModuleList()
-        for i in range(depth - 1, -1, -1):
-            skip_ch = base_filters * (2 ** i)
-            self.upconvs.append(nn.ConvTranspose2d(ch, skip_ch, 2, stride=2))
-            self.decoders.append(_ConvBlock(skip_ch * 2, skip_ch))
-            ch = skip_ch
-
-        # Output
-        self.out_conv = nn.Conv2d(ch, n_classes, 1)
-
-    def forward(self, x):
-        # Pad to multiple of 2^depth
-        factor = 2 ** self.depth
-        _, _, h, w = x.shape
-        pad_h = (factor - h % factor) % factor
-        pad_w = (factor - w % factor) % factor
-        if pad_h > 0 or pad_w > 0:
-            x = F.pad(x, [0, pad_w, 0, pad_h])
-
-        # Encoder
-        skips = []
-        for enc, pool in zip(self.encoders, self.pools):
-            x = enc(x)
-            skips.append(x)
-            x = pool(x)
-
-        x = self.bottleneck(x)
-
-        # Decoder
-        for upconv, dec, skip in zip(self.upconvs, self.decoders, reversed(skips)):
-            x = upconv(x)
-            # Handle size mismatch from rounding
-            if x.shape != skip.shape:
-                x = F.pad(x, [0, skip.shape[3] - x.shape[3],
-                               0, skip.shape[2] - x.shape[2]])
-            x = torch.cat([x, skip], dim=1)
-            x = dec(x)
-
-        x = self.out_conv(x)
-
-        # Crop back to original size
-        return x[:, :, :h, :w]
 
 
 def build_embedding_grid(embeddings, coords, width, height):
     """Build a dense (H, W, dim) grid from sparse (N, dim) embeddings.
 
-    Pixels with no data are zero-filled.
+    Pixels with no data are zero-filled.  Pure numpy — no torch required.
     """
     dim = embeddings.shape[1]
     grid = np.zeros((height, width, dim), dtype=np.float32)
     grid[coords[:, 1], coords[:, 0]] = embeddings
     return grid
+
+
+# ---------------------------------------------------------------------------
+# PyTorch model classes — only defined when torch is available so the module
+# can be safely imported (for TORCH_MISSING_MSG / _HAS_TORCH) on machines
+# without torch.
+# ---------------------------------------------------------------------------
+if _HAS_TORCH:
+
+    class _ConvBlock(nn.Module):
+        """Two Conv3x3 → BN → ReLU layers."""
+
+        def __init__(self, in_ch, out_ch):
+            super().__init__()
+            self.block = nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, 3, padding=1),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(out_ch, out_ch, 3, padding=1),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+            )
+
+        def forward(self, x):
+            return self.block(x)
+
+    class UNet(nn.Module):
+        """Lightweight U-Net for pixel classification on embedding grids."""
+
+        def __init__(self, in_channels=128, n_classes=2, depth=3, base_filters=64):
+            super().__init__()
+            self.depth = depth
+
+            # Encoder
+            self.encoders = nn.ModuleList()
+            self.pools = nn.ModuleList()
+            ch = in_channels
+            for i in range(depth):
+                out_ch = base_filters * (2 ** i)
+                self.encoders.append(_ConvBlock(ch, out_ch))
+                self.pools.append(nn.MaxPool2d(2))
+                ch = out_ch
+
+            # Bottleneck
+            self.bottleneck = _ConvBlock(ch, ch * 2)
+            ch = ch * 2
+
+            # Decoder
+            self.upconvs = nn.ModuleList()
+            self.decoders = nn.ModuleList()
+            for i in range(depth - 1, -1, -1):
+                skip_ch = base_filters * (2 ** i)
+                self.upconvs.append(nn.ConvTranspose2d(ch, skip_ch, 2, stride=2))
+                self.decoders.append(_ConvBlock(skip_ch * 2, skip_ch))
+                ch = skip_ch
+
+            # Output
+            self.out_conv = nn.Conv2d(ch, n_classes, 1)
+
+        def forward(self, x):
+            # Pad to multiple of 2^depth
+            factor = 2 ** self.depth
+            _, _, h, w = x.shape
+            pad_h = (factor - h % factor) % factor
+            pad_w = (factor - w % factor) % factor
+            if pad_h > 0 or pad_w > 0:
+                x = F.pad(x, [0, pad_w, 0, pad_h])
+
+            # Encoder
+            skips = []
+            for enc, pool in zip(self.encoders, self.pools):
+                x = enc(x)
+                skips.append(x)
+                x = pool(x)
+
+            x = self.bottleneck(x)
+
+            # Decoder
+            for upconv, dec, skip in zip(self.upconvs, self.decoders, reversed(skips)):
+                x = upconv(x)
+                # Handle size mismatch from rounding
+                if x.shape != skip.shape:
+                    x = F.pad(x, [0, skip.shape[3] - x.shape[3],
+                                   0, skip.shape[2] - x.shape[2]])
+                x = torch.cat([x, skip], dim=1)
+                x = dec(x)
+
+            x = self.out_conv(x)
+
+            # Crop back to original size
+            return x[:, :, :h, :w]
 
 
 def train_unet(embedding_grid, labelled_coords, labelled_labels,

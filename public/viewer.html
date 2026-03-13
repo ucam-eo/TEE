@@ -7503,12 +7503,14 @@
                     signal: evalAbortController.signal,
                 });
 
-                // Non-streaming error responses (4xx) come as JSON
+                // Non-streaming error responses (4xx/5xx)
                 if (!resp.ok) {
-                    const data = await resp.json();
+                    let msg = 'Evaluation failed';
+                    try { const data = await resp.json(); msg = data.error || msg; }
+                    catch (_) { msg = `Server error (${resp.status})`; }
                     resetButtons();
                     hideFinishButtons();
-                    status.textContent = data.error || 'Evaluation failed';
+                    status.textContent = msg;
                     status.style.color = '#dc3545';
                     return;
                 }

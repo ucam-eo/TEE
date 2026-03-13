@@ -276,9 +276,8 @@ def run_evaluation(request):
     embedding_grid = None
     labelled_coords = None
     if "unet" in classifiers:
-        from api.views.unet_model import build_embedding_grid, TORCH_MISSING_MSG
-        from api.views.unet_model import torch as _unet_torch
-        if _unet_torch is None:
+        from api.views.unet_model import build_embedding_grid, _HAS_TORCH, TORCH_MISSING_MSG
+        if not _HAS_TORCH:
             return JsonResponse({"error": TORCH_MISSING_MSG}, status=400)
         embedding_grid = build_embedding_grid(embeddings, coords, width, height)
         labelled_coords = coords[np.where(labelled_mask)[0][valid_mask]]
