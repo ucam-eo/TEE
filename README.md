@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="tee-logo.jpg" alt="TEE Logo" width="500">
+</p>
+
 # TEE: Tessera Embeddings Explorer
 
 **Version 3.1** | [Docker Hub](https://hub.docker.com/r/sk818/tee) | [User Guide](public/user_guide.md)
