@@ -636,6 +636,10 @@ For issues or questions:
 3. Verify data files exist in `~/data/`
 4. Check browser console for JavaScript errors
 
+## Acknowledgements
+
+Thanks to Julia Jones (Bangor), David Coomes (Cambridge), Anil Madhavapeddy (Cambridge), and Sadiq Jaffer (Cambridge) for their insightful feedback on half-baked versions of the code.
+
 ## Citation
 
 If you use this project in research, please cite:
