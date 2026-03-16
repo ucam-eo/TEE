@@ -4009,17 +4009,20 @@
                 const visIcon = label.visible ? '\ud83d\udc41' : '\ud83d\udc41\u200d\ud83d\udde8';
                 const codeTag = label.code ? `<code style="font-size: 10px; color: #667eea; background: #f0f0ff; padding: 1px 4px; border-radius: 2px; margin-right: 2px;">${label.code}</code>` : '';
 
-                let detailHtml;
+                const hasSlider = label.embedding != null;
+                let detailHtml = '';
                 if (isPolygon) {
-                    // Polygon: show static pixel count
+                    // Polygon: pixel count + optional similarity expansion slider
                     detailHtml = `<span style="font-size: 10px; color: #888;">${label.pixelCount || label.matchCount || 0}px</span>`;
-                } else {
+                    if (hasSlider) {
+                        detailHtml += ` <input type="range" min="0" max="35" value="${label.threshold}" style="width: 50px; cursor: pointer; vertical-align: middle;" oninput="updateManualLabelThreshold(${label.id}, parseFloat(this.value)); this.nextElementSibling.textContent=this.value">
+                         <span style="font-size: 10px; color: #666; min-width: 20px;">${label.threshold}</span>`;
+                    }
+                } else if (hasSlider) {
                     // Point/similarity: show slider
-                    const hasSlider = label.embedding != null;
-                    detailHtml = hasSlider ?
-                        `<input type="range" min="0" max="35" value="${label.threshold}" style="width: 60px; cursor: pointer; vertical-align: middle;" oninput="updateManualLabelThreshold(${label.id}, parseFloat(this.value)); this.nextElementSibling.textContent=this.value">
+                    detailHtml = `<input type="range" min="0" max="35" value="${label.threshold}" style="width: 60px; cursor: pointer; vertical-align: middle;" oninput="updateManualLabelThreshold(${label.id}, parseFloat(this.value)); this.nextElementSibling.textContent=this.value">
                          <span style="font-size: 10px; color: #666; min-width: 20px;">${label.threshold}</span>
-                         <span style="font-size: 10px; color: #888;">${label.matchCount || 0}px</span>` : '';
+                         <span style="font-size: 10px; color: #888;">${label.matchCount || 0}px</span>`;
                 }
 
                 html += `<div class="manual-label-item" data-id="${label.id}" style="display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #eee; flex-wrap: wrap;">
@@ -4060,7 +4063,7 @@
                 return;
             }
 
-            // Build flat list of label sources: each has an embedding, threshold², and class index
+            // Build class name → index + color maps
             const classNames = [];   // unique label names
             const classColorMap = {};
             for (const label of activeLabels) {
@@ -4072,46 +4075,67 @@
             if (classNames.length === 0) return;
 
             const dim = localVectors.dim;
-            const sources = [];  // [{emb: Float32Array, threshSq: number, classIdx: number}]
-            for (const label of activeLabels) {
-                const classIdx = classNames.indexOf(label.name);
-                const t = label.threshold || 0;
-                sources.push({
-                    emb: new Float32Array(label.embedding),
-                    threshSq: t * t,
-                    classIdx
-                });
-            }
-
             const N = localVectors.numVectors;
             const coords = localVectors.coords;
             const emb = localVectors.embeddings;
             const gt = localVectors.metadata.geotransform;
-            const numSources = sources.length;
+            const grid = localVectors.gridLookup;
 
-            // For each pixel, check if within any source's threshold.
-            // If matched by multiple classes, assign to closest source.
-            // -1 = unassigned (no source within threshold).
+            // -1 = unassigned
             const assignments = new Int8Array(N).fill(-1);
 
-            for (let i = 0; i < N; i++) {
-                let bestDist = Infinity;
-                let bestClass = -1;
-                const base = i * dim;
-                for (let s = 0; s < numSources; s++) {
-                    const src = sources[s];
-                    if (src.threshSq === 0) continue; // threshold 0 → no contribution
-                    let distSq = 0;
-                    for (let d = 0; d < dim; d++) {
-                        const diff = emb[base + d] - src.emb[d];
-                        distSq += diff * diff;
-                    }
-                    if (distSq <= src.threshSq && distSq < bestDist) {
-                        bestDist = distSq;
-                        bestClass = src.classIdx;
+            // Pass 1: rasterize polygon interiors — always assigned
+            for (const label of activeLabels) {
+                if (label.type !== 'polygon' || !label.vertices) continue;
+                const classIdx = classNames.indexOf(label.name);
+                const pixVerts = label.vertices.map(v => [
+                    Math.round((v[1] - gt.c) / gt.a),
+                    Math.round((v[0] - gt.f) / gt.e)
+                ]);
+                const matches = rasterizePolygon(pixVerts);
+                for (const m of matches) {
+                    if (m.vectorIndex >= 0 && m.vectorIndex < N) {
+                        assignments[m.vectorIndex] = classIdx;
                     }
                 }
-                assignments[i] = bestClass;
+            }
+
+            // Pass 2: threshold-gated similarity for point/similarity labels
+            // and polygon centroid embeddings (if threshold > 0)
+            const sources = [];
+            for (const label of activeLabels) {
+                const classIdx = classNames.indexOf(label.name);
+                const t = label.threshold || 0;
+                if (t > 0 && label.embedding) {
+                    sources.push({
+                        emb: new Float32Array(label.embedding),
+                        threshSq: t * t,
+                        classIdx
+                    });
+                }
+            }
+
+            if (sources.length > 0) {
+                const numSources = sources.length;
+                for (let i = 0; i < N; i++) {
+                    if (assignments[i] >= 0) continue; // already assigned by polygon
+                    let bestDist = Infinity;
+                    let bestClass = -1;
+                    const base = i * dim;
+                    for (let s = 0; s < numSources; s++) {
+                        const src = sources[s];
+                        let distSq = 0;
+                        for (let d = 0; d < dim; d++) {
+                            const diff = emb[base + d] - src.emb[d];
+                            distSq += diff * diff;
+                        }
+                        if (distSq <= src.threshSq && distSq < bestDist) {
+                            bestDist = distSq;
+                            bestClass = src.classIdx;
+                        }
+                    }
+                    if (bestClass >= 0) assignments[i] = bestClass;
+                }
             }
 
             // Pre-parse colors

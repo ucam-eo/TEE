@@ -280,16 +280,16 @@ class TestClassificationOverlay:
 
     def test_uses_image_overlay(self, script_text):
         # renderManualClassification should create an L.imageOverlay
-        fn_body = script_text.split("function renderManualClassification")[1][:6000]
+        fn_body = script_text.split("function renderManualClassification")[1][:10000]
         assert "L.imageOverlay" in fn_body
 
     def test_pixelated_rendering(self, script_text):
-        fn_body = script_text.split("function renderManualClassification")[1][:6000]
+        fn_body = script_text.split("function renderManualClassification")[1][:10000]
         assert "imageRendering" in fn_body
         assert "pixelated" in fn_body
 
     def test_nearest_centroid_loop(self, script_text):
-        fn_body = script_text.split("function renderManualClassification")[1][:6000]
+        fn_body = script_text.split("function renderManualClassification")[1][:10000]
         # Should iterate over all pixels
         assert "for (let i = 0; i < N; i++)" in fn_body
         # Should compute distance to centroids
