@@ -44,7 +44,9 @@ Use the **layout dropdown** in the header to switch between modes:
 | 6. **Embeddings Y2** | Second year's embeddings for comparison |
 
 Additional modes:
-- **Labelling** — replaces panel 6 with a split view for segmentation clusters and saved labels
+- **Labelling** — replaces panel 6 with a split view. Two sub-modes:
+  - **Auto-label** — K-means segmentation clusters (left) and promoted labels (right)
+  - **Manual Label** — hand-placed pins and polygons with per-class similarity thresholds (see [Manual Labelling](#manual-labelling))
 - **Validation** — replaces the bottom row with ground-truth upload controls and a learning-curve chart (see [Validation](#validation-learning-curves))
 
 ### Switching Years
@@ -92,6 +94,121 @@ Labels are portable — they use embedding distance rather than coordinates, so 
 
 - **Import** — use the Import button to load a previously exported JSON file
 - **Export** — see Export Options below
+
+## Manual Labelling
+
+Manual labelling mode lets you build label classes by hand — placing individual pins, drawing polygons, or combining both. Each label entry captures an embedding, which enables similarity-based expansion, cross-year timeline analysis, and classification in Panel 5.
+
+### Entering Manual Mode
+
+1. Switch the layout to **Labelling** (header dropdown)
+2. In Panel 6, change the mode dropdown from **Auto-label** to **Manual Label**
+
+Panel headings update: Panel 2 becomes **Labels** (shows your labels on the satellite image), Panel 5 becomes **Classification**, and Panel 6 shows the manual label controls.
+
+### Setting a Label
+
+Before placing any labels, you must set the active label class:
+
+1. Type a **label name** in the text field (e.g. "Woodland")
+2. Click the **color swatch** to choose a color
+3. Click **Set**
+
+The **Active** bar appears below, showing the current label name, color, and instructions.
+
+**Schema support:** Click **Schema** in the header to load a classification scheme (UKHab v2 or a custom JSON/CSV). A floating tree window opens — click any entry to set it as the active label with its code and color pre-filled.
+
+### Placing Point Labels (Pins)
+
+**Ctrl+click** (or Cmd+click on Mac) anywhere on the map to drop a pin at that location. The pin:
+
+- Appears as a colored circle marker on the satellite panel (Panel 2)
+- Extracts the 128D embedding at that pixel (if vectors are loaded)
+- Inherits the similarity threshold from other labels in the same class
+- Is immediately listed in the Manual Labels panel (Panel 6)
+
+**Double-click** (without Ctrl) also drops a pin — this is a shortcut for quick labelling.
+
+### Drawing Polygon Labels
+
+**Ctrl+double-click** (or Cmd+double-click) to start drawing a polygon:
+
+1. A polygon drawing tool activates — click to place vertices on the map
+2. Click the first vertex (or double-click) to close the polygon
+3. Press **Escape** to cancel a polygon in progress
+
+The polygon:
+- Appears as a colored filled shape on the satellite panel
+- The centroid's embedding is extracted automatically
+- All pixels inside the polygon are rasterized at 10m resolution and included in the class overlay
+- Is listed in the Manual Labels panel with a "polygon" type indicator
+
+### Understanding Label Entries
+
+Each pin or polygon creates a **label entry** under a class name. A class can contain multiple entries (e.g. several pins for "Grassland"). The Manual Labels panel groups entries by class:
+
+- **Multi-entry classes** show a collapsible group with an expand/collapse arrow
+- **Single-entry classes** show a flat row
+
+Each row displays:
+- **Set-active icon** (target, leftmost) — click to make this the active label class for quick re-selection
+- **Color swatch** — the class color
+- **Label code** (if using a schema) — e.g. "[u1b5]"
+- **Label name** — e.g. "Grassland"
+- **Similarity slider** — adjusts the embedding distance threshold (see below)
+- **Pixel count** — number of matched pixels
+- **Timeline icon** (clock) — see coverage across years (only shown when an embedding is available)
+- **Delete icon** (trash) — remove the entry or entire class
+- **Visibility toggle** (eye) — show/hide the class on the map
+
+### Similarity Threshold
+
+Each label entry has a **similarity slider** that controls how far the embedding search extends from the pin/polygon centroid:
+
+- **Threshold = 0** — only the pin pixel itself (or polygon interior) is shown
+- **Higher threshold** — more pixels are included based on embedding distance
+- The slider ranges from 0 to 500 (L2 distance in embedding space)
+
+Adjusting the threshold for any entry in a class rebuilds the entire class overlay — the union of all entries' similarity matches.
+
+### Classification (Panel 5)
+
+Click the **Classify** button in the Panel 5 header to generate a full-viewport classification:
+
+- Each pixel is assigned to the nearest label class based on embedding distance
+- Only labels with a **non-zero threshold** contribute to classification
+- A pixel must fall within a label's threshold to be classified (pixels outside all thresholds remain unclassified)
+- Results appear as a colored overlay on Panel 5
+- Classification updates automatically when you add, remove, or adjust labels
+
+### Panel 4 Coloring
+
+Manual labels are reflected in the PCA/UMAP scatter plot (Panel 4):
+
+- Pixels matching any visible label class are colored with that class's color
+- Unmatched pixels appear as gray
+- Colors update when labels change, are toggled, or the scene loads
+
+### Cross-Year Timeline
+
+Click the **clock icon** on any class row to see how that class's coverage changes over all available years:
+
+- A bar chart shows pixel counts per year
+- A percentage change summary compares the first and last years
+- Each year's vector data is loaded from cache or downloaded automatically
+
+### Bulk Actions
+
+- **Hide All / Show All** — toggle visibility of all manual label classes at once
+- Set-active icon allows quick switching between classes without re-entering the name
+
+### Tips
+
+- **Combine pins and polygons** — use polygons for large homogeneous areas, pins for scattered features
+- **Start with threshold = 0** — place several pins across a class, then gradually increase the threshold to expand coverage
+- **Check Panel 4** — the PCA/UMAP view shows whether your labels form coherent clusters in embedding space
+- **Use Classify** — the Panel 5 classification gives a quick visual check of your label coverage
+- **Labels persist** across page reloads (stored in browser localStorage)
 
 ## Segmentation (K-Means Clustering)
 
@@ -273,6 +390,9 @@ The temporal distance heatmap shows pixel-by-pixel embedding differences between
 | Place marker | Single-click on any panel |
 | Similarity search | Double-click on any panel |
 | Adjust similarity | Drag the similarity slider |
+| Drop pin (manual mode) | Ctrl+click (or double-click) |
+| Draw polygon (manual mode) | Ctrl+double-click, then click vertices |
+| Cancel polygon | Escape |
 | Rotate (PCA/UMAP) | Right-click drag |
 
 ## Tips

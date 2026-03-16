@@ -4,7 +4,7 @@
 
 # TEE: Tessera Embeddings Explorer
 
-**Version 3.1** | [Docker Hub](https://hub.docker.com/r/sk818/tee) | [User Guide](public/user_guide.md)
+**Version 3.4** | [Docker Hub](https://hub.docker.com/r/sk818/tee) | [User Guide](public/user_guide.md)
 
 A system for downloading, processing, and visualizing Sentinel-2 satellite embeddings (2018-2025) with an interactive web interface.
 
@@ -52,6 +52,15 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - Real-time threshold slider for instant local filtering
 - Labels and search are fully private — only tile images are fetched from the server
 
+### Manual Labelling
+- **Pin labels** — Ctrl+click (or double-click) to place point labels on the map with the active class name and color
+- **Polygon labels** — Ctrl+double-click to draw polygon boundaries; interiors are rasterized at 10m resolution
+- **Similarity expansion** — each pin/polygon captures an embedding; adjust the per-class similarity slider to expand coverage to nearby pixels in embedding space
+- **Classification** — click Classify to generate a full-viewport nearest-centroid classification in Panel 5, respecting per-class thresholds
+- **Panel 4 integration** — manual label classes are colored in the PCA/UMAP scatter plot for visual verification
+- **Schema support** — load a classification scheme (UKHab v2 or custom JSON/CSV) for standardized class names and codes
+- **Timeline** — track how each manual label class's coverage changes across years
+
 ### Segmentation (K-Means Clustering)
 - **Auto-cluster** the viewport into k groups using K-means on the embedding space — runs entirely in a Web Worker
 - Segmentation results appear as a **temporary preview** overlay with a floating panel
@@ -90,9 +99,9 @@ The viewer includes a **6-panel layout** toggle for advanced analysis:
 5. **Heatmap** — Temporal distance heatmap (Y1 vs Y2 pixel-by-pixel differences)
 6. **Embeddings Y2** — Second year embeddings for temporal comparison
 
-A **Validation** mode replaces the bottom row with a controls panel and a learning-curve chart for evaluating classifier performance on uploaded ground-truth shapefiles.
+A **Labelling** mode replaces Panel 6 with label management — choose between **Auto-label** (K-means segmentation + promoted labels) and **Manual Label** (hand-placed pins, polygons, and similarity-based expansion with per-class thresholds). A **Validation** mode replaces the bottom row with a controls panel and a learning-curve chart for evaluating classifier performance on uploaded ground-truth shapefiles.
 
-Key capabilities: one-click similarity search, real-time threshold control, persistent colored label overlays, cross-panel synchronized markers, UMAP visualization with satellite RGB coloring, temporal distance heatmap, year-based label updates, cross-year label timeline analysis, and ground-truth validation with learning curves.
+Key capabilities: one-click similarity search, real-time threshold control, persistent colored label overlays, cross-panel synchronized markers, manual pin and polygon labelling with classification, UMAP visualization with satellite RGB coloring, temporal distance heatmap, year-based label updates, cross-year label timeline analysis, and ground-truth validation with learning curves.
 
 Labels are stored in browser localStorage (private, survive reloads). Labels can be exported/imported as compact JSON files for sharing — they are portable across viewports since matching uses embedding distance, not coordinates.
 
