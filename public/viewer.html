@@ -1264,6 +1264,18 @@
         </div>
     </div>
 
+    <!-- Schema Floating Window -->
+    <div id="schema-float" style="display:none; position:fixed; top:80px; left:20px; width:280px; max-height:60vh; background:rgba(255,255,255,0.97); backdrop-filter:blur(10px); border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.3); z-index:2001; font-size:12px; overflow:hidden; display:none;">
+        <div id="schema-float-header" style="cursor:grab; display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#667eea; color:white; border-radius:8px 8px 0 0; font-weight:600; font-size:13px; user-select:none;">
+            <span id="schema-float-title">Schema</span>
+            <button onclick="closeSchemaFloat()" style="background:none; border:none; color:white; cursor:pointer; font-size:16px; padding:0; width:20px; height:20px; line-height:20px;">&#10005;</button>
+        </div>
+        <div style="padding:8px;">
+            <input type="text" id="schema-float-search" placeholder="Search habitats..." style="width:100%; padding:5px 8px; border:1px solid #ccc; border-radius:3px; font-size:11px; color:#333; box-sizing:border-box; margin-bottom:6px;" oninput="filterSchemaTree(this.value)">
+            <div id="schema-tree-container" style="max-height:calc(60vh - 90px); overflow-y:auto; border:1px solid #ddd; border-radius:3px; padding:4px; background:#fafafa;"></div>
+        </div>
+    </div>
+
     <!-- Save Label Modal -->
     <div id="save-label-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center;">
         <div style="background: white; border-radius: 8px; padding: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); width: 90%; max-width: 400px;">
@@ -4193,6 +4205,56 @@
             manualClassifyOverlay.getElement().style.imageRendering = 'pixelated';
         }
 
+        // ===== DRAGGABLE HELPER =====
+
+        function makeDraggable(panel, handle) {
+            let startX, startY, startLeft, startTop;
+            handle.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                startX = e.clientX;
+                startY = e.clientY;
+                const rect = panel.getBoundingClientRect();
+                startLeft = rect.left;
+                startTop = rect.top;
+                handle.style.cursor = 'grabbing';
+                document.addEventListener('mousemove', onDrag);
+                document.addEventListener('mouseup', stopDrag);
+            });
+            function onDrag(e) {
+                panel.style.left = (startLeft + e.clientX - startX) + 'px';
+                panel.style.top = (startTop + e.clientY - startY) + 'px';
+                panel.style.right = 'auto';
+                panel.style.bottom = 'auto';
+            }
+            function stopDrag() {
+                handle.style.cursor = 'grab';
+                document.removeEventListener('mousemove', onDrag);
+                document.removeEventListener('mouseup', stopDrag);
+            }
+        }
+
+        // ===== SCHEMA FLOAT =====
+
+        function openSchemaFloat() {
+            if (!activeSchema) return;
+            const panel = document.getElementById('schema-float');
+            document.getElementById('schema-float-title').textContent = activeSchema.name || 'Schema';
+            document.getElementById('schema-tree-container').innerHTML = renderSchemaTreeHTML(activeSchema.tree, 0);
+            document.getElementById('schema-float-search').value = '';
+            panel.style.display = 'block';
+        }
+
+        function closeSchemaFloat() {
+            document.getElementById('schema-float').style.display = 'none';
+        }
+
+        // Init dragging on schema float once DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            const sf = document.getElementById('schema-float');
+            const sh = document.getElementById('schema-float-header');
+            if (sf && sh) makeDraggable(sf, sh);
+        });
+
         // ===== SCHEMA SYSTEM (Phase 2A) =====
 
         function toggleSchemaDropdown() {
@@ -4289,6 +4351,9 @@
 
             if (!activeSchema || activeSchemaMode === 'none') {
                 // Restore freetext mode
+                container.style.flexDirection = '';
+                container.style.alignItems = '';
+                closeSchemaFloat();
                 container.innerHTML = `
                     <span style="font-weight: 600; color: #333; font-size: 12px; white-space: nowrap;">Current label:</span>
                     <div id="manual-label-swatch" title="Click to choose colour" style="width: 18px; height: 18px; border-radius: 3px; border: 2px solid #666; background: ${currentManualLabel ? currentManualLabel.color : '#3cb44b'}; flex-shrink: 0; cursor: pointer;" onclick="document.getElementById('manual-label-color').click()"></div>
@@ -4299,24 +4364,11 @@
                 return;
             }
 
-            // Schema tree mode
-            container.innerHTML = '';
-            container.style.flexDirection = 'column';
-            container.style.alignItems = 'stretch';
-
-            const headerDiv = document.createElement('div');
-            headerDiv.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 4px;';
-            headerDiv.innerHTML = `
+            // Schema compact mode — tree lives in the floating window
+            container.innerHTML = `
                 <span style="font-weight: 600; color: #333; font-size: 12px; white-space: nowrap;">Schema: ${activeSchema.name}</span>
-                <input type="text" id="schema-search" placeholder="Search habitats..." style="flex: 1; padding: 3px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; color: #333; min-width: 0;" oninput="filterSchemaTree(this.value)">
+                <button onclick="openSchemaFloat()" style="padding: 3px 10px; background: #667eea; color: white; border: none; border-radius: 3px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;">Browse &#9662;</button>
             `;
-            container.appendChild(headerDiv);
-
-            const treeDiv = document.createElement('div');
-            treeDiv.id = 'schema-tree-container';
-            treeDiv.style.cssText = 'max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 3px; padding: 4px; background: #fafafa;';
-            treeDiv.innerHTML = renderSchemaTreeHTML(activeSchema.tree, 0);
-            container.appendChild(treeDiv);
         }
 
         function renderSchemaTreeHTML(nodes, depth) {
@@ -4372,6 +4424,7 @@
                 document.getElementById('manual-active-label-name').textContent = `${code ? '[' + code + '] ' : ''}${name}`;
             }
             localStorage.setItem('currentManualLabel', JSON.stringify(currentManualLabel));
+            closeSchemaFloat();
         }
 
         function filterSchemaTree(query) {
