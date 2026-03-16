@@ -278,6 +278,7 @@ console.log('\n--- DOM ID cross-reference ---');
         'explorer-loading', 'explorer-stats-overlay',
         'seg-overlay-panel', 'change-info-overlay',
         'color-picker-backdrop',
+        'labelling-export-menu', 'schema-tree-container',
     ]);
 
     for (const id of idRefs) {
@@ -368,6 +369,149 @@ console.log('\n--- setLabelMode references ---');
     assert(fnBody.includes("labelMode = mode"), 'setLabelMode sets labelMode');
     assert(fnBody.includes("localStorage.setItem"), 'setLabelMode persists to localStorage');
     assert(fnBody.includes('triggerManualClassification'), 'setLabelMode triggers classification');
+}
+
+
+// ──────────────────────────────────────────
+// Test 11: pointInPolygon logic
+// ──────────────────────────────────────────
+console.log('\n--- pointInPolygon ---');
+{
+    const fn = new Function('return ' + extractFunction('pointInPolygon', allJS))();
+
+    // Square polygon: (0,0), (10,0), (10,10), (0,10)
+    const square = [[0,0],[10,0],[10,10],[0,10]];
+    assert(fn(5, 5, square) === true, 'point (5,5) inside square');
+    assert(fn(15, 5, square) === false, 'point (15,5) outside square');
+    assert(fn(-1, 5, square) === false, 'point (-1,5) outside square');
+
+    // Triangle: (0,0), (10,0), (5,10)
+    const triangle = [[0,0],[10,0],[5,10]];
+    assert(fn(5, 3, triangle) === true, 'point (5,3) inside triangle');
+    assert(fn(0, 10, triangle) === false, 'point (0,10) outside triangle');
+
+    // Concave L-shape: (0,0),(10,0),(10,5),(5,5),(5,10),(0,10)
+    const concave = [[0,0],[10,0],[10,5],[5,5],[5,10],[0,10]];
+    assert(fn(2, 2, concave) === true, 'point (2,2) inside concave');
+    assert(fn(7, 7, concave) === false, 'point (7,7) in concavity = outside');
+    assert(fn(7, 2, concave) === true, 'point (7,2) inside concave arm');
+}
+
+
+// ──────────────────────────────────────────
+// Test 12: rasterizePolygon integration
+// ──────────────────────────────────────────
+console.log('\n--- rasterizePolygon ---');
+{
+    // rasterizePolygon depends on localVectors and gridLookupIndex
+    const dim = 4;
+    const N = 25; // 5x5 grid
+    const embeddings = new Float32Array(N * dim);
+    for (let i = 0; i < N * dim; i++) embeddings[i] = Math.random();
+    const coords = new Int32Array(N * 2);
+    for (let y = 0; y < 5; y++) {
+        for (let x = 0; x < 5; x++) {
+            const idx = y * 5 + x;
+            coords[idx * 2] = x;
+            coords[idx * 2 + 1] = y;
+        }
+    }
+    const metadata = { geotransform: { c: 0, a: 1, f: 0, e: 1 } };
+    const gridLookup = { minX: 0, minY: 0, w: 5, h: 5 };
+
+    const gridFnSrc = extractFunction('gridLookupIndex', allJS);
+    const pipFnSrc = extractFunction('pointInPolygon', allJS);
+    const rpFnSrc = extractFunction('rasterizePolygon', allJS);
+
+    const wrapper = new Function('localVectors', `
+        ${gridFnSrc}
+        ${pipFnSrc}
+        ${rpFnSrc}
+        return rasterizePolygon;
+    `);
+    const rasterizePolygon = wrapper({ embeddings, coords, metadata, gridLookup, numVectors: N, dim });
+
+    // Rectangle polygon covering pixels (1,1) to (3,3) — inner area
+    const rectPoly = [[1,1],[3,1],[3,3],[1,3]];
+    const matches = rasterizePolygon(rectPoly);
+    // Interior of a 1-3 polygon should contain pixel (2,2) at minimum
+    assert(matches.length > 0, 'rasterizePolygon returns matches for rectangle');
+    const has22 = matches.some(m => m.px === 2 && m.py === 2);
+    assert(has22, 'rasterizePolygon includes center pixel (2,2)');
+}
+
+
+// ──────────────────────────────────────────
+// Test 13: UKHab schema JSON validation
+// ──────────────────────────────────────────
+console.log('\n--- UKHab schema validation ---');
+{
+    const schemaPath = path.join(__dirname, '..', 'public', 'schemas', 'ukhab-v2.json');
+    let schema;
+    try {
+        schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+        assert(true, 'UKHab schema parses as valid JSON');
+    } catch (e) {
+        assert(false, 'UKHab schema parses as valid JSON: ' + e.message);
+        schema = null;
+    }
+
+    if (schema) {
+        assert(schema.name && schema.name.includes('UKHab'), 'schema.name contains "UKHab"');
+        assert(Array.isArray(schema.tree), 'schema.tree is an array');
+        assertEq(schema.tree.length, 9, 'schema.tree has 9 top-level entries');
+
+        // Check each top-level node has required fields
+        for (const node of schema.tree) {
+            assert(typeof node.code === 'string', `node has code: ${node.code}`);
+            assert(typeof node.name === 'string', `node has name: ${node.name}`);
+            assert(Array.isArray(node.children), `node ${node.code} has children array`);
+        }
+
+        // Verify known codes
+        const topCodes = schema.tree.map(n => n.code);
+        assert(topCodes.includes('g'), 'has Grassland (g)');
+        assert(topCodes.includes('w'), 'has Woodland (w)');
+        assert(topCodes.includes('h'), 'has Heathland (h)');
+        assert(topCodes.includes('u'), 'has Urban (u)');
+
+        // Count total nodes
+        function countNodes(nodes) {
+            let c = 0;
+            for (const n of nodes) {
+                c++;
+                if (n.children) c += countNodes(n.children);
+            }
+            return c;
+        }
+        const total = countNodes(schema.tree);
+        assert(total >= 100, `total nodes >= 100 (got ${total})`);
+
+        // Verify at least one Level 4 code exists (4 chars)
+        function findDepth4(nodes) {
+            for (const n of nodes) {
+                if (n.code && n.code.length >= 4) return n;
+                if (n.children) {
+                    const f = findDepth4(n.children);
+                    if (f) return f;
+                }
+            }
+            return null;
+        }
+        const d4 = findDepth4(schema.tree);
+        assert(d4 !== null, `at least one Level 4 code exists (e.g. ${d4 ? d4.code : 'none'})`);
+    }
+}
+
+
+// ──────────────────────────────────────────
+// Test 14: Schema mode consistency
+// ──────────────────────────────────────────
+console.log('\n--- Schema mode consistency ---');
+{
+    assert(allJS.includes("activeSchemaMode = 'none'"), "activeSchemaMode initialized to 'none'");
+    assert(allJS.includes("'ukhab'"), "JS references 'ukhab' schema mode");
+    assert(allJS.includes("'custom'"), "JS references 'custom' schema mode");
 }
 
 

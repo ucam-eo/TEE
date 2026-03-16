@@ -4,8 +4,8 @@ Structural validation tests for public/viewer.html
 Run:  cd /Users/skeshav/blore && venv/bin/pytest validation/ -v
 
 These tests parse the HTML statically (no browser needed) and verify that
-the Phase 1 changes — Explore rename, manual label mode, classification
-overlay — haven't regressed and that key invariants hold.
+Phase 1 (Explore rename, manual label mode, classification overlay) and
+Phase 2 (schema system, polygon drawing, toolbar) haven't regressed.
 """
 
 import re
@@ -192,6 +192,19 @@ class TestRequiredFunctions:
         "handleManualPinDrop",
         "triggerManualClassification",
         "renderManualClassification",
+        # Phase 2A: Schema system
+        "loadSchema",
+        "loadCustomSchema",
+        "parseTabIndentedSchema",
+        "renderSchemaSelector",
+        "selectSchemaLabel",
+        "filterSchemaTree",
+        # Phase 2B: Polygon drawing
+        "startPolygonDrawing",
+        "cancelPolygonDrawing",
+        "handlePolygonComplete",
+        "pointInPolygon",
+        "rasterizePolygon",
     ]
 
     @pytest.mark.parametrize("fname", FUNCTIONS)
@@ -313,6 +326,12 @@ class TestExistingElements:
         "help-popup",
         "export-dropdown-btn",
         "import-labels-btn",
+        # Phase 2C: Toolbar buttons
+        "schema-dropdown-btn",
+        "schema-dropdown-menu",
+        "labelling-export-btn",
+        "labelling-import-btn",
+        "labelling-share-btn",
     ]
 
     @pytest.mark.parametrize("elem_id", IDS)
@@ -367,6 +386,108 @@ class TestModeClasses:
         titles_block = script_text.split("const titles = {")[1][:600]
         for mode in self.MODES:
             assert f"'{mode}'" in titles_block
+
+
+# ────────────────────────────────────────────
+# 2C  Toolbar buttons
+# ────────────────────────────────────────────
+
+class TestToolbarButtons:
+    def test_labelling_toolbar_exists(self, soup):
+        div = soup.find("div", class_="labelling-toolbar")
+        assert div, "div.labelling-toolbar not found"
+
+    def test_schema_dropdown_btn(self, soup):
+        btn = soup.find("button", id="schema-dropdown-btn")
+        assert btn, "#schema-dropdown-btn missing"
+
+    def test_labelling_export_btn(self, soup):
+        btn = soup.find("button", id="labelling-export-btn")
+        assert btn, "#labelling-export-btn missing"
+
+    def test_labelling_import_btn(self, soup):
+        btn = soup.find("button", id="labelling-import-btn")
+        assert btn, "#labelling-import-btn missing"
+
+    def test_labelling_share_btn_disabled(self, soup):
+        btn = soup.find("button", id="labelling-share-btn")
+        assert btn, "#labelling-share-btn missing"
+        assert btn.has_attr("disabled"), "Share button should be disabled"
+
+    def test_toolbar_hidden_css(self, html):
+        assert "body:not(.mode-labelling) .labelling-toolbar" in html
+
+
+# ────────────────────────────────────────────
+# 2A  Schema system
+# ────────────────────────────────────────────
+
+class TestSchemaSystem:
+    def test_schema_state_vars(self, script_text):
+        assert re.search(r"let activeSchema\s*=\s*null", script_text)
+        assert re.search(r"let activeSchemaMode\s*=\s*'none'", script_text)
+
+    def test_load_schema_function(self, script_text):
+        assert re.search(r"(?:async\s+)?function\s+loadSchema\s*\(", script_text)
+
+    def test_load_custom_schema_function(self, script_text):
+        assert re.search(r"function\s+loadCustomSchema\s*\(", script_text)
+
+    def test_parse_tab_indented_function(self, script_text):
+        assert re.search(r"function\s+parseTabIndentedSchema\s*\(", script_text)
+
+    def test_render_schema_selector_function(self, script_text):
+        assert re.search(r"function\s+renderSchemaSelector\s*\(", script_text)
+
+    def test_select_schema_label_function(self, script_text):
+        assert re.search(r"function\s+selectSchemaLabel\s*\(", script_text)
+
+    def test_filter_schema_tree_function(self, script_text):
+        assert re.search(r"function\s+filterSchemaTree\s*\(", script_text)
+
+    def test_schema_dropdown_menu(self, soup):
+        menu = soup.find("div", id="schema-dropdown-menu")
+        assert menu, "#schema-dropdown-menu missing"
+
+
+# ────────────────────────────────────────────
+# 2B  Polygon drawing
+# ────────────────────────────────────────────
+
+class TestPolygonDrawing:
+    def test_leaflet_draw_cdn(self, html):
+        assert "leaflet-draw" in html
+        assert "leaflet.draw.css" in html or "leaflet-draw" in html
+        assert "leaflet.draw.js" in html
+
+    def test_polygon_state_vars(self, script_text):
+        assert re.search(r"let polygonDrawHandler\s*=\s*null", script_text)
+        assert re.search(r"let isPolygonDrawing\s*=\s*false", script_text)
+
+    def test_start_polygon_function(self, script_text):
+        assert re.search(r"function\s+startPolygonDrawing\s*\(", script_text)
+
+    def test_cancel_polygon_function(self, script_text):
+        assert re.search(r"function\s+cancelPolygonDrawing\s*\(", script_text)
+
+    def test_handle_polygon_complete(self, script_text):
+        assert re.search(r"function\s+handlePolygonComplete\s*\(", script_text)
+
+    def test_point_in_polygon_function(self, script_text):
+        assert re.search(r"function\s+pointInPolygon\s*\(", script_text)
+
+    def test_rasterize_polygon_function(self, script_text):
+        assert re.search(r"function\s+rasterizePolygon\s*\(", script_text)
+
+    def test_ctrl_dblclick_polygon(self, script_text):
+        assert "startPolygonDrawing()" in script_text
+
+    def test_escape_key_cancel(self, script_text):
+        assert "'Escape'" in script_text or '"Escape"' in script_text
+
+    def test_draw_toolbar_hidden(self, html):
+        assert ".leaflet-draw-toolbar" in html
+        assert "display: none" in html
 
 
 # ────────────────────────────────────────────

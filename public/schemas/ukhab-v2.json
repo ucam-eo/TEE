@@ -1,0 +1,781 @@
+{
+  "name": "UKHab v2.01",
+  "version": "2.01",
+  "date": "July 2023",
+  "tree": [
+    {
+      "code": "g",
+      "name": "Grassland",
+      "children": [
+        {
+          "code": "g1",
+          "name": "Acid grassland",
+          "children": [
+            {
+              "code": "g1a",
+              "name": "Lowland dry acid grassland",
+              "children": [
+                { "code": "g1a5", "name": "Dry heaths (H4030)", "children": [] },
+                { "code": "g1a6", "name": "Species-rich Nardus grassland (H6230)", "children": [] }
+              ]
+            },
+            {
+              "code": "g1b",
+              "name": "Upland acid grassland",
+              "children": []
+            },
+            {
+              "code": "g1c",
+              "name": "Bracken",
+              "children": []
+            },
+            {
+              "code": "g1d",
+              "name": "Other lowland acid grassland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "g2",
+          "name": "Calcareous grassland",
+          "children": [
+            {
+              "code": "g2a",
+              "name": "Lowland calcareous grassland",
+              "children": [
+                { "code": "g2a5", "name": "Dry grasslands and scrublands on chalk or limestone (H6210)", "children": [] },
+                { "code": "g2a6", "name": "Semi-natural dry grasslands on limestone; orchid-rich (H6210p)", "children": [] }
+              ]
+            },
+            {
+              "code": "g2b",
+              "name": "Upland calcareous grassland",
+              "children": [
+                { "code": "g2b5", "name": "Alpine and subalpine calcareous grasslands (H6170)", "children": [] }
+              ]
+            }
+          ]
+        },
+        {
+          "code": "g3",
+          "name": "Neutral grassland",
+          "children": [
+            {
+              "code": "g3a",
+              "name": "Lowland meadows",
+              "children": [
+                { "code": "g3a5", "name": "Lowland hay meadows (H6510)", "children": [] }
+              ]
+            },
+            {
+              "code": "g3b",
+              "name": "Upland hay meadows",
+              "children": [
+                { "code": "g3b5", "name": "Mountain hay meadows (H6520)", "children": [] }
+              ]
+            },
+            {
+              "code": "g3c",
+              "name": "Other neutral grassland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "g4",
+          "name": "Modified grassland",
+          "children": []
+        }
+      ]
+    },
+    {
+      "code": "h",
+      "name": "Heathland and shrub",
+      "children": [
+        {
+          "code": "h1",
+          "name": "Dwarf shrub heath",
+          "children": [
+            {
+              "code": "h1a",
+              "name": "Lowland heathland",
+              "children": [
+                { "code": "h1a5", "name": "Northern Atlantic wet heaths (H4010)", "children": [] },
+                { "code": "h1a6", "name": "European dry heaths (H4030)", "children": [] },
+                { "code": "h1a7", "name": "Temperate Atlantic wet heaths (H4020)", "children": [] }
+              ]
+            },
+            {
+              "code": "h1b",
+              "name": "Upland heathland",
+              "children": [
+                { "code": "h1b5", "name": "Northern Atlantic wet heaths (H4010)", "children": [] },
+                { "code": "h1b6", "name": "European dry heaths (H4030)", "children": [] }
+              ]
+            },
+            {
+              "code": "h1c",
+              "name": "Mountain heaths and willow scrub",
+              "children": [
+                { "code": "h1c5", "name": "Alpine and boreal heaths (H4060)", "children": [] },
+                { "code": "h1c6", "name": "Juniper on heaths or calcareous grasslands (H5130)", "children": [] }
+              ]
+            }
+          ]
+        },
+        {
+          "code": "h2",
+          "name": "Hedgerow",
+          "children": [
+            {
+              "code": "h2a",
+              "name": "Native hedgerow",
+              "children": []
+            },
+            {
+              "code": "h2b",
+              "name": "Non-native and ornamental hedgerow",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "h3",
+          "name": "Dense scrub",
+          "children": [
+            {
+              "code": "h3a",
+              "name": "Blackthorn scrub",
+              "children": []
+            },
+            {
+              "code": "h3b",
+              "name": "Bramble scrub",
+              "children": []
+            },
+            {
+              "code": "h3c",
+              "name": "Gorse scrub",
+              "children": []
+            },
+            {
+              "code": "h3d",
+              "name": "Hazel scrub",
+              "children": []
+            },
+            {
+              "code": "h3e",
+              "name": "Hawthorn scrub",
+              "children": []
+            },
+            {
+              "code": "h3f",
+              "name": "Rhododendron scrub",
+              "children": []
+            },
+            {
+              "code": "h3g",
+              "name": "Mixed scrub",
+              "children": []
+            },
+            {
+              "code": "h3h",
+              "name": "Other scrub",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "h4",
+          "name": "Line of trees",
+          "children": [
+            {
+              "code": "h4a",
+              "name": "Line of trees - native",
+              "children": []
+            },
+            {
+              "code": "h4b",
+              "name": "Line of trees - non-native",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "w",
+      "name": "Woodland and forest",
+      "children": [
+        {
+          "code": "w1",
+          "name": "Broadleaved, mixed and yew woodland",
+          "children": [
+            {
+              "code": "w1a",
+              "name": "Upland oakwoods",
+              "children": [
+                { "code": "w1a5", "name": "Western acidic oak woodland (H91A0)", "children": [] },
+                { "code": "w1a6", "name": "Old sessile oak woods (H9190)", "children": [] }
+              ]
+            },
+            {
+              "code": "w1b",
+              "name": "Upland mixed ashwoods",
+              "children": [
+                { "code": "w1b5", "name": "Tilio-Acerion forests of slopes, screes and ravines (H9180)", "children": [] }
+              ]
+            },
+            {
+              "code": "w1c",
+              "name": "Lowland beech and yew woodland",
+              "children": [
+                { "code": "w1c5", "name": "Asperulo-Fagetum beech forests (H9130)", "children": [] },
+                { "code": "w1c6", "name": "Atlantic acidophilous beech forests (H9120)", "children": [] },
+                { "code": "w1c7", "name": "Taxus baccata woods of the British Isles (H91J0)", "children": [] }
+              ]
+            },
+            {
+              "code": "w1d",
+              "name": "Wet woodland",
+              "children": [
+                { "code": "w1d5", "name": "Alluvial forests with Alnus and Fraxinus (H91E0)", "children": [] },
+                { "code": "w1d6", "name": "Bog woodland (H91D0)", "children": [] }
+              ]
+            },
+            {
+              "code": "w1e",
+              "name": "Upland birchwoods",
+              "children": []
+            },
+            {
+              "code": "w1f",
+              "name": "Lowland mixed deciduous woodland",
+              "children": []
+            },
+            {
+              "code": "w1g",
+              "name": "Other woodland; broadleaved",
+              "children": []
+            },
+            {
+              "code": "w1h",
+              "name": "Other woodland; mixed",
+              "children": [
+                { "code": "w1h5", "name": "Other woodland; mixed; mainly broadleaved", "children": [] },
+                { "code": "w1h6", "name": "Other woodland; mixed; mainly conifer", "children": [] }
+              ]
+            }
+          ]
+        },
+        {
+          "code": "w2",
+          "name": "Coniferous woodland",
+          "children": [
+            {
+              "code": "w2a",
+              "name": "Native pine woodlands",
+              "children": [
+                { "code": "w2a5", "name": "Caledonian forest (H91C0)", "children": [] }
+              ]
+            },
+            {
+              "code": "w2b",
+              "name": "Other Scot's Pine woodland",
+              "children": []
+            },
+            {
+              "code": "w2c",
+              "name": "Other coniferous woodland",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "c",
+      "name": "Cropland",
+      "children": [
+        {
+          "code": "c1",
+          "name": "Arable and horticulture",
+          "children": [
+            {
+              "code": "c1a",
+              "name": "Arable field margins",
+              "children": [
+                { "code": "c1a5", "name": "Arable field margins tussocky grass", "children": [] },
+                { "code": "c1a6", "name": "Arable field margins pollen and nectar mix", "children": [] },
+                { "code": "c1a7", "name": "Arable field margins cultivated annually for flora", "children": [] },
+                { "code": "c1a8", "name": "Arable field margins game bird mix", "children": [] }
+              ]
+            },
+            {
+              "code": "c1b",
+              "name": "Temporary grass and clover leys",
+              "children": [
+                { "code": "c1b5", "name": "Rye-grass and clover ley", "children": [] },
+                { "code": "c1b6", "name": "Legume-rich ley", "children": [] },
+                { "code": "c1b7", "name": "Herb-rich ley", "children": [] }
+              ]
+            },
+            {
+              "code": "c1c",
+              "name": "Cereal crops",
+              "children": [
+                { "code": "c1c5", "name": "Winter stubble", "children": [] },
+                { "code": "c1c6", "name": "Game bird mix fields", "children": [] },
+                { "code": "c1c7", "name": "Other cereal crops", "children": [] }
+              ]
+            },
+            {
+              "code": "c1d",
+              "name": "Non-cereal crops",
+              "children": [
+                { "code": "c1d5", "name": "Miscanthus", "children": [] },
+                { "code": "c1d6", "name": "Short rotation coppice", "children": [] },
+                { "code": "c1d7", "name": "Vineyards", "children": [] },
+                { "code": "c1d8", "name": "Other non-cereal crops", "children": [] }
+              ]
+            },
+            {
+              "code": "c1e",
+              "name": "Intensive orchards",
+              "children": []
+            },
+            {
+              "code": "c1f",
+              "name": "Horticulture",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "e",
+      "name": "Sparsely vegetated land",
+      "children": [
+        {
+          "code": "e1",
+          "name": "Inland rock",
+          "children": [
+            {
+              "code": "e1a",
+              "name": "Inland rock outcrop and scree habitats",
+              "children": [
+                { "code": "e1a5", "name": "Siliceous scree (H8110)", "children": [] },
+                { "code": "e1a6", "name": "Calcareous and calc-schist screes (H8120)", "children": [] },
+                { "code": "e1a7", "name": "Calcareous rocky slopes with chasmophytic vegetation (H8210)", "children": [] },
+                { "code": "e1a8", "name": "Siliceous rocky slopes with chasmophytic vegetation (H8220)", "children": [] }
+              ]
+            },
+            {
+              "code": "e1b",
+              "name": "Limestone pavement",
+              "children": [
+                { "code": "e1b5", "name": "Limestone pavements (H8240)", "children": [] }
+              ]
+            },
+            {
+              "code": "e1c",
+              "name": "Calaminarian grasslands",
+              "children": [
+                { "code": "e1c5", "name": "Calaminarian grasslands of Violetalia calaminariae (H6130)", "children": [] }
+              ]
+            },
+            {
+              "code": "e1d",
+              "name": "Other inland rock and scree",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "e2",
+          "name": "Supralittoral rock",
+          "children": [
+            {
+              "code": "e2a",
+              "name": "Maritime cliff and slopes",
+              "children": [
+                { "code": "e2a5", "name": "Vegetated sea cliffs of the Atlantic and Baltic coasts (H1230)", "children": [] }
+              ]
+            }
+          ]
+        },
+        {
+          "code": "e3",
+          "name": "Supralittoral sediment",
+          "children": [
+            {
+              "code": "e3a",
+              "name": "Coastal sand dunes",
+              "children": [
+                { "code": "e3a5", "name": "Embryonic shifting dunes (H2110)", "children": [] },
+                { "code": "e3a6", "name": "Shifting dunes along the shoreline with Ammophila arenaria (H2120)", "children": [] },
+                { "code": "e3a7", "name": "Fixed coastal dunes with herbaceous vegetation (H2130)", "children": [] },
+                { "code": "e3a8", "name": "Decalcified fixed dunes with Empetrum nigrum (H2140)", "children": [] },
+                { "code": "e3a9", "name": "Atlantic decalcified fixed dunes (H2150)", "children": [] },
+                { "code": "e3a10", "name": "Dunes with Salix repens ssp. argentea (H2170)", "children": [] },
+                { "code": "e3a11", "name": "Humid dune slacks (H2190)", "children": [] },
+                { "code": "e3a12", "name": "Dune juniper thickets (H2250)", "children": [] },
+                { "code": "e3a13", "name": "Machairs (H21A0)", "children": [] }
+              ]
+            },
+            {
+              "code": "e3b",
+              "name": "Coastal vegetated shingle",
+              "children": [
+                { "code": "e3b5", "name": "Annual vegetation of drift lines (H1210)", "children": [] },
+                { "code": "e3b6", "name": "Perennial vegetation of stony banks (H1220)", "children": [] }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "u",
+      "name": "Urban",
+      "children": [
+        {
+          "code": "u1",
+          "name": "Built-up areas and gardens",
+          "children": [
+            {
+              "code": "u1a",
+              "name": "Open mosaic habitats on previously developed land",
+              "children": []
+            },
+            {
+              "code": "u1b",
+              "name": "Developed land; sealed surface",
+              "children": [
+                { "code": "u1b5", "name": "Developed land; sealed surface; buildings", "children": [] },
+                { "code": "u1b6", "name": "Developed land; sealed surface; other", "children": [] }
+              ]
+            },
+            {
+              "code": "u1c",
+              "name": "Artificial unvegetated, unsealed surface",
+              "children": []
+            },
+            {
+              "code": "u1d",
+              "name": "Suburban mosaic of developed and natural surface",
+              "children": []
+            },
+            {
+              "code": "u1e",
+              "name": "Built linear features",
+              "children": []
+            },
+            {
+              "code": "u1f",
+              "name": "Vegetated garden",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "u2",
+          "name": "Green infrastructure",
+          "children": [
+            {
+              "code": "u2a",
+              "name": "Allotments",
+              "children": []
+            },
+            {
+              "code": "u2b",
+              "name": "Ground level planters",
+              "children": []
+            },
+            {
+              "code": "u2c",
+              "name": "Bioswale",
+              "children": []
+            },
+            {
+              "code": "u2d",
+              "name": "Rain garden",
+              "children": []
+            },
+            {
+              "code": "u2e",
+              "name": "Green roof",
+              "children": []
+            },
+            {
+              "code": "u2f",
+              "name": "Green wall",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "f",
+      "name": "Wetland",
+      "children": [
+        {
+          "code": "f1",
+          "name": "Bog",
+          "children": [
+            {
+              "code": "f1a",
+              "name": "Blanket bog",
+              "children": [
+                { "code": "f1a5", "name": "Active blanket bog (H7130)", "children": [] },
+                { "code": "f1a6", "name": "Degraded blanket bog", "children": [] }
+              ]
+            },
+            {
+              "code": "f1b",
+              "name": "Lowland raised bog",
+              "children": [
+                { "code": "f1b5", "name": "Active raised bogs (H7110)", "children": [] },
+                { "code": "f1b6", "name": "Degraded raised bog still capable of natural regeneration (H7120)", "children": [] }
+              ]
+            },
+            {
+              "code": "f1c",
+              "name": "Other bog",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "f2",
+          "name": "Fen, marsh and swamp",
+          "children": [
+            {
+              "code": "f2a",
+              "name": "Lowland fens",
+              "children": [
+                { "code": "f2a5", "name": "Calcareous fens with Cladium mariscus (H7210)", "children": [] },
+                { "code": "f2a6", "name": "Calcium-rich springwater-fed fens (H7220)", "children": [] },
+                { "code": "f2a7", "name": "Alkaline fens (H7230)", "children": [] },
+                { "code": "f2a8", "name": "Transition mires and quaking bogs (H7140)", "children": [] }
+              ]
+            },
+            {
+              "code": "f2b",
+              "name": "Purple moor grass and rush pastures",
+              "children": [
+                { "code": "f2b5", "name": "Molinia meadows on calcareous, peaty or clayey soils (H6410)", "children": [] }
+              ]
+            },
+            {
+              "code": "f2c",
+              "name": "Upland flushes, fens and swamps",
+              "children": []
+            },
+            {
+              "code": "f2d",
+              "name": "Reedbeds",
+              "children": []
+            },
+            {
+              "code": "f2e",
+              "name": "Other swamps",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "f3",
+          "name": "Coastal and floodplain grazing marsh",
+          "children": []
+        }
+      ]
+    },
+    {
+      "code": "r",
+      "name": "Rivers and lakes",
+      "children": [
+        {
+          "code": "r1",
+          "name": "Standing open water and canals",
+          "children": [
+            {
+              "code": "r1a",
+              "name": "Eutrophic standing waters",
+              "children": [
+                { "code": "r1a5", "name": "Natural eutrophic lakes (H3150)", "children": [] }
+              ]
+            },
+            {
+              "code": "r1b",
+              "name": "Mesotrophic lakes",
+              "children": [
+                { "code": "r1b5", "name": "Oligotrophic to mesotrophic standing waters (H3130)", "children": [] }
+              ]
+            },
+            {
+              "code": "r1c",
+              "name": "Oligotrophic and dystrophic lakes",
+              "children": [
+                { "code": "r1c5", "name": "Oligotrophic waters with very few minerals (H3110)", "children": [] },
+                { "code": "r1c6", "name": "Natural dystrophic lakes and ponds (H3160)", "children": [] }
+              ]
+            },
+            {
+              "code": "r1d",
+              "name": "Aquifer-fed naturally fluctuating water bodies",
+              "children": []
+            },
+            {
+              "code": "r1e",
+              "name": "Ponds (non-priority habitat)",
+              "children": []
+            },
+            {
+              "code": "r1f",
+              "name": "Canals",
+              "children": []
+            },
+            {
+              "code": "r1g",
+              "name": "Reservoirs",
+              "children": []
+            },
+            {
+              "code": "r1h",
+              "name": "Other standing open water",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "r2",
+          "name": "Rivers and streams",
+          "children": [
+            {
+              "code": "r2a",
+              "name": "Rivers (priority habitat)",
+              "children": [
+                { "code": "r2a5", "name": "Water courses of plain to montane levels with Ranunculion fluitantis (H3260)", "children": [] }
+              ]
+            },
+            {
+              "code": "r2b",
+              "name": "Other rivers and streams",
+              "children": []
+            },
+            {
+              "code": "r2c",
+              "name": "Ditches",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "s",
+      "name": "Marine and coastal",
+      "children": [
+        {
+          "code": "s1",
+          "name": "Coastal lagoons",
+          "children": [
+            {
+              "code": "s1a",
+              "name": "Saline lagoons",
+              "children": [
+                { "code": "s1a5", "name": "Coastal lagoons (H1150)", "children": [] }
+              ]
+            }
+          ]
+        },
+        {
+          "code": "s2",
+          "name": "Coastal saltmarsh",
+          "children": [
+            {
+              "code": "s2a",
+              "name": "Coastal saltmarsh",
+              "children": [
+                { "code": "s2a5", "name": "Salicornia and other annuals colonising mud and sand (H1310)", "children": [] },
+                { "code": "s2a6", "name": "Spartina swards (H1320)", "children": [] },
+                { "code": "s2a7", "name": "Atlantic salt meadows (H1330)", "children": [] },
+                { "code": "s2a8", "name": "Mediterranean and thermo-Atlantic halophilous scrubs (H1420)", "children": [] }
+              ]
+            }
+          ]
+        },
+        {
+          "code": "s3",
+          "name": "Intertidal habitats",
+          "children": [
+            {
+              "code": "s3a",
+              "name": "Littoral rock",
+              "children": [
+                { "code": "s3a5", "name": "Sabellaria alveolata reefs", "children": [] },
+                { "code": "s3a6", "name": "Intertidal underboulder communities", "children": [] },
+                { "code": "s3a7", "name": "Estuarine rocky habitats", "children": [] }
+              ]
+            },
+            {
+              "code": "s3b",
+              "name": "Littoral sediment",
+              "children": [
+                { "code": "s3b5", "name": "Intertidal mudflats (H1140)", "children": [] },
+                { "code": "s3b6", "name": "Blue mussel beds on sediment", "children": [] },
+                { "code": "s3b7", "name": "Seagrass beds", "children": [] },
+                { "code": "s3b8", "name": "Sheltered muddy gravels", "children": [] },
+                { "code": "s3b9", "name": "Peat and clay exposures with piddocks", "children": [] }
+              ]
+            }
+          ]
+        },
+        {
+          "code": "s4",
+          "name": "Sublittoral habitats",
+          "children": [
+            {
+              "code": "s4a",
+              "name": "Sublittoral rock",
+              "children": [
+                { "code": "s4a5", "name": "Subtidal chalk (H8330)", "children": [] },
+                { "code": "s4a6", "name": "Sabellaria spinulosa reefs (H1170)", "children": [] },
+                { "code": "s4a7", "name": "Cold-water coral reefs (H1170)", "children": [] },
+                { "code": "s4a8", "name": "Fragile sponge and anthozoan communities on rocky habitats", "children": [] }
+              ]
+            },
+            {
+              "code": "s4b",
+              "name": "Sublittoral sediment",
+              "children": [
+                { "code": "s4b5", "name": "Subtidal sands and gravels (H1110)", "children": [] },
+                { "code": "s4b6", "name": "Mud habitats in deep water (H1160)", "children": [] },
+                { "code": "s4b7", "name": "Horse mussel beds (Modiolus modiolus)", "children": [] },
+                { "code": "s4b8", "name": "Maerl beds", "children": [] },
+                { "code": "s4b9", "name": "Sea-pen and burrowing megafauna communities", "children": [] }
+              ]
+            }
+          ]
+        },
+        {
+          "code": "s5",
+          "name": "Estuaries",
+          "children": [
+            {
+              "code": "s5a",
+              "name": "Estuaries",
+              "children": [
+                { "code": "s5a5", "name": "Estuaries (H1130)", "children": [] }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

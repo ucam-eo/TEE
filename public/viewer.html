@@ -4,7 +4,9 @@
     <meta charset="utf-8">
     <title>TEE Viewer</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script type="importmap">
     {
         "imports": {
@@ -270,6 +272,12 @@
         /* Labelling: suppress heatmap messages */
         #map-container.mode-labelling #heatmap-waiting-message { display: none !important; }
         #map-container.mode-labelling #heatmap-same-year-message { display: none !important; }
+
+        /* Labelling toolbar: only visible in labelling mode */
+        body:not(.mode-labelling) .labelling-toolbar { display: none; }
+
+        /* Hide default Leaflet.Draw toolbar (we activate programmatically) */
+        .leaflet-draw-toolbar { display: none !important; }
 
         /* Labelling: repurpose panel 6 as label-management split view */
         #panel6-label-view { display: none; }
@@ -809,6 +817,24 @@
             </button>
             <input type="file" id="import-labels-file" accept=".json" style="display: none;">
             <span id="unsaved-labels-warning" style="display: none; background: #ff9800; color: #000; padding: 4px 10px; border-radius: 3px; font-weight: 700; font-size: 12px; white-space: nowrap; animation: pulse-warning 1.5s ease-in-out 3;">⚠ Unsaved labels — export to avoid losing work</span>
+        </div>
+
+        <!-- Labelling toolbar (only visible in labelling mode) -->
+        <div class="toolbar-group labelling-toolbar" style="gap: 4px;">
+            <div style="position: relative; display: inline-block;">
+                <button id="schema-dropdown-btn" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" onclick="toggleSchemaDropdown()">Schema &#9662;</button>
+                <div id="schema-dropdown-menu" style="display: none; position: absolute; top: 100%; left: 0; min-width: 180px; background: #2a2a2a; border: 1px solid #555; border-radius: 4px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); overflow: hidden;">
+                    <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="loadSchema('none')">None (freetext)</button>
+                    <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="loadSchema('ukhab')">UKHab v2</button>
+                    <label style="display: block; padding: 8px 12px; font-size: 12px; color: #ccc; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'">
+                        Custom (upload) <input type="file" accept=".json,.txt,.csv" style="display: none;" onchange="loadCustomSchema(this.files[0]); this.value='';">
+                    </label>
+                </div>
+            </div>
+            <button id="labelling-export-btn" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" onclick="exportManualLabels()">Export</button>
+            <button id="labelling-import-btn" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" onclick="document.getElementById('labelling-import-file').click()">Import</button>
+            <input type="file" id="labelling-import-file" accept=".json,.geojson,.zip" style="display: none;" onchange="importManualLabels(this.files[0]); this.value='';">
+            <button id="labelling-share-btn" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; opacity: 0.5; cursor: not-allowed;" disabled>Share</button>
         </div>
 
         <!-- Lat/Lon Coordinates -->
@@ -2431,6 +2457,9 @@
                 maps.rgb.options.maxBoundsViscosity = 1.0;  // Prevent bouncing when hitting edges
             }
 
+            // Initialize polygon drawing (Leaflet.Draw) on maps.rgb
+            initPolygonDrawing();
+
             // Panel 4: UMAP — Three.js scene, initialised in loadUMAP()
 
             // Panel 5: Heatmap (geographic, synced to OSM)
@@ -2519,6 +2548,12 @@
                         clearTimeout(clickTimeout);
                         clickTimeout = null;
                     }
+                    // Ctrl/Cmd+double-click in manual label mode: start polygon drawing
+                    if ((e.originalEvent.ctrlKey || e.originalEvent.metaKey) &&
+                        currentPanelMode === 'labelling' && labelMode === 'manual') {
+                        startPolygonDrawing();
+                        return;
+                    }
                     handleSimilaritySearch(e.latlng.lat, e.latlng.lng);
                 });
 
@@ -2535,6 +2570,25 @@
 
             // Synchronize maps
             syncMaps();
+
+            // Escape key: cancel polygon drawing
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && isPolygonDrawing) {
+                    cancelPolygonDrawing();
+                }
+            });
+
+            // Close schema/export dropdown on outside click
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('#schema-dropdown-btn') && !e.target.closest('#schema-dropdown-menu')) {
+                    const menu = document.getElementById('schema-dropdown-menu');
+                    if (menu) menu.style.display = 'none';
+                }
+                if (!e.target.closest('#labelling-export-btn') && !e.target.closest('#labelling-export-menu')) {
+                    const menu = document.getElementById('labelling-export-menu');
+                    if (menu) menu.style.display = 'none';
+                }
+            });
 
             // Store reference to embedding layer for switching years
             window.embeddingLayer = embeddingLayer;
@@ -3038,6 +3092,7 @@
             const entry = {
                 name: currentManualLabel.name,
                 color: currentManualLabel.color,
+                code: currentManualLabel.code || null,
                 type: 'similarity',
                 lat, lon,
                 embedding: Array.from(embedding),
@@ -3069,6 +3124,7 @@
             const entry = {
                 name: currentManualLabel.name,
                 color: currentManualLabel.color,
+                code: currentManualLabel.code || null,
                 type: 'point',
                 lat, lon,
                 embedding: embedding,
@@ -3626,8 +3682,8 @@
         }
 
         // ===== MANUAL LABEL STATE =====
-        let manualLabels = [];       // [{id, name, color, type:'point'|'similarity', lat, lon, embedding, threshold, visible, matchCount}]
-        let currentManualLabel = null; // {name, color}
+        let manualLabels = [];       // [{id, name, color, code, type:'point'|'similarity'|'polygon', lat, lon, embedding, threshold, visible, matchCount, vertices}]
+        let currentManualLabel = null; // {name, color, code}
         let labelMode = 'autolabel';   // 'autolabel' | 'manual'
         let manualClassifyOverlay = null; // L.imageOverlay on maps.heatmap
         let manualLabelIdCounter = 0;
@@ -3635,6 +3691,15 @@
 
         // Manual label overlay layers on maps.rgb (per-label DirectCanvasLayer instances)
         let manualLabelOverlays = {};  // {labelId: {layer, layerGroup}}
+
+        // Schema system state
+        let activeSchema = null;        // null or {name, tree: [...]}
+        let activeSchemaMode = 'none';  // 'none' | 'ukhab' | 'custom'
+
+        // Polygon drawing state (Leaflet.Draw)
+        let polygonDrawHandler = null;   // L.Draw.Polygon instance
+        let isPolygonDrawing = false;
+        let drawnItems = null;           // L.FeatureGroup for drawn polygons
 
         function setLabelMode(mode) {
             labelMode = mode;
@@ -3678,7 +3743,7 @@
                 alert('Please enter a label name.');
                 return;
             }
-            currentManualLabel = { name, color };
+            currentManualLabel = { name, color, code: null };
             // Show active label indicator
             const activeEl = document.getElementById('manual-active-label');
             activeEl.style.display = '';
@@ -3698,18 +3763,32 @@
         }
 
         function restoreManualLabelState() {
+            // Restore schema mode
+            const savedSchemaMode = localStorage.getItem('schemaMode');
+            if (savedSchemaMode && savedSchemaMode !== 'none' && savedSchemaMode !== activeSchemaMode) {
+                loadSchema(savedSchemaMode);
+            }
+
             // Restore current label
             const saved = localStorage.getItem('currentManualLabel');
             if (saved) {
                 try {
                     currentManualLabel = JSON.parse(saved);
-                    document.getElementById('manual-label-name').value = currentManualLabel.name;
-                    document.getElementById('manual-label-color').value = currentManualLabel.color;
-                    document.getElementById('manual-label-swatch').style.background = currentManualLabel.color;
+                    // Ensure code field exists
+                    if (!('code' in currentManualLabel)) currentManualLabel.code = null;
+                    const nameInput = document.getElementById('manual-label-name');
+                    const colorInput = document.getElementById('manual-label-color');
+                    const swatch = document.getElementById('manual-label-swatch');
+                    if (nameInput) nameInput.value = currentManualLabel.name;
+                    if (colorInput) colorInput.value = currentManualLabel.color;
+                    if (swatch) swatch.style.background = currentManualLabel.color;
                     const activeEl = document.getElementById('manual-active-label');
-                    activeEl.style.display = '';
-                    document.getElementById('manual-active-label-swatch').style.background = currentManualLabel.color;
-                    document.getElementById('manual-active-label-name').textContent = currentManualLabel.name;
+                    if (activeEl) {
+                        activeEl.style.display = '';
+                        document.getElementById('manual-active-label-swatch').style.background = currentManualLabel.color;
+                        const nameText = currentManualLabel.code ? `[${currentManualLabel.code}] ${currentManualLabel.name}` : currentManualLabel.name;
+                        document.getElementById('manual-active-label-name').textContent = nameText;
+                    }
                 } catch(e) { /* ignore */ }
             }
             // Restore manual labels
@@ -3745,6 +3824,26 @@
                     const matches = localSearchSimilar(emb, label.threshold);
                     label.matchCount = matches.length;
                     updateManualLabelOverlay(label, matches);
+                } else if (label.type === 'polygon' && label.vertices) {
+                    // Re-rasterize polygon
+                    const gt = localVectors.metadata.geotransform;
+                    const pixVerts = label.vertices.map(v => [
+                        Math.round((v[1] - gt.c) / gt.a),
+                        Math.round((v[0] - gt.f) / gt.e)
+                    ]);
+                    const matches = rasterizePolygon(pixVerts);
+                    label.matchCount = matches.length;
+                    label.pixelCount = matches.length;
+                    updateManualLabelOverlay(label, matches);
+                    // Add polygon outline
+                    const polyLatLngs = label.vertices.map(v => L.latLng(v[0], v[1]));
+                    const polyline = L.polygon(polyLatLngs, {
+                        color: label.color, fillColor: label.color,
+                        fillOpacity: 0.15, weight: 2
+                    });
+                    if (manualLabelOverlays[label.id] && manualLabelOverlays[label.id].layerGroup) {
+                        manualLabelOverlays[label.id].layerGroup.addLayer(polyline);
+                    }
                 } else if (label.type === 'point') {
                     // Pin-only (no threshold yet)
                     const pinMarker = L.circleMarker([label.lat, label.lon], {
@@ -3877,19 +3976,29 @@
 
             let html = '';
             for (const label of manualLabels) {
-                const typeIcon = '\ud83d\udccd';
+                const isPolygon = label.type === 'polygon';
+                const typeIcon = isPolygon ? '\u2b20' : '\ud83d\udccd';
                 const visIcon = label.visible ? '\ud83d\udc41' : '\ud83d\udc41\u200d\ud83d\udde8';
-                const hasSlider = label.embedding != null;
-                const threshHtml = hasSlider ?
-                    `<input type="range" min="0" max="35" value="${label.threshold}" style="width: 60px; cursor: pointer; vertical-align: middle;" oninput="updateManualLabelThreshold(${label.id}, parseFloat(this.value)); this.nextElementSibling.textContent=this.value">
-                     <span style="font-size: 10px; color: #666; min-width: 20px;">${label.threshold}</span>
-                     <span style="font-size: 10px; color: #888;">${label.matchCount || 0}px</span>` : '';
+                const codeTag = label.code ? `<code style="font-size: 10px; color: #667eea; background: #f0f0ff; padding: 1px 4px; border-radius: 2px; margin-right: 2px;">${label.code}</code>` : '';
+
+                let detailHtml;
+                if (isPolygon) {
+                    // Polygon: show static pixel count
+                    detailHtml = `<span style="font-size: 10px; color: #888;">${label.pixelCount || label.matchCount || 0}px</span>`;
+                } else {
+                    // Point/similarity: show slider
+                    const hasSlider = label.embedding != null;
+                    detailHtml = hasSlider ?
+                        `<input type="range" min="0" max="35" value="${label.threshold}" style="width: 60px; cursor: pointer; vertical-align: middle;" oninput="updateManualLabelThreshold(${label.id}, parseFloat(this.value)); this.nextElementSibling.textContent=this.value">
+                         <span style="font-size: 10px; color: #666; min-width: 20px;">${label.threshold}</span>
+                         <span style="font-size: 10px; color: #888;">${label.matchCount || 0}px</span>` : '';
+                }
 
                 html += `<div class="manual-label-item" data-id="${label.id}" style="display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #eee; flex-wrap: wrap;">
                     <div style="width: 14px; height: 14px; border-radius: 2px; background: ${label.color}; border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0;"></div>
-                    <span style="font-size: 12px; color: #333; font-weight: 500; min-width: 50px;">${label.name}</span>
+                    ${codeTag}<span style="font-size: 12px; color: #333; font-weight: 500; min-width: 50px;">${label.name}</span>
                     <span style="font-size: 11px; color: #888;" title="${label.type}">${typeIcon}</span>
-                    ${threshHtml}
+                    ${detailHtml}
                     <span style="cursor: pointer; font-size: 13px; margin-left: auto;" onclick="toggleManualLabelVisibility(${label.id})" title="Toggle visibility">${visIcon}</span>
                     <span style="cursor: pointer; font-size: 13px; color: #e53e3e;" onclick="removeManualLabel(${label.id})" title="Delete">&times;</span>
                 </div>`;
@@ -4034,6 +4143,695 @@
             manualClassifyOverlay = L.imageOverlay(dataURL, [[latMin, lonMin], [latMax, lonMax]]);
             manualClassifyOverlay.addTo(maps.heatmap);
             manualClassifyOverlay.getElement().style.imageRendering = 'pixelated';
+        }
+
+        // ===== SCHEMA SYSTEM (Phase 2A) =====
+
+        function toggleSchemaDropdown() {
+            const menu = document.getElementById('schema-dropdown-menu');
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function loadSchema(mode) {
+            document.getElementById('schema-dropdown-menu').style.display = 'none';
+            activeSchemaMode = mode;
+            localStorage.setItem('schemaMode', mode);
+
+            if (mode === 'none') {
+                activeSchema = null;
+                renderSchemaSelector();
+                return;
+            }
+
+            if (mode === 'ukhab') {
+                try {
+                    const resp = await fetch('/schemas/ukhab-v2.json');
+                    if (!resp.ok) throw new Error('Failed to load UKHab schema');
+                    activeSchema = await resp.json();
+                } catch (e) {
+                    console.error('[SCHEMA] Failed to load UKHab:', e);
+                    alert('Failed to load UKHab schema. Make sure /schemas/ukhab-v2.json exists.');
+                    activeSchemaMode = 'none';
+                    activeSchema = null;
+                }
+            }
+
+            renderSchemaSelector();
+        }
+
+        function loadCustomSchema(file) {
+            if (!file) return;
+            document.getElementById('schema-dropdown-menu').style.display = 'none';
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                try {
+                    // Try JSON first
+                    const parsed = JSON.parse(text);
+                    if (parsed.tree && Array.isArray(parsed.tree)) {
+                        activeSchema = parsed;
+                    } else if (Array.isArray(parsed)) {
+                        activeSchema = { name: file.name.replace(/\.[^.]+$/, ''), tree: parsed };
+                    } else {
+                        throw new Error('Invalid schema format');
+                    }
+                } catch (jsonErr) {
+                    // Fall back to tab-indented text
+                    activeSchema = parseTabIndentedSchema(text, file.name);
+                }
+                activeSchemaMode = 'custom';
+                localStorage.setItem('schemaMode', 'custom');
+                renderSchemaSelector();
+            };
+            reader.readAsText(file);
+        }
+
+        function parseTabIndentedSchema(text, filename) {
+            const lines = text.split('\n').filter(l => l.trim());
+            const root = [];
+            const stack = [{ children: root, depth: -1 }];
+
+            for (const line of lines) {
+                const stripped = line.replace(/\t/g, '    ');
+                const indent = stripped.search(/\S/);
+                if (indent < 0) continue;
+                const depth = Math.floor(indent / 4);
+                const content = stripped.trim();
+
+                // Try to extract code and name: "g1a Lowland dry acid grassland"
+                const codeMatch = content.match(/^([a-z]\w*)\s+(.+)$/i);
+                const node = codeMatch
+                    ? { code: codeMatch[1].toLowerCase(), name: codeMatch[2], children: [] }
+                    : { code: '', name: content, children: [] };
+
+                // Pop stack to correct parent level
+                while (stack.length > 1 && stack[stack.length - 1].depth >= depth) {
+                    stack.pop();
+                }
+                stack[stack.length - 1].children.push(node);
+                stack.push({ children: node.children, depth });
+            }
+
+            return { name: (filename || 'Custom').replace(/\.[^.]+$/, ''), tree: root };
+        }
+
+        function renderSchemaSelector() {
+            const container = document.getElementById('manual-label-selector');
+            if (!container) return;
+
+            if (!activeSchema || activeSchemaMode === 'none') {
+                // Restore freetext mode
+                container.innerHTML = `
+                    <span style="font-weight: 600; color: #333; font-size: 12px; white-space: nowrap;">Current label:</span>
+                    <div id="manual-label-swatch" title="Click to choose colour" style="width: 18px; height: 18px; border-radius: 3px; border: 2px solid #666; background: ${currentManualLabel ? currentManualLabel.color : '#3cb44b'}; flex-shrink: 0; cursor: pointer;" onclick="document.getElementById('manual-label-color').click()"></div>
+                    <input type="color" id="manual-label-color" value="${currentManualLabel ? currentManualLabel.color : '#3cb44b'}" style="display: none;" onchange="updateManualLabelColor(this.value)">
+                    <input type="text" id="manual-label-name" placeholder="Label name..." value="${currentManualLabel ? currentManualLabel.name : ''}" style="flex: 1; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; color: #333; min-width: 0;">
+                    <button id="manual-label-set-btn" onclick="setCurrentManualLabel()" style="padding: 4px 10px; background: #667eea; color: white; border: none; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">Set</button>
+                `;
+                return;
+            }
+
+            // Schema tree mode
+            container.innerHTML = '';
+            container.style.flexDirection = 'column';
+            container.style.alignItems = 'stretch';
+
+            const headerDiv = document.createElement('div');
+            headerDiv.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 4px;';
+            headerDiv.innerHTML = `
+                <span style="font-weight: 600; color: #333; font-size: 12px; white-space: nowrap;">Schema: ${activeSchema.name}</span>
+                <input type="text" id="schema-search" placeholder="Search habitats..." style="flex: 1; padding: 3px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; color: #333; min-width: 0;" oninput="filterSchemaTree(this.value)">
+            `;
+            container.appendChild(headerDiv);
+
+            const treeDiv = document.createElement('div');
+            treeDiv.id = 'schema-tree-container';
+            treeDiv.style.cssText = 'max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 3px; padding: 4px; background: #fafafa;';
+            treeDiv.innerHTML = renderSchemaTreeHTML(activeSchema.tree, 0);
+            container.appendChild(treeDiv);
+        }
+
+        function renderSchemaTreeHTML(nodes, depth) {
+            if (!nodes || nodes.length === 0) return '';
+            let html = '';
+            for (const node of nodes) {
+                const hasChildren = node.children && node.children.length > 0;
+                const indent = depth * 16;
+                const caret = hasChildren
+                    ? `<span class="schema-caret" onclick="toggleSchemaNode(this)" style="cursor: pointer; display: inline-block; width: 14px; font-size: 10px; color: #888; user-select: none;">&#9654;</span>`
+                    : `<span style="display: inline-block; width: 14px;"></span>`;
+                html += `<div class="schema-node" data-code="${node.code || ''}" data-name="${(node.name || '').toLowerCase()}" style="padding: 2px 0 2px ${indent}px; cursor: pointer; font-size: 12px; color: #333; border-radius: 2px;" onclick="selectSchemaLabel('${node.code || ''}', '${(node.name || '').replace(/'/g, "\\'")}', event)" onmouseover="this.style.background='#e8f0ff'" onmouseout="this.style.background=''">
+                    ${caret}<code style="font-size: 11px; color: #667eea; margin-right: 4px;">${node.code || ''}</code>${node.name || ''}
+                </div>`;
+                if (hasChildren) {
+                    html += `<div class="schema-children" style="display: none;">${renderSchemaTreeHTML(node.children, depth + 1)}</div>`;
+                }
+            }
+            return html;
+        }
+
+        function toggleSchemaNode(caretEl) {
+            event.stopPropagation();
+            const parent = caretEl.closest('.schema-node');
+            const children = parent.nextElementSibling;
+            if (children && children.classList.contains('schema-children')) {
+                const isOpen = children.style.display !== 'none';
+                children.style.display = isOpen ? 'none' : 'block';
+                caretEl.innerHTML = isOpen ? '&#9654;' : '&#9660;';
+            }
+        }
+
+        function selectSchemaLabel(code, name, event) {
+            if (event) event.stopPropagation();
+            // Auto-assign color from SEG_PALETTE based on code hash or reuse existing
+            const existingLabel = manualLabels.find(l => l.code === code && l.name === name);
+            let color;
+            if (existingLabel) {
+                color = existingLabel.color;
+            } else {
+                // Hash code to pick from palette
+                let hash = 0;
+                for (let i = 0; i < code.length; i++) hash = ((hash << 5) - hash) + code.charCodeAt(i);
+                color = SEG_PALETTE[Math.abs(hash) % SEG_PALETTE.length];
+            }
+
+            currentManualLabel = { name, color, code };
+            // Update active label display
+            const activeEl = document.getElementById('manual-active-label');
+            if (activeEl) {
+                activeEl.style.display = '';
+                document.getElementById('manual-active-label-swatch').style.background = color;
+                document.getElementById('manual-active-label-name').textContent = `${code ? '[' + code + '] ' : ''}${name}`;
+            }
+            localStorage.setItem('currentManualLabel', JSON.stringify(currentManualLabel));
+        }
+
+        function filterSchemaTree(query) {
+            const container = document.getElementById('schema-tree-container');
+            if (!container) return;
+            const q = query.toLowerCase().trim();
+
+            if (!q) {
+                // Show all, collapse all
+                container.querySelectorAll('.schema-node').forEach(n => n.style.display = '');
+                container.querySelectorAll('.schema-children').forEach(c => c.style.display = 'none');
+                container.querySelectorAll('.schema-caret').forEach(c => c.innerHTML = '&#9654;');
+                return;
+            }
+
+            // Show matching nodes and their ancestors
+            const nodes = container.querySelectorAll('.schema-node');
+            const childrenDivs = container.querySelectorAll('.schema-children');
+
+            // First hide all
+            nodes.forEach(n => n.style.display = 'none');
+            childrenDivs.forEach(c => c.style.display = 'none');
+
+            // Show matches and expand parents
+            nodes.forEach(n => {
+                const code = (n.dataset.code || '').toLowerCase();
+                const name = n.dataset.name || '';
+                if (code.includes(q) || name.includes(q)) {
+                    n.style.display = '';
+                    // Expand all parent schema-children
+                    let parent = n.parentElement;
+                    while (parent) {
+                        if (parent.classList && parent.classList.contains('schema-children')) {
+                            parent.style.display = 'block';
+                            // Show the node before this children div
+                            if (parent.previousElementSibling && parent.previousElementSibling.classList.contains('schema-node')) {
+                                parent.previousElementSibling.style.display = '';
+                                const caret = parent.previousElementSibling.querySelector('.schema-caret');
+                                if (caret) caret.innerHTML = '&#9660;';
+                            }
+                        }
+                        parent = parent.parentElement;
+                    }
+                }
+            });
+        }
+
+        // ===== POLYGON DRAWING (Phase 2B) =====
+
+        function initPolygonDrawing() {
+            if (!maps.rgb || typeof L.Draw === 'undefined') return;
+            drawnItems = new L.FeatureGroup();
+            maps.rgb.addLayer(drawnItems);
+            maps.rgb.on(L.Draw.Event.CREATED, function(e) {
+                if (e.layerType === 'polygon') {
+                    handlePolygonComplete(e.layer.getLatLngs()[0]);
+                }
+                isPolygonDrawing = false;
+                polygonDrawHandler = null;
+            });
+        }
+
+        function startPolygonDrawing() {
+            if (!currentManualLabel) {
+                alert('Please set a label name first (top of Panel 6).');
+                return;
+            }
+            if (!maps.rgb || typeof L.Draw === 'undefined') return;
+            if (isPolygonDrawing) return;
+
+            polygonDrawHandler = new L.Draw.Polygon(maps.rgb, {
+                shapeOptions: {
+                    color: currentManualLabel.color,
+                    fillColor: currentManualLabel.color,
+                    fillOpacity: 0.3,
+                    weight: 2
+                },
+                allowIntersection: false
+            });
+            polygonDrawHandler.enable();
+            isPolygonDrawing = true;
+        }
+
+        function cancelPolygonDrawing() {
+            if (polygonDrawHandler) {
+                polygonDrawHandler.disable();
+                polygonDrawHandler = null;
+            }
+            isPolygonDrawing = false;
+        }
+
+        function handlePolygonComplete(latLngs) {
+            if (!currentManualLabel || !localVectors) return;
+
+            const gt = localVectors.metadata.geotransform;
+            // Convert lat/lng vertices to pixel coords
+            const pixelVertices = latLngs.map(ll => {
+                const px = Math.round((ll.lng - gt.c) / gt.a);
+                const py = Math.round((ll.lat - gt.f) / gt.e);
+                return [px, py];
+            });
+
+            // Store geo vertices for export
+            const geoVertices = latLngs.map(ll => [ll.lat, ll.lng]);
+
+            // Rasterize polygon to find interior pixels
+            const matches = rasterizePolygon(pixelVertices);
+
+            if (matches.length === 0) {
+                console.warn('[POLYGON] No pixels inside polygon');
+                return;
+            }
+
+            // Compute centroid embedding from interior pixels
+            const dim = localVectors.dim;
+            const centroid = new Float32Array(dim);
+            for (const m of matches) {
+                const idx = m.vectorIndex;
+                const base = idx * dim;
+                for (let d = 0; d < dim; d++) {
+                    centroid[d] += localVectors.embeddings[base + d];
+                }
+            }
+            for (let d = 0; d < dim; d++) centroid[d] /= matches.length;
+
+            const entry = {
+                name: currentManualLabel.name,
+                color: currentManualLabel.color,
+                code: currentManualLabel.code || null,
+                type: 'polygon',
+                lat: geoVertices.reduce((s, v) => s + v[0], 0) / geoVertices.length,
+                lon: geoVertices.reduce((s, v) => s + v[1], 0) / geoVertices.length,
+                vertices: geoVertices,
+                embedding: Array.from(centroid),
+                threshold: 0,
+                matchCount: matches.length,
+                pixelCount: matches.length
+            };
+            addManualLabel(entry);
+
+            // Show polygon overlay using DirectCanvasLayer
+            updateManualLabelOverlay(manualLabels[manualLabels.length - 1], matches);
+
+            // Draw polygon outline on maps.rgb
+            const labelId = manualLabels[manualLabels.length - 1].id;
+            const polyline = L.polygon(latLngs, {
+                color: currentManualLabel.color,
+                fillColor: currentManualLabel.color,
+                fillOpacity: 0.15,
+                weight: 2
+            });
+            if (manualLabelOverlays[labelId] && manualLabelOverlays[labelId].layerGroup) {
+                manualLabelOverlays[labelId].layerGroup.addLayer(polyline);
+            }
+        }
+
+        function pointInPolygon(px, py, polygon) {
+            // Ray-casting algorithm
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i][0], yi = polygon[i][1];
+                const xj = polygon[j][0], yj = polygon[j][1];
+                if (((yi > py) !== (yj > py)) &&
+                    (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
+                    inside = !inside;
+                }
+            }
+            return inside;
+        }
+
+        function rasterizePolygon(pixelVertices) {
+            if (!localVectors || !pixelVertices || pixelVertices.length < 3) return [];
+
+            // Compute bounding box
+            let minPx = Infinity, maxPx = -Infinity, minPy = Infinity, maxPy = -Infinity;
+            for (const [px, py] of pixelVertices) {
+                if (px < minPx) minPx = px;
+                if (px > maxPx) maxPx = px;
+                if (py < minPy) minPy = py;
+                if (py > maxPy) maxPy = py;
+            }
+
+            // Clamp to grid bounds
+            const grid = localVectors.gridLookup;
+            minPx = Math.max(minPx, grid.minX);
+            maxPx = Math.min(maxPx, grid.minX + grid.w - 1);
+            minPy = Math.max(minPy, grid.minY);
+            maxPy = Math.min(maxPy, grid.minY + grid.h - 1);
+
+            const gt = localVectors.metadata.geotransform;
+            const matches = [];
+
+            for (let py = minPy; py <= maxPy; py++) {
+                for (let px = minPx; px <= maxPx; px++) {
+                    if (pointInPolygon(px, py, pixelVertices)) {
+                        const gridIdx = gridLookupIndex(grid, px, py);
+                        if (gridIdx >= 0) {
+                            const lon = gt.c + px * gt.a;
+                            const lat = gt.f + py * gt.e;
+                            matches.push({ lat, lon, px, py, vectorIndex: gridIdx });
+                        }
+                    }
+                }
+            }
+            return matches;
+        }
+
+        // ===== EXPORT / IMPORT (Phase 3) =====
+
+        function exportManualLabels() {
+            if (manualLabels.length === 0) {
+                alert('No manual labels to export.');
+                return;
+            }
+
+            // Create export dropdown if it doesn't exist
+            const btn = document.getElementById('labelling-export-btn');
+            let menu = document.getElementById('labelling-export-menu');
+            if (menu) {
+                menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+                return;
+            }
+
+            // Create dropdown menu
+            menu = document.createElement('div');
+            menu.id = 'labelling-export-menu';
+            menu.style.cssText = 'position: absolute; top: 100%; left: 0; min-width: 160px; background: #2a2a2a; border: 1px solid #555; border-radius: 4px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); overflow: hidden;';
+            menu.innerHTML = `
+                <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('json')">JSON (full)</button>
+                <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('geojson')">GeoJSON</button>
+                <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('shapefile')">ESRI Shapefile (ZIP)</button>
+            `;
+            btn.parentElement.style.position = 'relative';
+            btn.parentElement.appendChild(menu);
+        }
+
+        function doExportManualLabels(format) {
+            const menu = document.getElementById('labelling-export-menu');
+            if (menu) menu.style.display = 'none';
+
+            if (format === 'json') {
+                const data = {
+                    viewport: currentViewportName,
+                    year: currentEmbeddingYear,
+                    schema: activeSchemaMode,
+                    labels: manualLabels.map(l => ({
+                        name: l.name,
+                        color: l.color,
+                        code: l.code || null,
+                        type: l.type,
+                        lat: l.lat,
+                        lon: l.lon,
+                        vertices: l.vertices || null,
+                        embedding: l.embedding || null,
+                        threshold: l.threshold,
+                        matchCount: l.matchCount,
+                        pixelCount: l.pixelCount || null
+                    }))
+                };
+                downloadFile(JSON.stringify(data, null, 2), `manual-labels-${currentViewportName || 'export'}.json`, 'application/json');
+            } else if (format === 'geojson') {
+                const features = manualLabels.map(l => {
+                    if (l.type === 'polygon' && l.vertices) {
+                        // GeoJSON polygon: [[[lng, lat], ...]]
+                        const ring = l.vertices.map(v => [v[1], v[0]]);
+                        ring.push(ring[0]); // close ring
+                        return {
+                            type: 'Feature',
+                            geometry: { type: 'Polygon', coordinates: [ring] },
+                            properties: { name: l.name, color: l.color, code: l.code || '', type: l.type, matchCount: l.matchCount }
+                        };
+                    } else {
+                        return {
+                            type: 'Feature',
+                            geometry: { type: 'Point', coordinates: [l.lon, l.lat] },
+                            properties: { name: l.name, color: l.color, code: l.code || '', type: l.type, threshold: l.threshold, matchCount: l.matchCount }
+                        };
+                    }
+                });
+                const geojson = { type: 'FeatureCollection', features };
+                downloadFile(JSON.stringify(geojson, null, 2), `manual-labels-${currentViewportName || 'export'}.geojson`, 'application/geo+json');
+            } else if (format === 'shapefile') {
+                exportManualLabelsShapefile();
+            }
+        }
+
+        function downloadFile(content, filename, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function exportManualLabelsShapefile() {
+            // Use shp-write for ESRI Shapefile export
+            try {
+                if (typeof shpwrite === 'undefined') {
+                    // Dynamically load shp-write
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = 'https://unpkg.com/@mapbox/shp-write@0.3.2/shpwrite.js';
+                        script.onload = resolve;
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    });
+                }
+
+                const points = [];
+                const polygons = [];
+
+                for (const l of manualLabels) {
+                    const props = { name: l.name, color: l.color, code: l.code || '', type: l.type };
+                    if (l.type === 'polygon' && l.vertices) {
+                        const ring = l.vertices.map(v => [v[1], v[0]]);
+                        ring.push(ring[0]);
+                        polygons.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: props });
+                    } else {
+                        points.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [l.lon, l.lat] }, properties: props });
+                    }
+                }
+
+                // Export as GeoJSON-based ZIP (shp-write generates .shp, .shx, .dbf, .prj)
+                const gj = {
+                    type: 'FeatureCollection',
+                    features: [...points, ...polygons]
+                };
+
+                if (typeof shpwrite !== 'undefined' && shpwrite.zip) {
+                    const content = await shpwrite.zip(gj);
+                    downloadFile(content, `manual-labels-${currentViewportName || 'export'}.zip`, 'application/zip');
+                } else {
+                    // Fallback: download as GeoJSON instead
+                    console.warn('[EXPORT] shp-write not available, falling back to GeoJSON');
+                    doExportManualLabels('geojson');
+                }
+            } catch (e) {
+                console.error('[EXPORT] Shapefile export failed:', e);
+                alert('Shapefile export failed. Exporting as GeoJSON instead.');
+                doExportManualLabels('geojson');
+            }
+        }
+
+        function importManualLabels(file) {
+            if (!file) return;
+            const reader = new FileReader();
+            const ext = file.name.split('.').pop().toLowerCase();
+
+            reader.onload = function(e) {
+                try {
+                    if (ext === 'json' || ext === 'geojson') {
+                        const data = JSON.parse(e.target.result);
+                        if (data.type === 'FeatureCollection' && data.features) {
+                            // GeoJSON import
+                            importGeoJSON(data);
+                        } else if (data.labels && Array.isArray(data.labels)) {
+                            // Full JSON import
+                            importLabelsJSON(data.labels);
+                        } else if (Array.isArray(data)) {
+                            // Array of labels (anonymous or located)
+                            importLabelsJSON(data);
+                        } else {
+                            alert('Unrecognized JSON format.');
+                        }
+                    } else if (ext === 'zip') {
+                        importShapefile(e.target.result);
+                    } else {
+                        alert('Unsupported file format. Use .json, .geojson, or .zip (shapefile).');
+                    }
+                } catch (err) {
+                    console.error('[IMPORT]', err);
+                    alert('Failed to import file: ' + err.message);
+                }
+            };
+
+            if (ext === 'zip') {
+                reader.readAsArrayBuffer(file);
+            } else {
+                reader.readAsText(file);
+            }
+        }
+
+        function importGeoJSON(geojson) {
+            let count = 0;
+            for (const feature of geojson.features) {
+                const props = feature.properties || {};
+                const geom = feature.geometry;
+                if (!geom) continue;
+
+                if (geom.type === 'Point') {
+                    const [lon, lat] = geom.coordinates;
+                    const entry = {
+                        name: props.name || props.label || 'Imported',
+                        color: props.color || SEG_PALETTE[count % SEG_PALETTE.length],
+                        code: props.code || null,
+                        type: props.type || 'point',
+                        lat, lon,
+                        embedding: null,
+                        threshold: props.threshold || 0,
+                        matchCount: 0
+                    };
+                    // Re-extract embedding if vectors available
+                    if (localVectors) {
+                        const emb = localExtract(lat, lon);
+                        if (emb) entry.embedding = Array.from(emb);
+                    }
+                    addManualLabel(entry);
+                    count++;
+                } else if (geom.type === 'Polygon') {
+                    const ring = geom.coordinates[0];
+                    const geoVertices = ring.slice(0, -1).map(c => [c[1], c[0]]); // [lat, lon]
+                    const entry = {
+                        name: props.name || props.label || 'Imported',
+                        color: props.color || SEG_PALETTE[count % SEG_PALETTE.length],
+                        code: props.code || null,
+                        type: 'polygon',
+                        lat: geoVertices.reduce((s, v) => s + v[0], 0) / geoVertices.length,
+                        lon: geoVertices.reduce((s, v) => s + v[1], 0) / geoVertices.length,
+                        vertices: geoVertices,
+                        embedding: null,
+                        threshold: 0,
+                        matchCount: 0,
+                        pixelCount: 0
+                    };
+                    addManualLabel(entry);
+                    // Rebuild overlay for polygon
+                    if (localVectors) {
+                        const gt = localVectors.metadata.geotransform;
+                        const pixVerts = geoVertices.map(v => [Math.round((v[1] - gt.c) / gt.a), Math.round((v[0] - gt.f) / gt.e)]);
+                        const matches = rasterizePolygon(pixVerts);
+                        const lbl = manualLabels[manualLabels.length - 1];
+                        lbl.matchCount = matches.length;
+                        lbl.pixelCount = matches.length;
+                        if (matches.length > 0) {
+                            // Compute centroid embedding
+                            const dim = localVectors.dim;
+                            const centroid = new Float32Array(dim);
+                            for (const m of matches) {
+                                const base = m.vectorIndex * dim;
+                                for (let d = 0; d < dim; d++) centroid[d] += localVectors.embeddings[base + d];
+                            }
+                            for (let d = 0; d < dim; d++) centroid[d] /= matches.length;
+                            lbl.embedding = Array.from(centroid);
+                            updateManualLabelOverlay(lbl, matches);
+                        }
+                    }
+                    count++;
+                }
+            }
+            saveManualLabelsToStorage();
+            renderManualLabelsList();
+            triggerManualClassification();
+            console.log(`[IMPORT] Imported ${count} features from GeoJSON`);
+        }
+
+        function importLabelsJSON(labels) {
+            let count = 0;
+            for (const l of labels) {
+                const entry = {
+                    name: l.name || 'Imported',
+                    color: l.color || SEG_PALETTE[count % SEG_PALETTE.length],
+                    code: l.code || null,
+                    type: l.type || 'point',
+                    lat: l.lat || 0,
+                    lon: l.lon || 0,
+                    vertices: l.vertices || null,
+                    embedding: l.embedding || null,
+                    threshold: l.threshold || 0,
+                    matchCount: l.matchCount || 0,
+                    pixelCount: l.pixelCount || null
+                };
+                addManualLabel(entry);
+                count++;
+            }
+            rebuildManualOverlays();
+            triggerManualClassification();
+            console.log(`[IMPORT] Imported ${count} labels from JSON`);
+        }
+
+        async function importShapefile(arrayBuffer) {
+            // Try to load shapefile reader dynamically
+            try {
+                if (typeof shapefile === 'undefined') {
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = 'https://unpkg.com/shapefile@0.6.6/dist/shapefile.js';
+                        script.onload = resolve;
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    });
+                }
+
+                const source = await shapefile.open(arrayBuffer);
+                const features = [];
+                let result = await source.read();
+                while (!result.done) {
+                    features.push(result.value);
+                    result = await source.read();
+                }
+                importGeoJSON({ type: 'FeatureCollection', features });
+            } catch (e) {
+                console.error('[IMPORT] Shapefile import failed:', e);
+                alert('Shapefile import failed: ' + e.message);
+            }
         }
 
         function updateThresholdDisplay() {
