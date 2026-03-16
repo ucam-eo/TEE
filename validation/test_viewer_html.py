@@ -318,7 +318,6 @@ class TestExistingElements:
         "panel6-toggle-all-btn",
         "panel6-label-view",
         "panel6-header-text",
-        "save-label-btn",
         "map-container",
         "map-embedding",
         "map-embedding2",

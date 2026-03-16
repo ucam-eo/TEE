@@ -792,12 +792,6 @@
         <!-- Label controls group (greyed out when vectors not ready) -->
         <div id="label-controls-bar" class="toolbar-group" style="opacity: 0.4;">
             <div style="color: white; background: #333; padding: 4px 8px; border-radius: 3px; font-weight: 600; font-size: 13px;">Labels: <span id="label-count">0</span></div>
-            <button id="labels-toggle-btn" style="padding: 8px 12px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;" disabled>
-                📋 View Labels
-            </button>
-            <button id="save-label-btn" style="padding: 8px 12px; background: #667eea; color: white; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 13px; white-space: nowrap;" disabled>
-                💾 Save as Label
-            </button>
             <button id="toggle-all-overlays" style="padding: 8px 12px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap;" disabled>
                 👁 Toggle Labels
             </button>
@@ -860,7 +854,7 @@
                 <div><b>Left-click</b> anywhere to locate a point</div>
                 <div><b>Left-click drag</b> to pan the map</div>
                 <div><b>Scroll</b> to zoom in/out</div>
-                <div><b>Double-click</b> for similarity search. Use similarity slider to change selected region and click <b>Save as Label</b> to label it.</div>
+                <div><b>Double-click</b> for similarity search. Use the similarity slider to change the selected region.</div>
                 <div><b>Right-click drag</b> to rotate (PCA/UMAP pane)</div>
                 <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;"><b>Segmentation:</b> Use the <b>k</b> slider and <b>Segment</b> to auto-cluster the viewport. Clusters are temporary previews. Click <b>&#8599;</b> on a cluster row to promote it to a permanent saved label, or <b>Promote All</b> to save them all. Promoted labels support timeline analysis and re-matching.</div>
                 <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">Use <b>Export</b> / <b>Import</b> to save labels to your desktop or load them from a local file.</div>
@@ -921,7 +915,8 @@
         <div class="panel">
             <div class="panel-header" style="justify-content: space-between;">
                 <span id="panel2-title">Satellite</span>
-                <select id="satellite-source-selector" style="margin-left: 10px; padding: 4px 8px; border: 1px solid #555; border-radius: 3px; background: #333; color: #fff; font-size: 13px;">
+                <span id="satellite-acq-date" style="font-size: 11px; color: #aaa; font-weight: normal; margin-left: 6px;"></span>
+                <select id="satellite-source-selector" style="margin-left: auto; padding: 4px 8px; border: 1px solid #555; border-radius: 3px; background: #333; color: #fff; font-size: 13px;">
                     <option value="esri">Esri</option>
                     <option value="google">Google</option>
                 </select>
@@ -1210,7 +1205,7 @@
                     <!-- Manual label rows -->
                     <div style="flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.95); border-radius: 4px; margin: 4px; overflow: hidden; min-height: 0;">
                         <div style="padding: 6px 10px; font-weight: 600; color: #333; border-bottom: 1px solid #ddd; font-size: 13px;">Manual Labels</div>
-                        <div id="manual-labels-list" style="flex: 1; overflow-y: auto; padding: 8px 10px;">
+                        <div id="manual-labels-list" style="flex: 1; overflow-y: auto; padding: 8px 20px 8px 10px;">
                             <div style="color: #999; font-size: 12px; padding: 10px; text-align: center;">Set a label above, then click to place pins. Use the similarity slider to expand.</div>
                         </div>
                     </div>
@@ -1517,8 +1512,8 @@
                     document.getElementById('similarity-threshold').disabled = false;
                     document.getElementById('similarity-controls').style.opacity = '1';
                     document.getElementById('label-controls-bar').style.opacity = '1';
-                    // Enable label bar buttons (save-label stays disabled until a search is done)
-                    ['labels-toggle-btn', 'toggle-all-overlays', 'export-dropdown-btn', 'import-labels-btn'].forEach(id => {
+                    // Enable label bar buttons
+                    ['toggle-all-overlays', 'export-dropdown-btn', 'import-labels-btn'].forEach(id => {
                         document.getElementById(id).disabled = false;
                     });
                     if (savedLabels.length > 0) {
@@ -2493,6 +2488,47 @@
                 });
             }
 
+            // Fetch and display satellite imagery acquisition date
+            let _acqDateTimer = null;
+            function fetchSatelliteAcqDate() {
+                const el = document.getElementById('satellite-acq-date');
+                if (!el) return;
+                if (currentSatelliteSource === 'google') {
+                    el.textContent = '';
+                    return;
+                }
+                const center = maps.rgb.getCenter();
+                const bounds = maps.rgb.getBounds();
+                const ext = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+                const url = `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/identify?geometryType=esriGeometryPoint&geometry=${center.lng},${center.lat}&sr=4326&layers=visible:0&tolerance=2&mapExtent=${ext}&imageDisplay=800,800,96&returnGeometry=false&f=json`;
+                fetch(url).then(r => r.json()).then(data => {
+                    if (currentSatelliteSource !== 'esri') return;
+                    const results = data.results || [];
+                    for (const r of results) {
+                        const d = r.attributes && r.attributes.SRC_DATE2;
+                        if (d && d !== 'Null') {
+                            const date = new Date(d);
+                            if (!isNaN(date)) {
+                                el.textContent = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                                return;
+                            }
+                        }
+                    }
+                    el.textContent = '';
+                }).catch(() => { el.textContent = ''; });
+            }
+            function debouncedAcqDate() {
+                if (_acqDateTimer) clearTimeout(_acqDateTimer);
+                _acqDateTimer = setTimeout(fetchSatelliteAcqDate, 500);
+            }
+            maps.rgb.on('moveend', debouncedAcqDate);
+            // Also fetch on source change
+            if (satSelector) {
+                satSelector.addEventListener('change', debouncedAcqDate);
+            }
+            // Initial fetch
+            debouncedAcqDate();
+
             // Clip RGB satellite map to viewport bounds
             if (viewportBounds) {
                 maps.rgb.setMaxBounds(viewportBounds);
@@ -2571,14 +2607,15 @@
 
                     // Ctrl/Cmd+click in manual label mode: drop a pin
                     if ((e.originalEvent.ctrlKey || e.originalEvent.metaKey) &&
-                        currentPanelMode === 'labelling' && labelMode === 'manual') {
+                        currentPanelMode === 'labelling' && labelMode === 'manual' &&
+                        !isPolygonDrawing) {
                         handleManualPinDrop(e.latlng.lat, e.latlng.lng);
                         return;
                     }
 
                     // Delay single-click action to allow dblclick to cancel it
                     clickTimeout = setTimeout(() => {
-                        handleUnifiedClick(e.latlng.lat, e.latlng.lng);
+                        if (!isPolygonDrawing) handleUnifiedClick(e.latlng.lat, e.latlng.lng);
                         clickTimeout = null;
                     }, 250);
                 });
@@ -2590,6 +2627,7 @@
                         clearTimeout(clickTimeout);
                         clickTimeout = null;
                     }
+                    if (isPolygonDrawing) return;
                     // Ctrl/Cmd+double-click in manual label mode: start polygon drawing
                     if ((e.originalEvent.ctrlKey || e.originalEvent.metaKey) &&
                         currentPanelMode === 'labelling' && labelMode === 'manual') {
@@ -3753,6 +3791,7 @@
                 autoView.style.display = 'none';
                 manualView.style.display = 'flex';
                 document.getElementById('panel6-header-text').textContent = 'Manual Label';
+                document.getElementById('panel2-title').textContent = 'Labels';
                 document.getElementById('panel5-title').textContent = 'Classification';
                 if (classifyBtn) classifyBtn.style.display = '';
                 restoreManualLabelState();
@@ -3764,6 +3803,7 @@
                 autoView.style.display = 'flex';
                 manualView.style.display = 'none';
                 document.getElementById('panel6-header-text').textContent = 'Auto-label';
+                document.getElementById('panel2-title').textContent = 'Satellite';
                 document.getElementById('panel5-title').textContent = 'Segmentation';
                 if (classifyBtn) classifyBtn.style.display = 'none';
                 // Remove manual classification overlay
@@ -3950,38 +3990,59 @@
             renderManualLabelsList();
         }
 
+        let _thresholdRAF = null;
+        let _thresholdSaveTimer = null;
+
         function updateManualLabelThreshold(id, newThreshold) {
             const label = manualLabels.find(l => l.id === id);
             if (!label) return;
             label.threshold = newThreshold;
 
-            // Re-search and re-render overlay for this label
-            if (label.embedding) {
-                if (newThreshold > 0) {
-                    const emb = new Float32Array(label.embedding);
-                    const matches = localSearchSimilar(emb, newThreshold);
-                    label.matchCount = matches.length;
-                    updateManualLabelOverlay(label, matches);
-                } else {
-                    // Threshold 0: remove similarity overlay, restore pin if point type
-                    label.matchCount = 0;
-                    if (manualLabelOverlays[label.id]) {
-                        if (manualLabelOverlays[label.id].layerGroup) {
-                            maps.rgb.removeLayer(manualLabelOverlays[label.id].layerGroup);
-                        }
-                        delete manualLabelOverlays[label.id];
+            // Debounce the expensive search+overlay to one per animation frame
+            if (_thresholdRAF) cancelAnimationFrame(_thresholdRAF);
+            _thresholdRAF = requestAnimationFrame(() => {
+                _thresholdRAF = null;
+                _applyThreshold(label, newThreshold);
+            });
+
+            // Debounce localStorage save until sliding stops (200ms)
+            if (_thresholdSaveTimer) clearTimeout(_thresholdSaveTimer);
+            _thresholdSaveTimer = setTimeout(() => {
+                _thresholdSaveTimer = null;
+                saveManualLabelsToStorage();
+            }, 200);
+        }
+
+        function _applyThreshold(label, newThreshold) {
+            if (!label.embedding) return;
+            if (newThreshold > 0) {
+                const emb = new Float32Array(label.embedding);
+                const matches = localSearchSimilar(emb, newThreshold);
+                label.matchCount = matches.length;
+                updateManualLabelOverlay(label, matches);
+            } else {
+                // Threshold 0: remove similarity overlay, restore pin if point type
+                label.matchCount = 0;
+                if (manualLabelOverlays[label.id]) {
+                    if (manualLabelOverlays[label.id].layerGroup) {
+                        maps.rgb.removeLayer(manualLabelOverlays[label.id].layerGroup);
                     }
-                    if (label.type === 'point' && label.visible) {
-                        const pinMarker = L.circleMarker([label.lat, label.lon], {
-                            radius: 6, fillColor: label.color, color: '#fff', weight: 2, fillOpacity: 0.9
-                        });
-                        const lg = L.layerGroup([pinMarker]).addTo(maps.rgb);
-                        manualLabelOverlays[label.id] = { layerGroup: lg, layer: null };
-                    }
+                    delete manualLabelOverlays[label.id];
+                }
+                if (label.type === 'point' && label.visible) {
+                    const pinMarker = L.circleMarker([label.lat, label.lon], {
+                        radius: 6, fillColor: label.color, color: '#fff', weight: 2, fillOpacity: 0.9
+                    });
+                    const lg = L.layerGroup([pinMarker]).addTo(maps.rgb);
+                    manualLabelOverlays[label.id] = { layerGroup: lg, layer: null };
                 }
             }
-            saveManualLabelsToStorage();
-            renderManualLabelsList();
+            // Update match count in-place without rebuilding the DOM
+            const row = document.querySelector(`.manual-label-item[data-id="${label.id}"]`);
+            if (row) {
+                const countSpan = row.querySelector('span[style*="color: #888"]');
+                if (countSpan) countSpan.textContent = (label.matchCount || 0) + 'px';
+            }
         }
 
         function updateManualLabelOverlay(label, matches) {
@@ -4023,25 +4084,20 @@
 
                 const hasSlider = label.embedding != null;
                 let detailHtml = '';
-                if (isPolygon) {
-                    // Polygon: pixel count + optional similarity expansion slider
-                    detailHtml = `<span style="font-size: 10px; color: #888;">${label.pixelCount || label.matchCount || 0}px</span>`;
-                    if (hasSlider) {
-                        detailHtml += ` <input type="range" min="0" max="35" value="${label.threshold}" style="width: 50px; cursor: pointer; vertical-align: middle;" oninput="updateManualLabelThreshold(${label.id}, parseFloat(this.value)); this.nextElementSibling.textContent=this.value">
-                         <span style="font-size: 10px; color: #666; min-width: 20px;">${label.threshold}</span>`;
-                    }
-                } else if (hasSlider) {
-                    // Point/similarity: show slider
+                const pxCount = label.matchCount || label.pixelCount || 0;
+                if (hasSlider) {
                     detailHtml = `<input type="range" min="0" max="35" value="${label.threshold}" style="width: 60px; cursor: pointer; vertical-align: middle;" oninput="updateManualLabelThreshold(${label.id}, parseFloat(this.value)); this.nextElementSibling.textContent=this.value">
                          <span style="font-size: 10px; color: #666; min-width: 20px;">${label.threshold}</span>
-                         <span style="font-size: 10px; color: #888;">${label.matchCount || 0}px</span>`;
+                         <span style="font-size: 10px; color: #888;">${pxCount}px</span>`;
+                } else {
+                    detailHtml = `<span style="font-size: 10px; color: #888;">${pxCount}px</span>`;
                 }
 
                 html += `<div class="manual-label-item" data-id="${label.id}" style="display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #eee; flex-wrap: wrap;">
                     <div style="width: 14px; height: 14px; border-radius: 2px; background: ${label.color}; border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0;"></div>
                     ${codeTag}<span style="font-size: 12px; color: #333; font-weight: 500; min-width: 50px;">${label.name}</span>
-                    <span style="font-size: 11px; color: #888;" title="${label.type}">${typeIcon}</span>
                     ${detailHtml}
+                    <span style="font-size: 11px; color: #888;" title="${label.type}">${typeIcon}</span>
                     <span style="cursor: pointer; font-size: 13px; margin-left: auto;" onclick="toggleManualLabelVisibility(${label.id})" title="Toggle visibility">${visIcon}</span>
                     <span style="cursor: pointer; font-size: 13px; color: #e53e3e;" onclick="removeManualLabel(${label.id})" title="Delete">&times;</span>
                 </div>`;
@@ -4973,10 +5029,6 @@
 
             // Clear search cache for persistent labels
             currentSearchCache = null;
-            const saveLabelBtn = document.getElementById('save-label-btn');
-            if (saveLabelBtn) {
-                saveLabelBtn.disabled = true;
-            }
 
             console.log('[EXPLORER] Results cleared');
         }
@@ -5058,12 +5110,6 @@
                     threshold: parseInt(document.getElementById('similarity-threshold').value),
                     timestamp: Date.now()
                 };
-
-                // Enable save button
-                const saveLabelBtn = document.getElementById('save-label-btn');
-                if (saveLabelBtn) {
-                    saveLabelBtn.disabled = false;
-                }
 
                 // Step 4: Visualize with current threshold
                 updateExplorerVisualization();
@@ -7609,7 +7655,6 @@
 
         // Attach event listeners to sidebar buttons and modal
         document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('save-label-btn').addEventListener('click', saveCurrentSearchAsLabel);
             document.getElementById('toggle-all-overlays').addEventListener('click', toggleAllOverlays);
             // Export dropdown toggle
             document.getElementById('export-dropdown-btn').addEventListener('click', (e) => {
@@ -7680,16 +7725,6 @@
             document.getElementById('label-name-input').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
                     confirmSaveLabel();
-                }
-            });
-
-            // Labels toggle button (skip in labelling mode — panel 6 shows labels inline)
-            document.getElementById('labels-toggle-btn').addEventListener('click', function() {
-                const panel = document.getElementById('labels-details-panel');
-                const show = panel.style.display === 'none';
-                panel.style.display = show ? 'block' : 'none';
-                if (show) {
-                    renderLabelsInto(document.getElementById('labels-list'));
                 }
             });
 
