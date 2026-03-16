@@ -290,8 +290,7 @@
         /* Validation: grey out similarity + label bar */
         body.mode-validation #similarity-controls { opacity: 0.4 !important; pointer-events: none; }
         body.mode-validation #label-controls-bar { opacity: 0.4 !important; pointer-events: none; }
-        /* Validation: hide Panel 6 year selector */
-        #map-container.mode-validation #embedding-year-selector-2 { display: none !important; }
+        /* Panel 6 year selector visibility controlled by year-selector-2-visibility dependency */
 
         /* Validation: Panel 1 shows class table instead of OSM */
         #map-container.mode-validation #map-osm { display: none; }
@@ -1436,19 +1435,14 @@
                 test: (s) => s.has_pyramids && s.years_available.length > 0,
                 onReady: (s) => {
                     console.log('[DEP] panel6-tiles: creating tile layer');
-                    const yearToUse = applyYearSelector(
-                        'embedding-year-selector-2', s.years_available, currentEmbeddingYear2,
-                        (year) => switchEmbeddingYear2(year)
-                    );
-                    currentEmbeddingYear2 = String(yearToUse);
+                    const sorted = [...s.years_available].map(String).sort();
+                    if (!currentEmbeddingYear2 || !sorted.includes(currentEmbeddingYear2)) {
+                        currentEmbeddingYear2 = sorted[sorted.length - 1];
+                    }
                     // Pick a different year than Panel 3 so the change heatmap can load
                     if (s.years_available.length >= 2 && currentEmbeddingYear2 === currentEmbeddingYear) {
                         const alt = s.years_available.find(y => String(y) !== currentEmbeddingYear);
-                        if (alt) {
-                            currentEmbeddingYear2 = String(alt);
-                            const sel2el = document.getElementById('embedding-year-selector-2');
-                            if (sel2el) sel2el.value = currentEmbeddingYear2;
-                        }
+                        if (alt) currentEmbeddingYear2 = String(alt);
                     }
                     refreshEmbeddingTileLayer('embedding2', currentEmbeddingYear2);
                 },
@@ -1463,15 +1457,24 @@
                         'embedding-year-selector', s.years_available, currentEmbeddingYear,
                         (year) => switchEmbeddingYear(parseInt(year))
                     );
+                },
+                onNotReady: () => {
+                    document.getElementById('embedding-year-selector').style.display = 'none';
+                },
+                satisfied: false
+            },
+            {
+                id: 'year-selector-2-visibility',
+                test: (s) => currentPanelMode === 'change-detection' && s.years_available.length > 1,
+                onReady: (s) => {
                     applyYearSelector(
                         'embedding-year-selector-2', s.years_available, currentEmbeddingYear2,
                         (year) => switchEmbeddingYear2(year)
                     );
                 },
                 onNotReady: () => {
-                    document.getElementById('embedding-year-selector').style.display = 'none';
-                    const sel2hide = document.getElementById('embedding-year-selector-2');
-                    if (sel2hide) sel2hide.style.display = 'none';
+                    const sel2 = document.getElementById('embedding-year-selector-2');
+                    if (sel2) sel2.style.display = 'none';
                 },
                 satisfied: false
             },
@@ -1635,10 +1638,6 @@
                     applyYearSelector(
                         'embedding-year-selector', viewportStatus.years_available, currentEmbeddingYear,
                         (year) => switchEmbeddingYear(parseInt(year))
-                    );
-                    applyYearSelector(
-                        'embedding-year-selector-2', viewportStatus.years_available, currentEmbeddingYear2,
-                        (year) => switchEmbeddingYear2(year)
                     );
                 }
             } catch (e) {
@@ -3702,6 +3701,7 @@
             }, 350);
 
             localStorage.setItem('panelMode', mode);
+            evaluateDependencies();
         }
 
         // Restore panel mode preference on load
