@@ -323,11 +323,16 @@ zip ground_truth.zip polygons.shp polygons.dbf polygons.shx polygons.prj
    - **RF** — Random Forest (default 100 trees)
    - **XGBoost** — Gradient boosted trees (default 100 rounds, max depth 6)
    - **MLP** — Multi-layer perceptron (default 64-32 hidden layers)
+   - **Spatial MLP (3x3)** — MLP that uses a 3x3 neighbourhood of embeddings as input, capturing local spatial context
+   - **Spatial MLP (5x5)** — same idea with a 5x5 neighbourhood for wider spatial context
+   - **U-Net (GPU)** — a convolutional U-Net trained on the full 2D embedding grid (requires PyTorch/GPU)
 3. *(Optional)* Click the **`...`** button next to any classifier to expand its hyperparameters:
    - **k-NN**: k (1–50), weights (uniform or distance-weighted)
    - **Random Forest**: number of trees (10–500), max depth (leave empty for unlimited)
    - **XGBoost**: boosting rounds (10–500), max depth (1–15), learning rate (0.01–1.0)
    - **MLP**: hidden layer architecture (64,32 / 128,64 / 256,128,64), max iterations (50–1000)
+   - **Spatial MLP**: hidden layer architecture, max iterations (same options as MLP)
+   - **U-Net**: epochs (5–500), learning rate (0.0001–0.1), depth (3/4/5), base filters (16/32/64)
 4. *(Optional)* Adjust **Max training pixels** (default 10,000). Increase this if your ground truth has dense coverage — training sizes are log-spaced from 10 up to this value (e.g. 30,000 gives sizes 10, 30, 100, 300, 1000, 3000, 10000, 30000).
 5. Click **Run Evaluation** — the server trains each classifier at each training size with 5 random repeats. An elapsed timer shows progress. Typical runtime is 60–120 seconds for 4 classifiers at the default max.
 
@@ -390,13 +395,25 @@ Two export options are available in the confusion matrix header:
 
 ## Export Options
 
-The **Export** dropdown in the header provides three formats:
+### Header Export (Explore / Auto-label modes)
+
+The **Export** dropdown in the header provides three formats for saved labels:
 
 | Format | Description |
 |--------|-------------|
 | **Labels (JSON)** | Compact metadata for re-importing into TEE |
 | **Labels (GeoJSON)** | FeatureCollection with 10m polygons per pixel, compatible with QGIS and other GIS tools. Properties include label name, color, distance, and threshold. |
 | **Map (JPG)** | High-resolution satellite image with label overlays and legend, rendered at zoom level 18 |
+
+### Manual Label Export (Labelling mode)
+
+In manual label mode, the **Export** button in the labelling toolbar provides:
+
+| Format | Description |
+|--------|-------------|
+| **JSON** | Compact metadata including embeddings and thresholds, for re-importing into TEE |
+| **GeoJSON** | Points and polygons as a FeatureCollection, compatible with QGIS and GIS tools |
+| **ESRI Shapefile (ZIP)** | Zipped `.shp`/`.dbf`/`.shx`/`.prj` — the standard GIS interchange format. Can be shared with others and also uploaded back into TEE's Validation mode as ground-truth training data. |
 
 ## PCA / UMAP Visualization (Panel 4)
 

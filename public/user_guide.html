@@ -478,6 +478,9 @@
             <li><strong>RF</strong> &mdash; Random Forest (default 100 trees)</li>
             <li><strong>XGBoost</strong> &mdash; Gradient boosted trees (default 100 rounds, max depth 6)</li>
             <li><strong>MLP</strong> &mdash; Multi-layer perceptron (default 64-32 hidden layers)</li>
+            <li><strong>Spatial MLP (3&times;3)</strong> &mdash; MLP that uses a 3&times;3 neighbourhood of embeddings as input, capturing local spatial context</li>
+            <li><strong>Spatial MLP (5&times;5)</strong> &mdash; same idea with a 5&times;5 neighbourhood for wider spatial context</li>
+            <li><strong>U-Net (GPU)</strong> &mdash; a convolutional U-Net trained on the full 2D embedding grid (requires PyTorch/GPU)</li>
         </ul>
     </li>
     <li><em>(Optional)</em> Click the <strong><code>...</code></strong> button next to any classifier to expand its hyperparameters:
@@ -486,6 +489,8 @@
             <li><strong>Random Forest</strong>: number of trees (10&ndash;500), max depth (leave empty for unlimited)</li>
             <li><strong>XGBoost</strong>: boosting rounds (10&ndash;500), max depth (1&ndash;15), learning rate (0.01&ndash;1.0)</li>
             <li><strong>MLP</strong>: hidden layer architecture (64,32 / 128,64 / 256,128,64), max iterations (50&ndash;1000)</li>
+            <li><strong>Spatial MLP</strong>: hidden layer architecture, max iterations (same options as MLP)</li>
+            <li><strong>U-Net</strong>: epochs (5&ndash;500), learning rate (0.0001&ndash;0.1), depth (3/4/5), base filters (16/32/64)</li>
         </ul>
     </li>
     <li><em>(Optional)</em> Adjust <strong>Max training pixels</strong> (default 10,000). Increase this if your ground truth has dense coverage &mdash; training sizes are log-spaced from 10 up to this value (e.g. 30,000 gives sizes 10, 30, 100, 300, 1000, 3000, 10000, 30000).</li>
@@ -565,13 +570,26 @@ predicted_names = [names[i] for i in predictions]</code></pre>
 
 <h2>Export Options</h2>
 
-<p>The <strong>Export</strong> dropdown in the header provides three formats:</p>
+<h3>Header Export (Explore / Auto-label modes)</h3>
+
+<p>The <strong>Export</strong> dropdown in the header provides three formats for saved labels:</p>
 
 <table>
     <tr><th>Format</th><th>Description</th></tr>
     <tr><td><strong>Labels (JSON)</strong></td><td>Compact metadata for re-importing into TEE</td></tr>
     <tr><td><strong>Labels (GeoJSON)</strong></td><td>FeatureCollection with 10m polygons per pixel, compatible with QGIS and other GIS tools. Properties include label name, color, distance, and threshold.</td></tr>
     <tr><td><strong>Map (JPG)</strong></td><td>High-resolution satellite image with label overlays and legend, rendered at zoom level 18</td></tr>
+</table>
+
+<h3>Manual Label Export (Labelling mode)</h3>
+
+<p>In manual label mode, the <strong>Export</strong> button in the labelling toolbar provides:</p>
+
+<table>
+    <tr><th>Format</th><th>Description</th></tr>
+    <tr><td><strong>JSON</strong></td><td>Compact metadata including embeddings and thresholds, for re-importing into TEE</td></tr>
+    <tr><td><strong>GeoJSON</strong></td><td>Points and polygons as a FeatureCollection, compatible with QGIS and GIS tools</td></tr>
+    <tr><td><strong>ESRI Shapefile (ZIP)</strong></td><td>Zipped <code>.shp</code>/<code>.dbf</code>/<code>.shx</code>/<code>.prj</code> &mdash; the standard GIS interchange format. Can be shared with others and also uploaded back into TEE's Validation mode as ground-truth training data.</td></tr>
 </table>
 
 <h2>PCA / UMAP Visualization (Panel 4)</h2>
