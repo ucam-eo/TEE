@@ -7161,41 +7161,39 @@
                 console.warn('[LABEL] Vector data not loaded, skipping recompute');
                 return;
             }
+            const gt = localVectors.metadata.geotransform;
             for (const label of savedLabels) {
                 try {
-                    // Static labels (from segmentation): rebuild pixels from pixel_coords
-                    if (label.static) {
-                        if (label.pixel_coords && localVectors) {
-                            const gt = localVectors.metadata.geotransform;
-                            const pc = label.pixel_coords;
-                            label.pixels = [];
-                            for (let i = 0; i < pc.length; i += 2) {
-                                label.pixels.push({
-                                    lat: gt.f + pc[i + 1] * gt.e,
-                                    lon: gt.c + pc[i] * gt.a,
-                                    distance: 0
-                                });
-                            }
-                            label.pixel_count = label.pixels.length;
+                    // Labels with stored pixel_coords: reconstruct directly
+                    if (label.pixel_coords && label.pixel_coords.length > 0) {
+                        const pc = label.pixel_coords;
+                        label.pixels = [];
+                        for (let i = 0; i < pc.length; i += 2) {
+                            label.pixels.push({
+                                lat: gt.f + pc[i + 1] * gt.e,
+                                lon: gt.c + pc[i] * gt.a,
+                                distance: 0
+                            });
                         }
+                        label.pixel_count = label.pixels.length;
                         continue;
                     }
 
-                    // Use stored embedding if available (exact match to original search),
-                    // otherwise fall back to re-extracting from source pixel
+                    // No pixel_coords: re-search using embedding + threshold
                     let embedding = label.embedding;
                     if (embedding) {
-                        // Convert from Array to Float32Array for localSearchSimilar
                         if (!(embedding instanceof Float32Array)) {
                             embedding = new Float32Array(embedding);
                         }
-                    } else {
+                    } else if (label.source_pixel) {
                         embedding = localExtract(label.source_pixel.lat, label.source_pixel.lon);
                         if (!embedding) {
                             console.warn(`[LABEL] No embedding for ${label.name} at source pixel`);
                             continue;
                         }
                         label.embedding = Array.from(embedding);
+                    } else {
+                        continue;
                     }
                     const matches = localSearchSimilar(embedding, label.threshold);
                     label.pixels = matches;
