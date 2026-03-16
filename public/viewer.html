@@ -279,9 +279,17 @@
         #map-container.mode-labelling #map-embedding2 { display: none; }
         #map-container.mode-labelling #panel6-label-view { display: flex; }
 
-        /* Validation: grey out similarity + label bar */
+        /* Validation: grey out similarity, repurpose label bar for validation buttons */
         body.mode-validation #similarity-controls { opacity: 0.4 !important; pointer-events: none; }
-        body.mode-validation #label-controls-bar { opacity: 0.4 !important; pointer-events: none; }
+        body.mode-validation #label-controls-bar { opacity: 1 !important; }
+        body.mode-validation #export-dropdown-btn { display: none !important; }
+        body.mode-validation #export-dropdown-menu { display: none !important; }
+        body.mode-validation #import-labels-btn { display: none !important; }
+        body.mode-validation #unsaved-labels-warning { display: none !important; }
+        #val-export-btn, #val-download-btn { display: none; }
+        body.mode-validation #val-export-btn { display: inline-block; }
+        body.mode-validation #val-download-btn { display: inline-block; }
+        #val-download-btn:disabled { background: #555 !important; color: #888 !important; cursor: default; }
         /* Panel 6 year selector visibility controlled by year-selector-2-visibility dependency */
 
         /* Validation: Panel 1 shows class table instead of OSM */
@@ -801,6 +809,8 @@
             </button>
             <input type="file" id="import-labels-file" accept=".json" style="display: none;">
             <span id="unsaved-labels-warning" style="display: none; background: #ff9800; color: #000; padding: 4px 10px; border-radius: 3px; font-weight: 700; font-size: 12px; white-space: nowrap; animation: pulse-warning 1.5s ease-in-out 3;">⚠ Unsaved labels — export to avoid losing work</span>
+            <button id="val-export-btn" style="padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap;">Export Results</button>
+            <button id="val-download-btn" style="padding: 8px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap;" disabled title="Run evaluation first">Download Models</button>
         </div>
 
         <!-- Labelling toolbar (only visible in labelling mode) -->
@@ -9287,7 +9297,10 @@
                 status.textContent = `Done in ${ev.elapsed_seconds}s — ${lastChartData.total_labelled_pixels.toLocaleString()} pixels, ${lastChartData.classes.length} classes`;
                 status.style.color = '#28a745';
                 const dlBtn = document.getElementById('cm-download-btn');
-                dlBtn.disabled = !(ev.models_available && ev.models_available.length);
+                const dlBtnH = document.getElementById('val-download-btn');
+                const modelsReady = !!(ev.models_available && ev.models_available.length);
+                dlBtn.disabled = !modelsReady;
+                dlBtnH.disabled = !modelsReady;
                 hideFinishButtons();
 
             } else if (ev.event === 'error') {
@@ -9538,7 +9551,10 @@
         function renderConfusionMatrix(data) {
             lastEvalData = data;
             const dlBtn = document.getElementById('cm-download-btn');
-            dlBtn.disabled = !(data.models_available && data.models_available.length);
+            const dlBtnH = document.getElementById('val-download-btn');
+            const modelsReady = !!(data.models_available && data.models_available.length);
+            dlBtn.disabled = !modelsReady;
+            dlBtnH.disabled = !modelsReady;
             const panel = document.getElementById('val-cm-panel');
             const sel = document.getElementById('cm-classifier-select');
             const scroll = panel.querySelector('.cm-scroll');
@@ -9661,6 +9677,8 @@
             });
         }
         document.getElementById('cm-download-btn').addEventListener('click', downloadModels);
+        document.getElementById('val-export-btn').addEventListener('click', exportEvalResults);
+        document.getElementById('val-download-btn').addEventListener('click', downloadModels);
 
         document.getElementById('cm-toggle-pct').addEventListener('click', function() {
             cmShowPct = !cmShowPct;
