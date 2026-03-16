@@ -2382,6 +2382,87 @@
             }
         }
 
+        async function showManualLabelTimeline(className) {
+            const classLabels = manualLabels.filter(l => l.name === className && l.embedding);
+            if (classLabels.length === 0) return;
+            const first = classLabels[0];
+            const threshold = first.threshold || 0;
+            if (threshold <= 0) {
+                alert('Set a similarity threshold > 0 to run timeline analysis.');
+                return;
+            }
+
+            const overlay = document.getElementById('timeline-modal-overlay');
+            const nameEl = document.getElementById('timeline-label-name');
+            const swatchEl = document.getElementById('timeline-color-swatch');
+            const progressEl = document.getElementById('timeline-progress');
+            const resultsEl = document.getElementById('timeline-results');
+            const bodyEl = document.getElementById('timeline-table-body');
+            const summaryEl = document.getElementById('timeline-summary');
+
+            const markerNote = classLabels.length > 1 ? ` (${classLabels.length} markers)` : '';
+            nameEl.textContent = first.name + markerNote;
+            swatchEl.style.background = first.color;
+            progressEl.style.display = 'block';
+            progressEl.textContent = 'Starting timeline analysis...';
+            resultsEl.style.display = 'none';
+            bodyEl.innerHTML = '';
+            summaryEl.innerHTML = '';
+            overlay.style.display = 'flex';
+
+            try {
+                const years = getAvailableYears();
+                const timeline = [];
+                for (let i = 0; i < years.length; i++) {
+                    progressEl.textContent = `Loading year ${years[i]} (${i + 1} of ${years.length})...`;
+                    await new Promise(r => setTimeout(r, 0));
+                    const data = await loadVectorDataOnly(currentViewportName, years[i]);
+                    const searches = [];
+                    for (const l of classLabels) {
+                        if (!l.embedding) continue;
+                        const emb = extractFromData(data, l.lat, l.lon);
+                        if (emb) {
+                            searches.push({ embedding: emb, threshSq: threshold * threshold });
+                        }
+                    }
+                    const count = searches.length > 0 ? searchMultiInVectorData(data, searches) : 0;
+                    timeline.push({ year: years[i], count });
+                }
+
+                const maxCount = Math.max(...timeline.map(t => t.count), 1);
+                bodyEl.innerHTML = timeline.map(t => {
+                    const pct = (t.count / maxCount * 100).toFixed(1);
+                    return `<tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 6px; color: #333; font-weight: 600; font-size: 13px;">${t.year}</td>
+                        <td style="padding: 6px; text-align: right; color: #333; font-size: 13px;">${t.count.toLocaleString()}</td>
+                        <td style="padding: 6px;">
+                            <div style="background: #eee; border-radius: 3px; height: 18px; position: relative;">
+                                <div style="background: ${first.color}; width: ${pct}%; height: 100%; border-radius: 3px; min-width: ${t.count > 0 ? '2px' : '0'};"></div>
+                            </div>
+                        </td>
+                    </tr>`;
+                }).join('');
+
+                if (timeline.length >= 2) {
+                    const f = timeline[0], last = timeline[timeline.length - 1];
+                    if (f.count > 0) {
+                        const changePct = ((last.count - f.count) / f.count * 100).toFixed(1);
+                        const direction = changePct > 0 ? 'increase' : changePct < 0 ? 'decrease' : 'no change';
+                        const arrow = changePct > 0 ? '\u2191' : changePct < 0 ? '\u2193' : '\u2194';
+                        summaryEl.innerHTML = `<strong>${arrow} ${Math.abs(changePct)}% ${direction}</strong> from ${f.year} (${f.count.toLocaleString()} px) to ${last.year} (${last.count.toLocaleString()} px)`;
+                    } else {
+                        summaryEl.innerHTML = `${f.year}: 0 pixels &rarr; ${last.year}: ${last.count.toLocaleString()} pixels`;
+                    }
+                }
+
+                progressEl.style.display = 'none';
+                resultsEl.style.display = 'block';
+            } catch (err) {
+                progressEl.textContent = `Error: ${err.message}`;
+                console.error('[MANUAL TIMELINE] Failed:', err);
+            }
+        }
+
         // Fetch current viewport and update map center/zoom
         async function updateMapViewport() {
             try {
@@ -3803,6 +3884,7 @@
 
         // Manual label overlay layers on maps.rgb (per-class DirectCanvasLayer instances)
         let manualClassOverlays = {};  // {className: {layerGroup, layer}}
+        let _classMatchCache = {};     // {className: [{lat, lon}, ...]} cached similarity+polygon matches for Panel 4
         let collapsedClasses = new Set();
 
         // Schema system state
@@ -3966,6 +4048,7 @@
                 }
                 delete manualClassOverlays[className];
             }
+            delete _classMatchCache[className];
 
             const classLabels = getClassLabels(className);
             if (classLabels.length === 0) return;
@@ -3977,6 +4060,7 @@
             const color = classLabels[0].color;
             const threshold = classLabels[0].threshold || 0;
             let totalMatchCount = 0;
+            const cachedCoords = [];  // collect all lat/lon for Panel 4
 
             // Add pin markers for point-type labels
             for (const label of classLabels) {
@@ -3986,6 +4070,7 @@
                         radius: 6, fillColor: label.color, color: '#fff', weight: 2, fillOpacity: 0.9
                     });
                     layerGroup.addLayer(pinMarker);
+                    cachedCoords.push({ lat: label.lat, lon: label.lon });
                 }
                 // Add polygon outlines
                 if (label.type === 'polygon' && label.vertices) {
@@ -4013,6 +4098,7 @@
                         const polyCanvas = new DirectCanvasLayer(polyMatches, maps.rgb, color);
                         layerGroup.addLayer(polyCanvas);
                         totalMatchCount += polyMatches.length;
+                        for (const m of polyMatches) cachedCoords.push({ lat: m.lat, lon: m.lon });
                     }
                 }
             }
@@ -4031,6 +4117,7 @@
                     if (matches.length > 0) {
                         const canvasLayer = new DirectCanvasLayer(matches, maps.rgb, color);
                         layerGroup.addLayer(canvasLayer);
+                        for (const m of matches) cachedCoords.push({ lat: m.lat, lon: m.lon });
                     }
                 }
             }
@@ -4040,8 +4127,37 @@
                 label.matchCount = totalMatchCount;
             }
 
+            _classMatchCache[className] = cachedCoords;
             layerGroup.addTo(maps.rgb);
             manualClassOverlays[className] = { layerGroup, layer: null };
+            updatePanel4ManualLabels();
+        }
+
+        function updatePanel4ManualLabels() {
+            if (!umapCanvasLayer) return;
+            // Check if any visible manual labels exist with cached matches
+            const classNames = [...new Set(manualLabels.filter(l => l.visible).map(l => l.name))];
+            const hasAny = classNames.some(cn => _classMatchCache[cn] && _classMatchCache[cn].length > 0);
+            if (!hasAny) {
+                umapCanvasLayer.clearSimilarityHighlight();
+                return;
+            }
+            // Build colourMap across all visible classes
+            const colourMap = new Map();
+            for (const cn of classNames) {
+                const classLabels = getClassLabels(cn);
+                const first = classLabels[0];
+                if (!first) continue;
+                const rgb = umapCanvasLayer._cssColorToRGB(first.color);
+                if (!rgb) continue;
+                const coords = _classMatchCache[cn];
+                if (!coords) continue;
+                for (const c of coords) {
+                    const key = c.lat.toFixed(6) + ',' + c.lon.toFixed(6);
+                    colourMap.set(key, rgb);
+                }
+            }
+            umapCanvasLayer.colorByManualLabels(colourMap);
         }
 
         function toggleClassExpand(className) {
@@ -4068,6 +4184,8 @@
                         maps.rgb.removeLayer(manualClassOverlays[className].layerGroup);
                     }
                     delete manualClassOverlays[className];
+                    delete _classMatchCache[className];
+                    updatePanel4ManualLabels();
                 }
             } else if (newState) {
                 rebuildClassOverlay(className);
@@ -4086,6 +4204,7 @@
                 }
             }
             manualClassOverlays = {};
+            _classMatchCache = {};
 
             if (!localVectors || !maps.rgb) return;
 
@@ -4117,9 +4236,11 @@
                 }
                 delete manualClassOverlays[className];
             }
+            delete _classMatchCache[className];
             manualLabels = manualLabels.filter(l => l.name !== className);
             saveManualLabelsToStorage();
             renderManualLabelsList();
+            updatePanel4ManualLabels();
         }
 
         function removeManualLabel(id) {
@@ -4136,11 +4257,13 @@
                         }
                         delete manualClassOverlays[className];
                     }
+                    delete _classMatchCache[className];
                 } else {
                     rebuildClassOverlay(className);
                 }
             }
             renderManualLabelsList();
+            updatePanel4ManualLabels();
         }
 
         function toggleAllManualLabels() {
@@ -4161,6 +4284,7 @@
             }
             // If showing and some classes had no overlay yet, rebuild
             if (newState) rebuildManualOverlays();
+            else updatePanel4ManualLabels();
             saveManualLabelsToStorage();
             renderManualLabelsList();
             const btn = document.getElementById('manual-hide-all-btn');
@@ -4233,6 +4357,8 @@
                 const codeTag = first.code ? `<code style="font-size: 10px; color: #667eea; background: #f0f0ff; padding: 1px 4px; border-radius: 2px; margin-right: 2px;">${first.code}</code>` : '';
                 const anyVisible = labels.some(l => l.visible);
                 const visIcon = anyVisible ? '\ud83d\udc41' : '\ud83d\udc41\u200d\ud83d\udde8';
+                const isActive = currentManualLabel && currentManualLabel.name === className;
+                const activateColor = isActive ? '#222' : '#667eea';
                 const escapedName = className.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 const jsName = className.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
@@ -4253,7 +4379,9 @@
                         ${codeTag}<span style="font-size: 12px; color: #333; font-weight: 500; min-width: 50px;">${className}</span>
                         ${sliderHtml}
                         <span data-class-count="${escapedName}" style="font-size: 10px; color: #888;">${pxCount}px</span>
-                        <span style="cursor: pointer; font-size: 13px; color: #e53e3e; margin-left: auto;" onclick="removeManualClass('${jsName}')" title="Delete all ${labels.length} labels">&#x1f5d1;</span>
+                        ${hasEmbedding ? `<span style="cursor: pointer; font-size: 14px; color: #5500cc; margin-left: auto;" onclick="showManualLabelTimeline('${jsName}')" title="Show coverage timeline across years">&#128339;</span>` : `<span style="margin-left: auto;"></span>`}
+                        <span style="cursor: pointer; font-size: 14px; color: ${activateColor};" onclick="activateManualClass('${jsName}')" title="Set as active label">&#9678;</span>
+                        <span style="cursor: pointer; font-size: 13px; color: #e53e3e;" onclick="removeManualClass('${jsName}')" title="Delete all ${labels.length} labels">&#x1f5d1;</span>
                         <span style="cursor: pointer; font-size: 13px;" onclick="toggleClassVisibility('${jsName}')" title="Toggle visibility">${visIcon}</span>
                     </div>`;
 
@@ -4279,7 +4407,9 @@
                         ${codeTag}<span style="font-size: 12px; color: #333; font-weight: 500; min-width: 50px;">${className}</span>
                         ${sliderHtml}
                         <span data-class-count="${escapedName}" style="font-size: 10px; color: #888;">${pxCount}px</span>
-                        <span style="cursor: pointer; font-size: 13px; color: #e53e3e; margin-left: auto;" onclick="removeManualLabel(${label.id})" title="Delete">&#x1f5d1;</span>
+                        ${hasEmbedding ? `<span style="cursor: pointer; font-size: 14px; color: #5500cc; margin-left: auto;" onclick="showManualLabelTimeline('${jsName}')" title="Show coverage timeline across years">&#128339;</span>` : `<span style="margin-left: auto;"></span>`}
+                        <span style="cursor: pointer; font-size: 14px; color: ${activateColor};" onclick="activateManualClass('${jsName}')" title="Set as active label">&#9678;</span>
+                        <span style="cursor: pointer; font-size: 13px; color: #e53e3e;" onclick="removeManualLabel(${label.id})" title="Delete">&#x1f5d1;</span>
                         <span style="cursor: pointer; font-size: 13px;" onclick="toggleClassVisibility('${jsName}')" title="Toggle visibility">${visIcon}</span>
                     </div>`;
                 }
@@ -4350,19 +4480,15 @@
                 }
             }
 
-            // Pass 2: threshold-gated similarity for point/similarity labels
-            // and polygon centroid embeddings (if threshold > 0)
+            // Pass 2: nearest-centroid classification for remaining pixels
             const sources = [];
             for (const label of activeLabels) {
+                if (!label.embedding) continue;
                 const classIdx = classNames.indexOf(label.name);
-                const t = label.threshold || 0;
-                if (t > 0 && label.embedding) {
-                    sources.push({
-                        emb: new Float32Array(label.embedding),
-                        threshSq: t * t,
-                        classIdx
-                    });
-                }
+                sources.push({
+                    emb: new Float32Array(label.embedding),
+                    classIdx
+                });
             }
 
             if (sources.length > 0) {
@@ -4379,7 +4505,7 @@
                             const diff = emb[base + d] - src.emb[d];
                             distSq += diff * diff;
                         }
-                        if (distSq <= src.threshSq && distSq < bestDist) {
+                        if (distSq < bestDist) {
                             bestDist = distSq;
                             bestClass = src.classIdx;
                         }
@@ -4665,6 +4791,23 @@
             }
             localStorage.setItem('currentManualLabel', JSON.stringify(currentManualLabel));
             closeSchemaFloat();
+        }
+
+        function activateManualClass(className) {
+            const label = manualLabels.find(l => l.name === className);
+            if (!label) return;
+            currentManualLabel = { name: label.name, color: label.color, code: label.code || '' };
+            const activeEl = document.getElementById('manual-active-label');
+            if (activeEl) {
+                activeEl.style.display = '';
+                document.getElementById('manual-active-label-swatch').style.background = label.color;
+                document.getElementById('manual-active-label-name').textContent =
+                    `${label.code ? '[' + label.code + '] ' : ''}${label.name}`;
+                const acp = document.getElementById('active-label-color-picker');
+                if (acp) acp.value = label.color;
+            }
+            localStorage.setItem('currentManualLabel', JSON.stringify(currentManualLabel));
+            renderManualLabelsList();
         }
 
         function filterSchemaTree(query) {
@@ -6467,6 +6610,7 @@
                     umapCanvasLayer = new window.UMAPScene('map-umap', umapData);
                     setTimeout(() => { if (umapCanvasLayer && umapCanvasLayer.resize) umapCanvasLayer.resize(); }, 50);
                     if (savedLabels && savedLabels.length > 0) updateUMAPColorsFromLabels();
+                    updatePanel4ManualLabels();
                     console.log(`✓ ${methodUpper} restored from cache: ${points.length} points`);
                     return;
                 }
@@ -6618,6 +6762,7 @@
                     } else {
                         console.log(`✓ ${methodUpper} rendered: ${points.length} points (all grey)`);
                     }
+                    updatePanel4ManualLabels();
                 }
             } catch (error) {
                 console.error(`[${methodUpper}] Fatal error:`, error);
@@ -7108,6 +7253,12 @@
                     deleteLabelGroup(labelName);
                 });
             });
+            container.querySelectorAll('.rename-label-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const labelName = e.currentTarget.dataset.labelName;
+                    renameLabel(labelName);
+                });
+            });
         }
 
         function updateLabelsUI() {
@@ -7144,6 +7295,20 @@
             return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
         }
 
+        function renameLabel(oldName) {
+            const newName = prompt('Rename label:', oldName);
+            if (!newName || !newName.trim() || newName.trim() === oldName) return;
+            const trimmed = newName.trim();
+            for (const label of savedLabels) {
+                if (label.name === oldName) label.name = trimmed;
+            }
+            labelsExportedSinceChange = false;
+            persistLabels();
+            updateOverlay();
+            updateLabelsUI();
+            updateUMAPColorsFromLabels();
+        }
+
         // Render grouped label card
         function renderLabelGroup(name, members) {
             const color = members[0].color;
@@ -7151,7 +7316,7 @@
             const markerCount = members.length;
             const markerNote = markerCount > 1 ? ` (${markerCount} markers)` : '';
             const anyVisible = members.some(l => l.visible);
-            const toggleText = anyVisible ? 'Hide' : 'Show';
+            const visIcon = anyVisible ? '\ud83d\udc41' : '\ud83d\udc41\u200d\ud83d\udde8';
             const hasSourcePixel = members.some(l => l.source_pixel);
             const thresholdStr = hasSourcePixel ? `, threshold: ${parseFloat(members[0].threshold.toPrecision(3))}` : '';
             return `
@@ -7161,15 +7326,16 @@
                       <div style="display: flex; align-items: center; margin-bottom: 4px;">
                         <div style="width: 14px; height: 14px; background: ${color}; border-radius: 2px; margin-right: 8px; flex-shrink: 0;"></div>
                         <div style="font-weight: 600; font-size: 13px; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(name)}${markerNote}</div>
+                        <span class="rename-label-btn" data-label-name="${escapeHtml(name)}" style="cursor: pointer; font-size: 12px; color: #999; margin-left: 4px; flex-shrink: 0;" title="Rename">&#9998;</span>
                       </div>
                       <div style="font-size: 11px; color: #999; margin-left: 22px;">${totalPixels.toLocaleString()} pixels${thresholdStr}</div>
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;">
-                      <div style="display: flex; gap: 4px;">
-                        ${hasSourcePixel ? `<button class="timeline-label-btn" data-label-name="${escapeHtml(name)}" style="padding: 4px 7px; background: #f0f0ff; border: 1px solid #b0b0ff; border-radius: 3px; cursor: pointer; font-size: 11px; color: #5500cc; font-weight: 600;" title="Show coverage timeline across years">Timeline</button>` : ''}
-                        <button class="delete-label-btn" data-label-name="${escapeHtml(name)}" style="padding: 4px 6px; background: #ffe8e8; border: 1px solid #ffb0b0; border-radius: 3px; cursor: pointer; font-size: 13px; color: #cc0000; line-height: 1;" title="Delete label">&#128465;</button>
+                      <div style="display: flex; gap: 4px; align-items: center;">
+                        ${hasSourcePixel ? `<span class="timeline-label-btn" data-label-name="${escapeHtml(name)}" style="cursor: pointer; font-size: 14px; color: #5500cc;" title="Show coverage timeline across years">&#128339;</span>` : ''}
+                        <span class="delete-label-btn" data-label-name="${escapeHtml(name)}" style="cursor: pointer; font-size: 13px; color: #cc0000;" title="Delete label">&#128465;</span>
+                        <span class="toggle-label-btn" data-label-name="${escapeHtml(name)}" style="cursor: pointer; font-size: 13px;" title="Toggle visibility">${visIcon}</span>
                       </div>
-                      <button class="toggle-label-btn" data-label-name="${escapeHtml(name)}" style="padding: 4px 7px; background: #e8f0ff; border: 1px solid #b0d4ff; border-radius: 3px; cursor: pointer; font-size: 11px; color: #0066cc; font-weight: 600;" title="Toggle visibility">${toggleText}</button>
                     </div>
                   </div>
                 </div>
@@ -8403,6 +8569,29 @@
 
             this.geometry.attributes.color.needsUpdate = true;
             console.log(`[UMAPScene] Highlighted ${matchSet.size} similar points`);
+        }
+
+        /**
+         * Colour points by manual label classes.
+         * @param {Map<string, [number,number,number]>} colourMap - lat,lon key → [r,g,b] (0-1)
+         */
+        colorByManualLabels(colourMap) {
+            const c = this.colors;
+            const n = this.points.length;
+            for (let i = 0; i < n; i++) {
+                const key = this.points[i].lat.toFixed(6) + ',' + this.points[i].lon.toFixed(6);
+                const rgb = colourMap.get(key);
+                if (rgb) {
+                    c[i * 3]     = rgb[0];
+                    c[i * 3 + 1] = rgb[1];
+                    c[i * 3 + 2] = rgb[2];
+                } else {
+                    c[i * 3]     = 0.53;
+                    c[i * 3 + 1] = 0.53;
+                    c[i * 3 + 2] = 0.53;
+                }
+            }
+            this.geometry.attributes.color.needsUpdate = true;
         }
 
         /**
