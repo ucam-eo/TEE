@@ -279,6 +279,9 @@
         /* Hide default Leaflet.Draw toolbar (we activate programmatically) */
         .leaflet-draw-toolbar { display: none !important; }
 
+        /* Labelling: hide top-bar similarity slider (per-label sliders in Panel 6 instead) */
+        body.mode-labelling #similarity-controls { display: none !important; }
+
         /* Labelling: repurpose panel 6 as label-management split view */
         #panel6-label-view { display: none; }
         #map-container.mode-labelling #map-embedding2 { display: none; }
@@ -3989,7 +3992,7 @@
                     // Point/similarity: show slider
                     const hasSlider = label.embedding != null;
                     detailHtml = hasSlider ?
-                        `<input type="range" min="0" max="35" value="${label.threshold}" style="width: 60px; cursor: pointer; vertical-align: middle;" oninput="updateManualLabelThreshold(${label.id}, parseFloat(this.value)); this.nextElementSibling.textContent=this.value">
+                        `<input type="range" min="0" max="35" value="${label.threshold}" style="width: 60px; cursor: pointer; vertical-align: middle;" oninput="this.nextElementSibling.textContent=this.value" onchange="updateManualLabelThreshold(${label.id}, parseFloat(this.value))">
                          <span style="font-size: 10px; color: #666; min-width: 20px;">${label.threshold}</span>
                          <span style="font-size: 10px; color: #888;">${label.matchCount || 0}px</span>` : '';
                 }
