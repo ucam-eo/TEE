@@ -59,6 +59,20 @@
             border-radius: 3px;
             font-size: 13px;
         }
+        pre {
+            background: #2a2a2e;
+            color: #e0e0e0;
+            padding: 12px 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
         .back-link {
             display: inline-block;
             margin-bottom: 20px;
@@ -120,7 +134,7 @@
 
 <h3>6-Panel Layout (Advanced)</h3>
 
-<p>Click the <strong>3/6 Panel</strong> toggle in the header to switch to the advanced layout:</p>
+<p>Use the <strong>layout dropdown</strong> in the header to switch between modes:</p>
 
 <table>
     <tr><th>Panel</th><th>Content</th></tr>
@@ -131,6 +145,17 @@
     <tr><td>5. <strong>Heatmap</strong></td><td>Temporal distance heatmap (Y1 vs Y2)</td></tr>
     <tr><td>6. <strong>Embeddings Y2</strong></td><td>Second year's embeddings for comparison</td></tr>
 </table>
+
+<p>Additional modes:</p>
+<ul>
+    <li><strong>Labelling</strong> &mdash; replaces panel 6 with a split view. Two sub-modes:
+        <ul>
+            <li><strong>Auto-label</strong> &mdash; K-means segmentation clusters (left) and promoted labels (right)</li>
+            <li><strong>Manual Label</strong> &mdash; hand-placed pins and polygons with per-class similarity thresholds (see <a href="#manual-labelling">Manual Labelling</a>)</li>
+        </ul>
+    </li>
+    <li><strong>Validation</strong> &mdash; replaces the bottom row with ground-truth upload controls and a learning-curve chart (see <a href="#validation">Validation</a>)</li>
+</ul>
 
 <h3>Switching Years</h3>
 
@@ -149,7 +174,7 @@
 </ol>
 
 <div class="note">
-    The first time you run a search for a viewport+year, Vector data (~20&ndash;50MB) is downloaded and cached in your browser's IndexedDB. Subsequent searches are instant.
+    The first time you run a search for a viewport+year, vector data (~20&ndash;50MB) is downloaded and cached in your browser's IndexedDB. Subsequent searches are instant.
 </div>
 
 <h3>Single-Click</h3>
@@ -186,6 +211,147 @@
 <ul>
     <li><strong>Import</strong> &mdash; use the Import button to load a previously exported JSON file</li>
     <li><strong>Export</strong> &mdash; see Export Options below</li>
+</ul>
+
+<h2 id="manual-labelling">Manual Labelling</h2>
+
+<p>Manual labelling mode lets you build label classes by hand &mdash; placing individual pins, drawing polygons, or combining both. Each label entry captures an embedding, which enables similarity-based expansion, cross-year timeline analysis, and classification in Panel 5.</p>
+
+<h3>Entering Manual Mode</h3>
+
+<ol>
+    <li>Switch the layout to <strong>Labelling</strong> (header dropdown)</li>
+    <li>In Panel 6, change the mode dropdown from <strong>Auto-label</strong> to <strong>Manual Label</strong></li>
+</ol>
+
+<p>Panel headings update: Panel 2 becomes <strong>Labels</strong> (shows your labels on the satellite image), Panel 5 becomes <strong>Classification</strong>, and Panel 6 shows the manual label controls.</p>
+
+<h3>Setting a Label</h3>
+
+<p>Before placing any labels, you must set the active label class:</p>
+
+<ol>
+    <li>Type a <strong>label name</strong> in the text field (e.g. "Woodland")</li>
+    <li>Click the <strong>color swatch</strong> to choose a color</li>
+    <li>Click <strong>Set</strong></li>
+</ol>
+
+<p>The <strong>Active</strong> bar appears below, showing the current label name, color, and instructions.</p>
+
+<p><strong>Schema support:</strong> Click <strong>Schema</strong> in the header to load a classification scheme (UKHab v2 or a custom JSON/CSV). A floating tree window opens &mdash; click any entry to set it as the active label with its code and color pre-filled.</p>
+
+<h3>Placing Point Labels (Pins)</h3>
+
+<p><strong>Ctrl+click</strong> (or Cmd+click on Mac) anywhere on the map to drop a pin at that location. The pin:</p>
+
+<ul>
+    <li>Appears as a colored circle marker on the satellite panel (Panel 2)</li>
+    <li>Extracts the 128D embedding at that pixel (if vectors are loaded)</li>
+    <li>Inherits the similarity threshold from other labels in the same class</li>
+    <li>Is immediately listed in the Manual Labels panel (Panel 6)</li>
+</ul>
+
+<p><strong>Double-click</strong> (without Ctrl) also drops a pin &mdash; this is a shortcut for quick labelling.</p>
+
+<h3>Drawing Polygon Labels</h3>
+
+<p><strong>Ctrl+double-click</strong> (or Cmd+double-click) to start drawing a polygon:</p>
+
+<ol>
+    <li>A polygon drawing tool activates &mdash; click to place vertices on the map</li>
+    <li>Click the first vertex (or double-click) to close the polygon</li>
+    <li>Press <strong>Escape</strong> to cancel a polygon in progress</li>
+</ol>
+
+<p>The polygon:</p>
+<ul>
+    <li>Appears as a colored filled shape on the satellite panel</li>
+    <li>The centroid's embedding is extracted automatically</li>
+    <li>All pixels inside the polygon are rasterized at 10m resolution and included in the class overlay</li>
+    <li>Is listed in the Manual Labels panel with a "polygon" type indicator</li>
+</ul>
+
+<h3>Understanding Label Entries</h3>
+
+<p>Each pin or polygon creates a <strong>label entry</strong> under a class name. A class can contain multiple entries (e.g. several pins for "Grassland"). The Manual Labels panel groups entries by class:</p>
+
+<ul>
+    <li><strong>Multi-entry classes</strong> show a collapsible group with an expand/collapse arrow</li>
+    <li><strong>Single-entry classes</strong> show a flat row</li>
+</ul>
+
+<p>Each row displays:</p>
+<ul>
+    <li><strong>Set-active icon</strong> (target, leftmost) &mdash; click to make this the active label class for quick re-selection</li>
+    <li><strong>Color swatch</strong> &mdash; the class color</li>
+    <li><strong>Label code</strong> (if using a schema) &mdash; e.g. "[u1b5]"</li>
+    <li><strong>Label name</strong> &mdash; e.g. "Grassland"</li>
+    <li><strong>Similarity slider</strong> &mdash; adjusts the embedding distance threshold (see below)</li>
+    <li><strong>Pixel count</strong> &mdash; number of matched pixels</li>
+    <li><strong>Timeline icon</strong> (clock) &mdash; see coverage across years (only shown when an embedding is available)</li>
+    <li><strong>Delete icon</strong> (trash) &mdash; remove the entry or entire class</li>
+    <li><strong>Visibility toggle</strong> (eye) &mdash; show/hide the class on the map</li>
+</ul>
+
+<h3>Similarity Threshold</h3>
+
+<p>Each label entry has a <strong>similarity slider</strong> that controls how far the embedding search extends from the pin/polygon centroid:</p>
+
+<ul>
+    <li><strong>Threshold = 0</strong> &mdash; only the pin pixel itself (or polygon interior) is shown</li>
+    <li><strong>Higher threshold</strong> &mdash; more pixels are included based on embedding distance</li>
+    <li>The slider ranges from 0 to 500 (L2 distance in embedding space)</li>
+</ul>
+
+<p>Adjusting the threshold for any entry in a class rebuilds the entire class overlay &mdash; the union of all entries' similarity matches.</p>
+
+<h3>Classification (Panel 5)</h3>
+
+<p>Click the <strong>Classify</strong> button in the Panel 5 header to generate a full-viewport classification:</p>
+
+<ul>
+    <li>Each pixel is assigned to the nearest label class based on embedding distance</li>
+    <li>Only labels with a <strong>non-zero threshold</strong> contribute to classification</li>
+    <li>A pixel must fall within a label's threshold to be classified (pixels outside all thresholds remain unclassified)</li>
+    <li>Results appear as a colored overlay on Panel 5</li>
+    <li>Classification updates automatically when you add, remove, or adjust labels</li>
+</ul>
+
+<h3>Panel 4 Coloring</h3>
+
+<p>Manual labels are reflected in the PCA/UMAP scatter plot (Panel 4):</p>
+
+<ul>
+    <li>Pixels matching any visible label class are colored with that class's color</li>
+    <li>Unmatched pixels appear as gray</li>
+    <li>Colors update when labels change, are toggled, or the scene loads</li>
+</ul>
+
+<h3>Cross-Year Timeline</h3>
+
+<p>Click the <strong>clock icon</strong> on any class row to see how that class's coverage changes over all available years:</p>
+
+<ul>
+    <li>A bar chart shows pixel counts per year</li>
+    <li>A percentage change summary compares the first and last years</li>
+    <li>Each year's vector data is loaded from cache or downloaded automatically</li>
+</ul>
+
+<h3>Bulk Actions</h3>
+
+<ul>
+    <li><strong>Hide All / Show All</strong> &mdash; toggle visibility of all manual label classes at once</li>
+    <li>Set-active icon allows quick switching between classes without re-entering the name</li>
+</ul>
+
+<h3>Tips</h3>
+
+<ul>
+    <li><strong>Combine pins and polygons</strong> &mdash; use polygons for large homogeneous areas, pins for scattered features</li>
+    <li><strong>Start with threshold = 0</strong> &mdash; place several pins across a class, then gradually increase the threshold to expand coverage</li>
+    <li><strong>Check Panel 4</strong> &mdash; the PCA/UMAP view shows whether your labels form coherent clusters in embedding space</li>
+    <li><strong>Use Classify</strong> &mdash; the Panel 5 classification gives a quick visual check of your label coverage</li>
+    <li><strong>Labels persist</strong> across page reloads (stored in browser localStorage)</li>
 </ul>
 
 <h2>Segmentation (K-Means Clustering)</h2>
@@ -228,6 +394,139 @@
     <li><strong>Merge related clusters</strong> &mdash; if two auto-labelled clusters represent the same land cover (e.g. two shades of grassland), type the <strong>same label name</strong> for both in Panel 6 before promoting. TEE merges them into a single label automatically.</li>
     <li><strong>Fine-tune with pins</strong> &mdash; double-click to place a pin on a location that was missed or misclassified, then adjust the <strong>similarity slider</strong> until the highlighted area matches what you want. Save the result as a new label or extend an existing one.</li>
 </ol>
+
+<h2 id="validation">Validation (Learning Curves)</h2>
+
+<p>The <strong>Validation</strong> panel lets you evaluate how well classifiers can distinguish habitat classes using Tessera embeddings as features, given expert-labelled ground-truth polygons.</p>
+
+<h3>Setup</h3>
+
+<ol>
+    <li>Switch the layout dropdown to <strong>Validation</strong></li>
+    <li>The bottom row changes to: a controls panel (left), a learning-curve chart (centre), and a confusion matrix panel (right)</li>
+</ol>
+
+<h3>Preparing a Ground-Truth Shapefile</h3>
+
+<p>TEE accepts a <strong>zipped ESRI shapefile</strong>. The <code>.zip</code> must contain at least four files with the same base name:</p>
+
+<table>
+    <tr><th>Extension</th><th>Purpose</th></tr>
+    <tr><td><code>.shp</code></td><td>Geometry (polygons or multipolygons)</td></tr>
+    <tr><td><code>.dbf</code></td><td>Attribute table</td></tr>
+    <tr><td><code>.shx</code></td><td>Spatial index</td></tr>
+    <tr><td><code>.prj</code></td><td>Coordinate reference system</td></tr>
+</table>
+
+<p>The shapefile should cover (or overlap) the current viewport area. Each polygon needs an attribute column whose values represent the class labels (e.g. a <code>Habitat</code> field with values like "Woodland", "Grassland", "Urban"). Any coordinate reference system is accepted &mdash; TEE reprojects to EPSG:4326 automatically.</p>
+
+<div class="note">
+    You can produce a suitable shapefile from QGIS, ArcGIS, or any GIS tool. Export your labelled polygons as a shapefile and zip the four files together:<br>
+    <code>zip ground_truth.zip polygons.shp polygons.dbf polygons.shx polygons.prj</code>
+</div>
+
+<h3>Uploading Ground Truth</h3>
+
+<ol>
+    <li>Drag and drop the <code>.zip</code> onto the upload zone (or click to browse)</li>
+    <li>The shapefile polygons appear as <strong>red outlines</strong> on the satellite panel (panel 2) with hover tooltips showing class labels</li>
+    <li>The <strong>Class field</strong> dropdown is populated with the shapefile's attribute columns &mdash; each shows the number of unique values and sample entries to help you pick the right one</li>
+</ol>
+
+<h3>Running an Evaluation</h3>
+
+<ol>
+    <li>Select a <strong>Class field</strong> &mdash; this determines what's being classified (e.g. broad habitat groups vs fine-grained types). The summary shows the number of classes and sample values.</li>
+    <li>Check the <strong>classifiers</strong> you want to compare:
+        <ul>
+            <li><strong>k-NN</strong> &mdash; k-Nearest Neighbours (default k=5, Euclidean distance)</li>
+            <li><strong>RF</strong> &mdash; Random Forest (default 100 trees)</li>
+            <li><strong>XGBoost</strong> &mdash; Gradient boosted trees (default 100 rounds, max depth 6)</li>
+            <li><strong>MLP</strong> &mdash; Multi-layer perceptron (default 64-32 hidden layers)</li>
+        </ul>
+    </li>
+    <li><em>(Optional)</em> Click the <strong><code>...</code></strong> button next to any classifier to expand its hyperparameters:
+        <ul>
+            <li><strong>k-NN</strong>: k (1&ndash;50), weights (uniform or distance-weighted)</li>
+            <li><strong>Random Forest</strong>: number of trees (10&ndash;500), max depth (leave empty for unlimited)</li>
+            <li><strong>XGBoost</strong>: boosting rounds (10&ndash;500), max depth (1&ndash;15), learning rate (0.01&ndash;1.0)</li>
+            <li><strong>MLP</strong>: hidden layer architecture (64,32 / 128,64 / 256,128,64), max iterations (50&ndash;1000)</li>
+        </ul>
+    </li>
+    <li><em>(Optional)</em> Adjust <strong>Max training pixels</strong> (default 10,000). Increase this if your ground truth has dense coverage &mdash; training sizes are log-spaced from 10 up to this value (e.g. 30,000 gives sizes 10, 30, 100, 300, 1000, 3000, 10000, 30000).</li>
+    <li>Click <strong>Run Evaluation</strong> &mdash; the server trains each classifier at each training size with 5 random repeats. An elapsed timer shows progress. Typical runtime is 60&ndash;120 seconds for 4 classifiers at the default max.</li>
+</ol>
+
+<h3>Learning Curve Chart</h3>
+
+<p>Results appear as a line chart in the centre panel:</p>
+
+<ul>
+    <li><strong>X axis</strong>: number of training pixels (log scale)</li>
+    <li><strong>Y axis</strong>: F1 score (0&ndash;1)</li>
+    <li>One line per classifier with shaded &plusmn;1 standard deviation bands</li>
+    <li>Use the <strong>Macro F1 / Weighted F1</strong> dropdown (top-right of chart) to switch metrics:
+        <ul>
+            <li><strong>Macro F1</strong> &mdash; unweighted average across classes (treats all classes equally)</li>
+            <li><strong>Weighted F1</strong> &mdash; weighted by class frequency (reflects overall accuracy better when classes are imbalanced)</li>
+        </ul>
+    </li>
+    <li>Expect F1 to rise from ~0.1 at 10 pixels to ~0.5&ndash;0.7 at 10,000 pixels</li>
+</ul>
+
+<h3>Confusion Matrix</h3>
+
+<p>After the evaluation finishes, the right panel shows a <strong>confusion matrix</strong> for the largest training size:</p>
+
+<ul>
+    <li>Rows are the <strong>true</strong> class, columns are the <strong>predicted</strong> class</li>
+    <li>Cells are colour-coded: diagonal (correct predictions) in blue, off-diagonal (errors) in red</li>
+    <li>Use the <strong>classifier dropdown</strong> to switch between classifiers</li>
+    <li>Click the <strong>%</strong> button to toggle between raw pixel counts and row-normalised percentages</li>
+    <li>A note at the top lists any classes that were excluded for having fewer than 50 labelled pixels</li>
+</ul>
+
+<h3>Exporting Results</h3>
+
+<p>Two export options are available in the confusion matrix header:</p>
+
+<ul>
+    <li><strong>Export Results</strong> &mdash; downloads the full evaluation data as a JSON file (training sizes, F1 scores, confusion matrices, class info)</li>
+    <li><strong>Download Models</strong> &mdash; downloads <code>.joblib</code> files for each trained classifier. After the evaluation, each classifier is retrained on <strong>all</strong> labelled data and saved. Each <code>.joblib</code> file contains a dict with:
+        <ul>
+            <li><code>model</code> &mdash; the fitted sklearn/xgboost classifier object</li>
+            <li><code>class_names</code> &mdash; list of class name strings (matching the prediction order)</li>
+        </ul>
+    </li>
+</ul>
+
+<p>You can load a downloaded model in Python:</p>
+<pre><code>import joblib
+d = joblib.load("rf_model.joblib")
+clf = d["model"]          # the trained classifier
+names = d["class_names"]  # e.g. ["Grassland", "Urban", "Woodland"]
+predictions = clf.predict(embeddings)  # embeddings shape: (N, 128)
+predicted_names = [names[i] for i in predictions]</code></pre>
+
+<h3>Interpreting Results</h3>
+
+<ul>
+    <li><strong>Steeper curves</strong> indicate embeddings that separate classes well even with few training samples</li>
+    <li><strong>RF and XGBoost</strong> typically outperform k-NN at small sample sizes</li>
+    <li><strong>MLP</strong> may need more training data to converge (it has more parameters to learn)</li>
+    <li>Classes with fewer than 50 labelled pixels are automatically excluded</li>
+    <li>At large training sizes, rare classes contribute fewer samples (capped at 80% of their count) to ensure test data remains available</li>
+</ul>
+
+<h3>Notes</h3>
+
+<ul>
+    <li>The evaluation uses the current viewport's embeddings (128D float32 vectors) as features and the shapefile's class labels as targets</li>
+    <li>All computation runs server-side; runtime scales with max training pixels and number of classifiers</li>
+    <li>Changing the class field updates the polygon hover tooltips on the satellite panel</li>
+    <li>Re-running with different hyperparameters or a different field does not require re-uploading the shapefile</li>
+    <li>Downloaded models are trained on <strong>all</strong> labelled pixels (not a train/test split), so they represent the best possible fit for deployment</li>
+</ul>
 
 <h2>Export Options</h2>
 
@@ -272,6 +571,9 @@
     <tr><td>Place marker</td><td>Single-click on any panel</td></tr>
     <tr><td>Similarity search</td><td>Double-click on any panel</td></tr>
     <tr><td>Adjust similarity</td><td>Drag the similarity slider</td></tr>
+    <tr><td>Drop pin (manual mode)</td><td>Ctrl+click (or double-click)</td></tr>
+    <tr><td>Draw polygon (manual mode)</td><td>Ctrl+double-click, then click vertices</td></tr>
+    <tr><td>Cancel polygon</td><td>Escape</td></tr>
     <tr><td>Rotate (PCA/UMAP)</td><td>Right-click drag</td></tr>
 </table>
 
