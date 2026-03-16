@@ -121,45 +121,80 @@
 
 <h2>The Viewer</h2>
 
-<h3>3-Panel Layout (Default)</h3>
+<p>The viewer has four modes, selected from the <strong>layout dropdown</strong> in the header. All modes share panels 1&ndash;3 across the top row and differ in the bottom row (panels 4&ndash;6). All six panels are synchronized &mdash; panning or zooming one pans/zooms all.</p>
+
+<h3>Explore (default)</h3>
+
+<p>A 3-panel overview for browsing embeddings and running similarity searches.</p>
 
 <table>
-    <tr><th>Panel</th><th>Content</th></tr>
-    <tr><td><strong>OSM</strong></td><td>OpenStreetMap geographic reference</td></tr>
-    <tr><td><strong>Satellite</strong></td><td>Esri or Google satellite imagery (toggle in header)</td></tr>
-    <tr><td><strong>Embeddings</strong></td><td>Tessera embedding visualization with year selector</td></tr>
+    <tr><th>Panel</th><th>Title</th><th>Content</th></tr>
+    <tr><td>1</td><td><strong>OpenStreetMap</strong></td><td>Geographic reference</td></tr>
+    <tr><td>2</td><td><strong>Satellite</strong></td><td>Esri or Google satellite imagery (toggle in header)</td></tr>
+    <tr><td>3</td><td><strong>Tessera Embeddings</strong></td><td>Embedding visualization with year selector</td></tr>
+    <tr><td>4</td><td><strong>PCA (Embedding Space)</strong></td><td>3D scatter plot of embeddings (PCA or UMAP)</td></tr>
+    <tr><td>5</td><td><strong>Change Heatmap</strong></td><td>Pixel-by-pixel temporal distance between Y1 and Y2</td></tr>
+    <tr><td>6</td><td><strong>Tessera Embeddings</strong></td><td>Second year's embeddings for comparison</td></tr>
 </table>
 
-<p>All three panels are synchronized &mdash; panning or zooming one pans/zooms all.</p>
+<p>Double-click any pixel to run a similarity search. Adjust the threshold slider and save results as labels.</p>
 
-<h3>6-Panel Layout (Advanced)</h3>
+<h3>Change Detection</h3>
 
-<p>Use the <strong>layout dropdown</strong> in the header to switch between modes:</p>
+<p>For comparing two years side by side and identifying areas of change.</p>
 
 <table>
-    <tr><th>Panel</th><th>Content</th></tr>
-    <tr><td>1. <strong>OSM</strong></td><td>OpenStreetMap reference</td></tr>
-    <tr><td>2. <strong>Satellite</strong></td><td>Satellite imagery with label painting</td></tr>
-    <tr><td>3. <strong>Embeddings Y1</strong></td><td>First year's embeddings with similarity search</td></tr>
-    <tr><td>4. <strong>UMAP / PCA</strong></td><td>Dimensionality reduction visualization</td></tr>
-    <tr><td>5. <strong>Heatmap</strong></td><td>Temporal distance heatmap (Y1 vs Y2)</td></tr>
-    <tr><td>6. <strong>Embeddings Y2</strong></td><td>Second year's embeddings for comparison</td></tr>
+    <tr><th>Panel</th><th>Title</th><th>Content</th></tr>
+    <tr><td>1</td><td><strong>OpenStreetMap</strong></td><td>Geographic reference</td></tr>
+    <tr><td>2</td><td><strong>Satellite</strong></td><td>Satellite imagery</td></tr>
+    <tr><td>3</td><td><strong>Tessera Embeddings</strong></td><td>Y1 embeddings</td></tr>
+    <tr><td>4</td><td><strong>Change Distribution</strong></td><td>Histogram and statistics of embedding distance between Y1 and Y2</td></tr>
+    <tr><td>5</td><td><strong>Change Heatmap</strong></td><td>Pixel-by-pixel temporal distance &mdash; bright = changed, dark = stable</td></tr>
+    <tr><td>6</td><td><strong>Tessera Embeddings</strong></td><td>Y2 embeddings</td></tr>
 </table>
 
-<p>Additional modes:</p>
+<p>Select different years for Y1 and Y2 using the year dropdowns. The heatmap and change distribution update automatically.</p>
+
+<h3>Labelling</h3>
+
+<p>For building label sets &mdash; either automatically via K-means or manually with pins and polygons.</p>
+
+<table>
+    <tr><th>Panel</th><th>Title</th><th>Content</th></tr>
+    <tr><td>1</td><td><strong>OpenStreetMap</strong></td><td>Geographic reference</td></tr>
+    <tr><td>2</td><td><strong>Satellite</strong> / <strong>Labels</strong></td><td>Satellite imagery with label overlays (titled "Labels" in manual sub-mode)</td></tr>
+    <tr><td>3</td><td><strong>Tessera Embeddings</strong></td><td>Embeddings with similarity search</td></tr>
+    <tr><td>4</td><td><strong>PCA (Embedding Space)</strong></td><td>3D scatter plot, colored by label classes in manual sub-mode</td></tr>
+    <tr><td>5</td><td><strong>Segmentation</strong> / <strong>Classification</strong></td><td>K-means overlay in auto-label; nearest-centroid classification in manual</td></tr>
+    <tr><td>6</td><td><strong>Auto-label</strong> / <strong>Manual Label</strong></td><td>Label management (see below)</td></tr>
+</table>
+
+<p>Panel 6 has a <strong>sub-mode dropdown</strong> at the top:</p>
+
 <ul>
-    <li><strong>Labelling</strong> &mdash; replaces panel 6 with a split view. Two sub-modes:
-        <ul>
-            <li><strong>Auto-label</strong> &mdash; K-means segmentation clusters (left) and promoted labels (right)</li>
-            <li><strong>Manual Label</strong> &mdash; hand-placed pins and polygons with per-class similarity thresholds (see <a href="#manual-labelling">Manual Labelling</a>)</li>
-        </ul>
-    </li>
-    <li><strong>Validation</strong> &mdash; replaces the bottom row with ground-truth upload controls and a learning-curve chart (see <a href="#validation">Validation</a>)</li>
+    <li><strong>Auto-label</strong> &mdash; left half shows K-means clusters with promote buttons; right half shows saved labels with timeline, visibility toggle, and rename</li>
+    <li><strong>Manual Label</strong> &mdash; set a label name/color, then Ctrl+click to pin or Ctrl+double-click to draw polygons. Per-class similarity sliders expand coverage. See <a href="#manual-labelling">Manual Labelling</a> for full details.</li>
 </ul>
+
+<h3>Validation</h3>
+
+<p>For evaluating classifier performance on expert ground-truth polygons.</p>
+
+<table>
+    <tr><th>Panel</th><th>Title</th><th>Content</th></tr>
+    <tr><td>1</td><td><strong>Classes</strong></td><td>Table of ground-truth classes with pixel counts</td></tr>
+    <tr><td>2</td><td><strong>Satellite</strong></td><td>Satellite imagery with ground-truth polygon outlines in red</td></tr>
+    <tr><td>3</td><td><strong>Evaluation year</strong></td><td>Embeddings for the year being evaluated</td></tr>
+    <tr><td>4</td><td><strong>Performance</strong></td><td>Learning-curve chart (F1 vs training pixels)</td></tr>
+    <tr><td>5</td><td><strong>Confusion Matrix</strong></td><td>Per-class confusion matrix for the largest training size</td></tr>
+    <tr><td>6</td><td><strong>Controls</strong></td><td>Shapefile upload, class field selector, classifier checkboxes, hyperparameters</td></tr>
+</table>
+
+<p>Upload a zipped shapefile, select a class field and classifiers, then click Run Evaluation. See <a href="#validation">Validation</a> for full details.</p>
 
 <h3>Switching Years</h3>
 
-<p>Use the <strong>year dropdown</strong> above the embedding panels to switch between processed years. In the 6-panel layout, Y1 and Y2 can be set to different years for temporal comparison.</p>
+<p>Use the <strong>year dropdown</strong> above the embedding panels to switch between processed years. In Change Detection and Explore modes, Y1 and Y2 can be set to different years for temporal comparison.</p>
 
 <h2>Similarity Search</h2>
 
@@ -354,7 +389,7 @@
     <li><strong>Labels persist</strong> across page reloads (stored in browser localStorage)</li>
 </ul>
 
-<h2>Segmentation (K-Means Clustering)</h2>
+<h2>Auto-Labelling (K-Means Clustering)</h2>
 
 <p>TEE can automatically segment the viewport into distinct clusters using K-means clustering on the embedding space. Segmentation clusters are <strong>temporary previews</strong> &mdash; they appear in a floating panel but are not saved until you promote them.</p>
 
