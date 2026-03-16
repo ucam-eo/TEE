@@ -983,8 +983,9 @@
 
         <!-- Panel 5: Distance Heatmap -->
         <div class="panel">
-            <div class="panel-header" style="background: #805AD5; color: white; padding: 8px; font-weight: 600; font-size: 14px;">
+            <div class="panel-header" style="background: #805AD5; color: white; padding: 8px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;">
                 <span id="panel5-title">Change Heatmap</span>
+                <button id="manual-classify-btn" style="display: none; margin-left: auto; padding: 3px 10px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="triggerManualClassification()">Classify</button>
             </div>
             <div id="map-heatmap" class="map"></div>
             <!-- Message when years are the same -->
@@ -2113,6 +2114,9 @@
             return localVectors.embeddings.slice(idx * 128, (idx + 1) * 128);
         }
 
+        // Pre-allocated distance buffer (reused across calls to avoid GC pressure)
+        let _distSqBuf = null;
+
         function localSearchSimilar(embedding, threshold) {
             if (!localVectors) return [];
             const gt = localVectors.metadata.geotransform;
@@ -2120,22 +2124,46 @@
             const dim = localVectors.dim;
             const emb = localVectors.embeddings;
             const coords = localVectors.coords;
-            const matches = [];
             const threshSq = threshold * threshold;
 
+            // Allocate or reuse distance buffer
+            if (!_distSqBuf || _distSqBuf.length < N) {
+                _distSqBuf = new Float32Array(N);
+            }
+            const distBuf = _distSqBuf;
+
+            // Tight distance computation — no object alloc in hot loop
+            // Process 4 dimensions at a time (loop unrolling for 128-dim)
+            const dim4 = dim & ~3; // round down to multiple of 4
             for (let i = 0; i < N; i++) {
-                let distSq = 0;
+                let s = 0;
                 const base = i * dim;
-                for (let d = 0; d < dim; d++) {
-                    const diff = emb[base + d] - embedding[d];
-                    distSq += diff * diff;
+                let d = 0;
+                for (; d < dim4; d += 4) {
+                    const d0 = emb[base + d]     - embedding[d];
+                    const d1 = emb[base + d + 1] - embedding[d + 1];
+                    const d2 = emb[base + d + 2] - embedding[d + 2];
+                    const d3 = emb[base + d + 3] - embedding[d + 3];
+                    s += d0*d0 + d1*d1 + d2*d2 + d3*d3;
                 }
-                if (distSq <= threshSq) {
+                for (; d < dim; d++) {
+                    const diff = emb[base + d] - embedding[d];
+                    s += diff * diff;
+                }
+                distBuf[i] = s;
+            }
+
+            // Collect matches — only allocate objects for hits
+            const matches = [];
+            for (let i = 0; i < N; i++) {
+                if (distBuf[i] <= threshSq) {
                     const px = coords[i * 2];
                     const py = coords[i * 2 + 1];
-                    const lon = gt.c + px * gt.a;
-                    const lat = gt.f + py * gt.e;
-                    matches.push({lat, lon, distance: Math.sqrt(distSq)});
+                    matches.push({
+                        lat: gt.f + py * gt.e,
+                        lon: gt.c + px * gt.a,
+                        distance: Math.sqrt(distBuf[i])
+                    });
                 }
             }
             return matches;
@@ -3708,14 +3736,14 @@
             labelMode = mode;
             const autoView = document.getElementById('panel6-autolabel-view');
             const manualView = document.getElementById('panel6-manual-view');
+            const classifyBtn = document.getElementById('manual-classify-btn');
             if (mode === 'manual') {
                 autoView.style.display = 'none';
                 manualView.style.display = 'flex';
                 document.getElementById('panel6-header-text').textContent = 'Manual Label';
                 document.getElementById('panel5-title').textContent = 'Classification';
+                if (classifyBtn) classifyBtn.style.display = '';
                 restoreManualLabelState();
-                // Show classification overlay on Panel 5
-                triggerManualClassification();
                 // Hide segmentation overlay if present
                 if (segOverlay && maps.heatmap && maps.heatmap.hasLayer(segOverlay)) {
                     maps.heatmap.removeLayer(segOverlay);
@@ -3725,6 +3753,7 @@
                 manualView.style.display = 'none';
                 document.getElementById('panel6-header-text').textContent = 'Auto-label';
                 document.getElementById('panel5-title').textContent = 'Segmentation';
+                if (classifyBtn) classifyBtn.style.display = 'none';
                 // Remove manual classification overlay
                 if (manualClassifyOverlay && maps.heatmap && maps.heatmap.hasLayer(manualClassifyOverlay)) {
                     maps.heatmap.removeLayer(manualClassifyOverlay);
@@ -3874,7 +3903,6 @@
             manualLabels.push(entry);
             saveManualLabelsToStorage();
             renderManualLabelsList();
-            triggerManualClassification();
         }
 
         function removeManualLabel(id) {
@@ -3888,7 +3916,6 @@
             manualLabels = manualLabels.filter(l => l.id !== id);
             saveManualLabelsToStorage();
             renderManualLabelsList();
-            triggerManualClassification();
         }
 
         function toggleManualLabelVisibility(id) {
@@ -3909,7 +3936,6 @@
             }
             saveManualLabelsToStorage();
             renderManualLabelsList();
-            triggerManualClassification();
         }
 
         function updateManualLabelThreshold(id, newThreshold) {
@@ -3944,7 +3970,6 @@
             }
             saveManualLabelsToStorage();
             renderManualLabelsList();
-            triggerManualClassification();
         }
 
         function updateManualLabelOverlay(label, matches) {
@@ -3992,7 +4017,7 @@
                     // Point/similarity: show slider
                     const hasSlider = label.embedding != null;
                     detailHtml = hasSlider ?
-                        `<input type="range" min="0" max="35" value="${label.threshold}" style="width: 60px; cursor: pointer; vertical-align: middle;" oninput="this.nextElementSibling.textContent=this.value" onchange="updateManualLabelThreshold(${label.id}, parseFloat(this.value))">
+                        `<input type="range" min="0" max="35" value="${label.threshold}" style="width: 60px; cursor: pointer; vertical-align: middle;" oninput="updateManualLabelThreshold(${label.id}, parseFloat(this.value)); this.nextElementSibling.textContent=this.value">
                          <span style="font-size: 10px; color: #666; min-width: 20px;">${label.threshold}</span>
                          <span style="font-size: 10px; color: #888;">${label.matchCount || 0}px</span>` : '';
                 }
@@ -4778,7 +4803,6 @@
             }
             saveManualLabelsToStorage();
             renderManualLabelsList();
-            triggerManualClassification();
             console.log(`[IMPORT] Imported ${count} features from GeoJSON`);
         }
 
@@ -4802,7 +4826,6 @@
                 count++;
             }
             rebuildManualOverlays();
-            triggerManualClassification();
             console.log(`[IMPORT] Imported ${count} labels from JSON`);
         }
 

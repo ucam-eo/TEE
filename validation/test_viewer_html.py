@@ -332,6 +332,8 @@ class TestExistingElements:
         "labelling-export-btn",
         "labelling-import-btn",
         "labelling-share-btn",
+        # Panel 5 classify button
+        "manual-classify-btn",
     ]
 
     @pytest.mark.parametrize("elem_id", IDS)

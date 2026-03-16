@@ -156,6 +156,7 @@ console.log('\n--- localSearchSimilar ---');
     // Construct localSearchSimilar with bound localVectors
     const fnSrc = extractFunction('localSearchSimilar', allJS);
     const wrapper = new Function('localVectors', `
+        let _distSqBuf = null;
         ${fnSrc}
         return localSearchSimilar;
     `);
@@ -368,7 +369,7 @@ console.log('\n--- setLabelMode references ---');
     assert(fnBody.includes('panel6-manual-view'), 'setLabelMode references manual view');
     assert(fnBody.includes("labelMode = mode"), 'setLabelMode sets labelMode');
     assert(fnBody.includes("localStorage.setItem"), 'setLabelMode persists to localStorage');
-    assert(fnBody.includes('triggerManualClassification'), 'setLabelMode triggers classification');
+    assert(fnBody.includes('manual-classify-btn'), 'setLabelMode toggles classify button');
 }
 
 
