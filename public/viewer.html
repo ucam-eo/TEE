@@ -4032,72 +4032,67 @@
                 return;
             }
 
-            // Group labels by name to compute per-class centroids and source embeddings
-            const classMap = {};  // name → {color, embeddings: [Float32Array, ...], thresholds: [number, ...]}
+            // Build flat list of label sources: each has an embedding, threshold², and class index
+            const classNames = [];   // unique label names
+            const classColorMap = {};
             for (const label of activeLabels) {
-                if (!classMap[label.name]) {
-                    classMap[label.name] = { color: label.color, embeddings: [], thresholds: [] };
+                if (!classColorMap[label.name]) {
+                    classColorMap[label.name] = label.color;
+                    classNames.push(label.name);
                 }
-                classMap[label.name].embeddings.push(new Float32Array(label.embedding));
-                classMap[label.name].thresholds.push(label.threshold || 0);
             }
-
-            const classNames = Object.keys(classMap);
             if (classNames.length === 0) return;
 
-            // Compute centroids per class
             const dim = localVectors.dim;
-            const centroids = {};
-            for (const name of classNames) {
-                const embs = classMap[name].embeddings;
-                const centroid = new Float32Array(dim);
-                for (const emb of embs) {
-                    for (let d = 0; d < dim; d++) centroid[d] += emb[d];
-                }
-                for (let d = 0; d < dim; d++) centroid[d] /= embs.length;
-                centroids[name] = centroid;
+            const sources = [];  // [{emb: Float32Array, threshSq: number, classIdx: number}]
+            for (const label of activeLabels) {
+                const classIdx = classNames.indexOf(label.name);
+                const t = label.threshold || 0;
+                sources.push({
+                    emb: new Float32Array(label.embedding),
+                    threshSq: t * t,
+                    classIdx
+                });
             }
 
             const N = localVectors.numVectors;
             const coords = localVectors.coords;
             const emb = localVectors.embeddings;
             const gt = localVectors.metadata.geotransform;
+            const numSources = sources.length;
 
-            // For each pixel, find nearest class centroid
-            // Build assignments array: index into classNames, -1 for unassigned
-            const assignments = new Int8Array(N);
-            const numClasses = classNames.length;
-            const centroidArrays = classNames.map(n => centroids[n]);
+            // For each pixel, check if within any source's threshold.
+            // If matched by multiple classes, assign to closest source.
+            // -1 = unassigned (no source within threshold).
+            const assignments = new Int8Array(N).fill(-1);
+
+            for (let i = 0; i < N; i++) {
+                let bestDist = Infinity;
+                let bestClass = -1;
+                const base = i * dim;
+                for (let s = 0; s < numSources; s++) {
+                    const src = sources[s];
+                    if (src.threshSq === 0) continue; // threshold 0 → no contribution
+                    let distSq = 0;
+                    for (let d = 0; d < dim; d++) {
+                        const diff = emb[base + d] - src.emb[d];
+                        distSq += diff * diff;
+                    }
+                    if (distSq <= src.threshSq && distSq < bestDist) {
+                        bestDist = distSq;
+                        bestClass = src.classIdx;
+                    }
+                }
+                assignments[i] = bestClass;
+            }
 
             // Pre-parse colors
             const classColors = classNames.map(n => {
-                const hex = classMap[n].color;
+                const hex = classColorMap[n];
                 return [parseInt(hex.slice(1,3), 16), parseInt(hex.slice(3,5), 16), parseInt(hex.slice(5,7), 16)];
             });
 
-            // First pass: find pixels within any label's similarity threshold
-            // Second pass: for remaining, assign by nearest centroid
-            // Combined approach: compute distance to all centroids, assign to nearest
-            for (let i = 0; i < N; i++) {
-                let minDist = Infinity;
-                let minClass = 0;
-                const base = i * dim;
-                for (let c = 0; c < numClasses; c++) {
-                    const cent = centroidArrays[c];
-                    let distSq = 0;
-                    for (let d = 0; d < dim; d++) {
-                        const diff = emb[base + d] - cent[d];
-                        distSq += diff * diff;
-                    }
-                    if (distSq < minDist) {
-                        minDist = distSq;
-                        minClass = c;
-                    }
-                }
-                assignments[i] = minClass;
-            }
-
-            // Render to offscreen canvas
+            // Render to offscreen canvas — only pixels with assignments >= 0
             let minPx = Infinity, maxPx = -Infinity, minPy = Infinity, maxPy = -Infinity;
             for (let i = 0; i < N; i++) {
                 const px = coords[i * 2], py = coords[i * 2 + 1];
@@ -4117,6 +4112,7 @@
             const data = imgData.data;
 
             for (let i = 0; i < N; i++) {
+                if (assignments[i] < 0) continue; // unmatched — leave transparent
                 const gx = coords[i * 2] - minPx;
                 const gy = coords[i * 2 + 1] - minPy;
                 const idx = (gy * width + gx) * 4;
