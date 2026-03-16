@@ -1511,6 +1511,10 @@
                     if (savedLabels.length > 0) {
                         recomputeLabelPixels();
                     }
+                    // Rebuild manual label overlays now that vectors are available
+                    if (labelMode === 'manual' && manualLabels.length > 0) {
+                        rebuildManualOverlays();
+                    }
                     // Enable segmentation controls and populate year dropdown
                     document.getElementById('seg-run-btn').disabled = false;
                     document.getElementById('seg-k-input').disabled = false;
@@ -4135,13 +4139,15 @@
 
         function updatePanel4ManualLabels() {
             if (!umapCanvasLayer) return;
-            // Check if any visible manual labels exist with cached matches
             const classNames = [...new Set(manualLabels.filter(l => l.visible).map(l => l.name))];
-            const hasAny = classNames.some(cn => _classMatchCache[cn] && _classMatchCache[cn].length > 0);
-            if (!hasAny) {
+            // No visible manual labels at all → clear to gray
+            if (classNames.length === 0) {
                 umapCanvasLayer.clearSimilarityHighlight();
                 return;
             }
+            // Cache not yet populated (vectors not loaded) → skip, don't clear
+            const hasAny = classNames.some(cn => _classMatchCache[cn] && _classMatchCache[cn].length > 0);
+            if (!hasAny) return;
             // Build colourMap across all visible classes
             const colourMap = new Map();
             for (const cn of classNames) {
@@ -4374,13 +4380,13 @@
                     const expanded = !collapsedClasses.has(className);
                     const arrow = expanded ? '\u25bc' : '\u25b6';
                     html += `<div class="manual-label-item" style="display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #eee; flex-wrap: wrap;">
+                        <span style="cursor: pointer; font-size: 14px; color: ${activateColor}; flex-shrink: 0;" onclick="activateManualClass('${jsName}')" title="Set as active label">&#9678;</span>
                         <span style="cursor: pointer; font-size: 16px; color: #555; user-select: none; width: 14px; text-align: center; flex-shrink: 0;" onclick="toggleClassExpand('${jsName}')" title="Expand/collapse ${labels.length} labels">${arrow}</span>
                         <div style="width: 14px; height: 14px; border-radius: 2px; background: ${first.color}; border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0;"></div>
                         ${codeTag}<span style="font-size: 12px; color: #333; font-weight: 500; min-width: 50px;">${className}</span>
                         ${sliderHtml}
                         <span data-class-count="${escapedName}" style="font-size: 10px; color: #888;">${pxCount}px</span>
                         ${hasEmbedding ? `<span style="cursor: pointer; font-size: 14px; color: #5500cc; margin-left: auto;" onclick="showManualLabelTimeline('${jsName}')" title="Show coverage timeline across years">&#128339;</span>` : `<span style="margin-left: auto;"></span>`}
-                        <span style="cursor: pointer; font-size: 14px; color: ${activateColor};" onclick="activateManualClass('${jsName}')" title="Set as active label">&#9678;</span>
                         <span style="cursor: pointer; font-size: 13px; color: #e53e3e;" onclick="removeManualClass('${jsName}')" title="Delete all ${labels.length} labels">&#x1f5d1;</span>
                         <span style="cursor: pointer; font-size: 13px;" onclick="toggleClassVisibility('${jsName}')" title="Toggle visibility">${visIcon}</span>
                     </div>`;
@@ -4403,12 +4409,12 @@
                     // Single-member class: flat row
                     const label = first;
                     html += `<div class="manual-label-item" data-id="${label.id}" style="display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #eee; flex-wrap: wrap;">
+                        <span style="cursor: pointer; font-size: 14px; color: ${activateColor}; flex-shrink: 0;" onclick="activateManualClass('${jsName}')" title="Set as active label">&#9678;</span>
                         <div style="width: 14px; height: 14px; border-radius: 2px; background: ${label.color}; border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0;"></div>
                         ${codeTag}<span style="font-size: 12px; color: #333; font-weight: 500; min-width: 50px;">${className}</span>
                         ${sliderHtml}
                         <span data-class-count="${escapedName}" style="font-size: 10px; color: #888;">${pxCount}px</span>
                         ${hasEmbedding ? `<span style="cursor: pointer; font-size: 14px; color: #5500cc; margin-left: auto;" onclick="showManualLabelTimeline('${jsName}')" title="Show coverage timeline across years">&#128339;</span>` : `<span style="margin-left: auto;"></span>`}
-                        <span style="cursor: pointer; font-size: 14px; color: ${activateColor};" onclick="activateManualClass('${jsName}')" title="Set as active label">&#9678;</span>
                         <span style="cursor: pointer; font-size: 13px; color: #e53e3e;" onclick="removeManualLabel(${label.id})" title="Delete">&#x1f5d1;</span>
                         <span style="cursor: pointer; font-size: 13px;" onclick="toggleClassVisibility('${jsName}')" title="Toggle visibility">${visIcon}</span>
                     </div>`;
@@ -4480,13 +4486,16 @@
                 }
             }
 
-            // Pass 2: nearest-centroid classification for remaining pixels
+            // Pass 2: threshold-gated nearest-centroid for remaining pixels
             const sources = [];
             for (const label of activeLabels) {
                 if (!label.embedding) continue;
+                const t = label.threshold || 0;
+                if (t <= 0) continue;
                 const classIdx = classNames.indexOf(label.name);
                 sources.push({
                     emb: new Float32Array(label.embedding),
+                    threshSq: t * t,
                     classIdx
                 });
             }
@@ -4505,7 +4514,7 @@
                             const diff = emb[base + d] - src.emb[d];
                             distSq += diff * diff;
                         }
-                        if (distSq < bestDist) {
+                        if (distSq <= src.threshSq && distSq < bestDist) {
                             bestDist = distSq;
                             bestClass = src.classIdx;
                         }
