@@ -115,6 +115,8 @@ WRITE_ENDPOINTS = {
     '/api/auth/change-password',
     '/api/downloads/embeddings',
     '/api/downloads/process',
+    '/api/evaluation/upload-shapefile',
+    '/api/evaluation/run',
 }
 
 
@@ -131,6 +133,8 @@ def _is_write_endpoint(path):
     if path.startswith('/api/viewports/') and path.endswith('/cancel-processing'):
         return True
     if path.startswith('/api/viewports/') and path.endswith('/add-years'):
+        return True
+    if path.startswith('/api/evaluation/download-model/'):
         return True
     return False
 
