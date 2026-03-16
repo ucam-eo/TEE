@@ -137,13 +137,6 @@
             background: #0056b3;
         }
 
-        #label-count {
-            padding: 8px 12px;
-            background: #333;
-            border-radius: 4px;
-            font-weight: 600;
-        }
-
         @keyframes pulse-warning {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
@@ -212,7 +205,6 @@
         /* Change Detection: grey out similarity + label bar, but keep Toggle Labels active */
         body.mode-change-detection #similarity-controls { opacity: 0.4 !important; pointer-events: none; }
         body.mode-change-detection #label-controls-bar { opacity: 0.4 !important; pointer-events: none; }
-        body.mode-change-detection #toggle-all-overlays { opacity: 1; pointer-events: auto; }
 
         /* Change Detection: Panel 4 shows change-stats table instead of PCA/UMAP */
         #map-container.mode-change-detection .panel:nth-child(4) { visibility: visible; }
@@ -791,10 +783,6 @@
 
         <!-- Label controls group (greyed out when vectors not ready) -->
         <div id="label-controls-bar" class="toolbar-group" style="opacity: 0.4;">
-            <div style="color: white; background: #333; padding: 4px 8px; border-radius: 3px; font-weight: 600; font-size: 13px;">Labels: <span id="label-count">0</span></div>
-            <button id="toggle-all-overlays" style="padding: 8px 12px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap;" disabled>
-                👁 Toggle Labels
-            </button>
             <div style="position: relative; display: inline-block;">
                 <button id="export-dropdown-btn" style="padding: 8px 12px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;" disabled>
                     Export &#9662;
@@ -1192,19 +1180,23 @@
                     <div id="manual-label-selector" style="padding: 8px; background: rgba(255,255,255,0.95); border-radius: 4px; margin: 4px 4px 0; display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
                         <span style="font-weight: 600; color: #333; font-size: 12px; white-space: nowrap;">Current label:</span>
                         <div id="manual-label-swatch" title="Click to choose colour" style="width: 18px; height: 18px; border-radius: 3px; border: 2px solid #666; background: #3cb44b; flex-shrink: 0; cursor: pointer;" onclick="document.getElementById('manual-label-color').click()"></div>
-                        <input type="color" id="manual-label-color" value="#3cb44b" style="display: none;" onchange="updateManualLabelColor(this.value)">
+                        <input type="color" id="manual-label-color" value="#3cb44b" style="position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none;" onchange="updateManualLabelColor(this.value)">
                         <input type="text" id="manual-label-name" placeholder="Label name..." value="" style="flex: 1; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; color: #333; min-width: 0;">
                         <button id="manual-label-set-btn" onclick="setCurrentManualLabel()" style="padding: 4px 10px; background: #667eea; color: white; border: none; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">Set</button>
                     </div>
                     <!-- Active label display -->
                     <div id="manual-active-label" style="display: none; padding: 4px 8px; margin: 2px 4px 0; background: rgba(255,255,255,0.9); border-radius: 4px; font-size: 12px; color: #333; flex-shrink: 0;">
-                        Active: <span id="manual-active-label-swatch" style="display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: middle; margin: 0 4px;"></span>
+                        Active: <span id="manual-active-label-swatch" title="Click to change colour" style="display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid #999; vertical-align: middle; margin: 0 4px; cursor: pointer;" onclick="document.getElementById('active-label-color-picker').click()"></span>
+                        <input type="color" id="active-label-color-picker" style="position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none;" onchange="updateActiveLabelColor(this.value)">
                         <strong id="manual-active-label-name"></strong>
-                        <span style="color: #999; margin-left: 8px; font-size: 11px;">Click or double-click to place a pin, then adjust similarity slider</span>
+                        <span style="color: #999; margin-left: 8px; font-size: 11px;">Ctrl+click to pin, Ctrl+dblclick to draw polygon</span>
                     </div>
                     <!-- Manual label rows -->
                     <div style="flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.95); border-radius: 4px; margin: 4px; overflow: hidden; min-height: 0;">
-                        <div style="padding: 6px 10px; font-weight: 600; color: #333; border-bottom: 1px solid #ddd; font-size: 13px;">Manual Labels</div>
+                        <div style="padding: 6px 10px; font-weight: 600; color: #333; border-bottom: 1px solid #ddd; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
+                            Manual Labels
+                            <button id="manual-hide-all-btn" onclick="toggleAllManualLabels()" style="padding: 2px 8px; background: #e8f0ff; border: 1px solid #b0d4ff; border-radius: 3px; cursor: pointer; font-size: 11px; color: #0066cc; font-weight: 600;">Hide All</button>
+                        </div>
                         <div id="manual-labels-list" style="flex: 1; overflow-y: auto; padding: 8px 20px 8px 10px;">
                             <div style="color: #999; font-size: 12px; padding: 10px; text-align: center;">Set a label above, then click to place pins. Use the similarity slider to expand.</div>
                         </div>
@@ -1513,7 +1505,7 @@
                     document.getElementById('similarity-controls').style.opacity = '1';
                     document.getElementById('label-controls-bar').style.opacity = '1';
                     // Enable label bar buttons
-                    ['toggle-all-overlays', 'export-dropdown-btn', 'import-labels-btn'].forEach(id => {
+                    ['export-dropdown-btn', 'import-labels-btn'].forEach(id => {
                         document.getElementById(id).disabled = false;
                     });
                     if (savedLabels.length > 0) {
@@ -2175,6 +2167,51 @@
             return matches;
         }
 
+        // Multi-embedding union search: matches if pixel is within threshold of ANY embedding
+        function localSearchSimilarMulti(embeddings, threshold) {
+            if (!localVectors || embeddings.length === 0) return [];
+            const gt = localVectors.metadata.geotransform;
+            const N = localVectors.numVectors;
+            const dim = localVectors.dim;
+            const emb = localVectors.embeddings;
+            const coords = localVectors.coords;
+            const threshSq = threshold * threshold;
+
+            const dim4 = dim & ~3;
+            const matches = [];
+            for (let i = 0; i < N; i++) {
+                const base = i * dim;
+                let hit = false;
+                for (let e = 0; e < embeddings.length; e++) {
+                    const qEmb = embeddings[e];
+                    let s = 0;
+                    let d = 0;
+                    for (; d < dim4; d += 4) {
+                        const d0 = emb[base + d]     - qEmb[d];
+                        const d1 = emb[base + d + 1] - qEmb[d + 1];
+                        const d2 = emb[base + d + 2] - qEmb[d + 2];
+                        const d3 = emb[base + d + 3] - qEmb[d + 3];
+                        s += d0*d0 + d1*d1 + d2*d2 + d3*d3;
+                    }
+                    for (; d < dim; d++) {
+                        const diff = emb[base + d] - qEmb[d];
+                        s += diff * diff;
+                    }
+                    if (s <= threshSq) { hit = true; break; }
+                }
+                if (hit) {
+                    const px = coords[i * 2];
+                    const py = coords[i * 2 + 1];
+                    matches.push({
+                        lat: gt.f + py * gt.e,
+                        lon: gt.c + px * gt.a,
+                        distance: 0
+                    });
+                }
+            }
+            return matches;
+        }
+
         // ===== Cross-Year Timeline Functions =====
 
         // Union search: single pass counts pixels matching ANY of the searches
@@ -2605,24 +2642,26 @@
                         clickTimeout = null;
                     }
 
-                    // Ctrl/Cmd+click in manual label mode: drop a pin
-                    if ((e.originalEvent.ctrlKey || e.originalEvent.metaKey) &&
-                        currentPanelMode === 'labelling' && labelMode === 'manual' &&
-                        !isPolygonDrawing) {
-                        handleManualPinDrop(e.latlng.lat, e.latlng.lng);
-                        return;
-                    }
+                    if (isPolygonDrawing) return;
 
-                    // Delay single-click action to allow dblclick to cancel it
+                    // Delay ALL single-click actions so dblclick can cancel them
+                    const lat = e.latlng.lat, lon = e.latlng.lng;
+                    const isCtrl = e.originalEvent.ctrlKey || e.originalEvent.metaKey;
                     clickTimeout = setTimeout(() => {
-                        if (!isPolygonDrawing) handleUnifiedClick(e.latlng.lat, e.latlng.lng);
                         clickTimeout = null;
+                        if (isPolygonDrawing) return;
+                        // Ctrl/Cmd+click in manual label mode: drop a pin
+                        if (isCtrl && currentPanelMode === 'labelling' && labelMode === 'manual') {
+                            handleManualPinDrop(lat, lon);
+                            return;
+                        }
+                        handleUnifiedClick(lat, lon);
                     }, 250);
                 });
 
                 // Double-click triggers similarity search
                 maps[panel].on('dblclick', function(e) {
-                    // Cancel pending single-click
+                    // Cancel pending single-click (pin drop or unified click)
                     if (clickTimeout) {
                         clearTimeout(clickTimeout);
                         clickTimeout = null;
@@ -2886,7 +2925,6 @@
             const oldTotal = Object.values(labels).reduce((sum, arr) => sum + arr.length, 0);
             const newTotal = Object.values(embeddingLabels).reduce((sum, arr) => sum + arr.length, 0);
             const total = oldTotal + newTotal;
-            document.getElementById('label-count').textContent = `Labels: ${total}`;
         }
 
         // Save labels to localStorage
@@ -3163,10 +3201,11 @@
                 return;
             }
 
-            const threshold = parseInt(document.getElementById('similarity-threshold').value);
-            const matches = localSearchSimilar(embedding, threshold);
+            // Inherit class threshold if other labels with same name exist
+            const classThreshold = getClassThreshold(currentManualLabel.name);
+            const threshold = classThreshold > 0 ? classThreshold : parseInt(document.getElementById('similarity-threshold').value);
 
-            console.log(`[MANUAL] Label "${currentManualLabel.name}" at ${lat.toFixed(4)},${lon.toFixed(4)}: ${matches.length} matches at threshold ${threshold}`);
+            console.log(`[MANUAL] Label "${currentManualLabel.name}" at ${lat.toFixed(4)},${lon.toFixed(4)}: threshold ${threshold}`);
 
             // Create manual label entry
             const entry = {
@@ -3177,12 +3216,12 @@
                 lat, lon,
                 embedding: Array.from(embedding),
                 threshold: threshold,
-                matchCount: matches.length
+                matchCount: 0
             };
             addManualLabel(entry);
 
-            // Show overlay on maps.rgb with the label's color
-            updateManualLabelOverlay(manualLabels[manualLabels.length - 1], matches);
+            // Rebuild class overlay (union of all embeddings in this class)
+            rebuildClassOverlay(currentManualLabel.name);
         }
 
         // Ctrl/Cmd+click: drop a colored pin at location
@@ -3201,6 +3240,9 @@
                 if (emb) embedding = Array.from(emb);
             }
 
+            // Inherit class threshold if other labels with same name exist
+            const classThreshold = getClassThreshold(currentManualLabel.name);
+
             const entry = {
                 name: currentManualLabel.name,
                 color: currentManualLabel.color,
@@ -3208,22 +3250,13 @@
                 type: 'point',
                 lat, lon,
                 embedding: embedding,
-                threshold: 0,
+                threshold: classThreshold,
                 matchCount: 0
             };
             addManualLabel(entry);
 
-            // Place a colored circle marker on maps.rgb via layerGroup
-            const pinMarker = L.circleMarker([lat, lon], {
-                radius: 6,
-                fillColor: currentManualLabel.color,
-                color: '#fff',
-                weight: 2,
-                fillOpacity: 0.9
-            });
-            const labelId = manualLabels[manualLabels.length - 1].id;
-            const lg = L.layerGroup([pinMarker]).addTo(maps.rgb);
-            manualLabelOverlays[labelId] = { layerGroup: lg, layer: null };
+            // Rebuild class overlay (includes pin marker + union similarity)
+            rebuildClassOverlay(currentManualLabel.name);
         }
 
         // Pick a contrastive color not already in use. Never offers yellow or black.
@@ -3577,8 +3610,6 @@
             Object.values(embeddingLabels).forEach(embs => {
                 totalEmbeddings += embs.length;
             });
-            document.getElementById('label-count').textContent =
-                `Labels: ${definedLabels.length} | Embeddings: ${totalEmbeddings}`;
         }
 
         // Export labels to JSON file
@@ -3770,8 +3801,9 @@
         let manualLabelIdCounter = 0;
         let manualClassifyDebounceTimer = null;
 
-        // Manual label overlay layers on maps.rgb (per-label DirectCanvasLayer instances)
-        let manualLabelOverlays = {};  // {labelId: {layer, layerGroup}}
+        // Manual label overlay layers on maps.rgb (per-class DirectCanvasLayer instances)
+        let manualClassOverlays = {};  // {className: {layerGroup, layer}}
+        let collapsedClasses = new Set();
 
         // Schema system state
         let activeSchema = null;        // null or {name, tree: [...]}
@@ -3834,6 +3866,8 @@
             document.getElementById('manual-active-label-swatch').style.background = color;
             document.getElementById('manual-active-label-name').textContent = name;
             document.getElementById('manual-label-swatch').style.background = color;
+            const acp = document.getElementById('active-label-color-picker');
+            if (acp) acp.value = color;
             localStorage.setItem('currentManualLabel', JSON.stringify(currentManualLabel));
         }
 
@@ -3843,7 +3877,30 @@
                 currentManualLabel.color = color;
                 document.getElementById('manual-active-label-swatch').style.background = color;
                 localStorage.setItem('currentManualLabel', JSON.stringify(currentManualLabel));
+                _syncClassColor(currentManualLabel.name, color);
             }
+        }
+
+        function updateActiveLabelColor(color) {
+            if (!currentManualLabel) return;
+            currentManualLabel.color = color;
+            document.getElementById('manual-active-label-swatch').style.background = color;
+            // Also update freetext swatch if present
+            const s = document.getElementById('manual-label-swatch');
+            if (s) s.style.background = color;
+            const c = document.getElementById('manual-label-color');
+            if (c) c.value = color;
+            localStorage.setItem('currentManualLabel', JSON.stringify(currentManualLabel));
+            _syncClassColor(currentManualLabel.name, color);
+        }
+
+        function _syncClassColor(className, color) {
+            const classLabels = getClassLabels(className);
+            if (classLabels.length === 0) return;
+            for (const label of classLabels) label.color = color;
+            saveManualLabelsToStorage();
+            rebuildClassOverlay(className);
+            renderManualLabelsList();
         }
 
         function restoreManualLabelState() {
@@ -3872,6 +3929,8 @@
                         document.getElementById('manual-active-label-swatch').style.background = currentManualLabel.color;
                         const nameText = currentManualLabel.code ? `[${currentManualLabel.code}] ${currentManualLabel.name}` : currentManualLabel.name;
                         document.getElementById('manual-active-label-name').textContent = nameText;
+                        const acp = document.getElementById('active-label-color-picker');
+                        if (acp) acp.value = currentManualLabel.color;
                     }
                 } catch(e) { /* ignore */ }
             }
@@ -3888,58 +3947,152 @@
             rebuildManualOverlays();
         }
 
-        function rebuildManualOverlays() {
-            // Clear all existing manual overlays
-            for (const id of Object.keys(manualLabelOverlays)) {
-                if (manualLabelOverlays[id].layerGroup && maps.rgb) {
-                    maps.rgb.removeLayer(manualLabelOverlays[id].layerGroup);
+        // --- Class-based grouping helpers ---
+
+        function getClassLabels(className) {
+            return manualLabels.filter(l => l.name === className);
+        }
+
+        function getClassThreshold(className) {
+            const existing = manualLabels.find(l => l.name === className && l.threshold > 0);
+            return existing ? existing.threshold : 0;
+        }
+
+        function rebuildClassOverlay(className) {
+            // Remove old overlay for this class
+            if (manualClassOverlays[className]) {
+                if (manualClassOverlays[className].layerGroup && maps.rgb) {
+                    maps.rgb.removeLayer(manualClassOverlays[className].layerGroup);
                 }
+                delete manualClassOverlays[className];
             }
-            manualLabelOverlays = {};
 
-            if (!localVectors || !maps.rgb) return;
+            const classLabels = getClassLabels(className);
+            if (classLabels.length === 0) return;
 
-            for (const label of manualLabels) {
+            const anyVisible = classLabels.some(l => l.visible);
+            if (!anyVisible || !maps.rgb) return;
+
+            const layerGroup = L.layerGroup();
+            const color = classLabels[0].color;
+            const threshold = classLabels[0].threshold || 0;
+            let totalMatchCount = 0;
+
+            // Add pin markers for point-type labels
+            for (const label of classLabels) {
                 if (!label.visible) continue;
-
-                if (label.embedding && label.threshold > 0) {
-                    // Similarity overlay (works for both point and similarity types)
-                    const emb = new Float32Array(label.embedding);
-                    const matches = localSearchSimilar(emb, label.threshold);
-                    label.matchCount = matches.length;
-                    updateManualLabelOverlay(label, matches);
-                } else if (label.type === 'polygon' && label.vertices) {
-                    // Re-rasterize polygon
-                    const gt = localVectors.metadata.geotransform;
-                    const pixVerts = label.vertices.map(v => [
-                        Math.round((v[1] - gt.c) / gt.a),
-                        Math.round((v[0] - gt.f) / gt.e)
-                    ]);
-                    const matches = rasterizePolygon(pixVerts);
-                    label.matchCount = matches.length;
-                    label.pixelCount = matches.length;
-                    updateManualLabelOverlay(label, matches);
-                    // Add polygon outline
+                if (label.type === 'point') {
+                    const pinMarker = L.circleMarker([label.lat, label.lon], {
+                        radius: 6, fillColor: label.color, color: '#fff', weight: 2, fillOpacity: 0.9
+                    });
+                    layerGroup.addLayer(pinMarker);
+                }
+                // Add polygon outlines
+                if (label.type === 'polygon' && label.vertices) {
                     const polyLatLngs = label.vertices.map(v => L.latLng(v[0], v[1]));
                     const polyline = L.polygon(polyLatLngs, {
                         color: label.color, fillColor: label.color,
                         fillOpacity: 0.15, weight: 2
                     });
-                    if (manualLabelOverlays[label.id] && manualLabelOverlays[label.id].layerGroup) {
-                        manualLabelOverlays[label.id].layerGroup.addLayer(polyline);
-                    }
-                } else if (label.type === 'point') {
-                    // Pin-only (no threshold yet)
-                    const pinMarker = L.circleMarker([label.lat, label.lon], {
-                        radius: 6,
-                        fillColor: label.color,
-                        color: '#fff',
-                        weight: 2,
-                        fillOpacity: 0.9
-                    });
-                    const lg = L.layerGroup([pinMarker]).addTo(maps.rgb);
-                    manualLabelOverlays[label.id] = { layerGroup: lg, layer: null };
+                    layerGroup.addLayer(polyline);
                 }
+            }
+
+            // Rasterize polygon interiors
+            if (localVectors) {
+                const gt = localVectors.metadata.geotransform;
+                for (const label of classLabels) {
+                    if (!label.visible || label.type !== 'polygon' || !label.vertices) continue;
+                    const pixVerts = label.vertices.map(v => [
+                        Math.round((v[1] - gt.c) / gt.a),
+                        Math.round((v[0] - gt.f) / gt.e)
+                    ]);
+                    const polyMatches = rasterizePolygon(pixVerts);
+                    label.pixelCount = polyMatches.length;
+                    if (polyMatches.length > 0) {
+                        const polyCanvas = new DirectCanvasLayer(polyMatches, maps.rgb, color);
+                        layerGroup.addLayer(polyCanvas);
+                        totalMatchCount += polyMatches.length;
+                    }
+                }
+            }
+
+            // Run similarity search with all class embeddings (union)
+            if (localVectors && threshold > 0) {
+                const embeddings = [];
+                for (const label of classLabels) {
+                    if (label.visible && label.embedding) {
+                        embeddings.push(new Float32Array(label.embedding));
+                    }
+                }
+                if (embeddings.length > 0) {
+                    const matches = localSearchSimilarMulti(embeddings, threshold);
+                    totalMatchCount += matches.length;
+                    if (matches.length > 0) {
+                        const canvasLayer = new DirectCanvasLayer(matches, maps.rgb, color);
+                        layerGroup.addLayer(canvasLayer);
+                    }
+                }
+            }
+
+            // Update matchCount on all labels in the class
+            for (const label of classLabels) {
+                label.matchCount = totalMatchCount;
+            }
+
+            layerGroup.addTo(maps.rgb);
+            manualClassOverlays[className] = { layerGroup, layer: null };
+        }
+
+        function toggleClassExpand(className) {
+            if (collapsedClasses.has(className)) {
+                collapsedClasses.delete(className);
+            } else {
+                collapsedClasses.add(className);
+            }
+            renderManualLabelsList();
+        }
+
+        function toggleClassVisibility(className) {
+            const classLabels = getClassLabels(className);
+            const anyVisible = classLabels.some(l => l.visible);
+            const newState = !anyVisible;
+            for (const label of classLabels) {
+                label.visible = newState;
+            }
+            if (manualClassOverlays[className]) {
+                if (newState) {
+                    rebuildClassOverlay(className);
+                } else {
+                    if (maps.rgb && manualClassOverlays[className].layerGroup) {
+                        maps.rgb.removeLayer(manualClassOverlays[className].layerGroup);
+                    }
+                    delete manualClassOverlays[className];
+                }
+            } else if (newState) {
+                rebuildClassOverlay(className);
+            }
+            saveManualLabelsToStorage();
+            renderManualLabelsList();
+        }
+
+        // --- Core CRUD and visibility ---
+
+        function rebuildManualOverlays() {
+            // Clear all existing class overlays
+            for (const name of Object.keys(manualClassOverlays)) {
+                if (manualClassOverlays[name].layerGroup && maps.rgb) {
+                    maps.rgb.removeLayer(manualClassOverlays[name].layerGroup);
+                }
+            }
+            manualClassOverlays = {};
+
+            if (!localVectors || !maps.rgb) return;
+
+            // Iterate unique class names
+            const classNames = [...new Set(manualLabels.map(l => l.name))];
+            for (const className of classNames) {
+                rebuildClassOverlay(className);
             }
         }
 
@@ -3957,52 +4110,77 @@
             renderManualLabelsList();
         }
 
-        function removeManualLabel(id) {
-            // Remove overlay for this label
-            if (manualLabelOverlays[id]) {
-                if (manualLabelOverlays[id].layerGroup) {
-                    maps.rgb.removeLayer(manualLabelOverlays[id].layerGroup);
+        function removeManualClass(className) {
+            if (manualClassOverlays[className]) {
+                if (manualClassOverlays[className].layerGroup && maps.rgb) {
+                    maps.rgb.removeLayer(manualClassOverlays[className].layerGroup);
                 }
-                delete manualLabelOverlays[id];
+                delete manualClassOverlays[className];
             }
-            manualLabels = manualLabels.filter(l => l.id !== id);
+            manualLabels = manualLabels.filter(l => l.name !== className);
             saveManualLabelsToStorage();
             renderManualLabelsList();
         }
 
-        function toggleManualLabelVisibility(id) {
+        function removeManualLabel(id) {
             const label = manualLabels.find(l => l.id === id);
-            if (!label) return;
-            label.visible = !label.visible;
-            // Toggle overlay visibility
-            if (manualLabelOverlays[id]) {
-                if (label.visible) {
-                    if (!maps.rgb.hasLayer(manualLabelOverlays[id].layerGroup)) {
-                        manualLabelOverlays[id].layerGroup.addTo(maps.rgb);
+            const className = label ? label.name : null;
+            manualLabels = manualLabels.filter(l => l.id !== id);
+            saveManualLabelsToStorage();
+            if (className) {
+                const remaining = getClassLabels(className);
+                if (remaining.length === 0) {
+                    if (manualClassOverlays[className]) {
+                        if (manualClassOverlays[className].layerGroup && maps.rgb) {
+                            maps.rgb.removeLayer(manualClassOverlays[className].layerGroup);
+                        }
+                        delete manualClassOverlays[className];
                     }
                 } else {
-                    if (maps.rgb.hasLayer(manualLabelOverlays[id].layerGroup)) {
-                        maps.rgb.removeLayer(manualLabelOverlays[id].layerGroup);
-                    }
+                    rebuildClassOverlay(className);
                 }
             }
+            renderManualLabelsList();
+        }
+
+        function toggleAllManualLabels() {
+            const allVisible = manualLabels.length > 0 && manualLabels.every(l => l.visible);
+            const newState = !allVisible;
+            for (const label of manualLabels) {
+                label.visible = newState;
+            }
+            for (const className of Object.keys(manualClassOverlays)) {
+                if (newState) {
+                    rebuildClassOverlay(className);
+                } else {
+                    if (manualClassOverlays[className].layerGroup && maps.rgb) {
+                        maps.rgb.removeLayer(manualClassOverlays[className].layerGroup);
+                    }
+                    delete manualClassOverlays[className];
+                }
+            }
+            // If showing and some classes had no overlay yet, rebuild
+            if (newState) rebuildManualOverlays();
             saveManualLabelsToStorage();
             renderManualLabelsList();
+            const btn = document.getElementById('manual-hide-all-btn');
+            if (btn) btn.textContent = newState ? 'Hide All' : 'Show All';
         }
 
         let _thresholdRAF = null;
         let _thresholdSaveTimer = null;
 
-        function updateManualLabelThreshold(id, newThreshold) {
-            const label = manualLabels.find(l => l.id === id);
-            if (!label) return;
-            label.threshold = newThreshold;
+        function updateManualClassThreshold(className, newThreshold) {
+            const classLabels = getClassLabels(className);
+            for (const label of classLabels) {
+                label.threshold = newThreshold;
+            }
 
             // Debounce the expensive search+overlay to one per animation frame
             if (_thresholdRAF) cancelAnimationFrame(_thresholdRAF);
             _thresholdRAF = requestAnimationFrame(() => {
                 _thresholdRAF = null;
-                _applyThreshold(label, newThreshold);
+                _applyClassThreshold(className, newThreshold);
             });
 
             // Debounce localStorage save until sliding stops (200ms)
@@ -4013,57 +4191,15 @@
             }, 200);
         }
 
-        function _applyThreshold(label, newThreshold) {
-            if (!label.embedding) return;
-            if (newThreshold > 0) {
-                const emb = new Float32Array(label.embedding);
-                const matches = localSearchSimilar(emb, newThreshold);
-                label.matchCount = matches.length;
-                updateManualLabelOverlay(label, matches);
-            } else {
-                // Threshold 0: remove similarity overlay, restore pin if point type
-                label.matchCount = 0;
-                if (manualLabelOverlays[label.id]) {
-                    if (manualLabelOverlays[label.id].layerGroup) {
-                        maps.rgb.removeLayer(manualLabelOverlays[label.id].layerGroup);
-                    }
-                    delete manualLabelOverlays[label.id];
-                }
-                if (label.type === 'point' && label.visible) {
-                    const pinMarker = L.circleMarker([label.lat, label.lon], {
-                        radius: 6, fillColor: label.color, color: '#fff', weight: 2, fillOpacity: 0.9
-                    });
-                    const lg = L.layerGroup([pinMarker]).addTo(maps.rgb);
-                    manualLabelOverlays[label.id] = { layerGroup: lg, layer: null };
-                }
+        function _applyClassThreshold(className, newThreshold) {
+            rebuildClassOverlay(className);
+            // Update px count in-place via data-class-count attribute
+            const countEl = document.querySelector(`[data-class-count="${CSS.escape(className)}"]`);
+            if (countEl) {
+                const classLabels = getClassLabels(className);
+                const count = classLabels.length > 0 ? (classLabels[0].matchCount || 0) : 0;
+                countEl.textContent = count + 'px';
             }
-            // Update match count in-place without rebuilding the DOM
-            const row = document.querySelector(`.manual-label-item[data-id="${label.id}"]`);
-            if (row) {
-                const countSpan = row.querySelector('span[style*="color: #888"]');
-                if (countSpan) countSpan.textContent = (label.matchCount || 0) + 'px';
-            }
-        }
-
-        function updateManualLabelOverlay(label, matches) {
-            // Remove old overlay
-            if (manualLabelOverlays[label.id]) {
-                if (manualLabelOverlays[label.id].layerGroup) {
-                    maps.rgb.removeLayer(manualLabelOverlays[label.id].layerGroup);
-                }
-            }
-
-            if (!label.visible || matches.length === 0) {
-                delete manualLabelOverlays[label.id];
-                return;
-            }
-
-            // Create colored canvas layer using DirectCanvasLayer pattern
-            const layerGroup = L.layerGroup();
-            const canvasLayer = new DirectCanvasLayer(matches, maps.rgb, label.color);
-            layerGroup.addLayer(canvasLayer);
-            layerGroup.addTo(maps.rgb);
-            manualLabelOverlays[label.id] = { layerGroup, layer: canvasLayer };
         }
 
         function renderManualLabelsList() {
@@ -4075,32 +4211,78 @@
                 return;
             }
 
-            let html = '';
+            // Group labels by class name, preserving order of first appearance
+            const classOrder = [];
+            const classMap = {};
             for (const label of manualLabels) {
-                const isPolygon = label.type === 'polygon';
-                const typeIcon = isPolygon ? '\u2b20' : '\ud83d\udccd';
-                const visIcon = label.visible ? '\ud83d\udc41' : '\ud83d\udc41\u200d\ud83d\udde8';
-                const codeTag = label.code ? `<code style="font-size: 10px; color: #667eea; background: #f0f0ff; padding: 1px 4px; border-radius: 2px; margin-right: 2px;">${label.code}</code>` : '';
+                if (!classMap[label.name]) {
+                    classMap[label.name] = [];
+                    classOrder.push(label.name);
+                }
+                classMap[label.name].push(label);
+            }
 
-                const hasSlider = label.embedding != null;
-                let detailHtml = '';
-                const pxCount = label.matchCount || label.pixelCount || 0;
-                if (hasSlider) {
-                    detailHtml = `<input type="range" min="0" max="35" value="${label.threshold}" style="width: 60px; cursor: pointer; vertical-align: middle;" oninput="updateManualLabelThreshold(${label.id}, parseFloat(this.value)); this.nextElementSibling.textContent=this.value">
-                         <span style="font-size: 10px; color: #666; min-width: 20px;">${label.threshold}</span>
-                         <span style="font-size: 10px; color: #888;">${pxCount}px</span>`;
-                } else {
-                    detailHtml = `<span style="font-size: 10px; color: #888;">${pxCount}px</span>`;
+            let html = '';
+            for (const className of classOrder) {
+                const labels = classMap[className];
+                const first = labels[0];
+                const isMulti = labels.length > 1;
+                const hasEmbedding = labels.some(l => l.embedding != null);
+                const pxCount = first.matchCount || 0;
+                const threshold = first.threshold || 0;
+                const codeTag = first.code ? `<code style="font-size: 10px; color: #667eea; background: #f0f0ff; padding: 1px 4px; border-radius: 2px; margin-right: 2px;">${first.code}</code>` : '';
+                const anyVisible = labels.some(l => l.visible);
+                const visIcon = anyVisible ? '\ud83d\udc41' : '\ud83d\udc41\u200d\ud83d\udde8';
+                const escapedName = className.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const jsName = className.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+                // Slider (shared for entire class)
+                let sliderHtml = '';
+                if (hasEmbedding) {
+                    sliderHtml = `<input type="range" min="0" max="35" value="${threshold}" style="width: 60px; cursor: pointer; vertical-align: middle;" oninput="updateManualClassThreshold('${jsName}', parseFloat(this.value)); this.nextElementSibling.textContent=this.value">
+                         <span style="font-size: 10px; color: #666; min-width: 20px;">${threshold}</span>`;
                 }
 
-                html += `<div class="manual-label-item" data-id="${label.id}" style="display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #eee; flex-wrap: wrap;">
-                    <div style="width: 14px; height: 14px; border-radius: 2px; background: ${label.color}; border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0;"></div>
-                    ${codeTag}<span style="font-size: 12px; color: #333; font-weight: 500; min-width: 50px;">${label.name}</span>
-                    ${detailHtml}
-                    <span style="font-size: 11px; color: #888;" title="${label.type}">${typeIcon}</span>
-                    <span style="cursor: pointer; font-size: 13px; margin-left: auto;" onclick="toggleManualLabelVisibility(${label.id})" title="Toggle visibility">${visIcon}</span>
-                    <span style="cursor: pointer; font-size: 13px; color: #e53e3e;" onclick="removeManualLabel(${label.id})" title="Delete">&times;</span>
-                </div>`;
+                if (isMulti) {
+                    // Multi-member class: collapsible group
+                    const expanded = !collapsedClasses.has(className);
+                    const arrow = expanded ? '\u25bc' : '\u25b6';
+                    html += `<div class="manual-label-item" style="display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #eee; flex-wrap: wrap;">
+                        <span style="cursor: pointer; font-size: 16px; color: #555; user-select: none; width: 14px; text-align: center; flex-shrink: 0;" onclick="toggleClassExpand('${jsName}')" title="Expand/collapse ${labels.length} labels">${arrow}</span>
+                        <div style="width: 14px; height: 14px; border-radius: 2px; background: ${first.color}; border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0;"></div>
+                        ${codeTag}<span style="font-size: 12px; color: #333; font-weight: 500; min-width: 50px;">${className}</span>
+                        ${sliderHtml}
+                        <span data-class-count="${escapedName}" style="font-size: 10px; color: #888;">${pxCount}px</span>
+                        <span style="cursor: pointer; font-size: 13px; color: #e53e3e; margin-left: auto;" onclick="removeManualClass('${jsName}')" title="Delete all ${labels.length} labels">&#x1f5d1;</span>
+                        <span style="cursor: pointer; font-size: 13px;" onclick="toggleClassVisibility('${jsName}')" title="Toggle visibility">${visIcon}</span>
+                    </div>`;
+
+                    // Expanded children
+                    if (expanded) {
+                        for (const label of labels) {
+                            const childIcon = label.type === 'polygon' ? '\u2b20' : '\ud83d\udccd';
+                            const childDetail = label.type === 'polygon'
+                                ? `polygon ${label.pixelCount || 0}px`
+                                : `${label.lat.toFixed(4)}, ${label.lon.toFixed(4)}`;
+                            html += `<div class="manual-label-item" data-id="${label.id}" style="display: flex; align-items: center; gap: 6px; padding: 2px 0 2px 24px; font-size: 11px; color: #666;">
+                                <span>${childIcon}</span>
+                                <span>${childDetail}</span>
+                                <span style="cursor: pointer; font-size: 13px; color: #e53e3e; margin-left: auto;" onclick="removeManualLabel(${label.id})" title="Delete">&times;</span>
+                            </div>`;
+                        }
+                    }
+                } else {
+                    // Single-member class: flat row
+                    const label = first;
+                    html += `<div class="manual-label-item" data-id="${label.id}" style="display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #eee; flex-wrap: wrap;">
+                        <div style="width: 14px; height: 14px; border-radius: 2px; background: ${label.color}; border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0;"></div>
+                        ${codeTag}<span style="font-size: 12px; color: #333; font-weight: 500; min-width: 50px;">${className}</span>
+                        ${sliderHtml}
+                        <span data-class-count="${escapedName}" style="font-size: 10px; color: #888;">${pxCount}px</span>
+                        <span style="cursor: pointer; font-size: 13px; color: #e53e3e; margin-left: auto;" onclick="removeManualLabel(${label.id})" title="Delete">&#x1f5d1;</span>
+                        <span style="cursor: pointer; font-size: 13px;" onclick="toggleClassVisibility('${jsName}')" title="Toggle visibility">${visIcon}</span>
+                    </div>`;
+                }
             }
             container.innerHTML = html;
         }
@@ -4413,7 +4595,7 @@
                 container.innerHTML = `
                     <span style="font-weight: 600; color: #333; font-size: 12px; white-space: nowrap;">Current label:</span>
                     <div id="manual-label-swatch" title="Click to choose colour" style="width: 18px; height: 18px; border-radius: 3px; border: 2px solid #666; background: ${currentManualLabel ? currentManualLabel.color : '#3cb44b'}; flex-shrink: 0; cursor: pointer;" onclick="document.getElementById('manual-label-color').click()"></div>
-                    <input type="color" id="manual-label-color" value="${currentManualLabel ? currentManualLabel.color : '#3cb44b'}" style="display: none;" onchange="updateManualLabelColor(this.value)">
+                    <input type="color" id="manual-label-color" value="${currentManualLabel ? currentManualLabel.color : '#3cb44b'}" style="position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none;" onchange="updateManualLabelColor(this.value)">
                     <input type="text" id="manual-label-name" placeholder="Label name..." value="${currentManualLabel ? currentManualLabel.name : ''}" style="flex: 1; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; color: #333; min-width: 0;">
                     <button id="manual-label-set-btn" onclick="setCurrentManualLabel()" style="padding: 4px 10px; background: #667eea; color: white; border: none; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">Set</button>
                 `;
@@ -4478,6 +4660,8 @@
                 activeEl.style.display = '';
                 document.getElementById('manual-active-label-swatch').style.background = color;
                 document.getElementById('manual-active-label-name').textContent = `${code ? '[' + code + '] ' : ''}${name}`;
+                const acp = document.getElementById('active-label-color-picker');
+                if (acp) acp.value = color;
             }
             localStorage.setItem('currentManualLabel', JSON.stringify(currentManualLabel));
             closeSchemaFloat();
@@ -4606,6 +4790,9 @@
             }
             for (let d = 0; d < dim; d++) centroid[d] /= matches.length;
 
+            // Inherit class threshold if other labels with same name exist
+            const classThreshold = getClassThreshold(currentManualLabel.name);
+
             const entry = {
                 name: currentManualLabel.name,
                 color: currentManualLabel.color,
@@ -4615,26 +4802,14 @@
                 lon: geoVertices.reduce((s, v) => s + v[1], 0) / geoVertices.length,
                 vertices: geoVertices,
                 embedding: Array.from(centroid),
-                threshold: 0,
+                threshold: classThreshold,
                 matchCount: matches.length,
                 pixelCount: matches.length
             };
             addManualLabel(entry);
 
-            // Show polygon overlay using DirectCanvasLayer
-            updateManualLabelOverlay(manualLabels[manualLabels.length - 1], matches);
-
-            // Draw polygon outline on maps.rgb
-            const labelId = manualLabels[manualLabels.length - 1].id;
-            const polyline = L.polygon(latLngs, {
-                color: currentManualLabel.color,
-                fillColor: currentManualLabel.color,
-                fillOpacity: 0.15,
-                weight: 2
-            });
-            if (manualLabelOverlays[labelId] && manualLabelOverlays[labelId].layerGroup) {
-                manualLabelOverlays[labelId].layerGroup.addLayer(polyline);
-            }
+            // Rebuild class overlay (union of all embeddings + polygon outlines)
+            rebuildClassOverlay(currentManualLabel.name);
         }
 
         function pointInPolygon(px, py, polygon) {
@@ -4910,7 +5085,7 @@
                         pixelCount: 0
                     };
                     addManualLabel(entry);
-                    // Rebuild overlay for polygon
+                    // Compute embedding for polygon
                     if (localVectors) {
                         const gt = localVectors.metadata.geotransform;
                         const pixVerts = geoVertices.map(v => [Math.round((v[1] - gt.c) / gt.a), Math.round((v[0] - gt.f) / gt.e)]);
@@ -4919,7 +5094,6 @@
                         lbl.matchCount = matches.length;
                         lbl.pixelCount = matches.length;
                         if (matches.length > 0) {
-                            // Compute centroid embedding
                             const dim = localVectors.dim;
                             const centroid = new Float32Array(dim);
                             for (const m of matches) {
@@ -4928,13 +5102,13 @@
                             }
                             for (let d = 0; d < dim; d++) centroid[d] /= matches.length;
                             lbl.embedding = Array.from(centroid);
-                            updateManualLabelOverlay(lbl, matches);
                         }
                     }
                     count++;
                 }
             }
             saveManualLabelsToStorage();
+            rebuildManualOverlays();
             renderManualLabelsList();
             console.log(`[IMPORT] Imported ${count} features from GeoJSON`);
         }
@@ -6937,18 +7111,6 @@
         }
 
         function updateLabelsUI() {
-            const countEl = document.getElementById('label-count');
-
-            // Group labels by name (for count)
-            const groups = new Map();
-            for (const label of savedLabels) {
-                if (!groups.has(label.name)) {
-                    groups.set(label.name, []);
-                }
-                groups.get(label.name).push(label);
-            }
-            countEl.textContent = groups.size;
-
             // Highlight export button and show warning when unexported labels exist
             const exportBtn = document.getElementById('export-dropdown-btn');
             const warning = document.getElementById('unsaved-labels-warning');
@@ -7655,7 +7817,6 @@
 
         // Attach event listeners to sidebar buttons and modal
         document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('toggle-all-overlays').addEventListener('click', toggleAllOverlays);
             // Export dropdown toggle
             document.getElementById('export-dropdown-btn').addEventListener('click', (e) => {
                 e.stopPropagation();

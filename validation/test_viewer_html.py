@@ -183,15 +183,21 @@ class TestRequiredFunctions:
         "saveManualLabelsToStorage",
         "addManualLabel",
         "removeManualLabel",
-        "toggleManualLabelVisibility",
-        "updateManualLabelThreshold",
-        "updateManualLabelOverlay",
         "renderManualLabelsList",
         "rebuildManualOverlays",
         "handleManualSimilaritySearch",
         "handleManualPinDrop",
         "triggerManualClassification",
         "renderManualClassification",
+        # Phase 3: Class-based grouping
+        "getClassLabels",
+        "getClassThreshold",
+        "localSearchSimilarMulti",
+        "rebuildClassOverlay",
+        "toggleClassExpand",
+        "toggleClassVisibility",
+        "updateManualClassThreshold",
+        "_applyClassThreshold",
         # Phase 2A: Schema system
         "loadSchema",
         "loadCustomSchema",
@@ -225,7 +231,8 @@ class TestStateVariables:
         ("manualClassifyOverlay", r"let manualClassifyOverlay\s*=\s*null"),
         ("manualLabelIdCounter", r"let manualLabelIdCounter\s*=\s*0"),
         ("manualClassifyDebounceTimer", r"let manualClassifyDebounceTimer\s*=\s*null"),
-        ("manualLabelOverlays", r"let manualLabelOverlays\s*=\s*\{\}"),
+        ("manualClassOverlays", r"let manualClassOverlays\s*=\s*\{\}"),
+        ("collapsedClasses", r"let collapsedClasses\s*=\s*new Set"),
     ]
 
     @pytest.mark.parametrize("name,pattern", VARS, ids=[v[0] for v in VARS])
@@ -257,7 +264,7 @@ class TestClickHandlers:
         assert "e.originalEvent.ctrlKey || e.originalEvent.metaKey" in script_text
 
     def test_ctrl_click_calls_pin_drop(self, script_text):
-        assert "handleManualPinDrop(e.latlng.lat, e.latlng.lng)" in script_text
+        assert "handleManualPinDrop(lat, lon)" in script_text
 
     def test_dblclick_dispatches_pin_in_manual(self, script_text):
         # handleSimilaritySearch should drop a pin in manual label mode

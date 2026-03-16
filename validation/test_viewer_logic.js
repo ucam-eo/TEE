@@ -185,6 +185,52 @@ console.log('\n--- localSearchSimilar ---');
 
 
 // ──────────────────────────────────────────
+// Test 4b: localSearchSimilarMulti correctness
+// ──────────────────────────────────────────
+console.log('\n--- localSearchSimilarMulti ---');
+{
+    // 3 vectors of dim=4, on a 3x1 grid at pixel coords (0,0), (1,0), (2,0)
+    const dim = 4;
+    const N = 3;
+    const embeddings = new Float32Array([
+        1,0,0,0,   // vec 0: unit x
+        0,1,0,0,   // vec 1: unit y
+        0,0,1,0,   // vec 2: unit z
+    ]);
+    const coords = new Int32Array([0,0, 1,0, 2,0]);
+    const metadata = { geotransform: { c: -1.0, a: 0.01, f: 52.0, e: -0.01 } };
+    const gridLookup = { minX: 0, minY: 0, w: 3, h: 1 };
+
+    const fnSrc = extractFunction('localSearchSimilarMulti', allJS);
+    const wrapper = new Function('localVectors', `
+        ${fnSrc}
+        return localSearchSimilarMulti;
+    `);
+    const localSearchSimilarMulti = wrapper({ embeddings, coords, metadata, gridLookup, numVectors: N, dim });
+
+    // Two query embeddings: unit x and unit y
+    const q1 = new Float32Array([1,0,0,0]);
+    const q2 = new Float32Array([0,1,0,0]);
+
+    // Threshold 0: exact matches for x (vec0) and y (vec1), not z (vec2)
+    const exact = localSearchSimilarMulti([q1, q2], 0);
+    assertEq(exact.length, 2, 'multi exact: 2 matches (unit x + unit y)');
+
+    // Threshold 2: all 3 vectors within distance sqrt(2) of at least one query
+    const wide = localSearchSimilarMulti([q1, q2], 2);
+    assertEq(wide.length, 3, 'multi wide: all 3 match');
+
+    // Single embedding behaves like localSearchSimilar
+    const single = localSearchSimilarMulti([q1], 0);
+    assertEq(single.length, 1, 'multi single: 1 exact match for unit x');
+
+    // Empty embeddings returns empty
+    const empty = localSearchSimilarMulti([], 10);
+    assertEq(empty.length, 0, 'multi empty: 0 matches');
+}
+
+
+// ──────────────────────────────────────────
 // Test 5: localExtract correctness
 // ──────────────────────────────────────────
 console.log('\n--- localExtract ---');
