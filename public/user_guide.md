@@ -175,9 +175,17 @@ The **Active** bar appears below, showing the current label name, color, and ins
 
 The polygon:
 - Appears as a colored filled shape on the satellite panel
-- The centroid's embedding is extracted automatically
 - All pixels inside the polygon are rasterized at 10m resolution and included in the class overlay
 - Is listed in the Manual Labels panel with a "polygon" type indicator
+
+#### Polygon Search Mode
+
+When the active label bar is visible, two radio buttons let you choose how the polygon embedding is used for similarity expansion:
+
+- **Mean** (default) — computes the average of all pixel embeddings inside the polygon and stores a single centroid embedding. The similarity slider then finds pixels similar to this average. Best for homogeneous areas where you want to capture the "typical" signature.
+- **Union** — stores every individual pixel embedding inside the polygon. The similarity slider finds pixels similar to *any* of those embeddings. Best for heterogeneous areas (e.g. a polygon spanning mixed habitat types) where you want to capture the full variety.
+
+The mode is chosen *before* drawing the polygon and is saved per label entry. Mean mode is faster for large polygons; union mode can be slow if the polygon contains thousands of pixels, but gives broader coverage.
 
 ### Understanding Label Entries
 
@@ -199,7 +207,7 @@ Each row displays:
 
 ### Similarity Threshold
 
-Each label entry has a **similarity slider** that controls how far the embedding search extends from the pin/polygon centroid:
+Each label entry has a **similarity slider** that controls how far the embedding search extends from the pin or polygon embedding (centroid in mean mode, or any pixel in union mode):
 
 - **Threshold = 0** — only the pin pixel itself (or polygon interior) is shown
 - **Higher threshold** — more pixels are included based on embedding distance

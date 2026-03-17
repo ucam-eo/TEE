@@ -1200,6 +1200,11 @@
                         <input type="color" id="active-label-color-picker" style="position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none;" onchange="updateActiveLabelColor(this.value)">
                         <strong id="manual-active-label-name"></strong>
                         <span style="color: #999; margin-left: 8px; font-size: 11px;">Ctrl+click to pin, Ctrl+dblclick to draw polygon</span>
+                        <span id="polygon-mode-radios" style="margin-left: 12px; font-size: 11px; color: #666; white-space: nowrap;">
+                            Polygon:
+                            <label style="cursor:pointer; margin-left: 3px;" title="Similarity to the average embedding of all pixels in the polygon"><input type="radio" name="polygon-search-mode" value="mean" checked onchange="polygonSearchMode=this.value" style="vertical-align: -1px; margin: 0 2px 0 0;">Mean</label>
+                            <label style="cursor:pointer; margin-left: 4px;" title="Similarity to any individual pixel embedding in the polygon"><input type="radio" name="polygon-search-mode" value="union" onchange="polygonSearchMode=this.value" style="vertical-align: -1px; margin: 0 2px 0 0;">Union</label>
+                        </span>
                     </div>
                     <!-- Manual label rows -->
                     <div style="flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.95); border-radius: 4px; margin: 4px; overflow: hidden; min-height: 0;">
@@ -3909,6 +3914,7 @@
         let polygonDrawHandler = null;   // L.Draw.Polygon instance
         let isPolygonDrawing = false;
         let drawnItems = null;           // L.FeatureGroup for drawn polygons
+        let polygonSearchMode = 'mean';  // 'mean' or 'union'
 
         function setLabelMode(mode) {
             labelMode = mode;
@@ -4121,7 +4127,11 @@
             if (localVectors && threshold > 0) {
                 const embeddings = [];
                 for (const label of classLabels) {
-                    if (label.visible && label.embedding) {
+                    if (!label.visible) continue;
+                    // Union-mode polygon: use all stored individual embeddings
+                    if (label.embeddings && label.embeddings.length > 0) {
+                        for (const e of label.embeddings) embeddings.push(new Float32Array(e));
+                    } else if (label.embedding) {
                         embeddings.push(new Float32Array(label.embedding));
                     }
                 }
@@ -4940,17 +4950,7 @@
                 return;
             }
 
-            // Compute centroid embedding from interior pixels
             const dim = localVectors.dim;
-            const centroid = new Float32Array(dim);
-            for (const m of matches) {
-                const idx = m.vectorIndex;
-                const base = idx * dim;
-                for (let d = 0; d < dim; d++) {
-                    centroid[d] += localVectors.embeddings[base + d];
-                }
-            }
-            for (let d = 0; d < dim; d++) centroid[d] /= matches.length;
 
             // Inherit class threshold if other labels with same name exist
             const classThreshold = getClassThreshold(currentManualLabel.name);
@@ -4963,11 +4963,35 @@
                 lat: geoVertices.reduce((s, v) => s + v[0], 0) / geoVertices.length,
                 lon: geoVertices.reduce((s, v) => s + v[1], 0) / geoVertices.length,
                 vertices: geoVertices,
-                embedding: Array.from(centroid),
                 threshold: classThreshold,
                 matchCount: matches.length,
-                pixelCount: matches.length
+                pixelCount: matches.length,
+                polygonMode: polygonSearchMode
             };
+
+            if (polygonSearchMode === 'union') {
+                // Store all individual pixel embeddings for union search
+                const allEmbs = [];
+                for (const m of matches) {
+                    const emb = new Float32Array(dim);
+                    const base = m.vectorIndex * dim;
+                    for (let d = 0; d < dim; d++) emb[d] = localVectors.embeddings[base + d];
+                    allEmbs.push(Array.from(emb));
+                }
+                entry.embeddings = allEmbs;
+                entry.embedding = null;
+            } else {
+                // Compute centroid (mean) embedding from interior pixels
+                const centroid = new Float32Array(dim);
+                for (const m of matches) {
+                    const base = m.vectorIndex * dim;
+                    for (let d = 0; d < dim; d++) centroid[d] += localVectors.embeddings[base + d];
+                }
+                for (let d = 0; d < dim; d++) centroid[d] /= matches.length;
+                entry.embedding = Array.from(centroid);
+                entry.embeddings = null;
+            }
+
             addManualLabel(entry);
 
             // Rebuild class overlay (union of all embeddings + polygon outlines)
@@ -5072,6 +5096,8 @@
                         lon: l.lon,
                         vertices: l.vertices || null,
                         embedding: l.embedding || null,
+                        embeddings: l.embeddings || null,
+                        polygonMode: l.polygonMode || null,
                         threshold: l.threshold,
                         matchCount: l.matchCount,
                         pixelCount: l.pixelCount || null
@@ -9593,16 +9619,9 @@
             renderCMTable(names2[0], data);
         }
 
-        function renderCMTable(classifierName, data) {
-            const cm = data.confusion_matrices[classifierName];
-            const labels = data.confusion_matrix_labels || [];
-            const scroll = document.querySelector('#val-cm-panel .cm-scroll');
-            if (!cm) { scroll.innerHTML = '<div class="cm-placeholder">No data.</div>'; return; }
-
+        function buildCMTableHTML(cm, labels, showPct, forPopup) {
             const n = cm.length;
-            const compact = n > 8;
-
-            // Compute row sums for normalization
+            const compact = n > 8 && !forPopup;
             const rowSums = cm.map(row => row.reduce((a, b) => a + b, 0));
 
             let html = '<div class="cm-wrapper">';
@@ -9627,7 +9646,6 @@
                     const pct = rowSums[i] > 0 ? (count / rowSums[i] * 100) : 0;
                     const isDiag = i === j;
 
-                    // Color: green on diagonal, red off-diagonal, intensity by row-normalized %
                     const intensity = Math.min(pct / 100, 1);
                     let bg;
                     if (isDiag) {
@@ -9638,19 +9656,150 @@
 
                     const textColor = intensity > 0.5 ? '#fff' : '#ccc';
                     const tip = `Actual: ${rowLabel}\nPredicted: ${labels[j] || `C${j}`}\n${count} (${pct.toFixed(1)}%)`;
-                    const cellText = cmShowPct ? `${pct.toFixed(1)}%` : count;
+                    const cellText = showPct ? `${pct.toFixed(1)}%` : count;
 
                     if (compact) {
                         html += `<td style="background:${bg};color:${textColor}" data-tip="${tip}"><span class="cm-count">${cellText}</span></td>`;
                     } else {
-                        const secondary = cmShowPct ? count : `${pct.toFixed(1)}%`;
+                        const secondary = showPct ? count : `${pct.toFixed(1)}%`;
                         html += `<td style="background:${bg};color:${textColor}" data-tip="${tip}"><span class="cm-count">${cellText}</span><span class="cm-pct">${secondary}</span></td>`;
                     }
                 }
                 html += '</tr>';
             }
             html += '</table></div>';
-            scroll.innerHTML = html;
+            return html;
+        }
+
+        let cmPopupWindow = null;
+
+        function openCMPopup(classifierName, data) {
+            const cm = data.confusion_matrices[classifierName];
+            const labels = data.confusion_matrix_labels || [];
+            if (!cm) return;
+
+            const n = cm.length;
+            const winW = Math.min(200 + n * 52, screen.width - 100);
+            const winH = Math.min(200 + n * 48, screen.height - 100);
+
+            if (cmPopupWindow && !cmPopupWindow.closed) cmPopupWindow.close();
+            cmPopupWindow = window.open('', 'cm_popup', `width=${winW},height=${winH},resizable=yes,scrollbars=yes`);
+            if (!cmPopupWindow) return;
+
+            const tableHTML = buildCMTableHTML(cm, labels, cmShowPct, true);
+            const classifierLabel = CLASSIFIER_LABELS[classifierName] || classifierName;
+
+            cmPopupWindow.document.write(`<!DOCTYPE html>
+<html><head><title>Confusion Matrix — ${classifierLabel}</title>
+<style>
+  body { margin: 0; padding: 16px; background: #1a1a2e; color: #ccc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .cm-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .cm-toolbar h3 { margin: 0; color: #e0e0e0; font-size: 15px; }
+  .cm-toolbar select, .cm-toolbar button { background: #2a2a3e; color: #ccc; border: 1px solid #444; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+  .cm-toolbar button:hover, .cm-toolbar select:hover { background: #3a3a4e; }
+  .cm-toolbar button.active { background: #4a90d9; color: #fff; }
+  .cm-scroll-area { overflow: auto; max-height: calc(100vh - 70px); }
+  .cm-wrapper { position: relative; display: inline-block; padding: 24px 0 0 24px; }
+  .cm-axis-label { position: absolute; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+  .cm-axis-label.y-axis { left: 0; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: 0 0; }
+  .cm-axis-label.x-axis { top: 6px; left: 50%; transform: translateX(-50%); }
+  .confusion-matrix { border-collapse: collapse; }
+  .confusion-matrix th, .confusion-matrix td { padding: 4px; text-align: center; font-size: 12px; min-width: 44px; height: 40px; }
+  .confusion-matrix th { color: #aaa; font-weight: normal; }
+  .cm-col-label { max-width: 50px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; writing-mode: vertical-lr; transform: rotate(180deg); height: 70px !important; vertical-align: bottom; }
+  .cm-row-label { text-align: right !important; padding-right: 8px !important; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .confusion-matrix td { cursor: default; position: relative; border: 1px solid rgba(255,255,255,0.05); }
+  .confusion-matrix td[data-tip]:hover::after { content: attr(data-tip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: #222; color: #fff; padding: 6px 10px; border-radius: 4px; font-size: 12px; white-space: pre; z-index: 100; pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  .cm-count { display: block; font-weight: 600; font-size: 13px; }
+  .cm-pct { display: block; font-size: 10px; opacity: 0.7; }
+</style></head><body>
+<div class="cm-toolbar">
+  <h3>Confusion Matrix</h3>
+  <select id="popup-cm-select"></select>
+  <button id="popup-cm-toggle">${cmShowPct ? '#' : '%'}</button>
+</div>
+<div class="cm-scroll-area" id="popup-cm-scroll">${tableHTML}</div>
+`+ '<scr' + 'ipt>' + `
+  const cmData = ${JSON.stringify(data.confusion_matrices)};
+  const cmLabels = ${JSON.stringify(labels)};
+  const classifierLabels = ${JSON.stringify(CLASSIFIER_LABELS)};
+  let showPct = ${cmShowPct};
+
+  const sel = document.getElementById('popup-cm-select');
+  Object.keys(cmData).forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n;
+    opt.textContent = classifierLabels[n] || n;
+    if (n === '${classifierName}') opt.selected = true;
+    sel.appendChild(opt);
+  });
+  sel.style.display = Object.keys(cmData).length > 1 ? '' : 'none';
+
+  function refresh() {
+    const name = sel.value;
+    const cm = cmData[name];
+    if (!cm) return;
+    document.getElementById('popup-cm-scroll').innerHTML = buildTable(cm, cmLabels, showPct);
+  }
+
+  sel.onchange = refresh;
+  document.getElementById('popup-cm-toggle').onclick = function() {
+    showPct = !showPct;
+    this.textContent = showPct ? '#' : '%';
+    this.classList.toggle('active', showPct);
+    refresh();
+  };
+
+  function buildTable(cm, labels, showPct) {
+    const n = cm.length;
+    const rowSums = cm.map(r => r.reduce((a,b) => a+b, 0));
+    let h = '<div class="cm-wrapper">';
+    h += '<div class="cm-axis-label y-axis">Actual</div>';
+    h += '<div class="cm-axis-label x-axis">Predicted</div>';
+    h += '<table class="confusion-matrix"><tr><th></th>';
+    for (let j=0;j<n;j++) { const l=labels[j]||'C'+j; h+='<th class="cm-col-label" title="'+l+'">'+l+'</th>'; }
+    h += '</tr>';
+    for (let i=0;i<n;i++) {
+      const rl=labels[i]||'C'+i;
+      h += '<tr><th class="cm-row-label" title="'+rl+'">'+rl+'</th>';
+      for (let j=0;j<n;j++) {
+        const c=cm[i][j], pct=rowSums[i]>0?(c/rowSums[i]*100):0, isDiag=i===j;
+        const int=Math.min(pct/100,1);
+        let bg; if(isDiag){bg='rgba(40,167,69,'+(0.15+int*0.7)+')';}else{bg=int>0.01?'rgba(220,53,69,'+(0.1+int*0.6)+')':'transparent';}
+        const tc=int>0.5?'#fff':'#ccc';
+        const tip='Actual: '+rl+'\\nPredicted: '+(labels[j]||'C'+j)+'\\n'+c+' ('+pct.toFixed(1)+'%)';
+        const ct=showPct?pct.toFixed(1)+'%':c;
+        const sec=showPct?c:pct.toFixed(1)+'%';
+        h+='<td style="background:'+bg+';color:'+tc+'" data-tip="'+tip+'"><span class="cm-count">'+ct+'</span><span class="cm-pct">'+sec+'</span></td>';
+      }
+      h += '</tr>';
+    }
+    h += '</table></div>';
+    return h;
+  }
+` + '</scr' + 'ipt></body></html>');
+            cmPopupWindow.document.close();
+        }
+
+        function renderCMTable(classifierName, data) {
+            const cm = data.confusion_matrices[classifierName];
+            const labels = data.confusion_matrix_labels || [];
+            const scroll = document.querySelector('#val-cm-panel .cm-scroll');
+            if (!cm) { scroll.innerHTML = '<div class="cm-placeholder">No data.</div>'; return; }
+
+            const n = cm.length;
+
+            // Large matrices: show a button that opens a popup window
+            if (n > 10) {
+                scroll.innerHTML = `<div style="display:flex; align-items:center; justify-content:center; height:100%;">
+                    <button onclick="openCMPopup('${classifierName}', lastEvalData)"
+                        style="padding:12px 28px; font-size:15px; background:#4a90d9; color:#fff; border:none; border-radius:6px; cursor:pointer;">
+                        Confusion Matrix (${n}&times;${n})
+                    </button></div>`;
+                return;
+            }
+
+            scroll.innerHTML = buildCMTableHTML(cm, labels, cmShowPct, false);
         }
 
         function exportEvalResults() {
