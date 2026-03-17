@@ -734,15 +734,15 @@
     <div id="controls">
         <!-- Navigation group -->
         <div class="toolbar-group">
-            <button style="background: #6c757d; color: white; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 13px;" onclick="window.location.href = '/'">← Back</button>
-            <button id="status-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;">ℹ️ Status</button>
+            <button style="background: #6c757d; color: white; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 13px;" onclick="window.location.href = '/'" title="Return to viewport list">← Back</button>
+            <button id="status-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;" title="Show viewport status and info">ℹ️ Status</button>
             <select id="panel-layout-select" onchange="setPanelLayout(this.value)" style="padding: 5px 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 13px; cursor: pointer;">
                 <option value="explore">Explore</option>
                 <option value="change-detection">Change Detection</option>
                 <option value="labelling">Labelling</option>
                 <option value="validation">Validation</option>
             </select>
-            <button id="help-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;">? Help</button>
+            <button id="help-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;" title="Show keyboard shortcuts and help">? Help</button>
         </div>
 
         <!-- Similarity group (greyed out when vectors not ready) -->
@@ -750,31 +750,31 @@
             <label style="margin: 0; font-size: 13px;">Similarity:</label>
             <input type="range" id="similarity-threshold" min="0" max="35" value="12" style="width: 120px; cursor: pointer;" oninput="updateThresholdDisplay()" disabled />
             <span id="threshold-display" style="background: rgba(0,0,0,0.3); padding: 3px 7px; border-radius: 3px; font-size: 13px; min-width: 36px; text-align: center;">12.00</span>
-            <button id="clear-similarity-btn" style="padding: 4px 10px; background: #555; color: white; border: 1px solid #666; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;" onclick="clearExplorerResults(); clearCrossPanelMarkers();">Clear</button>
+            <button id="clear-similarity-btn" style="padding: 4px 10px; background: #555; color: white; border: 1px solid #666; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;" onclick="clearExplorerResults(); clearCrossPanelMarkers();" title="Clear similarity search results">Clear</button>
         </div>
 
         <!-- Label controls group (greyed out when vectors not ready) -->
         <div id="label-controls-bar" class="toolbar-group" style="opacity: 0.4;">
-            <button id="val-export-btn" style="padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap;">Export Results</button>
+            <button id="val-export-btn" style="padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap;" title="Export evaluation results">Export Results</button>
             <button id="val-download-btn" style="padding: 8px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap;" disabled title="Run evaluation first">Download Models</button>
         </div>
 
         <!-- Labelling toolbar (only visible in labelling mode) -->
         <div class="toolbar-group labelling-toolbar" style="gap: 4px;">
             <div style="position: relative; display: inline-block;">
-                <button id="schema-dropdown-btn" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" onclick="toggleSchemaDropdown()">Schema &#9662;</button>
+                <button id="schema-dropdown-btn" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" onclick="toggleSchemaDropdown()" title="Choose a label schema">Schema &#9662;</button>
                 <div id="schema-dropdown-menu" style="display: none; position: absolute; top: 100%; left: 0; min-width: 180px; background: #2a2a2a; border: 1px solid #555; border-radius: 4px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); overflow: hidden;">
-                    <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="loadSchema('none')">None (freetext)</button>
-                    <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="loadSchema('ukhab')">UKHab v2</button>
-                    <label style="display: block; padding: 8px 12px; font-size: 12px; color: #ccc; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'">
+                    <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="loadSchema('none')" title="Free-text label names">None (freetext)</button>
+                    <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="loadSchema('ukhab')" title="UK Habitat Classification v2">UKHab v2</button>
+                    <label style="display: block; padding: 8px 12px; font-size: 12px; color: #ccc; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" title="Load custom schema from file">
                         Custom (upload) <input type="file" accept=".json,.txt,.csv" style="display: none;" onchange="loadCustomSchema(this.files[0]); this.value='';">
                     </label>
                 </div>
             </div>
-            <button id="labelling-export-btn" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" onclick="exportManualLabels()">Export</button>
-            <button id="labelling-import-btn" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" onclick="document.getElementById('labelling-import-file').click()">Import</button>
+            <button id="labelling-export-btn" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" onclick="exportManualLabels()" title="Export labels">Export</button>
+            <button id="labelling-import-btn" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" onclick="document.getElementById('labelling-import-file').click()" title="Import labels from file">Import</button>
             <input type="file" id="labelling-import-file" accept=".json,.geojson,.zip" style="display: none;" onchange="importManualLabels(this.files[0]); this.value='';">
-            <button id="labelling-share-btn" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; opacity: 0.5; cursor: not-allowed;" disabled>Share</button>
+            <button id="labelling-share-btn" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; opacity: 0.5; cursor: not-allowed;" disabled title="Share labels (coming soon)">Share</button>
         </div>
 
         <!-- Lat/Lon Coordinates -->
@@ -783,16 +783,16 @@
         <!-- User / Logout -->
         <div id="userInfo" style="display:none; align-items:center; gap:8px; font-size:13px;">
             <span id="userName" style="opacity:0.7;"></span>
-            <button style="background:#555; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer; font-size:12px;" onclick="showChangePassword()">Password</button>
-            <button style="background:#6c757d; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer; font-size:12px;" onclick="doLogout()">Logout</button>
+            <button style="background:#555; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer; font-size:12px;" onclick="showChangePassword()" title="Change your password">Password</button>
+            <button style="background:#6c757d; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer; font-size:12px;" onclick="doLogout()" title="Log out of your account">Logout</button>
         </div>
-        <button id="loginBtn" style="display:none; background:#667eea; color:white; padding:6px 14px; border:none; border-radius:4px; cursor:pointer; font-size:12px; font-weight:600;" onclick="window.location.href='/login.html'">Login</button>
+        <button id="loginBtn" style="display:none; background:#667eea; color:white; padding:6px 14px; border:none; border-radius:4px; cursor:pointer; font-size:12px; font-weight:600;" onclick="window.location.href='/login.html'" title="Log in to your account">Login</button>
 
         <!-- Help Popup -->
         <div id="help-popup" style="position: absolute; top: 100%; right: 10px; width: 340px; background: rgba(255,255,255,0.98); backdrop-filter: blur(10px); border-radius: 8px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 999; font-size: 13px; display: none;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <div style="font-weight: 600; font-size: 14px; color: #333;">Quick Reference</div>
-                <button id="help-close-btn" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px; color: #666;">&#10005;</button>
+                <button id="help-close-btn" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px; color: #666;" title="Close">&#10005;</button>
             </div>
             <div style="line-height: 1.8; color: #444;">
                 <div><b>Left-click</b> anywhere to locate a point</div>
@@ -802,6 +802,7 @@
                 <div><b>Right-click drag</b> to rotate (PCA/UMAP pane)</div>
                 <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;"><b>Segmentation:</b> Use the <b>k</b> slider and <b>Segment</b> to auto-cluster the viewport. Clusters are temporary previews. Click <b>&#8599;</b> on a cluster row to promote it to a permanent saved label, or <b>Promote All</b> to save them all. Promoted labels support timeline analysis and re-matching.</div>
                 <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">Use <b>Export</b> / <b>Import</b> to save labels to your desktop or load them from a local file.</div>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; text-align: center;"><a href="/user_guide.html" target="_blank" style="color: #667eea; text-decoration: none; font-weight: 600;">Open full User Guide &rarr;</a></div>
             </div>
         </div>
 
@@ -809,7 +810,7 @@
         <div id="status-popup" style="position: absolute; top: 100%; right: 10px; width: 320px; background: rgba(255,255,255,0.98); backdrop-filter: blur(10px); border-radius: 8px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 999; font-size: 12px; display: none;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <div style="font-weight: 600; font-size: 14px;">📊 Viewport Status</div>
-                <button id="status-close-btn" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px;">✕</button>
+                <button id="status-close-btn" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px;" title="Close">✕</button>
             </div>
             <div id="status-content" style="font-family: monospace; font-size: 11px; line-height: 1.6; color: #333;">
                 Loading...
@@ -820,7 +821,7 @@
         <div id="labels-details-panel" style="position: fixed; bottom: 40px; right: 20px; width: 300px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-radius: 8px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 2000; max-height: 450px; overflow-y: auto; font-size: 12px; display: none;">
             <div id="labels-panel-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; cursor: grab;">
                 <div style="font-weight: 600;">📋 Labels</div>
-                <button id="labels-close-btn" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px;">✕</button>
+                <button id="labels-close-btn" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px;" title="Close">✕</button>
             </div>
             <div id="labels-list" style="max-height: 350px; overflow-y: auto;">
                 <!-- Labels will be rendered here -->
@@ -831,12 +832,12 @@
         <div id="seg-results-panel" style="position: fixed; bottom: 40px; right: 20px; width: 320px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-radius: 8px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 999; max-height: 500px; overflow-y: auto; font-size: 12px; display: none;">
             <div id="seg-panel-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; cursor: grab;">
                 <div><span style="font-weight: 600; font-size: 14px; color: #333;">Segmentation</span> <span style="font-size: 11px; color: #999; font-weight: 400;">(temporary preview)</span></div>
-                <button id="seg-panel-close-btn" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px; color: #666;">&#10005;</button>
+                <button id="seg-panel-close-btn" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px; color: #666;" title="Close">&#10005;</button>
             </div>
             <div id="seg-cluster-list">
                 <!-- Cluster rows rendered by JS -->
             </div>
-            <button id="seg-export-btn" style="margin-top: 12px; width: 100%; padding: 8px; background: #667eea; color: white; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 13px;">Promote All to Labels</button>
+            <button id="seg-export-btn" style="margin-top: 12px; width: 100%; padding: 8px; background: #667eea; color: white; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 13px;" title="Save all clusters as labels">Promote All to Labels</button>
         </div>
     </div>
 
@@ -923,7 +924,7 @@
         <div class="panel">
             <div class="panel-header" style="background: #805AD5; color: white; padding: 8px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;">
                 <span id="panel5-title">Change Heatmap</span>
-                <button id="manual-classify-btn" style="display: none; margin-left: auto; padding: 3px 10px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="triggerManualClassification()">Classify</button>
+                <button id="manual-classify-btn" style="display: none; margin-left: auto; padding: 3px 10px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="triggerManualClassification()" title="Run pixel classification">Classify</button>
             </div>
             <div id="map-heatmap" class="map"></div>
             <!-- Message when years are the same -->
@@ -939,7 +940,7 @@
                     <h3>Confusion Matrix</h3>
                     <select id="cm-classifier-select"></select>
                     <button class="cm-toggle-pct" id="cm-toggle-pct" title="Toggle counts / percentages">%</button>
-                    <button class="cm-export-btn" id="cm-export-btn">Export Results</button>
+                    <button class="cm-export-btn" id="cm-export-btn" title="Export evaluation results">Export Results</button>
                     <button class="cm-download-btn" id="cm-download-btn" disabled title="Run evaluation first">Download Models</button>
                 </div>
                 <div id="cm-filtered-note" style="display:none; padding: 0 16px 4px; font-size: 11px; color: #e8a838;"></div>
@@ -979,7 +980,7 @@
                         <label class="val-clf-header">
                             <input type="checkbox" value="nn">
                             <span>k-NN</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
                         </label>
                         <div class="val-params">
                             <label>k <input type="number" data-clf="nn" data-param="n_neighbors" value="5" min="1" max="50"></label>
@@ -991,7 +992,7 @@
                         <label class="val-clf-header">
                             <input type="checkbox" value="rf">
                             <span>Random Forest</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
                         </label>
                         <div class="val-params">
                             <label>Trees <input type="number" data-clf="rf" data-param="n_estimators" value="100" min="10" max="500" step="10"></label>
@@ -1003,7 +1004,7 @@
                         <label class="val-clf-header">
                             <input type="checkbox" value="xgboost">
                             <span>XGBoost</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
                         </label>
                         <div class="val-params">
                             <label>Rounds <input type="number" data-clf="xgboost" data-param="n_estimators" value="100" min="10" max="500" step="10"></label>
@@ -1016,7 +1017,7 @@
                         <label class="val-clf-header">
                             <input type="checkbox" value="mlp">
                             <span>MLP</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
                         </label>
                         <div class="val-params">
                             <label>Layers <select data-clf="mlp" data-param="hidden_layers">
@@ -1032,7 +1033,7 @@
                         <label class="val-clf-header">
                             <input type="checkbox" value="spatial_mlp">
                             <span>Spatial MLP (3×3)</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
                         </label>
                         <div class="val-params">
                             <label>Layers <select data-clf="spatial_mlp" data-param="hidden_layers">
@@ -1048,7 +1049,7 @@
                         <label class="val-clf-header">
                             <input type="checkbox" value="spatial_mlp_5x5">
                             <span>Spatial MLP (5×5)</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
                         </label>
                         <div class="val-params">
                             <label>Layers <select data-clf="spatial_mlp_5x5" data-param="hidden_layers">
@@ -1064,7 +1065,7 @@
                         <label class="val-clf-header">
                             <input type="checkbox" value="unet" id="unet-checkbox">
                             <span>U-Net (GPU)</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')">...</button>
+                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
                         </label>
                         <div class="val-params">
                             <label>Epochs <input type="number" data-clf="unet" data-param="epochs" value="50" min="5" max="500" step="5"></label>
@@ -1087,8 +1088,8 @@
                     style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
 
                 <div style="display:flex; gap:6px;">
-                    <button id="val-run-btn" class="validation-run-btn" disabled style="flex:1;">Run Evaluation</button>
-                    <button id="val-cancel-btn" class="validation-run-btn" style="flex:0 0 auto; background:#dc3545; display:none;">Cancel</button>
+                    <button id="val-run-btn" class="validation-run-btn" disabled style="flex:1;" title="Run evaluation on selected classifiers">Run Evaluation</button>
+                    <button id="val-cancel-btn" class="validation-run-btn" style="flex:0 0 auto; background:#dc3545; display:none;" title="Cancel running evaluation">Cancel</button>
                 </div>
                 <div id="val-status" class="validation-status"></div>
             </div>
@@ -1107,23 +1108,23 @@
                     <div style="flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.95); border-radius: 4px; margin: 4px; overflow: hidden;">
                         <div id="seg-controls" style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #e8ecf0; border-bottom: 1px solid #ddd; opacity: 0.4; flex-wrap: wrap;">
                             <span style="font-size: 12px; color: #333; font-weight: 600;">k=</span>
-                            <button id="seg-k-minus" style="padding: 2px 7px; background: #555; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 13px; font-weight: 700; line-height: 1;" disabled>&#8722;</button>
+                            <button id="seg-k-minus" style="padding: 2px 7px; background: #555; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 13px; font-weight: 700; line-height: 1;" disabled title="Fewer clusters">&#8722;</button>
                             <input type="number" id="seg-k-input" value="5" min="2" max="20" style="width: 38px; padding: 2px 4px; border: 1px solid #aaa; border-radius: 3px; font-size: 12px; text-align: center; color: #333; background: #fff;" disabled>
-                            <button id="seg-k-plus" style="padding: 2px 7px; background: #555; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 13px; font-weight: 700; line-height: 1;" disabled>+</button>
-                            <button id="seg-run-btn" style="padding: 4px 8px; background: #38a169; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" disabled>Go</button>
-                            <button id="seg-clear-btn" style="display:none; padding: 4px 8px; background: #e53e3e; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;">Clear</button>
+                            <button id="seg-k-plus" style="padding: 2px 7px; background: #555; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 13px; font-weight: 700; line-height: 1;" disabled title="More clusters">+</button>
+                            <button id="seg-run-btn" style="padding: 4px 8px; background: #38a169; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" disabled title="Run auto-labelling">Go</button>
+                            <button id="seg-clear-btn" style="display:none; padding: 4px 8px; background: #e53e3e; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" title="Clear auto-label results">Clear</button>
                         </div>
                         <div style="padding: 8px 10px; font-weight: 600; color: #333; border-bottom: 1px solid #ddd; font-size: 13px;">Clusters</div>
                         <div id="panel6-seg-list" style="flex: 1; overflow-y: auto; padding: 8px 10px;">
                             <div style="color: #999; padding: 10px; text-align: center;">Run segmentation to see clusters</div>
                         </div>
-                        <button id="panel6-promote-all-btn" style="margin: 8px; padding: 8px; background: #667eea; color: white; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 12px; display: none;">Promote All &#8594;</button>
+                        <button id="panel6-promote-all-btn" style="margin: 8px; padding: 8px; background: #667eea; color: white; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 12px; display: none;" title="Save all clusters as labels">Promote All &#8594;</button>
                     </div>
                     <!-- Right: Labels -->
                     <div style="flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.95); border-radius: 4px; margin: 4px; overflow: hidden;">
                         <div style="padding: 6px 10px; font-weight: 600; color: #333; border-bottom: 1px solid #ddd; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
                             <span>Labels</span>
-                            <button id="panel6-toggle-all-btn" style="padding: 2px 8px; background: #e8f0ff; border: 1px solid #b0d4ff; border-radius: 3px; cursor: pointer; font-size: 11px; color: #0066cc; font-weight: 600; display: none;">Hide All</button>
+                            <button id="panel6-toggle-all-btn" style="padding: 2px 8px; background: #e8f0ff; border: 1px solid #b0d4ff; border-radius: 3px; cursor: pointer; font-size: 11px; color: #0066cc; font-weight: 600; display: none;" title="Toggle all label overlays">Hide All</button>
                         </div>
                         <div id="panel6-labels-list" style="flex: 1; overflow-y: auto; padding: 8px 10px;">
                             <div style="color: #999; font-size: 12px; padding: 10px;">No labels yet.</div>
@@ -1138,7 +1139,7 @@
                         <div id="manual-label-swatch" title="Click to choose colour" style="width: 18px; height: 18px; border-radius: 3px; border: 2px solid #666; background: #3cb44b; flex-shrink: 0; cursor: pointer;" onclick="document.getElementById('manual-label-color').click()"></div>
                         <input type="color" id="manual-label-color" value="#3cb44b" style="position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none;" onchange="updateManualLabelColor(this.value)">
                         <input type="text" id="manual-label-name" placeholder="Label name..." value="" style="flex: 1; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; color: #333; min-width: 0;">
-                        <button id="manual-label-set-btn" onclick="setCurrentManualLabel()" style="padding: 4px 10px; background: #667eea; color: white; border: none; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">Set</button>
+                        <button id="manual-label-set-btn" onclick="setCurrentManualLabel()" style="padding: 4px 10px; background: #667eea; color: white; border: none; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;" title="Create this label">Set</button>
                     </div>
                     <!-- Active label display -->
                     <div id="manual-active-label" style="display: none; padding: 4px 8px; margin: 2px 4px 0; background: rgba(255,255,255,0.9); border-radius: 4px; font-size: 12px; color: #333; flex-shrink: 0;">
@@ -1156,7 +1157,7 @@
                     <div style="flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.95); border-radius: 4px; margin: 4px; overflow: hidden; min-height: 0;">
                         <div style="padding: 6px 10px; font-weight: 600; color: #333; border-bottom: 1px solid #ddd; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
                             Manual Labels
-                            <button id="manual-hide-all-btn" onclick="toggleAllManualLabels()" style="padding: 2px 8px; background: #e8f0ff; border: 1px solid #b0d4ff; border-radius: 3px; cursor: pointer; font-size: 11px; color: #0066cc; font-weight: 600;">Hide All</button>
+                            <button id="manual-hide-all-btn" onclick="toggleAllManualLabels()" style="padding: 2px 8px; background: #e8f0ff; border: 1px solid #b0d4ff; border-radius: 3px; cursor: pointer; font-size: 11px; color: #0066cc; font-weight: 600;" title="Toggle all label overlays">Hide All</button>
                         </div>
                         <div id="manual-labels-list" style="flex: 1; overflow-y: auto; padding: 8px 20px 8px 10px;">
                             <div style="color: #999; font-size: 12px; padding: 10px; text-align: center;">Set a label above, then click to place pins. Use the similarity slider to expand.</div>
@@ -1193,7 +1194,7 @@
                     <div id="timeline-color-swatch" style="width: 18px; height: 18px; border-radius: 3px; border: 1px solid #999;"></div>
                     <h2 id="timeline-label-name" style="margin: 0; color: #333; font-size: 18px;"></h2>
                 </div>
-                <button id="timeline-close-btn" style="padding: 5px 12px; background: #ccc; color: #333; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 14px;">Close</button>
+                <button id="timeline-close-btn" style="padding: 5px 12px; background: #ccc; color: #333; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 14px;" title="Close timeline">Close</button>
             </div>
             <div id="timeline-progress" style="display: none; margin-bottom: 16px; padding: 10px; background: #f0f4ff; border-radius: 4px; color: #333; font-size: 13px;">Loading...</div>
             <div id="timeline-results" style="display: none;">
@@ -1216,7 +1217,7 @@
     <div id="schema-float" style="display:none; position:fixed; top:80px; left:20px; width:280px; max-height:60vh; background:rgba(255,255,255,0.97); backdrop-filter:blur(10px); border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.3); z-index:2001; font-size:12px; overflow:hidden; display:none;">
         <div id="schema-float-header" style="cursor:grab; display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#667eea; color:white; border-radius:8px 8px 0 0; font-weight:600; font-size:13px; user-select:none;">
             <span id="schema-float-title">Schema</span>
-            <button onclick="closeSchemaFloat()" style="background:none; border:none; color:white; cursor:pointer; font-size:16px; padding:0; width:20px; height:20px; line-height:20px;">&#10005;</button>
+            <button onclick="closeSchemaFloat()" style="background:none; border:none; color:white; cursor:pointer; font-size:16px; padding:0; width:20px; height:20px; line-height:20px;" title="Close schema browser">&#10005;</button>
         </div>
         <div style="padding:8px;">
             <input type="text" id="schema-float-search" placeholder="Search habitats..." style="width:100%; padding:5px 8px; border:1px solid #ccc; border-radius:3px; font-size:11px; color:#333; box-sizing:border-box; margin-bottom:6px;" oninput="filterSchemaTree(this.value)">
@@ -1248,8 +1249,8 @@
             </div>
 
             <div style="display: flex; gap: 10px;">
-                <button id="label-save-confirm" style="flex: 1; padding: 10px; background: #667eea; color: white; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 14px;">Save Label</button>
-                <button id="label-save-cancel" style="flex: 1; padding: 10px; background: #ccc; color: #333; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 14px;">Cancel</button>
+                <button id="label-save-confirm" style="flex: 1; padding: 10px; background: #667eea; color: white; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 14px;" title="Confirm and save this label">Save Label</button>
+                <button id="label-save-cancel" style="flex: 1; padding: 10px; background: #ccc; color: #333; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 14px;" title="Cancel without saving">Cancel</button>
             </div>
         </div>
     </div>
@@ -4737,7 +4738,7 @@
                     <div id="manual-label-swatch" title="Click to choose colour" style="width: 18px; height: 18px; border-radius: 3px; border: 2px solid #666; background: ${currentManualLabel ? currentManualLabel.color : '#3cb44b'}; flex-shrink: 0; cursor: pointer;" onclick="document.getElementById('manual-label-color').click()"></div>
                     <input type="color" id="manual-label-color" value="${currentManualLabel ? currentManualLabel.color : '#3cb44b'}" style="position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none;" onchange="updateManualLabelColor(this.value)">
                     <input type="text" id="manual-label-name" placeholder="Label name..." value="${currentManualLabel ? currentManualLabel.name : ''}" style="flex: 1; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; color: #333; min-width: 0;">
-                    <button id="manual-label-set-btn" onclick="setCurrentManualLabel()" style="padding: 4px 10px; background: #667eea; color: white; border: none; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">Set</button>
+                    <button id="manual-label-set-btn" onclick="setCurrentManualLabel()" style="padding: 4px 10px; background: #667eea; color: white; border: none; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;" title="Create this label">Set</button>
                 `;
                 return;
             }
@@ -5065,10 +5066,10 @@
             menu.id = 'labelling-export-menu';
             menu.style.cssText = 'position: absolute; top: 100%; left: 0; min-width: 160px; background: #2a2a2a; border: 1px solid #555; border-radius: 4px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); overflow: hidden;';
             menu.innerHTML = `
-                <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('json')">JSON (full)</button>
-                <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('geojson')">GeoJSON</button>
-                <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('shapefile')">ESRI Shapefile (ZIP)</button>
-                <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="document.getElementById('labelling-export-menu').style.display='none'; exportMapAsJPG()">Map (JPG)</button>
+                <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('json')" title="Export labels as JSON with embeddings">JSON (full)</button>
+                <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('geojson')" title="Export labels as GeoJSON points">GeoJSON</button>
+                <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('shapefile')" title="Export labels as ESRI Shapefile">ESRI Shapefile (ZIP)</button>
+                <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="document.getElementById('labelling-export-menu').style.display='none'; exportMapAsJPG()" title="Save current map view as image">Map (JPG)</button>
             `;
             btn.parentElement.style.position = 'relative';
             btn.parentElement.appendChild(menu);
@@ -8819,8 +8820,8 @@
             <input type="password" id="cpConfirm" placeholder="Confirm new password" style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:4px; font-size:13px; margin-bottom:10px;" />
             <div id="cpMsg" style="font-size:12px; margin-top:8px; min-height:18px;"></div>
             <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:6px;">
-                <button onclick="hideChangePassword()" style="padding:6px 16px; border:none; border-radius:4px; cursor:pointer; font-size:13px; background:#e9ecef; color:#333;">Cancel</button>
-                <button onclick="submitChangePassword()" style="padding:6px 16px; border:none; border-radius:4px; cursor:pointer; font-size:13px; background:#667eea; color:white; font-weight:600;">Change</button>
+                <button onclick="hideChangePassword()" style="padding:6px 16px; border:none; border-radius:4px; cursor:pointer; font-size:13px; background:#e9ecef; color:#333;" title="Cancel">Cancel</button>
+                <button onclick="submitChangePassword()" style="padding:6px 16px; border:none; border-radius:4px; cursor:pointer; font-size:13px; background:#667eea; color:white; font-weight:600;" title="Submit password change">Change</button>
             </div>
         </div>
     </div>
@@ -9704,7 +9705,7 @@
 <div class="cm-toolbar">
   <h3>Confusion Matrix</h3>
   <select id="popup-cm-select"></select>
-  <button id="popup-cm-toggle">${cmShowPct ? '#' : '%'}</button>
+  <button id="popup-cm-toggle" title="Toggle counts / percentages">${cmShowPct ? '#' : '%'}</button>
 </div>
 <div class="cm-scroll-area" id="popup-cm-scroll">${tableHTML}</div>
 `+ '<scr' + 'ipt>' + `
