@@ -4628,8 +4628,17 @@
 
         // ===== SCHEMA FLOAT =====
 
+        let _schemaTargetInput = null;  // if set, selectSchemaLabel fills this input instead
+
+        function openSchemaForCluster(inputEl) {
+            if (!activeSchema) return;
+            _schemaTargetInput = inputEl;
+            openSchemaFloat();
+        }
+
         function openSchemaFloat() {
             if (!activeSchema) return;
+            if (!_schemaTargetInput) _schemaTargetInput = null;
             const panel = document.getElementById('schema-float');
             document.getElementById('schema-float-title').textContent = activeSchema.name || 'Schema';
             document.getElementById('schema-tree-container').innerHTML = renderSchemaTreeHTML(activeSchema.tree, 0);
@@ -4638,6 +4647,7 @@
         }
 
         function closeSchemaFloat() {
+            _schemaTargetInput = null;
             document.getElementById('schema-float').style.display = 'none';
         }
 
@@ -4739,6 +4749,16 @@
         }
 
         function renderSchemaSelector() {
+            // Update top-bar schema button label
+            const btn = document.getElementById('schema-dropdown-btn');
+            if (btn) {
+                btn.innerHTML = (activeSchema && activeSchemaMode !== 'none')
+                    ? `Schema: ${activeSchema.name} &#9662;`
+                    : 'Schema &#9662;';
+            }
+            // Re-render cluster rows so S buttons appear/disappear
+            if (segLabels && segLabels.length > 0) showSegmentationPanel();
+
             const container = document.getElementById('manual-label-selector');
             if (!container) return;
 
@@ -4796,6 +4816,16 @@
 
         function selectSchemaLabel(code, name, event) {
             if (event) event.stopPropagation();
+
+            // If targeting a cluster input, fill it and return
+            if (_schemaTargetInput) {
+                const label = code ? `[${code}] ${name}` : name;
+                _schemaTargetInput.value = label;
+                _schemaTargetInput = null;
+                closeSchemaFloat();
+                return;
+            }
+
             // Auto-assign color from SEG_PALETTE based on code hash or reuse existing
             const existingLabel = manualLabels.find(l => l.code === code && l.name === name);
             let color;
@@ -6391,20 +6421,39 @@
                 return;
             }
             container.innerHTML = '';
+            const hasSchema = !!activeSchema;
             for (const cl of segLabels) {
                 const pct = total > 0 ? ((cl.count / total) * 100).toFixed(1) : '0.0';
                 const countStr = cl.count >= 1000 ? (cl.count / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : String(cl.count);
                 const row = document.createElement('div');
                 row.className = 'seg-cluster-row';
                 row.innerHTML = `
-                    <span class="seg-color-swatch" style="background: ${cl.color};"></span>
+                    <span class="seg-color-swatch" title="Click to change colour" style="background: ${cl.color};"></span>
+                    <input type="color" class="seg-color-picker" value="${cl.hex}" style="position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none;">
                     <input type="text" placeholder="Label name" data-cluster-id="${cl.id}"
                         style="min-width: 0; flex: 1 1 60px; padding: 3px 6px; border: none; border-bottom: 1px solid #ccc; border-radius: 0; font-size: 12px; color: #333; background: transparent; outline: none; overflow: hidden; text-overflow: ellipsis;">
+                    ${hasSchema ? `<button class="seg-schema-btn" title="Browse schema to pick a label name" style="flex-shrink: 0; background: none; border: 1px solid #888; border-radius: 3px; color: #667eea; cursor: pointer; font-size: 11px; padding: 1px 4px; line-height: 1.2;">S</button>` : ''}
                     <span style="color: #555; font-size: 10px; white-space: nowrap; flex-shrink: 0;" title="${cl.count.toLocaleString()} pixels">${countStr} ${pct}%</span>
                     <button title="Promote to saved label" data-promote-id="${cl.id}"
                         style="flex-shrink: 0; background: none; border: 1px solid #667eea; border-radius: 3px; color: #667eea; cursor: pointer; font-size: 11px; padding: 1px 5px; line-height: 1.2;">&#8594;</button>
                 `;
+                // Color picker
+                const swatch = row.querySelector('.seg-color-swatch');
+                const picker = row.querySelector('.seg-color-picker');
+                swatch.addEventListener('click', () => picker.click());
+                picker.addEventListener('input', (e) => {
+                    const hex = e.target.value;
+                    cl.hex = hex;
+                    cl.color = hex;
+                    swatch.style.background = hex;
+                    showSegmentationOverlay();
+                });
                 row.querySelector('[data-promote-id]').addEventListener('click', () => saveClusterAsLabel(cl.id));
+                if (hasSchema) {
+                    const schemaBtn = row.querySelector('.seg-schema-btn');
+                    const inputEl = row.querySelector(`input[data-cluster-id="${cl.id}"]`);
+                    schemaBtn.addEventListener('click', () => openSchemaForCluster(inputEl));
+                }
                 container.appendChild(row);
             }
         }
