@@ -296,12 +296,19 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
             mosaic, transform, crs = _fetch_result[0], _fetch_result[1], _fetch_result[2]
             break
         except Exception as e:
+            # Simplify known error messages
+            err_str = str(e)
+            if 'No embedding tiles found' in err_str:
+                short_msg = f"No embeddings available for {year} at this location"
+            else:
+                short_msg = f"{type(e).__name__}: {err_str}"
+
             if attempt < max_retries:
-                print(f"  [{year}] Attempt {attempt} failed, retrying: {type(e).__name__}: {e}")
+                print(f"  [{year}] Attempt {attempt}/{max_retries} failed, retrying in 5s: {short_msg}")
                 _time.sleep(5)
             else:
-                print(f"  [{year}] Not available: {type(e).__name__}: {e}")
-                return (year, False, str(e))
+                print(f"  [{year}] Failed after {max_retries} attempts: {short_msg}")
+                return (year, False, short_msg)
 
     if mosaic is None:
         return (year, False, "fetch failed")
@@ -470,10 +477,12 @@ def main():
     if succeeded:
         print(f"Processed: {succeeded}")
     if failed:
-        print(f"Failed: {[(y, m) for y, m in failed]}")
+        for year, msg in failed:
+            print(f"  [{year}] FAILED: {msg}")
 
     if failed and not succeeded:
-        progress.error(f"All years failed for {viewport_id}")
+        summary = '; '.join(f"{y}: {m}" for y, m in failed)
+        progress.error(f"All years failed for {viewport_id} — {summary}")
         sys.exit(1)
     else:
         progress.complete(f"Processed {len(succeeded)} year(s) for {viewport_id}")
