@@ -6536,6 +6536,19 @@
             updateOverlay();
             updateLabelsUI();
 
+            // Also add to manualLabels so export works
+            addManualLabel({
+                name,
+                color,
+                code: null,
+                type: 'similarity',
+                lat: cluster.sourcePixel ? cluster.sourcePixel.lat : 0,
+                lon: cluster.sourcePixel ? cluster.sourcePixel.lon : 0,
+                embedding: cluster.embedding ? Array.from(cluster.embedding) : null,
+                threshold: cluster.threshold || 0,
+                matchCount: pixels.length
+            });
+
             // Remove promoted cluster from seg panel
             segLabels = segLabels.filter(c => c.id !== clusterId);
             if (segLabels.length === 0) {
