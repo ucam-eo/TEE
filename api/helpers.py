@@ -256,9 +256,9 @@ def check_viewport_owner(request, viewport_name):
     Returns (True, None) if authorized, (False, JsonResponse 403) if not.
     Viewports without _config.json (legacy) are allowed for anyone.
     """
-    current_user = request.session.get('user')
-    if current_user == 'admin':
+    if request.user.is_superuser:
         return True, None
+    current_user = request.user.username if request.user.is_authenticated else None
     config_file = VIEWPORTS_DIR / f'{viewport_name}_config.json'
     if not config_file.exists():
         return True, None

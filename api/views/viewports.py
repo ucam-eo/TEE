@@ -81,10 +81,10 @@ def list_viewports(request):
                 logger.warning(f"Error reading viewport {viewport_name}: {e}")
 
         # Filter out private viewports for non-owners
-        current_user = request.session.get('user')
+        current_user = request.user.username if request.user.is_authenticated else None
         filtered = [
             vp for vp in viewport_data
-            if not vp.get('private') or current_user == 'admin' or current_user == vp.get('created_by')
+            if not vp.get('private') or request.user.is_superuser or current_user == vp.get('created_by')
         ]
 
         return JsonResponse({
@@ -231,9 +231,9 @@ def create_viewport(request):
         logger.info(f"[NEW VIEWPORT] API received years: {years} (type: {type(years).__name__})")
 
         # Per-user disk quota check
-        user = request.session.get('user')
-        if user and user != 'admin':
-            quota_mb = get_user_quota(user)
+        user = request.user.username if request.user.is_authenticated else None
+        if user and not request.user.is_superuser:
+            quota_mb = get_user_quota(request.user)
             num_years = len(years) if years else 1
             estimated_mb = estimate_viewport_size(bounds, num_years)
             current_mb = get_user_total_data_size(user)
@@ -255,7 +255,7 @@ def create_viewport(request):
         viewport['name'] = name
 
         private_flag = bool(data.get('private', False))
-        config = {'years': years, 'created_by': request.session.get('user'), 'private': private_flag}
+        config = {'years': years, 'created_by': user, 'private': private_flag}
         config_file = VIEWPORTS_DIR / f"{name}_config.json"
         with open(config_file, 'w') as f:
             json.dump(config, f)
@@ -459,15 +459,15 @@ def add_years(request, viewport_name):
             with open(config_file) as f:
                 config = json.load(f)
         else:
-            config = {'years': [], 'created_by': request.session.get('user')}
+            config = {'years': [], 'created_by': request.user.username if request.user.is_authenticated else None}
 
         existing_years = config.get('years') or []
         merged_years = sorted(set(existing_years) | set(new_years))
 
         # Disk quota check
-        user = request.session.get('user')
-        if user and user != 'admin':
-            quota_mb = get_user_quota(user)
+        user = request.user.username if request.user.is_authenticated else None
+        if user and not request.user.is_superuser:
+            quota_mb = get_user_quota(request.user)
             bounds = viewport['bounds']
             bounds_tuple = (bounds['minLon'], bounds['minLat'], bounds['maxLon'], bounds['maxLat'])
             estimated_mb = estimate_viewport_size(bounds_tuple, len(new_years))
@@ -612,7 +612,7 @@ def is_ready(request, viewport_name):
             else:
                 message = f"Ready to view ({available_str})"
         else:
-            if not pipeline_running and not pipeline_failed and request.session.get('user'):
+            if not pipeline_running and not pipeline_failed and request.user.is_authenticated:
                 logger.info(f"[is-ready] Pipeline not running for '{viewport_name}' but data incomplete - re-triggering pipeline")
                 saved_years = [int(y) for y in years_requested] if years_requested else None
                 trigger_data_download_and_processing(viewport_name, years=saved_years)

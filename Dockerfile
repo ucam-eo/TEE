@@ -47,6 +47,9 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8001/health || exit 1
 
-# Run the web server
+# Run migrations, collect admin static files, migrate passwd, then start server
 ENV TEE_MODE=production
-CMD ["python3", "-m", "waitress", "--host=0.0.0.0", "--port=8001", "tee_project.wsgi:application"]
+CMD python3 manage.py migrate --noinput && \
+    python3 manage.py collectstatic --noinput && \
+    python3 manage.py migrate_passwd --auto && \
+    exec python3 -m waitress --host=0.0.0.0 --port=8001 tee_project.wsgi:application

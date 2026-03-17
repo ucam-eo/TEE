@@ -12,54 +12,27 @@ set -euo pipefail
 
 CONTAINER="tee"
 IMAGE="sk818/tee:stable"
-PASSWD_FILE="/data/passwd"
-DEFAULT_QUOTA_MB=2048
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 die()  { echo "Error: $*" >&2; }
 
-# Generate bcrypt hash using the TEE Docker image (no host dependencies)
-bcrypt_hash() {
-    local password="$1"
-    docker run --rm -e PASSWORD="$password" "$IMAGE" python3 -c \
-        "import bcrypt,os; print(bcrypt.hashpw(os.environ['PASSWORD'].encode(), bcrypt.gensalt()).decode())"
-}
-
-user_exists() {
-    [ -f "$PASSWD_FILE" ] && grep -q "^${1}:" "$PASSWD_FILE"
-}
-
 # ── commands ─────────────────────────────────────────────────────────────────
 
 cmd_list() {
-    if [ ! -f "$PASSWD_FILE" ]; then
-        echo "No users configured (auth disabled)."
-        return
-    fi
-    echo ""
-    printf "  %-20s %s\n" "USER" "QUOTA"
-    printf "  %-20s %s\n" "----" "-----"
-    while IFS= read -r line; do
-        [[ -z "$line" || "$line" == \#* ]] && continue
-        [[ "$line" != *:* ]] && continue
-        user=$(echo "$line" | cut -d: -f1)
-        quota=$(echo "$line" | cut -d: -f3)
-        if [ "$user" = "admin" ]; then
-            printf "  %-20s %s\n" "$user" "unlimited"
-        elif [ -n "$quota" ]; then
-            printf "  %-20s %s\n" "$user" "$((quota / 1024))G (${quota} MB)"
-        else
-            printf "  %-20s %s\n" "$user" "default (${DEFAULT_QUOTA_MB} MB)"
-        fi
-    done < "$PASSWD_FILE"
-    echo ""
+    docker exec "$CONTAINER" python3 manage.py tee_listusers
 }
 
 cmd_add() {
     read -rp "Username: " username
     if [ -z "$username" ]; then
         die "Username cannot be empty"; return 1
+    fi
+
+    read -rp "Admin? (y/N): " is_admin
+    admin_flag=""
+    if [[ "$is_admin" =~ ^[Yy]$ ]]; then
+        admin_flag="--admin"
     fi
 
     # Read password (no echo)
@@ -72,69 +45,26 @@ cmd_add() {
         die "Password must be at least 4 characters"; return 1
     fi
 
-    echo "Generating hash..."
-    hash=$(bcrypt_hash "$password")
-
-    if user_exists "$username"; then
-        # Preserve existing quota
-        quota=$(grep "^${username}:" "$PASSWD_FILE" | cut -d: -f3)
-        tmpfile=$(mktemp /data/.passwd.XXXXXX)
-        while IFS= read -r line || [ -n "$line" ]; do
-            if [[ "$line" == "${username}:"* ]]; then
-                if [ -n "$quota" ]; then
-                    echo "${username}:${hash}:${quota}"
-                else
-                    echo "${username}:${hash}"
-                fi
-            else
-                echo "$line"
-            fi
-        done < "$PASSWD_FILE" > "$tmpfile"
-        mv "$tmpfile" "$PASSWD_FILE"
-        chmod 644 "$PASSWD_FILE"
-        echo "Updated user: $username"
-    else
-        echo "${username}:${hash}" >> "$PASSWD_FILE"
-        chmod 644 "$PASSWD_FILE"
-        echo "Added user: $username"
-    fi
+    docker exec -e PASSWORD="$password" "$CONTAINER" python3 manage.py tee_adduser "$username" $admin_flag
 }
 
 cmd_remove() {
-    if [ ! -f "$PASSWD_FILE" ]; then
-        die "No users configured"; return 1
-    fi
     cmd_list
 
     read -rp "Username to remove: " username
-    if ! user_exists "$username"; then
-        die "User '$username' not found"; return 1
+    if [ -z "$username" ]; then
+        die "Username cannot be empty"; return 1
     fi
 
-    tmpfile=$(mktemp /data/.passwd.XXXXXX)
-    grep -v "^${username}:" "$PASSWD_FILE" > "$tmpfile" || true
-    if [ -s "$tmpfile" ]; then
-        mv "$tmpfile" "$PASSWD_FILE"
-        chmod 644 "$PASSWD_FILE"
-    else
-        rm "$tmpfile" "$PASSWD_FILE"
-        echo "(No users left — auth disabled)"
-    fi
-    echo "Removed user: $username"
+    docker exec "$CONTAINER" python3 manage.py tee_removeuser "$username"
 }
 
 cmd_quota() {
-    if [ ! -f "$PASSWD_FILE" ]; then
-        die "No users configured"; return 1
-    fi
     cmd_list
 
     read -rp "Username: " username
-    if ! user_exists "$username"; then
-        die "User '$username' not found"; return 1
-    fi
-    if [ "$username" = "admin" ]; then
-        die "Admin always has unlimited quota"; return 1
+    if [ -z "$username" ]; then
+        die "Username cannot be empty"; return 1
     fi
 
     read -rp "Quota (e.g. 4G, 512M, or MB): " raw
@@ -154,18 +84,7 @@ cmd_quota() {
         die "Quota must be greater than zero"; return 1
     fi
 
-    tmpfile=$(mktemp /data/.passwd.XXXXXX)
-    while IFS= read -r line || [ -n "$line" ]; do
-        if [[ "$line" == "${username}:"* ]]; then
-            hash=$(echo "$line" | cut -d: -f2)
-            echo "${username}:${hash}:${quota_mb}"
-        else
-            echo "$line"
-        fi
-    done < "$PASSWD_FILE" > "$tmpfile"
-    mv "$tmpfile" "$PASSWD_FILE"
-    chmod 644 "$PASSWD_FILE"
-    echo "Set quota for '$username' to ${quota_mb} MB ($((quota_mb / 1024))G)"
+    docker exec "$CONTAINER" python3 manage.py tee_setquota "$username" "$quota_mb"
 }
 
 cmd_update() {

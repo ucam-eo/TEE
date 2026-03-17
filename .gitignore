@@ -29,6 +29,8 @@ Thumbs.db
 # Project specific
 *.log
 .env
+*.sqlite3
+public/static/
 
 # Large data files (regenerated from source)
 blore_data/
