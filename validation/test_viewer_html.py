@@ -330,8 +330,6 @@ class TestExistingElements:
         "map-embedding2",
         "map-osm",
         "help-popup",
-        "export-dropdown-btn",
-        "import-labels-btn",
         # Phase 2C: Toolbar buttons
         "schema-dropdown-btn",
         "schema-dropdown-menu",

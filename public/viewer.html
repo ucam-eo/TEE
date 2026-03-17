@@ -149,38 +149,6 @@
             font-weight: 700 !important;
         }
 
-        .export-dropdown-menu {
-            display: none;
-            position: absolute;
-            top: 100%;
-            left: 0;
-            background: #2a2a2a;
-            border: 1px solid #555;
-            border-radius: 4px;
-            min-width: 170px;
-            z-index: 1000;
-            margin-top: 4px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        }
-        .export-dropdown-menu button {
-            display: block;
-            width: 100%;
-            padding: 9px 14px;
-            background: none;
-            color: white;
-            border: none;
-            text-align: left;
-            cursor: pointer;
-            font-size: 13px;
-            white-space: nowrap;
-        }
-        .export-dropdown-menu button:hover {
-            background: #444;
-        }
-        .export-dropdown-menu button:not(:last-child) {
-            border-bottom: 1px solid #444;
-        }
-
         #map-container {
             position: fixed;
             top: 110px;
@@ -282,10 +250,6 @@
         /* Validation: grey out similarity, repurpose label bar for validation buttons */
         body.mode-validation #similarity-controls { opacity: 0.4 !important; pointer-events: none; }
         body.mode-validation #label-controls-bar { opacity: 1 !important; }
-        body.mode-validation #export-dropdown-btn { display: none !important; }
-        body.mode-validation #export-dropdown-menu { display: none !important; }
-        body.mode-validation #import-labels-btn { display: none !important; }
-        body.mode-validation #unsaved-labels-warning { display: none !important; }
         #val-export-btn, #val-download-btn { display: none; }
         body.mode-validation #val-export-btn { display: inline-block; }
         body.mode-validation #val-download-btn { display: inline-block; }
@@ -791,24 +755,6 @@
 
         <!-- Label controls group (greyed out when vectors not ready) -->
         <div id="label-controls-bar" class="toolbar-group" style="opacity: 0.4;">
-            <div style="position: relative; display: inline-block;">
-                <button id="export-dropdown-btn" style="padding: 8px 12px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;" disabled>
-                    Export &#9662;
-                </button>
-                <div id="export-dropdown-menu" class="export-dropdown-menu">
-                    <button id="export-labels-json-btn">Labels (JSON)</button>
-                    <button id="export-labels-geojson-btn">Labels (GeoJSON)</button>
-                    <button id="export-map-btn">Map (JPG)</button>
-                    <label style="display:flex; align-items:center; gap:5px; padding:6px 12px; font-size:12px; color:#ccc; border-top:1px solid #444; margin-top:4px; cursor:pointer;">
-                        <input type="checkbox" id="export-hide-locations"> Hide label locations
-                    </label>
-                </div>
-            </div>
-            <button id="import-labels-btn" style="padding: 8px 12px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;" disabled>
-                Import
-            </button>
-            <input type="file" id="import-labels-file" accept=".json" style="display: none;">
-            <span id="unsaved-labels-warning" style="display: none; background: #ff9800; color: #000; padding: 4px 10px; border-radius: 3px; font-weight: 700; font-size: 12px; white-space: nowrap; animation: pulse-warning 1.5s ease-in-out 3;">⚠ Unsaved labels — export to avoid losing work</span>
             <button id="val-export-btn" style="padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap;">Export Results</button>
             <button id="val-download-btn" style="padding: 8px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap;" disabled title="Run evaluation first">Download Models</button>
         </div>
@@ -1519,10 +1465,6 @@
                     document.getElementById('similarity-threshold').disabled = false;
                     document.getElementById('similarity-controls').style.opacity = '1';
                     document.getElementById('label-controls-bar').style.opacity = '1';
-                    // Enable label bar buttons
-                    ['export-dropdown-btn', 'import-labels-btn'].forEach(id => {
-                        document.getElementById(id).disabled = false;
-                    });
                     if (savedLabels.length > 0) {
                         recomputeLabelPixels();
                     }
@@ -4246,6 +4188,24 @@
             localStorage.setItem('manualLabels_' + currentViewportName, JSON.stringify(manualLabels));
         }
 
+        function markExportDirty() {
+            const btn = document.getElementById('labelling-export-btn');
+            if (!btn) return;
+            btn.style.background = '#c53030';
+            btn.style.borderColor = '#c53030';
+            btn.innerHTML = '&#9888; Export';
+            btn.title = 'Unexported labels';
+        }
+
+        function markExportClean() {
+            const btn = document.getElementById('labelling-export-btn');
+            if (!btn) return;
+            btn.style.background = '#333';
+            btn.style.borderColor = '#555';
+            btn.innerHTML = 'Export';
+            btn.title = '';
+        }
+
         function addManualLabel(entry) {
             manualLabelIdCounter++;
             entry.id = manualLabelIdCounter;
@@ -4253,6 +4213,7 @@
             manualLabels.push(entry);
             saveManualLabelsToStorage();
             renderManualLabelsList();
+            markExportDirty();
         }
 
         function removeManualClass(className) {
@@ -4441,6 +4402,10 @@
                 }
             }
             container.innerHTML = html;
+
+            // Mirror into the autolabel view's labels list
+            const p6list = document.getElementById('panel6-labels-list');
+            if (p6list && p6list !== container) p6list.innerHTML = html || '<div style="color: #999; font-size: 12px; padding: 10px;">No labels yet.</div>';
         }
 
         // ===== PANEL 5: NEAREST-CENTROID CLASSIFICATION OVERLAY =====
@@ -5103,6 +5068,7 @@
                 <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('json')">JSON (full)</button>
                 <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('geojson')">GeoJSON</button>
                 <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('shapefile')">ESRI Shapefile (ZIP)</button>
+                <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="document.getElementById('labelling-export-menu').style.display='none'; exportMapAsJPG()">Map (JPG)</button>
             `;
             btn.parentElement.style.position = 'relative';
             btn.parentElement.appendChild(menu);
@@ -5111,6 +5077,7 @@
         function doExportManualLabels(format) {
             const menu = document.getElementById('labelling-export-menu');
             if (menu) menu.style.display = 'none';
+            markExportClean();
 
             if (format === 'json') {
                 const data = {
@@ -6491,9 +6458,13 @@
             const gt = segVectors.metadata.geotransform;
             const N = segVectors.numVectors;
 
-            // Collect pixels and compact pixel_coords
+            // Collect pixels, compact pixel_coords, and find max distance from centroid
             const pixels = [];
             const pixel_coords = [];
+            const centroid = cluster.embedding;
+            const dim = segVectors.dim || 128;
+            const emb = segVectors.embeddings;
+            let maxDistSq = 0;
             for (let i = 0; i < N; i++) {
                 if (segAssignments[i] !== clusterId) continue;
                 const px = coords[i * 2], py = coords[i * 2 + 1];
@@ -6503,40 +6474,25 @@
                     lon: gt.c + px * gt.a,
                     distance: 0
                 });
+                // Compute squared Euclidean distance from centroid
+                if (centroid) {
+                    let s = 0;
+                    const base = i * dim;
+                    for (let d = 0; d < dim; d++) {
+                        const diff = emb[base + d] - centroid[d];
+                        s += diff * diff;
+                    }
+                    if (s > maxDistSq) maxDistSq = s;
+                }
             }
+            const clusterRadius = Math.sqrt(maxDistSq);
 
             // Reuse color from existing label with the same name, if any
-            const existingWithName = savedLabels.find(l => l.name === name);
+            const existingWithName = manualLabels.find(l => l.name === name);
             const color = existingWithName ? existingWithName.color : cluster.hex;
 
-            const label = {
-                id: 'label_' + Date.now(),
-                name,
-                color,
-                threshold: cluster.threshold || 0,
-                source_pixel: cluster.sourcePixel || null,
-                embedding: cluster.embedding || null,
-                static: false,
-                pixel_coords,
-                pixels,
-                pixel_count: pixels.length,
-                created: new Date().toISOString(),
-                visible: true,
-                _clusterInfo: {
-                    id: cluster.id, color: cluster.color, hex: cluster.hex,
-                    count: cluster.count, threshold: cluster.threshold,
-                    sourcePixel: cluster.sourcePixel, embedding: cluster.embedding,
-                    centroid: cluster.centroid
-                }
-            };
-
-            savedLabels.push(label);
-            labelsExportedSinceChange = false;
-            persistLabels();
-            updateOverlay();
-            updateLabelsUI();
-
-            // Also add to manualLabels so export works
+            // Add to manualLabels with exact pixel matches from k-means.
+            // Store centroid + cluster radius for later similarity expansion.
             addManualLabel({
                 name,
                 color,
@@ -6544,10 +6500,27 @@
                 type: 'similarity',
                 lat: cluster.sourcePixel ? cluster.sourcePixel.lat : 0,
                 lon: cluster.sourcePixel ? cluster.sourcePixel.lon : 0,
-                embedding: cluster.embedding ? Array.from(cluster.embedding) : null,
-                threshold: cluster.threshold || 0,
+                embedding: centroid ? Array.from(centroid) : null,
+                threshold: clusterRadius,
                 matchCount: pixels.length
             });
+
+            // Build overlay directly from exact seg pixels (not via similarity search)
+            if (maps.rgb) {
+                if (manualClassOverlays[name]) {
+                    if (manualClassOverlays[name].layerGroup && maps.rgb) maps.rgb.removeLayer(manualClassOverlays[name].layerGroup);
+                    delete manualClassOverlays[name];
+                }
+                const layerGroup = L.layerGroup();
+                if (pixels.length > 0) {
+                    const canvasLayer = new DirectCanvasLayer(pixels, maps.rgb, color);
+                    layerGroup.addLayer(canvasLayer);
+                }
+                layerGroup.addTo(maps.rgb);
+                manualClassOverlays[name] = { layerGroup, layer: null };
+                _classMatchCache[name] = pixels.map(m => ({ lat: m.lat, lon: m.lon }));
+                updatePanel4ManualLabels();
+            }
 
             // Remove promoted cluster from seg panel
             segLabels = segLabels.filter(c => c.id !== clusterId);
@@ -7367,16 +7340,6 @@
         }
 
         function updateLabelsUI() {
-            // Highlight export button and show warning when unexported labels exist
-            const exportBtn = document.getElementById('export-dropdown-btn');
-            const warning = document.getElementById('unsaved-labels-warning');
-            if (savedLabels.length > 0 && !labelsExportedSinceChange) {
-                exportBtn.classList.add('export-btn-highlight');
-                warning.style.display = '';
-            } else {
-                exportBtn.classList.remove('export-btn-highlight');
-                warning.style.display = 'none';
-            }
 
             // Render into floating popup
             renderLabelsInto(document.getElementById('labels-list'));
@@ -7923,8 +7886,8 @@
         async function exportMapAsJPG() {
             if (!maps.rgb) return;
 
-            const btn = document.getElementById('export-dropdown-btn');
-            btn.disabled = true;
+            const btn = document.getElementById('labelling-export-btn');
+            if (btn) btn.disabled = true;
             const MAX_ZOOM = 18;
             const TILE_SZ = 256;
 
@@ -8074,55 +8037,18 @@
                     a.download = `${currentViewportName}_labels_z${MAX_ZOOM}.jpg`;
                     a.click();
                     URL.revokeObjectURL(url);
-                    btn.textContent = 'Export \u25BE';
-                    btn.disabled = false;
+                    if (btn) btn.disabled = false;
                 }, 'image/jpeg', 0.95);
 
             } catch (e) {
                 console.error('[EXPORT] Error exporting map:', e);
                 alert('Error exporting map. Check console for details.');
-                btn.textContent = 'Export \u25BE';
-                btn.disabled = false;
+                if (btn) btn.disabled = false;
             }
         }
 
         // Attach event listeners to sidebar buttons and modal
         document.addEventListener('DOMContentLoaded', () => {
-            // Export dropdown toggle
-            document.getElementById('export-dropdown-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                const menu = document.getElementById('export-dropdown-menu');
-                const isHidden = getComputedStyle(menu).display === 'none';
-                menu.style.display = isHidden ? 'block' : 'none';
-            });
-            document.addEventListener('click', () => {
-                document.getElementById('export-dropdown-menu').style.display = 'none';
-            });
-            document.getElementById('export-dropdown-menu').addEventListener('click', (e) => {
-                e.stopPropagation();
-            });
-            // Export dropdown items
-            document.getElementById('export-labels-json-btn').addEventListener('click', () => {
-                document.getElementById('export-dropdown-menu').style.display = 'none';
-                exportSavedLabels();
-            });
-            document.getElementById('export-labels-geojson-btn').addEventListener('click', () => {
-                document.getElementById('export-dropdown-menu').style.display = 'none';
-                exportSavedLabelsGeoJSON();
-            });
-            document.getElementById('export-map-btn').addEventListener('click', () => {
-                document.getElementById('export-dropdown-menu').style.display = 'none';
-                exportMapAsJPG();
-            });
-            document.getElementById('import-labels-btn').addEventListener('click', () => {
-                document.getElementById('import-labels-file').click();
-            });
-            document.getElementById('import-labels-file').addEventListener('change', (e) => {
-                if (e.target.files[0]) {
-                    importSavedLabels(e.target.files[0]);
-                    e.target.value = '';  // reset so same file can be re-imported
-                }
-            });
 
             // Modal button listeners
             document.getElementById('label-save-confirm').addEventListener('click', confirmSaveLabel);
