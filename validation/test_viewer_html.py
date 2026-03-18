@@ -14,7 +14,9 @@ from pathlib import Path
 import pytest
 from bs4 import BeautifulSoup
 
-VIEWER = Path(__file__).resolve().parent.parent / "public" / "viewer.html"
+ROOT = Path(__file__).resolve().parent.parent
+VIEWER = ROOT / "public" / "viewer.html"
+JS_DIR = ROOT / "public" / "js"
 
 
 @pytest.fixture(scope="module")
@@ -29,9 +31,13 @@ def soup(html):
 
 @pytest.fixture(scope="module")
 def script_text(html):
-    """Concatenate all non-module <script> blocks."""
+    """All JS: inline <script> blocks + extracted ES module files."""
     parts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
-    return "\n".join(parts)
+    combined = "\n".join(parts)
+    if JS_DIR.is_dir():
+        for js_file in sorted(JS_DIR.glob("*.js")):
+            combined += "\n" + js_file.read_text()
+    return combined
 
 
 # ────────────────────────────────────────────
