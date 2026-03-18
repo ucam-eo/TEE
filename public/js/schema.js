@@ -243,7 +243,7 @@ function selectSchemaLabel(code, name, event) {
         const acp = document.getElementById('active-label-color-picker');
         if (acp) acp.value = color;
     }
-    localStorage.setItem('currentManualLabel', JSON.stringify(window.currentManualLabel));
+    localStorage.setItem('currentManualLabel_' + (window.currentViewportName || ''), JSON.stringify(window.currentManualLabel));
     closeSchemaFloat();
 }
 

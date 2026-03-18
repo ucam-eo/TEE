@@ -1990,22 +1990,9 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             return new Promise((resolve) => {
                 const pollInterval = setInterval(async () => {
                     try {
-                        // Check is-ready FIRST — switch to viewer as soon as
-                        // pyramids exist (don't wait for full pipeline).
-                        try {
-                            const readyResponse = await fetch(`/api/viewports/${viewportName}/is-ready`);
-                            const readyResult = await readyResponse.json();
-                            if (readyResult.ready) {
-                                console.log(`[WAIT] ✓ ${viewportName} is ready — switching to viewer`);
-                                clearInterval(pollInterval);
-                                resolve({ ready: true });
-                                return;
-                            }
-                        } catch (e) {
-                            // is-ready not available yet — continue to progress check
-                        }
-
-                        // Update progress bar from pipeline progress
+                        // Check pipeline progress FIRST — wait for full pipeline
+                        // before navigating to viewer.
+                        let pipelineActive = false;
                         try {
                             const progressResponse = await fetch(`/api/operations/progress/${viewportName}_pipeline`);
                             const progress = await progressResponse.json();
@@ -2013,7 +2000,7 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
                             if (progress.success && progress.status !== 'not_started') {
                                 updateSidebarProgress(viewportName, progress);
 
-                                // Pipeline complete — resolve (fallback if is-ready missed)
+                                // Pipeline complete — navigate to viewer
                                 if (progress.status === 'complete') {
                                     console.log(`[WAIT] ✓ ${viewportName} pipeline complete!`);
                                     clearInterval(pollInterval);
@@ -2028,9 +2015,29 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
                                     resolve({ ready: false, error: progress.message });
                                     return;
                                 }
+
+                                // Pipeline is actively running — keep waiting
+                                pipelineActive = true;
                             }
                         } catch (progressError) {
                             // Progress endpoint not available yet
+                        }
+
+                        // Only check is-ready when no pipeline is running
+                        // (fallback for viewports processed outside the pipeline)
+                        if (!pipelineActive) {
+                            try {
+                                const readyResponse = await fetch(`/api/viewports/${viewportName}/is-ready`);
+                                const readyResult = await readyResponse.json();
+                                if (readyResult.ready) {
+                                    console.log(`[WAIT] ✓ ${viewportName} is ready (no pipeline) — switching to viewer`);
+                                    clearInterval(pollInterval);
+                                    resolve({ ready: true });
+                                    return;
+                                }
+                            } catch (e) {
+                                // is-ready not available yet
+                            }
                         }
 
                         // Check timeout

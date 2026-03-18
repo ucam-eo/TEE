@@ -188,6 +188,10 @@ async function showManualLabelTimeline(className) {
 let manualLabels = [];       // [{id, name, color, code, type:'point'|'similarity'|'polygon', lat, lon, embedding, threshold, visible, matchCount, vertices}]
 let currentManualLabel = null; // {name, color, code}
 let labelMode = 'autolabel';   // 'autolabel' | 'manual'
+
+function _activeLabelKey() {
+    return 'currentManualLabel_' + (window.currentViewportName || '');
+}
 let manualClassifyOverlay = null; // L.imageOverlay on window.maps.heatmap
 let manualLabelIdCounter = 0;
 let manualClassifyDebounceTimer = null;
@@ -259,7 +263,7 @@ function setCurrentManualLabel() {
     document.getElementById('manual-label-swatch').style.background = color;
     const acp = document.getElementById('active-label-color-picker');
     if (acp) acp.value = color;
-    localStorage.setItem('currentManualLabel', JSON.stringify(currentManualLabel));
+    localStorage.setItem(_activeLabelKey(), JSON.stringify(currentManualLabel));
 }
 
 function updateManualLabelColor(color) {
@@ -267,7 +271,7 @@ function updateManualLabelColor(color) {
     if (currentManualLabel) {
         currentManualLabel.color = color;
         document.getElementById('manual-active-label-swatch').style.background = color;
-        localStorage.setItem('currentManualLabel', JSON.stringify(currentManualLabel));
+        localStorage.setItem(_activeLabelKey(), JSON.stringify(currentManualLabel));
         _syncClassColor(currentManualLabel.name, color);
     }
 }
@@ -281,7 +285,7 @@ function updateActiveLabelColor(color) {
     if (s) s.style.background = color;
     const c = document.getElementById('manual-label-color');
     if (c) c.value = color;
-    localStorage.setItem('currentManualLabel', JSON.stringify(currentManualLabel));
+    localStorage.setItem(_activeLabelKey(), JSON.stringify(currentManualLabel));
     _syncClassColor(currentManualLabel.name, color);
 }
 
@@ -302,7 +306,7 @@ function restoreManualLabelState() {
     }
 
     // Restore current label
-    const saved = localStorage.getItem('currentManualLabel');
+    const saved = localStorage.getItem(_activeLabelKey());
     if (saved) {
         try {
             currentManualLabel = JSON.parse(saved);
@@ -895,7 +899,7 @@ function activateManualClass(className) {
         const acp = document.getElementById('active-label-color-picker');
         if (acp) acp.value = label.color;
     }
-    localStorage.setItem('currentManualLabel', JSON.stringify(currentManualLabel));
+    localStorage.setItem(_activeLabelKey(), JSON.stringify(currentManualLabel));
     renderManualLabelsList();
 }
 
