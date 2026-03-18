@@ -497,7 +497,7 @@ class TestPolygonDrawing:
         assert re.search(r"function\s+rasterizePolygon\s*\(", script_text)
 
     def test_ctrl_dblclick_polygon(self, script_text):
-        assert "startPolygonDrawing()" in script_text
+        assert re.search(r"startPolygonDrawing\(", script_text)
 
     def test_escape_key_cancel(self, script_text):
         assert "'Escape'" in script_text or '"Escape"' in script_text

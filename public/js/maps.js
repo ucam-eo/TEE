@@ -322,7 +322,7 @@ function createMaps() {
             // Ctrl/Cmd+double-click in manual label mode: start polygon drawing
             if ((e.originalEvent.ctrlKey || e.originalEvent.metaKey) &&
                 window.currentPanelMode === 'labelling' && window.labelMode === 'manual') {
-                window.startPolygonDrawing();
+                window.startPolygonDrawing(e.latlng);
                 return;
             }
             handleSimilaritySearch(e.latlng.lat, e.latlng.lng);
@@ -843,7 +843,7 @@ function setPanelLayout(mode) {
     const titles = {
         'explore':          { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'PCA (Embedding Space)', p5: 'Change Heatmap',  p6: 'Tessera Embeddings' },
         'change-detection': { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'Change Distribution',    p5: 'Change Heatmap',  p6: 'Tessera Embeddings' },
-        'labelling':        { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'PCA (Embedding Space)', p5: 'Segmentation',    p6: 'Auto-label' },
+        'labelling':        { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'PCA (Embedding Space)', p5: 'Classification results',    p6: 'Auto-label' },
         'validation':       { p1: 'Classes',       p3: 'Evaluation year',    p4: 'Performance',           p5: 'Confusion Matrix', p6: 'Controls' },
     };
     const t = titles[mode] || titles['explore'];
@@ -857,6 +857,10 @@ function setPanelLayout(mode) {
     applyHeatmapLayerRule(window.heatmapSatelliteLayer, rules.satellite);
     applyHeatmapLayerRule(window.heatmapCanvasLayer, rules.heatmapCanvas);
     applyHeatmapLayerRule(window.segOverlay, rules.segOverlay);
+
+    // Hide classify button for all modes; labelling mode re-shows it if needed
+    const classifyBtn = document.getElementById('manual-classify-btn');
+    if (classifyBtn) classifyBtn.style.display = 'none';
 
     // Mode-specific setup beyond layers
     if (mode === 'labelling') {

@@ -9,7 +9,7 @@
 
 FROM ghcr.io/osgeo/gdal:ubuntu-small-3.10.0
 
-LABEL version="3.1"
+LABEL version="Alpha 3.6.0"
 
 WORKDIR /app
 

@@ -218,8 +218,8 @@ function setLabelMode(mode) {
         autoView.style.display = 'none';
         manualView.style.display = 'flex';
         document.getElementById('panel6-header-text').textContent = 'Manual Label';
-        document.getElementById('panel2-title').textContent = 'Labels';
-        document.getElementById('panel5-title').textContent = 'Classification';
+        document.getElementById('panel2-title').textContent = 'Create labelled points';
+        document.getElementById('panel5-title').textContent = 'Classification results';
         if (classifyBtn) classifyBtn.style.display = '';
         restoreManualLabelState();
         // Hide segmentation overlay if present
@@ -380,7 +380,7 @@ function rebuildClassOverlay(className) {
         if (!label.visible) continue;
         if (label.type === 'point') {
             const pinMarker = L.circleMarker([label.lat, label.lon], {
-                radius: 6, fillColor: label.color, color: '#fff', weight: 2, fillOpacity: 0.9
+                radius: 3, fillColor: label.color, color: '#fff', weight: 1, fillOpacity: 0.9
             });
             layerGroup.addLayer(pinMarker);
             cachedCoords.push({ lat: label.lat, lon: label.lon });
@@ -918,7 +918,7 @@ function initPolygonDrawing() {
     });
 }
 
-function startPolygonDrawing() {
+function startPolygonDrawing(latlng) {
     if (!currentManualLabel) {
         alert('Please set a label name first (top of Panel 6).');
         return;
@@ -937,6 +937,11 @@ function startPolygonDrawing() {
     });
     polygonDrawHandler.enable();
     isPolygonDrawing = true;
+
+    // Place the first vertex at the double-click location
+    if (latlng) {
+        polygonDrawHandler.addVertex(latlng);
+    }
 }
 
 function cancelPolygonDrawing() {
@@ -2481,6 +2486,12 @@ Object.defineProperty(window, '_classMatchCache', {
 });
 Object.defineProperty(window, 'isPolygonDrawing', {
     get: () => isPolygonDrawing,
+    set: (v) => { isPolygonDrawing = v; },
+    configurable: true,
+});
+Object.defineProperty(window, 'labelMode', {
+    get: () => labelMode,
+    set: (v) => { labelMode = v; },
     configurable: true,
 });
 

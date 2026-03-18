@@ -1046,6 +1046,10 @@ async function loadHeatmap() {
     // Guard: need different years
     if (window.currentEmbeddingYear === currentEmbeddingYear2) {
         sameMsg.style.display = 'block';
+        // Remove stale heatmap (e.g. PCA canvas from explore mode)
+        if (heatmapCanvasLayer && window.maps.heatmap && window.maps.heatmap.hasLayer(heatmapCanvasLayer)) {
+            window.maps.heatmap.removeLayer(heatmapCanvasLayer);
+        }
         return;
     }
     sameMsg.style.display = 'none';
