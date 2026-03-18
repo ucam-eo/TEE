@@ -52,4 +52,4 @@ ENV TEE_MODE=production
 CMD python3 manage.py migrate --noinput && \
     python3 manage.py collectstatic --noinput && \
     python3 manage.py migrate_passwd --auto && \
-    exec python3 -m waitress --host=0.0.0.0 --port=8001 tee_project.wsgi:application
+    exec python3 -m waitress --host=0.0.0.0 --port=8001 --send-bytes=1 tee_project.wsgi:application
