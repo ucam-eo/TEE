@@ -2131,7 +2131,7 @@ async function exportMapAsJPG() {
                     resolve();
                 };
                 img.onerror = () => { loaded++; resolve(); };
-                img.src = satelliteSources[currentSatelliteSource].exportUrl(MAX_ZOOM, ty, tx);
+                img.src = window.satelliteSources[window.currentSatelliteSource].exportUrl(MAX_ZOOM, ty, tx);
             })));
         }
 

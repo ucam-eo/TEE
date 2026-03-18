@@ -68,7 +68,8 @@ class TestExploreRename:
 
     def test_heatmap_layer_rules_has_explore(self, script_text):
         assert "'explore'" in script_text
-        assert "'explore'" in script_text.split("HEATMAP_LAYER_RULES")[1][:200]
+        # Find the definition block (contains 'explore':) rather than first reference
+        assert "'explore'" in script_text.split("HEATMAP_LAYER_RULES = {")[1][:300]
 
     def test_default_mode_is_explore(self, script_text):
         m = re.search(r"let currentPanelMode\s*=\s*'(\w+)'", script_text)
@@ -391,11 +392,15 @@ class TestModeClasses:
                     assert f"mode-{mode}" in m, f"mode-{mode} missing from classList.remove"
 
     def test_heatmap_rules_has_all_modes(self, script_text):
+        block = script_text.split("HEATMAP_LAYER_RULES = {")[1][:500]
         for mode in self.MODES:
-            assert f"'{mode}'" in script_text.split("HEATMAP_LAYER_RULES")[1][:500]
+            assert f"'{mode}'" in block
 
     def test_titles_dict_has_all_modes(self, script_text):
-        titles_block = script_text.split("const titles = {")[1][:600]
+        # setPanelLayout titles dict — find by its unique content (panel mode titles)
+        idx = script_text.find("'explore':          { p1:")
+        assert idx >= 0, "panel mode titles dict not found"
+        titles_block = script_text[idx:idx+700]
         for mode in self.MODES:
             assert f"'{mode}'" in titles_block
 
