@@ -17,6 +17,7 @@ from lib.viewport_writer import set_active_viewport, clear_active_viewport, crea
 from lib.pipeline import cancel_pipeline
 from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, VIEWPORTS_DIR, PROGRESS_DIR
 from lib.config import VECTORS_DIR, pyramid_exists
+from lib.viewport_ops import check_readiness, delete_viewport_data, compute_data_size
 from api.helpers import (
     MIN_YEAR,
     MAX_YEAR,
