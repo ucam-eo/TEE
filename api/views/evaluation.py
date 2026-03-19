@@ -430,7 +430,17 @@ def run_evaluation(request):
             "models_available": list(_trained_models.keys()),
         }) + "\n"
 
-    resp = StreamingHttpResponse(stream(), content_type="application/x-ndjson")
+    # Pad each NDJSON line to exceed waitress's send_bytes buffer (default 18KB)
+    # so each event is flushed immediately without needing --send-bytes=1.
+    FLUSH_PAD = 18 * 1024
+    def padded_stream():
+        for chunk in stream():
+            if len(chunk) < FLUSH_PAD:
+                yield chunk + " " * (FLUSH_PAD - len(chunk))
+            else:
+                yield chunk
+
+    resp = StreamingHttpResponse(padded_stream(), content_type="application/x-ndjson")
     resp["Cache-Control"] = "no-cache"
     # Prevent GZipMiddleware from buffering the stream
     resp["Content-Encoding"] = "identity"
