@@ -441,7 +441,17 @@ Body: file=<shapefile.zip>
 
 #### `POST /api/evaluation/class-counts`
 
-Get pixel counts per class without running ML. Uses rasterization to count how many pixels fall in each shapefile class.
+Get pixel counts per class without running ML. Uses rasterization to count how
+many pixels in the viewport's embedding grid fall within each shapefile polygon,
+grouped by the selected `field` attribute.
+
+The `field` parameter selects which attribute column to use as the classification
+schema. The upload endpoint returns all available fields with their unique class
+counts — the user picks one. A single shapefile may have multiple schemas
+(e.g., `habitat`, `landuse`, `ukhab_code`) and the user can switch between them.
+
+**Note:** If the uploaded zip contains multiple `.shp` files, only the first one
+found is used. The others are silently ignored.
 
 ```json
 // Request
@@ -454,6 +464,10 @@ Get pixel counts per class without running ML. Uses rasterization to count how m
     { "name": "grassland", "pixels": 8932 }
   ]
 }
+
+// Response 400
+{ "error": "No shapefile uploaded." }
+{ "error": "Field 'xyz' not found" }
 ```
 
 #### `POST /api/evaluation/run`
