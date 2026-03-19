@@ -145,6 +145,11 @@ async function downloadVectorData(viewport, year) {
 
     // Check IndexedDB cache
     const cached = await VectorCache.get(viewport, year);
+    // Migrate old cache format: .embeddings → .values
+    if (cached && !cached.values && cached.embeddings) {
+        cached.values = cached.embeddings;
+        delete cached.embeddings;
+    }
     if (cached) {
         // Validate cached data matches current viewport (bounds may have changed
         // if viewport was deleted and recreated with the same name)
@@ -551,6 +556,10 @@ function searchMultiInVectorData(data, searches) {
 
 async function loadVectorDataOnly(viewport, year) {
     const cached = await VectorCache.get(viewport, year);
+    if (cached && !cached.values && cached.embeddings) {
+        cached.values = cached.embeddings;
+        delete cached.embeddings;
+    }
     if (cached) {
         let hasNonZero = false;
         for (let i = 0; i < Math.min(1000, cached.values.length); i++) {
