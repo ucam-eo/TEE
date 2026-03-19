@@ -312,13 +312,21 @@ function createMaps() {
         });
 
         // Double-click triggers similarity search
+        // _polygonJustCompleted suppresses the dblclick that fires after polygon finish
+        let _polygonJustCompleted = false;
+        if (panel === 'rgb') {
+            window.maps.rgb.on(L.Draw.Event.CREATED, function() {
+                _polygonJustCompleted = true;
+                setTimeout(() => { _polygonJustCompleted = false; }, 100);
+            });
+        }
         window.maps[panel].on('dblclick', function(e) {
             // Cancel pending single-click (pin drop or unified click)
             if (clickTimeout) {
                 clearTimeout(clickTimeout);
                 clickTimeout = null;
             }
-            if (window.isPolygonDrawing) return;
+            if (window.isPolygonDrawing || _polygonJustCompleted) return;
             // Ctrl/Cmd+double-click in manual label mode: start polygon drawing
             if ((e.originalEvent.ctrlKey || e.originalEvent.metaKey) &&
                 window.currentPanelMode === 'labelling' && window.labelMode === 'manual') {

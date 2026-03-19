@@ -911,7 +911,14 @@ function initPolygonDrawing() {
     window.maps.rgb.addLayer(drawnItems);
     window.maps.rgb.on(L.Draw.Event.CREATED, function(e) {
         if (e.layerType === 'polygon') {
-            handlePolygonComplete(e.layer.getLatLngs()[0]);
+            const latlngs = e.layer.getLatLngs();
+            // Leaflet may return nested arrays: [[latlng,...]] or [[[latlng,...]]]
+            let ring = latlngs;
+            while (ring.length && Array.isArray(ring[0]) && !ring[0].lat) {
+                ring = ring[0];
+            }
+            console.log(`[POLYGON] CREATED event: ${ring.length} vertices`);
+            handlePolygonComplete(ring);
         }
         isPolygonDrawing = false;
         polygonDrawHandler = null;
