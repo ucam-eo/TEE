@@ -620,6 +620,72 @@ The change listener in `dimreduction.js` already calls
 
 ---
 
+## 9. Adding a Custom Schema
+
+Schemas define hierarchical label ontologies for structured labelling.  See
+[frontend_api.md §8](frontend_api.md#8-schemajs) for the full format reference.
+
+### Option A: Add a built-in schema
+
+1. Create a JSON file in `public/schemas/` (e.g. `public/schemas/corine.json`):
+
+```json
+{
+  "name": "CORINE Land Cover",
+  "tree": [
+    {
+      "code": "1",
+      "name": "Artificial surfaces",
+      "children": [
+        { "code": "1.1", "name": "Urban fabric", "children": [
+          { "code": "1.1.1", "name": "Continuous urban fabric", "children": [] },
+          { "code": "1.1.2", "name": "Discontinuous urban fabric", "children": [] }
+        ]}
+      ]
+    },
+    {
+      "code": "3",
+      "name": "Forest and semi-natural areas",
+      "children": []
+    }
+  ]
+}
+```
+
+2. In `schema.js`, add a branch in `loadSchema()`:
+
+```javascript
+} else if (mode === 'corine') {
+    const resp = await fetch('/schemas/corine.json');
+    if (!resp.ok) throw new Error('Failed to load CORINE schema');
+    activeSchema = await resp.json();
+}
+```
+
+3. In `viewer.html`, add an option to the schema dropdown menu (search for
+   `schema-dropdown-menu`):
+
+```html
+<button onclick="loadSchema('corine')">CORINE Land Cover</button>
+```
+
+### Option B: User-uploaded custom schema
+
+No code changes needed — users can already upload custom schemas via the
+"Custom..." option in the Schema dropdown.  Supported formats:
+
+- **JSON** — `{name, tree}` with nested `{code, name, children}` nodes
+- **Tab-indented text** — one label per line, optional code prefix:
+
+```
+1 Artificial surfaces
+    1.1 Urban fabric
+        1.1.1 Continuous urban fabric
+3 Forest and semi-natural areas
+```
+
+---
+
 ## Common Extension Points
 
 | Extension | Primary file | Key function/object |
