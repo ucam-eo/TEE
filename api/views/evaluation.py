@@ -129,7 +129,7 @@ def class_pixel_counts(request):
         return JsonResponse({"error": f"Field '{field}' not found"}, status=400)
 
     try:
-        embeddings, coords, metadata = load_vectors(viewport, str(year))
+        vectors, coords, metadata = load_vectors(viewport, str(year))
     except FileNotFoundError as e:
         return JsonResponse({"error": str(e)}, status=400)
 
@@ -199,7 +199,7 @@ def run_evaluation(request):
 
     # 1. Load vectors (do this before streaming so errors return clean JSON)
     try:
-        embeddings, coords, metadata = load_vectors(viewport, str(year))
+        vectors, coords, metadata = load_vectors(viewport, str(year))
     except FileNotFoundError as e:
         return JsonResponse({"error": str(e)}, status=400)
 
@@ -215,7 +215,7 @@ def run_evaluation(request):
     pixel_labels = class_raster[coords[:, 1], coords[:, 0]]
 
     labelled_mask = pixel_labels > 0
-    labelled_embeddings = embeddings[labelled_mask]
+    labelled_vectors = vectors[labelled_mask]
     labelled_labels = pixel_labels[labelled_mask]
 
     if len(labelled_labels) == 0:
@@ -242,7 +242,7 @@ def run_evaluation(request):
         }, status=400)
 
     valid_mask = np.isin(labelled_labels, list(valid_classes))
-    labelled_embeddings = labelled_embeddings[valid_mask]
+    labelled_vectors = labelled_vectors[valid_mask]
     labelled_labels = labelled_labels[valid_mask]
 
     label_encoder_final = LabelEncoder()
@@ -258,26 +258,26 @@ def run_evaluation(request):
                 f"{len(valid_classes)} classes, classifiers={classifiers}")
 
     # Combined mask: labelled AND valid class, on the full pixel array
-    subset_mask = np.zeros(len(embeddings), dtype=bool)
+    subset_mask = np.zeros(len(vectors), dtype=bool)
     subset_mask[np.where(labelled_mask)[0][valid_mask]] = True
 
-    spatial_embeddings = None
+    spatial_vectors = None
     if "spatial_mlp" in classifiers:
-        spatial_embeddings = gather_spatial_features(
-            embeddings, coords, width, height, radius=1, subset_mask=subset_mask)
+        spatial_vectors = gather_spatial_features(
+            vectors, coords, width, height, radius=1, subset_mask=subset_mask)
 
-    spatial_embeddings_5x5 = None
+    spatial_vectors_5x5 = None
     if "spatial_mlp_5x5" in classifiers:
-        spatial_embeddings_5x5 = gather_spatial_features(
-            embeddings, coords, width, height, radius=2, subset_mask=subset_mask)
+        spatial_vectors_5x5 = gather_spatial_features(
+            vectors, coords, width, height, radius=2, subset_mask=subset_mask)
 
-    embedding_grid = None
+    vector_grid = None
     labelled_coords = None
     if "unet" in classifiers:
-        from api.views.unet_model import build_embedding_grid, _HAS_TORCH, TORCH_MISSING_MSG
+        from api.views.unet_model import build_vector_grid, _HAS_TORCH, TORCH_MISSING_MSG
         if not _HAS_TORCH:
             return JsonResponse({"error": TORCH_MISSING_MSG}, status=400)
-        embedding_grid = build_embedding_grid(embeddings, coords, width, height)
+        vector_grid = build_vector_grid(vectors, coords, width, height)
         labelled_coords = coords[np.where(labelled_mask)[0][valid_mask]]
 
     all_sizes = [10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000]
@@ -311,11 +311,11 @@ def run_evaluation(request):
         # Run learning curve as generator
         active_classifiers = list(classifiers)
         for event in run_learning_curve(
-            labelled_embeddings, labelled_labels, classifiers, training_sizes,
+            labelled_vectors, labelled_labels, classifiers, training_sizes,
             repeats=5, classifier_params=classifier_params,
-            spatial_embeddings=spatial_embeddings,
-            spatial_embeddings_5x5=spatial_embeddings_5x5,
-            embedding_grid=embedding_grid,
+            spatial_vectors=spatial_vectors,
+            spatial_vectors_5x5=spatial_vectors_5x5,
+            vector_grid=vector_grid,
             labelled_coords=labelled_coords,
             finish_classifiers=_finish_classifiers,
         ):
@@ -333,10 +333,10 @@ def run_evaluation(request):
                             if name == "unet":
                                 import torch as _torch
                                 from api.views.unet_model import train_unet
-                                dim = labelled_embeddings.shape[1]
+                                dim = labelled_vectors.shape[1]
                                 n_cls = len(np.unique(labelled_labels))
                                 model = train_unet(
-                                    embedding_grid, labelled_coords, labelled_labels,
+                                    vector_grid, labelled_coords, labelled_labels,
                                     np.arange(len(labelled_labels)), n_cls,
                                     (classifier_params or {}).get("unet", {}))
                                 tmp = tempfile.NamedTemporaryFile(
@@ -351,11 +351,11 @@ def run_evaluation(request):
                                 _trained_models[name] = tmp.name
                             else:
                                 if name == "spatial_mlp":
-                                    X_full = spatial_embeddings
+                                    X_full = spatial_vectors
                                 elif name == "spatial_mlp_5x5":
-                                    X_full = spatial_embeddings_5x5
+                                    X_full = spatial_vectors_5x5
                                 else:
-                                    X_full = labelled_embeddings
+                                    X_full = labelled_vectors
                                 clf = make_classifier(name, (classifier_params or {}).get(name, {}))
                                 clf.fit(X_full, labelled_labels)
                                 tmp = tempfile.NamedTemporaryFile(
@@ -385,10 +385,10 @@ def run_evaluation(request):
                     if name == "unet":
                         import torch as _torch
                         from api.views.unet_model import train_unet
-                        dim = labelled_embeddings.shape[1]
+                        dim = labelled_vectors.shape[1]
                         n_cls = len(np.unique(labelled_labels))
                         model = train_unet(
-                            embedding_grid, labelled_coords, labelled_labels,
+                            vector_grid, labelled_coords, labelled_labels,
                             np.arange(len(labelled_labels)), n_cls,
                             (classifier_params or {}).get("unet", {}))
                         tmp = tempfile.NamedTemporaryFile(
@@ -403,11 +403,11 @@ def run_evaluation(request):
                         _trained_models[name] = tmp.name
                     else:
                         if name == "spatial_mlp":
-                            X_full = spatial_embeddings
+                            X_full = spatial_vectors
                         elif name == "spatial_mlp_5x5":
-                            X_full = spatial_embeddings_5x5
+                            X_full = spatial_vectors_5x5
                         else:
-                            X_full = labelled_embeddings
+                            X_full = labelled_vectors
                         clf = make_classifier(name, (classifier_params or {}).get(name, {}))
                         clf.fit(X_full, labelled_labels)
                         tmp = tempfile.NamedTemporaryFile(

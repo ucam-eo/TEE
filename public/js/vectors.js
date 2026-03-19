@@ -161,8 +161,8 @@ async function downloadVectorData(viewport, year) {
         // Validate cached embeddings aren't all zeros (corrupt data)
         if (cacheValid) {
             let hasNonZero = false;
-            for (let i = 0; i < Math.min(1000, cached.embeddings.length); i++) {
-                if (cached.embeddings[i] !== 0) { hasNonZero = true; break; }
+            for (let i = 0; i < Math.min(1000, cached.values.length); i++) {
+                if (cached.values[i] !== 0) { hasNonZero = true; break; }
             }
             if (!hasNonZero) {
                 console.warn(`[VECTORS] Cached data for ${viewport}/${year} is all zeros — purging`);
@@ -172,10 +172,10 @@ async function downloadVectorData(viewport, year) {
 
         if (cacheValid) {
             console.log(`[VECTORS] Cache hit for ${viewport}/${year}`);
-            const numVectors = cached.embeddings.length / 128;
+            const numVectors = cached.values.length / 128;
             const grid = buildGridLookup(cached.coords, numVectors);
             localVectors = {
-                embeddings: cached.embeddings,
+                values: cached.values,
                 coords: cached.coords,
                 metadata: cached.metadata,
                 gridLookup: grid,
@@ -375,13 +375,13 @@ async function downloadVectorData(viewport, year) {
 
         // Cache in IndexedDB off the critical path (don't block UI)
         VectorCache.put(viewport, year, {
-            embeddings: embeddingsData,
+            values: embeddingsData,
             coords: coordsData,
             metadata
         }).catch(e => console.warn('[VECTORS] Cache write failed:', e));
 
         localVectors = {
-            embeddings: embeddingsData,
+            values: embeddingsData,
             coords: coordsData,
             metadata,
             gridLookup: grid,
@@ -426,7 +426,7 @@ function localExtract(lat, lon) {
     if (idx < 0) return null;
 
     // Return 128-dim embedding slice
-    return localVectors.embeddings.slice(idx * 128, (idx + 1) * 128);
+    return localVectors.values.slice(idx * 128, (idx + 1) * 128);
 }
 
 // Pre-allocated distance buffer (reused across calls to avoid GC pressure)
@@ -436,7 +436,7 @@ function localSearchSimilar(embedding, threshold) {
     const gt = localVectors.metadata.geotransform;
     const N = localVectors.numVectors;
     const dim = localVectors.dim;
-    const emb = localVectors.embeddings;
+    const emb = localVectors.values;
     const coords = localVectors.coords;
     const threshSq = threshold * threshold;
 
@@ -489,7 +489,7 @@ function localSearchSimilarMulti(embeddings, threshold) {
     const gt = localVectors.metadata.geotransform;
     const N = localVectors.numVectors;
     const dim = localVectors.dim;
-    const emb = localVectors.embeddings;
+    const emb = localVectors.values;
     const coords = localVectors.coords;
     const threshSq = threshold * threshold;
 
@@ -533,7 +533,7 @@ function localSearchSimilarMulti(embeddings, threshold) {
 // Union search: single pass counts pixels matching ANY of the searches
 function searchMultiInVectorData(data, searches) {
     const N = data.numVectors;
-    const emb = data.embeddings;
+    const emb = data.values;
     let count = 0;
     for (let i = 0; i < N; i++) {
         const base = i * 128;
@@ -553,15 +553,15 @@ async function loadVectorDataOnly(viewport, year) {
     const cached = await VectorCache.get(viewport, year);
     if (cached) {
         let hasNonZero = false;
-        for (let i = 0; i < Math.min(1000, cached.embeddings.length); i++) {
-            if (cached.embeddings[i] !== 0) { hasNonZero = true; break; }
+        for (let i = 0; i < Math.min(1000, cached.values.length); i++) {
+            if (cached.values[i] !== 0) { hasNonZero = true; break; }
         }
         if (hasNonZero) {
             return {
-                embeddings: cached.embeddings,
+                values: cached.values,
                 coords: cached.coords,
                 metadata: cached.metadata,
-                numVectors: cached.embeddings.length / 128
+                numVectors: cached.values.length / 128
             };
         }
     }
@@ -570,7 +570,7 @@ async function loadVectorDataOnly(viewport, year) {
     try {
         await downloadVectorData(viewport, year);
         return {
-            embeddings: localVectors.embeddings,
+            values: localVectors.values,
             coords: localVectors.coords,
             metadata: localVectors.metadata,
             numVectors: localVectors.numVectors
@@ -598,7 +598,7 @@ function extractFromData(data, lat, lon) {
         }
     }
     if (idx < 0) return null;
-    return data.embeddings.slice(idx * 128, (idx + 1) * 128);
+    return data.values.slice(idx * 128, (idx + 1) * 128);
 }
 
 // ── Explorer Visualization ──

@@ -48,7 +48,7 @@ Object.defineProperty(window, 'segK', {
 const segWorkerBlob = new Blob([`
     self.onmessage = function(e) {
         const {N, dim, k, maxIter} = e.data;
-        const embeddings = new Float32Array(e.data.embeddings);
+        const embeddings = new Float32Array(e.data.vectors);
         const sampleIdx = e.data.sampleIdx ? new Uint32Array(e.data.sampleIdx) : null;
         const S = sampleIdx ? sampleIdx.length : N;
         const assignments = new Int32Array(N);
@@ -237,8 +237,8 @@ async function runKMeans(k) {
     const N = segVectors.numVectors;
     const dim = segVectors.dim;
 
-    // Slice to avoid detaching segVectors.embeddings
-    const embCopy = segVectors.embeddings.buffer.slice(0);
+    // Slice to avoid detaching segVectors.values
+    const embCopy = segVectors.values.buffer.slice(0);
     const transferables = [embCopy];
 
     const sampleSize = Math.min(Math.max(5000, k * 500), N);
@@ -277,7 +277,7 @@ async function runKMeans(k) {
                 const px = segVectors.coords[ni * 2], py = segVectors.coords[ni * 2 + 1];
                 segLabels.push({
                     id: c, color, hex, name: `Cluster ${c + 1}`, count: counts[c],
-                    embedding: Array.from(segVectors.embeddings.subarray(ni * dim, (ni + 1) * dim)),
+                    embedding: Array.from(segVectors.values.subarray(ni * dim, (ni + 1) * dim)),
                     sourcePixel: { lat: gt.f + py * gt.e, lon: gt.c + px * gt.a },
                     threshold: maxDistArr[c],
                     centroid: Array.from(centroids.subarray(c * dim, (c + 1) * dim))
@@ -302,7 +302,7 @@ async function runKMeans(k) {
     };
 
     segWorker.postMessage(
-        {embeddings: embCopy, N, dim, k, maxIter: 20, sampleIdx: sampleBuf},
+        {vectors: embCopy, N, dim, k, maxIter: 20, sampleIdx: sampleBuf},
         transferables
     );
 }
@@ -487,7 +487,7 @@ function saveClusterAsLabel(clusterId) {
     const pixel_coords = [];
     const centroid = cluster.embedding;
     const dim = segVectors.dim || 128;
-    const emb = segVectors.embeddings;
+    const emb = segVectors.values;
     let maxDistSq = 0;
     for (let i = 0; i < N; i++) {
         if (segAssignments[i] !== clusterId) continue;

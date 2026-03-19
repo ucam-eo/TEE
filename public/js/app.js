@@ -484,7 +484,7 @@ function exportLabels() {
 
 // Label management
 let definedLabels = [];  // List of all defined labels
-let embeddingLabels = {}; // {label: [[128-dim vector], [128-dim vector], ...]}
+let embeddingLabels = {}; // DEPRECATED — legacy label system, kept as empty stub
 let labelColors = {};    // {label: "#FF0000", ...}
 let labelPixels = {}; // {key: {label: 'road', coordinate: {lat, lon}}} for visualization
 
@@ -1190,7 +1190,6 @@ Object.defineProperties(window, {
     heatmapSatelliteLayer: { get() { return heatmapSatelliteLayer; }, set(v) { heatmapSatelliteLayer = v; }, configurable: true },
     isLoggedIn:            { get() { return isLoggedIn; },           set(v) { isLoggedIn = v; },           configurable: true },
     definedLabels:         { get() { return definedLabels; },        set(v) { definedLabels = v; },        configurable: true },
-    embeddingLabels:       { get() { return embeddingLabels; },      set(v) { embeddingLabels = v; },      configurable: true },
     labelColors:           { get() { return labelColors; },          set(v) { labelColors = v; },          configurable: true },
     labelPixels:           { get() { return labelPixels; },          set(v) { labelPixels = v; },          configurable: true },
     similarPixels:         { get() { return similarPixels; },        set(v) { similarPixels = v; },        configurable: true },

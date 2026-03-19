@@ -671,7 +671,7 @@ async function getUmapWorkerURL() {
     const workerCode = umapLib + `\n;
     self.onmessage = function(e) {
         const {n, dim, nComponents} = e.data;
-        const embeddings = new Float32Array(e.data.embeddings);
+        const embeddings = new Float32Array(e.data.vectors);
 
         // Reshape flat array into 2D array for UMAP
         const data = [];
@@ -712,7 +712,7 @@ async function getUmapWorkerURL() {
 function computePCAFromLocal(lv) {
     const N = lv.numVectors;
     const dim = lv.dim; // 128
-    const emb = lv.embeddings; // Float32Array, N * dim
+    const emb = lv.values; // Float32Array, N * dim
     const allCoords = lv.coords;  // Int32Array, N * 2
     const gt = lv.metadata.geotransform;
 
@@ -899,7 +899,7 @@ async function loadDimReduction(method = null) {
             const N = window.localVectors.numVectors;
             const dim = window.localVectors.dim;
             const gt = window.localVectors.metadata.geotransform;
-            const emb = window.localVectors.embeddings;
+            const emb = window.localVectors.values;
             const coords = window.localVectors.coords;
             const nComponents = 3;
 
@@ -953,7 +953,7 @@ async function loadDimReduction(method = null) {
                         reject(new Error(err.message || 'UMAP worker error'));
                     };
                     umapWorker.postMessage({
-                        embeddings: subEmb.buffer,
+                        vectors: subEmb.buffer,
                         n: subN,
                         dim: dim,
                         nComponents: nComponents
@@ -1080,8 +1080,8 @@ async function loadHeatmap() {
         const numVectors = Math.min(data1.numVectors, data2.numVectors);
         const dim = 128;
         const gt = data1.metadata.geotransform;
-        const emb1 = data1.embeddings;
-        const emb2 = data2.embeddings;
+        const emb1 = data1.values;
+        const emb2 = data2.values;
         const coords = data1.coords;
 
         // Compute Euclidean distances element-wise and build result array

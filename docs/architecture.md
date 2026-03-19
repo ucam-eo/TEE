@@ -510,7 +510,7 @@ const px = Math.round((lon - gt.c) / gt.a);
 const py = Math.round((lat - gt.f) / gt.e);
 const idx = gridLookupIndex(localVectors.gridLookup, px, py);
 if (idx >= 0) {
-    return localVectors.embeddings.subarray(idx * 128, (idx + 1) * 128);
+    return localVectors.values.subarray(idx * 128, (idx + 1) * 128);
 }
 ```
 
@@ -519,7 +519,26 @@ Note: `a` is typically ~0.00009 (about 10m in degrees at UK latitudes).
 
 ---
 
-## 12. Vector Data Pipeline
+## 12. Terminology: Embeddings vs Vectors
+
+The codebase enforces a consistent naming convention:
+
+| Term | Format | Meaning |
+|---|---|---|
+| **Embeddings** | uint8 quantized | Raw storage/transfer format from the Tessera model |
+| **Vectors** | float32 dequantized | What all computation uses (similarity search, PCA, k-means, etc.) |
+
+**Dequantization** converts embeddings to vectors:
+```
+vector[i] = embedding[i] / 255.0 * (dim_max[i] - dim_min[i]) + dim_min[i]
+```
+
+In code: `localVectors.values` is the Float32Array of dequantized vectors.
+The file on disk `all_embeddings_uint8.npy.gz` contains the uint8 embeddings.
+
+---
+
+## 13. Vector Data Pipeline
 
 When vectors are downloaded to the browser, they go through these steps:
 
@@ -544,7 +563,7 @@ When vectors are downloaded to the browser, they go through these steps:
 
 ---
 
-## 13. Testing
+## 14. Testing
 
 TEE has static analysis tests in `validation/` that verify the frontend HTML and
 JS haven't regressed during refactoring.  **Run after any frontend change:**
@@ -581,7 +600,7 @@ Fix the code or update the test assertion — never skip tests.
 
 ---
 
-## 14. Deployment
+## 15. Deployment
 
 ### Local development
 

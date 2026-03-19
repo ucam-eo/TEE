@@ -40,7 +40,6 @@ label management, progress tracking, and the `window.onload` entry point.
 | `window.markers` | `{osm: {}, embedding: {}, rgb: {}}` | Legacy marker objects |
 | `window.isLoggedIn` | `boolean` | Whether user is authenticated |
 | `window.definedLabels` | `string[]` | Legacy embedding label names |
-| `window.embeddingLabels` | `{label: number[][]}` | Legacy embedding vectors per label |
 | `window.labelColors` | `{label: string}` | Legacy label color map |
 
 ### Functions
@@ -744,7 +743,7 @@ Render schema tree as HTML string (recursive).
 
 ```javascript
 {
-    embeddings: Float32Array,      // N * 128 flat array
+    values: Float32Array,           // N * 128 flat array (dequantized float32 vectors)
     coords: Int32Array,            // N * 2 flat array [px0, py0, px1, py1, ...]
     metadata: {
         geotransform: {

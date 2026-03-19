@@ -22,17 +22,17 @@ logger = logging.getLogger(__name__)
 
 
 def dequantize(quantized, dim_min, dim_max):
-    """Convert uint8 embeddings back to float32 using per-dimension min/max."""
+    """Convert uint8 embeddings to float32 vectors using per-dimension min/max."""
     dim_scale = dim_max - dim_min
     dim_scale[dim_scale == 0] = 1
     return quantized.astype(np.float32) / 255.0 * dim_scale + dim_min
 
 
 def load_vectors(viewport, year):
-    """Load dequantized float32 embeddings + pixel coords + metadata."""
+    """Load dequantized float32 vectors + pixel coords + metadata."""
     vector_dir = VECTORS_DIR / viewport / str(year)
 
-    emb_path = vector_dir / "all_embeddings_uint8.npy.gz"
+    emb_path = vector_dir / "all_vectors_uint8.npy.gz"
     quant_path = vector_dir / "quantization.json"
     coords_path = vector_dir / "pixel_coords.npy.gz"
     meta_path = vector_dir / "metadata.json"
@@ -49,7 +49,7 @@ def load_vectors(viewport, year):
     with gzip.open(emb_path, "rb") as f:
         quantized = np.load(io.BytesIO(f.read()))
 
-    embeddings = dequantize(quantized, dim_min, dim_max)
+    vectors = dequantize(quantized, dim_min, dim_max)
 
     with gzip.open(coords_path, "rb") as f:
         coords = np.load(io.BytesIO(f.read()))
@@ -57,7 +57,7 @@ def load_vectors(viewport, year):
     with open(meta_path) as f:
         metadata = json.load(f)
 
-    return embeddings, coords, metadata
+    return vectors, coords, metadata
 
 
 def rasterize_shapefile(gdf, field, transform, width, height):
@@ -80,10 +80,10 @@ def rasterize_shapefile(gdf, field, transform, width, height):
     return class_raster
 
 
-def gather_spatial_features(embeddings, coords, width, height, radius=1,
+def gather_spatial_features(vectors, coords, width, height, radius=1,
                             subset_mask=None):
-    """Build (2r+1)^2 neighbourhood features from (N, dim) embeddings on a regular grid."""
-    dim = embeddings.shape[1]
+    """Build (2r+1)^2 neighbourhood features from (N, dim) vectors on a regular grid."""
+    dim = vectors.shape[1]
     window = 2 * radius + 1
     grid = np.full((height, width), -1, dtype=np.int32)
     grid[coords[:, 1], coords[:, 0]] = np.arange(len(coords))
@@ -103,7 +103,7 @@ def gather_spatial_features(embeddings, coords, width, height, radius=1,
         valid = (nr >= 0) & (nr < height) & (nc >= 0) & (nc < width)
         idx = np.where(valid, grid[np.clip(nr, 0, height - 1), np.clip(nc, 0, width - 1)], -1)
         has_neighbour = valid & (idx >= 0)
-        spatial[has_neighbour, i * dim:(i + 1) * dim] = embeddings[idx[has_neighbour]]
+        spatial[has_neighbour, i * dim:(i + 1) * dim] = vectors[idx[has_neighbour]]
 
     return spatial
 
@@ -187,9 +187,9 @@ def make_classifier(name, params=None):
         raise ValueError(f"Unknown classifier: {name}")
 
 
-def run_learning_curve(embeddings, labels, classifier_names, training_sizes,
-                       repeats=5, classifier_params=None, spatial_embeddings=None,
-                       spatial_embeddings_5x5=None, embedding_grid=None,
+def run_learning_curve(vectors, labels, classifier_names, training_sizes,
+                       repeats=5, classifier_params=None, spatial_vectors=None,
+                       spatial_vectors_5x5=None, vector_grid=None,
                        labelled_coords=None, finish_classifiers=None):
     """Generator that yields progress events after each training size."""
     if finish_classifiers is None:
@@ -235,21 +235,21 @@ def run_learning_curve(embeddings, labels, classifier_names, training_sizes,
             if len(test_idx) == 0:
                 continue
 
-            X_train, y_train = embeddings[train_idx], labels[train_idx]
-            X_test, y_test = embeddings[test_idx], labels[test_idx]
+            X_train, y_train = vectors[train_idx], labels[train_idx]
+            X_test, y_test = vectors[test_idx], labels[test_idx]
 
             for name in active:
                 if name == "unet" and seed >= unet_repeats:
                     continue
 
-                if name == "unet" and embedding_grid is not None:
+                if name == "unet" and vector_grid is not None:
                     try:
                         from api.views.unet_model import train_unet, predict_unet
                         model = train_unet(
-                            embedding_grid, labelled_coords, labels,
+                            vector_grid, labelled_coords, labels,
                             train_idx, n_classes,
                             (classifier_params or {}).get("unet", {}))
-                        preds = predict_unet(model, embedding_grid)
+                        preds = predict_unet(model, vector_grid)
                         y_pred = preds[labelled_coords[test_idx, 1],
                                        labelled_coords[test_idx, 0]]
                         f1 = f1_score(y_test, y_pred, average="macro", zero_division=0)
@@ -265,12 +265,12 @@ def run_learning_curve(embeddings, labels, classifier_names, training_sizes,
                         f1w_scores[name].append(0.0)
                     continue
 
-                if name == "spatial_mlp" and spatial_embeddings is not None:
-                    X_tr, X_te = spatial_embeddings[train_idx], spatial_embeddings[test_idx]
-                    X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=3, dim=embeddings.shape[1])
-                elif name == "spatial_mlp_5x5" and spatial_embeddings_5x5 is not None:
-                    X_tr, X_te = spatial_embeddings_5x5[train_idx], spatial_embeddings_5x5[test_idx]
-                    X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=5, dim=embeddings.shape[1])
+                if name == "spatial_mlp" and spatial_vectors is not None:
+                    X_tr, X_te = spatial_vectors[train_idx], spatial_vectors[test_idx]
+                    X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=3, dim=vectors.shape[1])
+                elif name == "spatial_mlp_5x5" and spatial_vectors_5x5 is not None:
+                    X_tr, X_te = spatial_vectors_5x5[train_idx], spatial_vectors_5x5[test_idx]
+                    X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=5, dim=vectors.shape[1])
                 else:
                     X_tr, X_te = X_train, X_test
                     y_tr_aug = y_train

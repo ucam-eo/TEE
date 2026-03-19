@@ -771,7 +771,7 @@ function renderManualClassification() {
     const dim = window.localVectors.dim;
     const N = window.localVectors.numVectors;
     const coords = window.localVectors.coords;
-    const emb = window.localVectors.embeddings;
+    const emb = window.localVectors.values;
     const gt = window.localVectors.metadata.geotransform;
     const grid = window.localVectors.gridLookup;
 
@@ -999,7 +999,7 @@ function handlePolygonComplete(latLngs) {
         for (const m of matches) {
             const emb = new Float32Array(dim);
             const base = m.vectorIndex * dim;
-            for (let d = 0; d < dim; d++) emb[d] = window.localVectors.embeddings[base + d];
+            for (let d = 0; d < dim; d++) emb[d] = window.localVectors.values[base + d];
             allEmbs.push(Array.from(emb));
         }
         entry.embeddings = allEmbs;
@@ -1009,7 +1009,7 @@ function handlePolygonComplete(latLngs) {
         const centroid = new Float32Array(dim);
         for (const m of matches) {
             const base = m.vectorIndex * dim;
-            for (let d = 0; d < dim; d++) centroid[d] += window.localVectors.embeddings[base + d];
+            for (let d = 0; d < dim; d++) centroid[d] += window.localVectors.values[base + d];
         }
         for (let d = 0; d < dim; d++) centroid[d] /= matches.length;
         entry.embedding = Array.from(centroid);
@@ -1312,7 +1312,7 @@ function importGeoJSON(geojson) {
                     const centroid = new Float32Array(dim);
                     for (const m of matches) {
                         const base = m.vectorIndex * dim;
-                        for (let d = 0; d < dim; d++) centroid[d] += window.localVectors.embeddings[base + d];
+                        for (let d = 0; d < dim; d++) centroid[d] += window.localVectors.values[base + d];
                     }
                     for (let d = 0; d < dim; d++) centroid[d] /= matches.length;
                     lbl.embedding = Array.from(centroid);
