@@ -689,14 +689,24 @@ from lib.viewport_writer import (
 
 Create a new viewport file from geographic bounds (WGS84).
 
+- **viewport_name** `str` — must pass `validate_viewport_name()` (alphanumeric + `_-`, ≤128 chars)
+- **bounds** `(min_lon, min_lat, max_lon, max_lat)` — WGS84 coordinates
+- **description** `str` — optional human-readable description
+
+**Returns:** `Path` to the created viewport file (e.g. `viewports/cambridge.txt`)
+
+**Raises:**
+- `ValueError` — invalid bounds: longitude outside ±180, latitude outside ±90,
+  or min ≥ max (e.g. `min_lon >= max_lon`)
+- `FileExistsError` — a viewport with that name already exists. The API layer
+  (`POST /api/viewports/create`) checks for this before calling, returning 409.
+
 ```python
 path = create_viewport_from_bounds(
     "cambridge",
     bounds=(0.08, 52.18, 0.16, 52.22),
     description="Central Cambridge"
 )
-# Returns: Path("viewports/cambridge.txt")
-# Raises: ValueError (invalid bounds), FileExistsError (already exists)
 ```
 
 #### `set_active_viewport(viewport_name: str) -> None`
