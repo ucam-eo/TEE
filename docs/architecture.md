@@ -564,7 +564,40 @@ serialized fields without a migration path.
 
 ## 13. Vector Data Pipeline
 
-When vectors are downloaded to the browser, they go through these steps:
+### Server-side: viewport processing (`process_viewport.py`)
+
+When a viewport is created, the pipeline fetches embedding tiles from
+GeoTessera and produces vector files for the browser:
+
+```
+GeoTessera remote storage        process_viewport.py           Stored on disk
+─────────────────────────        ───────────────────           ──────────────
+int8 embeddings + scales  ──►  dequantize to float32    ──►  uint8 quantized
+(per-tile, native UTM)         reproject to EPSG:4326        (per-viewport)
+                               merge into mosaic
+                               crop to viewport bounds
+                               re-quantize to uint8
+```
+
+**Known inefficiency (temporary):** The pipeline dequantizes int8→float32,
+reprojects all 128 bands with bilinear interpolation, then re-quantizes
+float32→uint8.  This is wasteful:
+
+- **Double quantization** — original int8 values are dequantized then
+  re-quantized with different min/max, introducing rounding error
+- **Bilinear interpolation on embeddings** — interpolating between two
+  learned embedding vectors produces semantically meaningless values;
+  nearest-neighbor would be more appropriate
+- **CPU cost** — reprojecting 128 bands per pixel is the main bottleneck
+  (~12 MB/s throughput on LAN despite fast network)
+
+This will be resolved by the **Zarr migration**, which serves pre-computed
+EPSG:4326 tiles directly — no dequantization, no reprojection, no
+re-quantization.  See `memory/zarr-plan.md` for details.
+
+### Client-side: browser vector loading
+
+Once stored on disk, vectors are downloaded to the browser:
 
 1. **Server stores** uint8 quantized embeddings + quantization params + pixel
    coordinates in `viewports/{name}/vectors/{year}/`:
