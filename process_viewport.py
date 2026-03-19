@@ -471,18 +471,18 @@ def main():
 
     progress.update("processing", f"Starting {len(years_to_process)} year(s)...", percent=1)
 
+    # Process years sequentially so progress is reported for each year.
+    # (Parallel workers can't share the ProgressTracker, and each spawns
+    # a separate GeoTessera instance with its own 28s registry download.)
     n = len(years_to_process)
-    if max_workers == 1:
-        # Single year: run in main process to avoid subprocess overhead
-        tessera = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
-        results = [
-            process_year(tessera, viewport_id, bounds, years_to_process[0],
-                         pyramids_dir, vectors_dir, progress=progress)
-        ]
-    else:
-        print(f"Using {max_workers} parallel workers")
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(_process_year_worker, args_list))
+    tessera = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
+    results = []
+    for i, year in enumerate(years_to_process):
+        results.append(
+            process_year(tessera, viewport_id, bounds, year,
+                         pyramids_dir, vectors_dir, progress=progress,
+                         year_idx=i, num_years=n)
+        )
 
     # Summary
     succeeded = [year for year, ok, _ in results if ok]
