@@ -366,7 +366,7 @@ class TestBackendLibraries:
             "make_classifier", "run_learning_curve",
         ]),
         ("lib/tile_renderer.py", [
-            "render_tile", "tile_to_bbox", "get_pyramid_path",
+            "render_tile_png", "tile_to_bbox", "get_pyramid_path",
         ]),
     ]
 

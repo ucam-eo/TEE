@@ -1,4 +1,4 @@
-"""Tile server views — serves map tiles from pyramid GeoTIFFs and PNGs."""
+"""Tile server views — serves map tiles from PNG pyramids."""
 
 import io
 import json
@@ -7,7 +7,6 @@ import logging
 from pathlib import Path
 
 from PIL import Image
-from rio_tiler.io import Reader
 from django.http import HttpResponse, JsonResponse
 
 from lib.config import PYRAMIDS_DIR
@@ -15,7 +14,6 @@ from lib.viewport_utils import validate_viewport_name
 from lib.tile_renderer import (
     tile_to_bbox,
     get_pyramid_path,
-    render_tile,
     render_tile_png,
     _load_pyramid_meta,
 )
@@ -45,7 +43,7 @@ def _get_transparent_png():
 
 def _get_reader(viewport, map_id, zoom_level):
     """Get or create a reader path for a specific viewport, map, and zoom level.
-    Returns (path_str, mtime, is_png) tuple, or None if file doesn't exist.
+    Returns (path_str, mtime) tuple, or None if file doesn't exist.
     Delegates path resolution to lib.tile_renderer.get_pyramid_path; caches result."""
     pyramid_level = max(0, min(5, (14 - zoom_level) // 2))
     key = f"{viewport}_{map_id}_{pyramid_level}"
@@ -55,10 +53,10 @@ def _get_reader(viewport, map_id, zoom_level):
         _readers.pop(key, None)
         return None
 
-    path, mtime, is_png = result
+    path, mtime = result
     cached = _readers.get(key)
     if not cached or cached[1] != mtime or cached[0] != path:
-        _readers[key] = (path, mtime, is_png)
+        _readers[key] = (path, mtime)
     return _readers[key]
 
 
@@ -89,7 +87,7 @@ def get_tile(request, viewport, map_id, z, x, y):
         if not reader_info:
             return _transparent_tile()
 
-        path, mtime, is_png = reader_info
+        path, mtime = reader_info
 
         # ETag / 304 support (includes mtime so stale cache is busted)
         etag = hashlib.md5(f"{path}:{mtime}:{z}:{x}:{y}".encode()).hexdigest()
@@ -97,10 +95,7 @@ def get_tile(request, viewport, map_id, z, x, y):
             return HttpResponse(status=304)
 
         try:
-            if is_png:
-                png_bytes = render_tile_png(path, z, x, y, _mtime=mtime)
-            else:
-                png_bytes = render_tile(path, z, x, y, _mtime=mtime)
+            png_bytes = render_tile_png(path, z, x, y, _mtime=mtime)
             if png_bytes is None:
                 return _transparent_tile()
             resp = _tile_response(png_bytes)
@@ -134,7 +129,6 @@ def get_bounds(request, viewport, map_id):
         else:
             year_dir = viewport_pyramids_dir / map_id
 
-        # Try PNG meta first
         meta_path = year_dir / 'pyramid_meta.json'
         if meta_path.exists():
             with open(meta_path) as f:
@@ -148,17 +142,7 @@ def get_bounds(request, viewport, map_id):
                 'center': [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2],
             })
 
-        # Fall back to GeoTIFF
-        tif_path = year_dir / 'level_0.tif'
-        if tif_path.exists():
-            with Reader(str(tif_path)) as src:
-                bounds = src.bounds
-                return JsonResponse({
-                    'bounds': bounds,
-                    'center': [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2],
-                })
-
-        return JsonResponse({'error': 'File not found'}, status=404)
+        return JsonResponse({'error': 'Pyramid not found (run migration if .tif files exist)'}, status=404)
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -177,14 +161,14 @@ def tile_health(request):
                 for year in YEARS:
                     if year != 'satellite':
                         yd = viewport_dir / year
-                        if (yd / 'level_0.png').exists() or (yd / 'level_0.tif').exists():
+                        if (yd / 'level_0.png').exists():
                             available_maps.append(year)
 
-                if (viewport_dir / 'satellite' / 'level_0.tif').exists():
+                if (viewport_dir / 'satellite' / 'level_0.png').exists():
                     available_maps.append('satellite')
 
                 rgb_dir = viewport_dir / 'rgb' / '2024'
-                if (rgb_dir / 'level_0.png').exists() or (rgb_dir / 'level_0.tif').exists():
+                if (rgb_dir / 'level_0.png').exists():
                     available_maps.append('rgb')
 
                 if available_maps:
