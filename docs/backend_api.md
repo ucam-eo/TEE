@@ -243,7 +243,7 @@ Check if a viewport has enough data to open the viewer. Returns `ready: true` on
 
 ### 1.3 Pipeline & Progress — `api/views/pipeline.py`
 
-**Overview:** Monitor and control the background data-processing pipeline. The pipeline is a 2-stage subprocess: (1) download tiles + create pyramids + extract vectors, (2) create satellite pyramids.
+**Overview:** Monitor and control the background data-processing pipeline. The pipeline downloads embedding tiles, creates PNG pyramids, and extracts vectors.
 
 **Depends on:** `lib.pipeline`, `lib.viewport_utils`, `lib.viewport_writer`, `lib.config`
 
@@ -311,7 +311,7 @@ performance.
 
 Serve a single map tile.
 
-- `map_id`: year string (`"2018"` .. `"2025"`), `"satellite"`, or `"rgb"`
+- `map_id`: year string (`"2017"` .. `"2025"`). Satellite imagery is served by external providers (ESRI, Google), not this tile server.
 - `z`, `x`, `y`: standard slippy-map tile coordinates
 
 ```
@@ -687,7 +687,7 @@ compute_data_size("cambridge")  # 142.3
 
 ### 2.5 `lib/pipeline.py` — Pipeline Orchestration
 
-**Overview:** Two-stage pipeline for viewport data processing. Stage 1 (0-98%): download embedding tiles, create RGB pyramids, extract vectors. Stage 2 (98-100%): create satellite pyramids. Supports cancellation via SIGTERM and real-time progress forwarding from subprocess to pipeline progress file.
+**Overview:** Pipeline for viewport data processing: download embedding tiles, create PNG pyramids, extract vectors. Supports cancellation via SIGTERM and real-time progress forwarding from subprocess to pipeline progress file.
 
 ```python
 from lib.pipeline import PipelineRunner, cancel_pipeline, is_pipeline_cancelled
@@ -719,8 +719,7 @@ success, error = runner.run_full_pipeline(
 
 | Stage | Range | Description |
 |---|---|---|
-| `process` | 0–98% | Download tiles + pyramids + vectors |
-| `satellite` | 98–100% | Satellite pyramids (fast) |
+| `process` | 0–100% | Download tiles + pyramids + vectors |
 
 **Key methods:**
 
@@ -1012,15 +1011,7 @@ vectors/<viewport>/<year>/
 
 ### 3.2 `create_pyramids.py`
 
-**Overview:** Creates satellite RGB pyramids from existing satellite GeoTIFF files. Separate from `process_viewport.py` because satellite imagery comes from a different source. Runs as Stage 2 of the pipeline.
-
-**Usage:**
-
-```bash
-python create_pyramids.py
-```
-
-Reads the active viewport, finds `mosaics/<viewport>_satellite_*.tif`, and creates a 6-level GeoTIFF pyramid under `pyramids/<viewport>/satellite/`.
+**Overview:** Legacy script for creating satellite RGB pyramids from GeoTIFF files. No longer used in the main pipeline — satellite imagery is now served by external providers (ESRI, Google). Kept for potential offline use.
 
 **Key function:**
 
@@ -1029,13 +1020,6 @@ def create_pyramid_level(input_file, output_file, scale_factor,
                         target_width, target_height, use_nearest=True):
     """Create one pyramid level with 2x2 averaging between levels.
     Uses nearest-neighbor resampling for crisp 10m boundaries."""
-```
-
-**Output structure:**
-
-```
-pyramids/<viewport>/satellite/
-  level_0.tif, level_1.tif, ..., level_5.tif
 ```
 
 ---

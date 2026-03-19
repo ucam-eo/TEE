@@ -46,7 +46,7 @@ TEE/
   api/urls.py          URL routing
   lib/                 Pure-function backend libraries
   process_viewport.py  Pipeline script (subprocess)
-  create_pyramids.py   Satellite pyramid builder
+  create_pyramids.py   Legacy satellite pyramid builder (unused)
   docs/                This documentation
 ```
 

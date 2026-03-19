@@ -153,7 +153,7 @@ import/export between modules; `dimreduction.js` is the only module that uses
     ├─ download embedding tiles            ▼
     │   via GeoTessera library         Tile server serves /tiles/{vp}/{year}/{z}/{x}/{y}.png
     ├─ create PNG pyramids ──────────► (api/views/tiles.py → lib/tile_renderer.py)
-    │   (create_pyramids.py)
+    │   (process_viewport.py)
     ├─ extract uint8 vectors ────────► /api/vector-data/{vp}/{year}/*.npy.gz
     │   (lib/viewport_ops.py)              │
     └─ write metadata                      ▼
@@ -322,7 +322,7 @@ TEE/
 │       └── base.py             Django settings
 │
 ├── process_viewport.py         Pipeline subprocess (fetch + pyramids + vectors)
-├── create_pyramids.py          Satellite pyramid builder
+├── create_pyramids.py          Legacy satellite pyramid builder (unused)
 ├── Dockerfile                  Multi-stage Docker build
 └── docs/
     ├── index.md                This documentation home
