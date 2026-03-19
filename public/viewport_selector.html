@@ -2059,8 +2059,11 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             });
         }
 
-        // Switch to viewport
+        // Switch to viewport (guarded against double-click race)
+        let _switching = false;
         async function switchViewport(name) {
+            if (_switching) return;
+            _switching = true;
             try {
                 const response = await fetch('/api/viewports/switch', {
                     method: 'POST',
@@ -2088,6 +2091,8 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             } catch (error) {
                 console.error('Error switching viewport:', error);
                 alert(`Error switching viewport: ${error.message}`);
+            } finally {
+                _switching = false;
             }
         }
 
