@@ -398,7 +398,22 @@ List all viewports and their available map layers.
 
 #### `POST /api/evaluation/upload-shapefile`
 
-Upload a `.zip` containing a shapefile (`.shp`, `.dbf`, `.shx`, `.prj`). Returns field metadata for class selection.
+Upload a `.zip` containing a shapefile (`.shp`, `.dbf`, `.shx`, `.prj`). Returns
+field metadata for class selection. The GeoJSON overlay is capped at 10K features
+to avoid browser crashes.
+
+**Validation (checked in order):**
+1. File present in request
+2. File extension is `.zip`
+3. Valid zip archive (not corrupt)
+4. Contains at least one `.shp` file
+5. Geopandas can read the shapefile (valid format, companion files present)
+6. Shapefile has at least 1 feature (not empty)
+7. Shapefile has geometry
+8. Shapefile has at least 1 non-geometry attribute field
+
+If no CRS is defined, EPSG:4326 is assumed with a server-side warning.
+Otherwise the shapefile is reprojected to EPSG:4326 automatically.
 
 ```
 POST /api/evaluation/upload-shapefile
@@ -415,6 +430,13 @@ Body: file=<shapefile.zip>
   ],
   "geojson": { "type": "FeatureCollection", "features": [...] }
 }
+
+// Response 400 (examples)
+{ "error": "File must be a .zip" }
+{ "error": "No .shp file found in zip" }
+{ "error": "Shapefile is empty (0 features)" }
+{ "error": "Shapefile has no attribute fields (only geometry)" }
+{ "error": "Failed to read shapefile: ..." }
 ```
 
 #### `POST /api/evaluation/class-counts`

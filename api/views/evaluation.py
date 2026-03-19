@@ -70,8 +70,21 @@ def upload_shapefile(request):
     except Exception as e:
         return JsonResponse({"error": f"Failed to read shapefile: {e}"}, status=400)
 
+    # Validate shapefile contents
+    if len(gdf) == 0:
+        return JsonResponse({"error": "Shapefile is empty (0 features)"}, status=400)
+
+    if "geometry" not in gdf.columns or gdf.geometry.is_empty.all():
+        return JsonResponse({"error": "Shapefile has no geometry"}, status=400)
+
+    non_geom_cols = [c for c in gdf.columns if c != "geometry"]
+    if not non_geom_cols:
+        return JsonResponse({"error": "Shapefile has no attribute fields (only geometry)"}, status=400)
+
     # Reproject to EPSG:4326
-    if gdf.crs and gdf.crs.to_epsg() != 4326:
+    if gdf.crs is None:
+        logger.warning("Shapefile has no CRS defined — assuming EPSG:4326")
+    elif gdf.crs.to_epsg() != 4326:
         gdf = gdf.to_crs(epsg=4326)
 
     # Cache for run step
