@@ -143,20 +143,18 @@ def get_bounds(request, viewport, map_id):
 
 
 def tile_health(request):
-    """Health check — returns available maps for all viewports."""
+    """Health check — returns available years for all viewports."""
     viewports_data = {}
 
     if PYRAMIDS_BASE_DIR.exists():
         for viewport_dir in PYRAMIDS_BASE_DIR.iterdir():
             if viewport_dir.is_dir():
                 viewport_name = viewport_dir.name
-                available_maps = []
-
-                for sub in viewport_dir.iterdir():
-                    if sub.is_dir() and sub.name.isdigit() and (sub / 'level_0.png').exists():
-                        available_maps.append(sub.name)
-
-                if available_maps:
-                    viewports_data[viewport_name] = available_maps
+                years = sorted([
+                    sub.name for sub in viewport_dir.iterdir()
+                    if sub.is_dir() and sub.name.isdigit() and (sub / 'level_0.png').exists()
+                ])
+                if years:
+                    viewports_data[viewport_name] = years
 
     return JsonResponse({'status': 'ok', 'viewports': viewports_data})
