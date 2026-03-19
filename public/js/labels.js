@@ -398,8 +398,8 @@ function rebuildClassOverlay(className) {
         if (label.type === 'polygon' && label.vertices) {
             const polyLatLngs = label.vertices.map(v => L.latLng(v[0], v[1]));
             const polyline = L.polygon(polyLatLngs, {
-                color: label.color, fillColor: label.color,
-                fillOpacity: 0.15, weight: 2
+                color: label.color, fillColor: 'transparent',
+                fillOpacity: 0, weight: 2
             });
             layerGroup.addLayer(polyline);
         }
