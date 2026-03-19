@@ -299,6 +299,15 @@ function _syncClassColor(className, color) {
 }
 
 function restoreManualLabelState() {
+    // Clear any stale overlays from prior viewport (handles bfcache restore)
+    for (const [cls, entry] of Object.entries(manualClassOverlays)) {
+        if (entry.layerGroup && window.maps.rgb) {
+            window.maps.rgb.removeLayer(entry.layerGroup);
+        }
+    }
+    manualClassOverlays = {};
+    manualLabels = [];
+
     // Restore schema mode
     const savedSchemaMode = localStorage.getItem('schemaMode');
     if (savedSchemaMode && savedSchemaMode !== 'none' && savedSchemaMode !== window.activeSchemaMode) {
