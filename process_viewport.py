@@ -244,7 +244,7 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         return (year, True, "already exists")
 
     # --- FETCH MOSAIC ---
-    _progress(0, f"[{year}] Fetching mosaic...")
+    _progress(0, f"[{year}] Connecting to GeoTessera...")
     print(f"  [{year}] Fetching mosaic...")
     t0 = _time.monotonic()
 
@@ -282,6 +282,7 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
             ft = _threading.Thread(target=_do_fetch, daemon=True)
             ft.start()
             tick = 0
+            data_started = False
             while ft.is_alive():
                 ft.join(timeout=2)
                 if ft.is_alive():
@@ -290,7 +291,15 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
                     elapsed = _time.monotonic() - t0
                     # Asymptotic percentage (0→55%) so the bar keeps moving
                     fetch_pct = int(55 * (1 - 1 / (1 + tick * 0.15)))
-                    _progress(fetch_pct, f"[{year}] Fetching mosaic ({downloaded_mb:.1f} MB, {elapsed:.0f}s)")
+                    if downloaded_mb > 0.1:
+                        if not data_started:
+                            data_started = True
+                            print(f"  [{year}] Download started after {elapsed:.0f}s")
+                        speed_mbs = downloaded_mb / elapsed if elapsed > 0 else 0
+                        _progress(fetch_pct, f"[{year}] Downloading tiles: {downloaded_mb:.1f} MB ({speed_mbs:.1f} MB/s, {elapsed:.0f}s)")
+                    else:
+                        # Connection/registry phase — no data yet
+                        _progress(fetch_pct, f"[{year}] Connecting to GeoTessera ({elapsed:.0f}s)...")
             if _fetch_result[3] is not None:
                 raise _fetch_result[3]
             mosaic, transform, crs = _fetch_result[0], _fetch_result[1], _fetch_result[2]
