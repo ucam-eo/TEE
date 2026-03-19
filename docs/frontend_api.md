@@ -51,10 +51,11 @@ Begin polling `GET /api/viewports/{name}/is-ready` and updating `viewportStatus`
 Stop the viewport status poller.
 
 #### `window.refreshEmbeddingTileLayer(panelName, year)`
-- **panelName** `string` -- `"embedding"` or `"embedding2"`
-- **year** `string` -- year to display
+- **panelName** `string` -- `"embedding"` (Panel 3) or `"embedding2"` (Panel 6)
+- **year** `string` -- year to display (e.g. `"2024"`)
 
-Remove the old pixelated tile layer and create a new one for the given year.
+Replace the PCA tile layer on the specified panel with tiles for the given year.
+Called when pyramids become ready or when the user switches years.
 
 #### `window.makeDraggable(panel, handle)`
 - **panel** `HTMLElement` -- element to make draggable
