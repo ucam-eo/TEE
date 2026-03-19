@@ -228,10 +228,20 @@ def create_viewport(request):
         except ValueError as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
-        # Check for duplicate name
+        # Check for duplicate name — allow re-creation if no data exists
+        # (e.g. after a cancelled pipeline left the viewport file behind)
         viewport_path = VIEWPORTS_DIR / f"{name}.txt"
         if viewport_path.exists():
-            return JsonResponse({'success': False, 'error': f'Viewport "{name}" already exists'}, status=409)
+            # Check if this is a stale viewport (no pyramids or vectors)
+            has_pyramids = (PYRAMIDS_DIR / name).exists() and any((PYRAMIDS_DIR / name).iterdir()) if (PYRAMIDS_DIR / name).exists() else False
+            has_vectors = (VECTORS_DIR / name).exists() and any((VECTORS_DIR / name).iterdir()) if (VECTORS_DIR / name).exists() else False
+            if has_pyramids or has_vectors:
+                return JsonResponse({'success': False, 'error': f'Viewport "{name}" already exists'}, status=409)
+            # Stale viewport — clean up and allow re-creation
+            logger.info(f"[NEW VIEWPORT] Removing stale viewport file for '{name}'")
+            viewport_path.unlink(missing_ok=True)
+            config_path = VIEWPORTS_DIR / f"{name}_config.json"
+            config_path.unlink(missing_ok=True)
 
         # Validate years
         years = data.get('years')
