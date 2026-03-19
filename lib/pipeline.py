@@ -19,10 +19,9 @@ from lib.config import PYRAMIDS_DIR, VECTORS_DIR, PROGRESS_DIR, pyramid_exists
 
 logger = logging.getLogger(__name__)
 
-# Pipeline stage progress allocation (must sum to 100)
+# Pipeline stage progress allocation
 STAGE_PROGRESS = {
-    'process': (0, 98),     # 0-98%: Download tiles + pyramids + vectors
-    'satellite': (98, 100), # 98-100%: Satellite pyramids (quick)
+    'process': (0, 100),    # Download tiles + pyramids + vectors
 }
 
 # Global registry of active pipeline processes (for cancellation)
@@ -258,7 +257,7 @@ class PipelineRunner:
 
     def stage_1_process_viewport(self, viewport_name, years_str):
         """Stage 1: Process viewport — download tiles, create pyramids + vectors."""
-        logger.info(f"[PIPELINE] STAGE 1/2: Processing viewport '{viewport_name}' (years: {years_str})...")
+        logger.info(f"[PIPELINE] Processing viewport '{viewport_name}' (years: {years_str})...")
         logger.info(f"[PIPELINE]   Python: {self.venv_python}")
 
         if years_str:
@@ -308,27 +307,9 @@ class PipelineRunner:
         logger.info(f"[PIPELINE] Stage 1 complete: pyramids={has_pyramids}, vectors={has_vectors}")
         return True, None
 
-    def stage_2_satellite_pyramids(self, viewport_name):
-        """Stage 2: Create satellite pyramids (if satellite file exists)."""
-        logger.info(f"[PIPELINE] STAGE 2/2: Creating satellite pyramids for '{viewport_name}'...")
-        logger.info(f"[PIPELINE]   $ python create_pyramids.py")
-
-        result = self.run_script('create_pyramids.py')
-
-        if result.returncode != 0:
-            # Satellite pyramids are not critical — warn but don't fail
-            logger.warning(f"[PIPELINE] Stage 2 warning - Satellite pyramid creation failed")
-            logger.warning(f"[PIPELINE]   Error: {result.stderr[:200] if result.stderr else '(no stderr)'}")
-            return True, None  # Don't fail pipeline
-
-        logger.info(f"[PIPELINE] Stage 2 complete: Satellite pyramids created")
-        return True, None
-
     def run_full_pipeline(self, viewport_name, years_str=None, cancel_check=None, **kwargs):
         """
-        Run complete 2-stage pipeline:
-        1. Process viewport: download + pyramids + vectors (per year)
-        2. Satellite pyramids
+        Run pipeline: download embedding tiles, create PNG pyramids, extract vectors.
 
         Args:
             viewport_name: Name of viewport
@@ -365,7 +346,7 @@ class PipelineRunner:
                 return True
             return False
 
-        # Stage 1: Process viewport (download + pyramids + vectors + UMAP)
+        # Process viewport (download + pyramids + vectors)
         self.update_progress('process', 0, "Processing viewport...")
         self._active_stage = ('process', viewport_name)
         success, error = self.stage_1_process_viewport(viewport_name, years_str or "")
@@ -377,18 +358,6 @@ class PipelineRunner:
             return False, "Cancelled by user"
         self.update_progress('process', 100, "Viewport processed")
 
-        # Stage 2: Satellite pyramids
-        if check_cancelled():
-            return False, "Cancelled by user"
-        self.update_progress('satellite', 0, "Creating satellite pyramids...")
-        self._active_stage = ('satellite', viewport_name)
-        success, error = self.stage_2_satellite_pyramids(viewport_name)
-        self._active_stage = None
-        self.update_progress('satellite', 100, "Satellite pyramids complete")
-
-        if check_cancelled():
-            return False, "Cancelled by user"
-
         logger.info(f"\n{'=' * 70}")
         logger.info(f"PIPELINE COMPLETE: {viewport_name}")
         logger.info(f"{'=' * 70}\n")
@@ -396,7 +365,7 @@ class PipelineRunner:
         self.progress.complete(f"Pipeline complete for {viewport_name}")
 
         # Clean up per-stage progress files (subprocess temp files)
-        for stage in ('process', 'satellite'):
+        for stage in ('process',):
             stage_file = PROGRESS_DIR / f"{viewport_name}_{stage}_progress.json"
             try:
                 if stage_file.exists():
