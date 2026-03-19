@@ -23,7 +23,7 @@ async function computeLabelTimeline(labelGroup) {
         const searches = [];
         for (const l of labelGroup) {
             if (!l.source_pixel) continue;
-            const emb = extractFromData(data, l.source_pixel.lat, l.source_pixel.lon);
+            const emb = window.extractFromData(data, l.source_pixel.lat, l.source_pixel.lon);
             if (emb) {
                 searches.push({ embedding: emb, threshSq: l.threshold * l.threshold });
             }
@@ -141,7 +141,7 @@ async function showManualLabelTimeline(className) {
             const searches = [];
             for (const l of classLabels) {
                 if (!l.embedding) continue;
-                const emb = extractFromData(data, l.lat, l.lon);
+                const emb = window.extractFromData(data, l.lat, l.lon);
                 if (emb) {
                     searches.push({ embedding: emb, threshSq: threshold * threshold });
                 }
@@ -301,8 +301,8 @@ function _syncClassColor(className, color) {
 function restoreManualLabelState() {
     // Restore schema mode
     const savedSchemaMode = localStorage.getItem('schemaMode');
-    if (savedSchemaMode && savedSchemaMode !== 'none' && savedSchemaMode !== activeSchemaMode) {
-        loadSchema(savedSchemaMode);
+    if (savedSchemaMode && savedSchemaMode !== 'none' && savedSchemaMode !== window.activeSchemaMode) {
+        window.loadSchema(savedSchemaMode);
     }
 
     // Restore current label
@@ -1061,7 +1061,7 @@ function rasterizePolygon(pixelVertices) {
     for (let py = minPy; py <= maxPy; py++) {
         for (let px = minPx; px <= maxPx; px++) {
             if (pointInPolygon(px, py, pixelVertices)) {
-                const gridIdx = gridLookupIndex(grid, px, py);
+                const gridIdx = window.gridLookupIndex(grid, px, py);
                 if (gridIdx >= 0) {
                     const lon = gt.c + px * gt.a;
                     const lat = gt.f + py * gt.e;
@@ -1112,7 +1112,7 @@ function doExportManualLabels(format) {
         const data = {
             viewport: window.currentViewportName,
             year: window.currentEmbeddingYear,
-            schema: activeSchemaMode,
+            schema: window.activeSchemaMode,
             labels: manualLabels.map(l => ({
                 name: l.name,
                 color: l.color,
@@ -1277,7 +1277,7 @@ function importGeoJSON(geojson) {
             };
             // Re-extract embedding if vectors available
             if (window.localVectors) {
-                const emb = localExtract(lat, lon);
+                const emb = window.localExtract(lat, lon);
                 if (emb) entry.embedding = Array.from(emb);
             }
             addManualLabel(entry);
@@ -1452,7 +1452,7 @@ async function recomputeLabelPixels() {
                     embedding = new Float32Array(embedding);
                 }
             } else if (label.source_pixel) {
-                embedding = localExtract(label.source_pixel.lat, label.source_pixel.lon);
+                embedding = window.localExtract(label.source_pixel.lat, label.source_pixel.lon);
                 if (!embedding) {
                     console.warn(`[LABEL] No embedding for ${label.name} at source pixel`);
                     continue;
@@ -1703,8 +1703,8 @@ function confirmSaveLabel() {
     updateOverlay();
 
     // Clear the explorer preview (yellow overlay) and search markers
-    clearExplorerResults();
-    clearCrossPanelMarkers();
+    window.clearExplorerResults();
+    window.clearCrossPanelMarkers();
 
     // Place persistent colored markers at the source pixel location on all panels
     const coloredIcon = window.makeColoredTriangleIcon(color);
@@ -2302,8 +2302,8 @@ document.addEventListener('DOMContentLoaded', () => {
         input.value = k;
     });
     document.getElementById('seg-clear-btn').addEventListener('click', window.clearSegmentation);
-    document.getElementById('seg-export-btn').addEventListener('click', saveAllClustersAsLabels);
-    document.getElementById('panel6-promote-all-btn').addEventListener('click', saveAllClustersAsLabels);
+    document.getElementById('seg-export-btn').addEventListener('click', window.saveAllClustersAsLabels);
+    document.getElementById('panel6-promote-all-btn').addEventListener('click', window.saveAllClustersAsLabels);
     document.getElementById('panel6-toggle-all-btn').addEventListener('click', toggleAllOverlays);
     document.getElementById('seg-panel-close-btn').addEventListener('click', function() {
         document.getElementById('seg-results-panel').style.display = 'none';
