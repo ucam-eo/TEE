@@ -984,6 +984,7 @@ function handlePolygonComplete(latLngs) {
 
     // Rasterize polygon to find interior pixels
     const matches = rasterizePolygon(pixelVertices);
+    console.log(`[POLYGON] ${pixelVertices.length} vertices → ${matches.length} pixels`, pixelVertices);
 
     if (matches.length === 0) {
         console.warn('[POLYGON] No pixels inside polygon');
