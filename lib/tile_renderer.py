@@ -32,12 +32,7 @@ def get_pyramid_path(viewport, map_id, zoom_level):
     pyramid_level = max(0, min(5, (14 - zoom_level) // 2))
     viewport_pyramids_dir = PYRAMIDS_DIR / viewport
 
-    if map_id == 'satellite':
-        year_dir = viewport_pyramids_dir / 'satellite'
-    elif map_id == 'rgb':
-        year_dir = viewport_pyramids_dir / 'rgb' / '2024'
-    else:
-        year_dir = viewport_pyramids_dir / map_id
+    year_dir = viewport_pyramids_dir / map_id
 
     png_path = year_dir / f'level_{pyramid_level}.png'
 

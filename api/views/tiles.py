@@ -21,8 +21,7 @@ from lib.tile_renderer import (
 logger = logging.getLogger(__name__)
 
 PYRAMIDS_BASE_DIR = PYRAMIDS_DIR
-YEARS = [str(y) for y in range(2018, 2026)] + ['satellite']
-_VALID_MAP_IDS = {str(y) for y in range(2018, 2026)} | {'satellite', 'rgb'}
+_VALID_MAP_IDS = {str(y) for y in range(2017, 2026)}
 
 # Cache for tile reader paths
 _readers = {}
@@ -122,12 +121,7 @@ def get_bounds(request, viewport, map_id):
     try:
         viewport_pyramids_dir = PYRAMIDS_BASE_DIR / viewport
 
-        if map_id == 'satellite':
-            year_dir = viewport_pyramids_dir / 'satellite'
-        elif map_id == 'rgb':
-            year_dir = viewport_pyramids_dir / 'rgb' / '2024'
-        else:
-            year_dir = viewport_pyramids_dir / map_id
+        year_dir = viewport_pyramids_dir / map_id
 
         meta_path = year_dir / 'pyramid_meta.json'
         if meta_path.exists():
@@ -158,18 +152,9 @@ def tile_health(request):
                 viewport_name = viewport_dir.name
                 available_maps = []
 
-                for year in YEARS:
-                    if year != 'satellite':
-                        yd = viewport_dir / year
-                        if (yd / 'level_0.png').exists():
-                            available_maps.append(year)
-
-                if (viewport_dir / 'satellite' / 'level_0.png').exists():
-                    available_maps.append('satellite')
-
-                rgb_dir = viewport_dir / 'rgb' / '2024'
-                if (rgb_dir / 'level_0.png').exists():
-                    available_maps.append('rgb')
+                for sub in viewport_dir.iterdir():
+                    if sub.is_dir() and sub.name.isdigit() and (sub / 'level_0.png').exists():
+                        available_maps.append(sub.name)
 
                 if available_maps:
                     viewports_data[viewport_name] = available_maps
