@@ -536,6 +536,30 @@ vector[i] = embedding[i] / 255.0 * (dim_max[i] - dim_min[i]) + dim_min[i]
 In code: `localVectors.values` is the Float32Array of dequantized vectors.
 The file on disk `all_embeddings_uint8.npy.gz` contains the uint8 embeddings.
 
+### Legacy naming exceptions
+
+The rename from `.embeddings` to `.values` could not be applied everywhere due
+to backwards compatibility.  The following places still use "embedding(s)" for
+float32 data.  **Do not rename these** — they are serialized to localStorage,
+JSON exports, or IndexedDB and renaming would break existing user data.
+
+| Location | Property | Why it stays |
+|---|---|---|
+| `manualLabel` entries | `label.embedding` (singular, `number[]`) | Stored in `localStorage` key `manualLabels_{viewport}` and exported as JSON/GeoJSON/Shapefile. Renaming breaks import of existing exports. |
+| `manualLabel` entries | `label.embeddings` (plural, `number[][]`) | Same — union-mode polygon labels store per-pixel vectors here. Serialized to localStorage and JSON exports. |
+| `savedLabel` entries | `label.embedding` | Stored in `localStorage` key `tee_labels_{viewport}`. Renaming breaks reload of existing saved labels. |
+| `segLabel` entries | `segLabel.embedding` | Transient (not persisted), but the field feeds into `addManualLabel()` which serializes it. |
+| `app.js` | `embeddingLabels` variable | Deprecated legacy label system, kept as empty stub. Not exposed on `window`. Will be removed in a future cleanup. |
+| `app.js` | `window.currentEmbeddingYear` | Refers to the year of the Tessera model output, not the data format. "Embedding year" is correct domain terminology here. |
+| `IndexedDB` cache | Old entries have `.embeddings` | `vectors.js` auto-migrates on read: if `.values` is missing but `.embeddings` exists, it renames the property in memory. No cache clear needed. |
+| Files on disk | `all_embeddings_uint8.npy.gz` | Correct — these ARE uint8 embeddings (pre-dequantization). |
+| URL paths | `/api/vector-data/{vp}/{year}/all_embeddings_uint8.npy.gz` | Matches the filename on disk. |
+
+**Rule for future changes:** If you add a new property that holds float32
+dequantized data, name it with "vector" (e.g., `entry.vector`, `data.values`).
+If it holds uint8 quantized data, name it with "embedding".  Never rename
+serialized fields without a migration path.
+
 ---
 
 ## 13. Vector Data Pipeline
