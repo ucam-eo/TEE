@@ -54,7 +54,7 @@ display depends on the current **mode**.
   |   Leaflet OSM    |   Leaflet Sat    |  Leaflet Emb     |
   +------------------+------------------+------------------+
   |    Panel 4       |    Panel 5       |    Panel 6       |
-  |   (map-umap)     |   (map-heatmap)  | (map-embedding2) |
+  |   (map-umap)     |   (map-panel5)  | (map-embedding2) |
   |   Three.js PCA/  |   Leaflet        |  Leaflet / HTML  |
   |   UMAP scatter   |   Heatmap/Seg    |  Labels/Controls |
   +------------------+------------------+------------------+
@@ -75,11 +75,11 @@ Mode is stored in `localStorage` and restored on reload via `restorePanelMode()`
 
 ### 2.2 Panel 5 Layer Rules
 
-Panel 5 (`maps.heatmap`) has three optional layers whose visibility is governed
+Panel 5 (`maps.panel5`) has three optional layers whose visibility is governed
 by a declarative rules table in `maps.js`:
 
 ```javascript
-const HEATMAP_LAYER_RULES = {
+const PANEL5_LAYER_RULES = {
     'explore':          { satellite: false, heatmapCanvas: true,  segOverlay: true  },
     'change-detection': { satellite: false, heatmapCanvas: true,  segOverlay: false },
     'labelling':        { satellite: true,  heatmapCanvas: false, segOverlay: true  },
@@ -88,7 +88,7 @@ const HEATMAP_LAYER_RULES = {
 ```
 
 The function `applyHeatmapLayerRule(layer, shouldShow)` adds or removes a
-Leaflet layer from `maps.heatmap` based on these rules.
+Leaflet layer from `maps.panel5` based on these rules.
 
 ---
 
@@ -214,7 +214,7 @@ actual storage is module-private.
 | Module | Properties on `window` |
 |---|---|
 | `app.js` | `currentViewportName`, `currentEmbeddingYear`, `viewportStatus`, `currentPanelMode`, `TILE_SERVER`, `heatmapSatelliteLayer`, `isLoggedIn` |
-| `maps.js` | `viewportBounds`, `satelliteSources`, `currentSatelliteSource`, `TRIANGLE_ICON`, `HEATMAP_LAYER_RULES`, `persistentLabelMarkers` |
+| `maps.js` | `viewportBounds`, `satelliteSources`, `currentSatelliteSource`, `TRIANGLE_ICON`, `PANEL5_LAYER_RULES`, `persistentLabelMarkers` |
 | `vectors.js` | `localVectors`, `explorerResults` |
 | `labels.js` | `manualLabels`, `currentManualLabel`, `savedLabels`, `currentSearchCache`, `manualClassOverlays`, `_classMatchCache`, `isPolygonDrawing`, `labelMode` |
 | `segmentation.js` | `segAssignments`, `segOverlay`, `segLabels`, `segRunning`, `segVectors`, `segK`, `SEG_PALETTE` |
@@ -452,7 +452,7 @@ IDs an agent needs to know:
   │
   ├── Panel 5: .panel
   │     ├── #panel5-title (span)
-  │     ├── #map-heatmap (Leaflet map div)
+  │     ├── #map-panel5 (Leaflet map div)
   │     ├── #heatmap-waiting-message (shown when vectors not ready)
   │     ├── #heatmap-same-year-message (shown when years match)
   │     └── #val-cm-panel (confusion matrix, validation mode only)

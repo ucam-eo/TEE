@@ -46,11 +46,11 @@ to `#map-container` and `body`:
 
 ### Step 2: Add to Panel 5 layer rules
 
-In `maps.js`, add the new mode to `HEATMAP_LAYER_RULES`:
+In `maps.js`, add the new mode to `PANEL5_LAYER_RULES`:
 
 ```javascript
-// In maps.js, inside the HEATMAP_LAYER_RULES object:
-const HEATMAP_LAYER_RULES = {
+// In maps.js, inside the PANEL5_LAYER_RULES object:
+const PANEL5_LAYER_RULES = {
     'explore':          { satellite: false, heatmapCanvas: true,  segOverlay: true  },
     'change-detection': { satellite: false, heatmapCanvas: true,  segOverlay: false },
     'labelling':        { satellite: true,  heatmapCanvas: false, segOverlay: true  },
@@ -624,7 +624,7 @@ The change listener in `dimreduction.js` already calls
 
 | Extension | Primary file | Key function/object |
 |---|---|---|
-| New panel mode | `maps.js` | `setPanelLayout()`, `HEATMAP_LAYER_RULES` |
+| New panel mode | `maps.js` | `setPanelLayout()`, `PANEL5_LAYER_RULES` |
 | New classifier | `lib/evaluation_engine.py` | `make_classifier()` |
 | New satellite source | `maps.js` | `satelliteSources` object |
 | New label type | `labels.js` | `rebuildClassOverlay()`, `doExportManualLabels()` |

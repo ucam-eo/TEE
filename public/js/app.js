@@ -46,7 +46,7 @@ let maps = {};
 
 // New state variables for 6-panel viewer
 let currentPanelMode = 'explore';       // 'explore', 'change-detection', or 'labelling'
-let heatmapSatelliteLayer = null;      // Satellite tiles for panel 5 in labelling mode
+let panel5SatelliteLayer = null;      // Satellite tiles for panel 5 in labelling mode
 let explorerCanvasLayer2 = null;      // Explorer viz for Panel 6
 
 
@@ -652,7 +652,7 @@ Object.defineProperties(window, {
     viewportStatus:        { get() { return viewportStatus; },       set(v) { viewportStatus = v; },       configurable: true },
     currentPanelMode:      { get() { return currentPanelMode; },     set(v) { currentPanelMode = v; },     configurable: true },
     TILE_SERVER:           { get() { return TILE_SERVER; },          set(v) { TILE_SERVER = v; },          configurable: true },
-    heatmapSatelliteLayer: { get() { return heatmapSatelliteLayer; }, set(v) { heatmapSatelliteLayer = v; }, configurable: true },
+    panel5SatelliteLayer: { get() { return panel5SatelliteLayer; }, set(v) { panel5SatelliteLayer = v; }, configurable: true },
     isLoggedIn:            { get() { return isLoggedIn; },           set(v) { isLoggedIn = v; },           configurable: true },
 });
 

@@ -211,8 +211,8 @@ async function runKMeans(k) {
     document.getElementById('seg-k-input').value = k;
 
     // Clear old overlay immediately so user sees a clean map during recomputation
-    if (segOverlay && window.maps.heatmap && window.maps.heatmap.hasLayer(segOverlay)) {
-        window.maps.heatmap.removeLayer(segOverlay);
+    if (segOverlay && window.maps.panel5 && window.maps.panel5.hasLayer(segOverlay)) {
+        window.maps.panel5.removeLayer(segOverlay);
     }
     segOverlay = null;
     segLabels = [];
@@ -368,17 +368,17 @@ function showSegmentationOverlay() {
     const latMax = gt.f + minPy * gt.e;
 
     // Remove old overlay
-    if (segOverlay && window.maps.heatmap.hasLayer(segOverlay)) {
-        window.maps.heatmap.removeLayer(segOverlay);
+    if (segOverlay && window.maps.panel5.hasLayer(segOverlay)) {
+        window.maps.panel5.removeLayer(segOverlay);
     }
 
     const dataURL = canvas.toDataURL();
     segOverlay = L.imageOverlay(dataURL, [[latMin, lonMin], [latMax, lonMax]]);
 
     // Consult the layer rules table — only add to map if current mode allows it
-    const segRules = window.HEATMAP_LAYER_RULES[window.currentPanelMode] || window.HEATMAP_LAYER_RULES['explore'];
+    const segRules = window.PANEL5_LAYER_RULES[window.currentPanelMode] || window.PANEL5_LAYER_RULES['explore'];
     if (segRules.segOverlay) {
-        segOverlay.addTo(window.maps.heatmap);
+        segOverlay.addTo(window.maps.panel5);
         segOverlay.getElement().style.imageRendering = 'pixelated';
     }
 }
@@ -386,8 +386,8 @@ function showSegmentationOverlay() {
 // ── Clear Segmentation ──
 
 function clearSegmentation() {
-    if (segOverlay && window.maps.heatmap && window.maps.heatmap.hasLayer(segOverlay)) {
-        window.maps.heatmap.removeLayer(segOverlay);
+    if (segOverlay && window.maps.panel5 && window.maps.panel5.hasLayer(segOverlay)) {
+        window.maps.panel5.removeLayer(segOverlay);
     }
     segOverlay = null;
     segAssignments = null;
@@ -549,8 +549,8 @@ function saveClusterAsLabel(clusterId) {
     // Remove promoted cluster from seg panel
     segLabels = segLabels.filter(c => c.id !== clusterId);
     if (segLabels.length === 0) {
-        if (segOverlay && window.maps.heatmap && window.maps.heatmap.hasLayer(segOverlay)) {
-            window.maps.heatmap.removeLayer(segOverlay);
+        if (segOverlay && window.maps.panel5 && window.maps.panel5.hasLayer(segOverlay)) {
+            window.maps.panel5.removeLayer(segOverlay);
         }
         segOverlay = null;
     }

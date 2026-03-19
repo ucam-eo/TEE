@@ -13,7 +13,7 @@ Object.defineProperties(window, {
     satelliteSources:        { get: () => satelliteSources,                                                     configurable: true },
     currentSatelliteSource:  { get: () => currentSatelliteSource,  set: v => { currentSatelliteSource = v; },  configurable: true },
     TRIANGLE_ICON:           { get: () => TRIANGLE_ICON,                                                        configurable: true },
-    HEATMAP_LAYER_RULES:     { get: () => HEATMAP_LAYER_RULES,                                                  configurable: true },
+    PANEL5_LAYER_RULES:     { get: () => PANEL5_LAYER_RULES,                                                  configurable: true },
     persistentLabelMarkers:  { get: () => persistentLabelMarkers,  set: v => { persistentLabelMarkers = v; },  configurable: true },
 });
 window.getViewportBounds = () => viewportBounds;
@@ -167,13 +167,13 @@ function createMaps() {
             satelliteTileLayer.addTo(window.maps.rgb);
 
             // Sync panel 5 satellite layer (used in labelling mode)
-            const wasOnHeatmap = window.maps.heatmap && window.maps.heatmap.hasLayer(window.heatmapSatelliteLayer);
-            if (wasOnHeatmap) window.maps.heatmap.removeLayer(window.heatmapSatelliteLayer);
-            window.heatmapSatelliteLayer = L.tileLayer(src.url, {
+            const wasOnHeatmap = window.maps.panel5 && window.maps.panel5.hasLayer(window.panel5SatelliteLayer);
+            if (wasOnHeatmap) window.maps.panel5.removeLayer(window.panel5SatelliteLayer);
+            window.panel5SatelliteLayer = L.tileLayer(src.url, {
                 attribution: src.attribution, opacity: 1.0,
                 maxZoom: 18, minZoom: 6, crossOrigin: 'anonymous'
             });
-            if (wasOnHeatmap) window.heatmapSatelliteLayer.addTo(window.maps.heatmap);
+            if (wasOnHeatmap) window.panel5SatelliteLayer.addTo(window.maps.panel5);
         });
     }
 
@@ -230,7 +230,7 @@ function createMaps() {
     // Panel 4: UMAP — Three.js scene, initialised in loadUMAP()
 
     // Panel 5: Heatmap (geographic, synced to OSM)
-    window.maps.heatmap = L.map('map-heatmap', {
+    window.maps.panel5 = L.map('map-panel5', {
         center: center,
         zoom: zoom,
         zoomControl: false,
@@ -238,17 +238,17 @@ function createMaps() {
         maxZoom: 18,
         doubleClickZoom: false  // We use dblclick for similarity search
     });
-    L.control.zoom({position: 'bottomright'}).addTo(window.maps.heatmap);
+    L.control.zoom({position: 'bottomright'}).addTo(window.maps.panel5);
 
     // Satellite layer for panel 5 (used in labelling mode only — not added to map yet)
-    window.heatmapSatelliteLayer = L.tileLayer(satelliteSources[currentSatelliteSource].url, {
+    window.panel5SatelliteLayer = L.tileLayer(satelliteSources[currentSatelliteSource].url, {
         attribution: satelliteSources[currentSatelliteSource].attribution,
         opacity: 1.0, maxZoom: 18, minZoom: 6, crossOrigin: 'anonymous'
     });
 
     if (viewportBounds) {
-        window.maps.heatmap.setMaxBounds(viewportBounds);
-        window.maps.heatmap.options.maxBoundsViscosity = 1.0;
+        window.maps.panel5.setMaxBounds(viewportBounds);
+        window.maps.panel5.options.maxBoundsViscosity = 1.0;
     }
 
     // HeatmapCanvasLayer handles its own redraw on move/zoom/resize,
@@ -774,9 +774,9 @@ function calculatePixelBounds(lat, lon) {
 // SIMILARITY SEARCH FUNCTIONS
 // =====================================================================
 
-// Declarative layer rules for maps.heatmap (Panel 5) per mode
+// Declarative layer rules for maps.panel5 (Panel 5) per mode
 // true = add layer if it exists, false = remove if present
-const HEATMAP_LAYER_RULES = {
+const PANEL5_LAYER_RULES = {
     'explore':          { satellite: false, heatmapCanvas: true,  segOverlay: true  },
     'change-detection': { satellite: false, heatmapCanvas: true,  segOverlay: false },
     'labelling':        { satellite: true,  heatmapCanvas: false, segOverlay: true  },
@@ -784,10 +784,10 @@ const HEATMAP_LAYER_RULES = {
 };
 
 function applyHeatmapLayerRule(layer, shouldShow) {
-    if (!layer || !window.maps.heatmap) return;
-    const onMap = window.maps.heatmap.hasLayer(layer);
-    if (shouldShow && !onMap) layer.addTo(window.maps.heatmap);
-    else if (!shouldShow && onMap) window.maps.heatmap.removeLayer(layer);
+    if (!layer || !window.maps.panel5) return;
+    const onMap = window.maps.panel5.hasLayer(layer);
+    if (shouldShow && !onMap) layer.addTo(window.maps.panel5);
+    else if (!shouldShow && onMap) window.maps.panel5.removeLayer(layer);
 }
 
 // Panel layout: explore / change-detection / labelling
@@ -819,8 +819,8 @@ function setPanelLayout(mode) {
     document.getElementById('panel5-title').textContent = t.p5;
     document.getElementById('panel6-header-text').textContent = t.p6;
 
-    const rules = HEATMAP_LAYER_RULES[mode] || HEATMAP_LAYER_RULES['explore'];
-    applyHeatmapLayerRule(window.heatmapSatelliteLayer, rules.satellite);
+    const rules = PANEL5_LAYER_RULES[mode] || PANEL5_LAYER_RULES['explore'];
+    applyHeatmapLayerRule(window.panel5SatelliteLayer, rules.satellite);
     applyHeatmapLayerRule(window.heatmapCanvasLayer, rules.heatmapCanvas);
     applyHeatmapLayerRule(window.segOverlay, rules.segOverlay);
 

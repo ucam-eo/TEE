@@ -192,7 +192,7 @@ let labelMode = 'autolabel';   // 'autolabel' | 'manual'
 function _activeLabelKey() {
     return 'currentManualLabel_' + (window.currentViewportName || '');
 }
-let manualClassifyOverlay = null; // L.imageOverlay on window.maps.heatmap
+let manualClassifyOverlay = null; // L.imageOverlay on window.maps.panel5
 let manualLabelIdCounter = 0;
 let manualClassifyDebounceTimer = null;
 
@@ -223,8 +223,8 @@ function setLabelMode(mode) {
         if (classifyBtn) classifyBtn.style.display = '';
         restoreManualLabelState();
         // Hide segmentation overlay if present
-        if (window.segOverlay && window.maps.heatmap && window.maps.heatmap.hasLayer(window.segOverlay)) {
-            window.maps.heatmap.removeLayer(window.segOverlay);
+        if (window.segOverlay && window.maps.panel5 && window.maps.panel5.hasLayer(window.segOverlay)) {
+            window.maps.panel5.removeLayer(window.segOverlay);
         }
     } else {
         autoView.style.display = 'flex';
@@ -234,14 +234,14 @@ function setLabelMode(mode) {
         document.getElementById('panel5-title').textContent = 'Segmentation';
         if (classifyBtn) classifyBtn.style.display = 'none';
         // Remove manual classification overlay
-        if (manualClassifyOverlay && window.maps.heatmap && window.maps.heatmap.hasLayer(manualClassifyOverlay)) {
-            window.maps.heatmap.removeLayer(manualClassifyOverlay);
+        if (manualClassifyOverlay && window.maps.panel5 && window.maps.panel5.hasLayer(manualClassifyOverlay)) {
+            window.maps.panel5.removeLayer(manualClassifyOverlay);
         }
         manualClassifyOverlay = null;
         // Restore segmentation overlay if it exists
         if (window.segOverlay) {
-            const segRules = window.HEATMAP_LAYER_RULES[window.currentPanelMode] || window.HEATMAP_LAYER_RULES['explore'];
-            if (segRules.segOverlay) window.segOverlay.addTo(window.maps.heatmap);
+            const segRules = window.PANEL5_LAYER_RULES[window.currentPanelMode] || window.PANEL5_LAYER_RULES['explore'];
+            if (segRules.segOverlay) window.segOverlay.addTo(window.maps.panel5);
         }
     }
     localStorage.setItem('labelMode', mode);
@@ -749,8 +749,8 @@ function triggerManualClassification() {
 function renderManualClassification() {
     // Only render in manual label mode
     if (window.currentPanelMode !== 'labelling' || labelMode !== 'manual') {
-        if (manualClassifyOverlay && window.maps.heatmap && window.maps.heatmap.hasLayer(manualClassifyOverlay)) {
-            window.maps.heatmap.removeLayer(manualClassifyOverlay);
+        if (manualClassifyOverlay && window.maps.panel5 && window.maps.panel5.hasLayer(manualClassifyOverlay)) {
+            window.maps.panel5.removeLayer(manualClassifyOverlay);
         }
         manualClassifyOverlay = null;
         return;
@@ -759,8 +759,8 @@ function renderManualClassification() {
     // Collect visible labels that have embeddings
     const activeLabels = manualLabels.filter(l => l.visible && l.embedding);
     if (activeLabels.length === 0 || !window.localVectors) {
-        if (manualClassifyOverlay && window.maps.heatmap && window.maps.heatmap.hasLayer(manualClassifyOverlay)) {
-            window.maps.heatmap.removeLayer(manualClassifyOverlay);
+        if (manualClassifyOverlay && window.maps.panel5 && window.maps.panel5.hasLayer(manualClassifyOverlay)) {
+            window.maps.panel5.removeLayer(manualClassifyOverlay);
         }
         manualClassifyOverlay = null;
         return;
@@ -885,13 +885,13 @@ function renderManualClassification() {
     const latMax = gt.f + minPy * gt.e;
 
     // Remove old overlay
-    if (manualClassifyOverlay && window.maps.heatmap && window.maps.heatmap.hasLayer(manualClassifyOverlay)) {
-        window.maps.heatmap.removeLayer(manualClassifyOverlay);
+    if (manualClassifyOverlay && window.maps.panel5 && window.maps.panel5.hasLayer(manualClassifyOverlay)) {
+        window.maps.panel5.removeLayer(manualClassifyOverlay);
     }
 
     const dataURL = canvas.toDataURL();
     manualClassifyOverlay = L.imageOverlay(dataURL, [[latMin, lonMin], [latMax, lonMax]]);
-    manualClassifyOverlay.addTo(window.maps.heatmap);
+    manualClassifyOverlay.addTo(window.maps.panel5);
     manualClassifyOverlay.getElement().style.imageRendering = 'pixelated';
 }
 
@@ -2056,23 +2056,23 @@ let labelOverlay = null;
 
 // Update the overlay visualization
 function updateOverlay() {
-    if (!window.maps.heatmap) return;
+    if (!window.maps.panel5) return;
 
     const visibleLabels = savedLabels.filter(l => l.visible);
 
     if (visibleLabels.length > 0) {
         // If overlay exists, update it in place (avoids remove/re-add timing issues)
-        if (labelOverlay && window.maps.heatmap.hasLayer(labelOverlay)) {
+        if (labelOverlay && window.maps.panel5.hasLayer(labelOverlay)) {
             labelOverlay.updateLabels(savedLabels);
         } else {
             // Create new overlay if it doesn't exist yet
             labelOverlay = new PersistentLabelOverlay(savedLabels);
-            labelOverlay.addTo(window.maps.heatmap);
+            labelOverlay.addTo(window.maps.panel5);
         }
     } else {
         // No visible labels - remove overlay if it exists
-        if (labelOverlay && window.maps.heatmap.hasLayer(labelOverlay)) {
-            window.maps.heatmap.removeLayer(labelOverlay);
+        if (labelOverlay && window.maps.panel5.hasLayer(labelOverlay)) {
+            window.maps.panel5.removeLayer(labelOverlay);
             labelOverlay = null;
         }
     }

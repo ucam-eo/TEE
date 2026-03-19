@@ -95,7 +95,7 @@ panel layout and mode switching, provide satellite source selection.
 | `window.satelliteSources` | `{esri: {...}, google: {...}}` | Satellite tile URL templates |
 | `window.currentSatelliteSource` | `string` | `"esri"` or `"google"` |
 | `window.TRIANGLE_ICON` | `L.divIcon` | Yellow triangle marker icon |
-| `window.HEATMAP_LAYER_RULES` | `object` | Layer visibility rules per mode |
+| `window.PANEL5_LAYER_RULES` | `object` | Layer visibility rules per mode |
 | `window.persistentLabelMarkers` | `array` | Array of persistent label markers |
 
 ### Functions
@@ -158,7 +158,7 @@ In manual label mode, drop a colored point label at the given location.
 Calculate geographic bounds of a 10m x 10m pixel centered at the given lat/lon.
 
 #### `window.applyHeatmapLayerRule(layer, shouldShow)`
-Add or remove a Leaflet layer from `maps.heatmap` based on the boolean flag.
+Add or remove a Leaflet layer from `maps.panel5` based on the boolean flag.
 
 #### `window.setPanelLayout(mode)`
 - **mode** `string` -- `"explore"`, `"change-detection"`, `"labelling"`, or `"validation"`
@@ -451,7 +451,7 @@ UI, segmentation overlay on Panel 5.
 | Property | Type | Description |
 |---|---|---|
 | `window.segAssignments` | `Int32Array \| null` | Per-pixel cluster assignments (length N) |
-| `window.segOverlay` | `L.ImageOverlay \| null` | Segmentation overlay on `maps.heatmap` |
+| `window.segOverlay` | `L.ImageOverlay \| null` | Segmentation overlay on `maps.panel5` |
 | `window.segLabels` | `array` | Cluster metadata: `[{id, color, hex, name, count, embedding, sourcePixel, threshold, centroid}]` |
 | `window.segRunning` | `boolean` | Whether segmentation is in progress |
 | `window.segVectors` | `object \| null` | Vector data used for current segmentation |

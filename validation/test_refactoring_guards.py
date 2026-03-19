@@ -204,7 +204,7 @@ class TestCriticalState:
         (r"(?:let|const|var)\s+polygonDrawHandler\s*=", "polygonDrawHandler"),
         (r"(?:let|const|var)\s+segAssignments\s*=", "segAssignments"),
         (r"(?:let|const|var)\s+currentDimReduction\s*=", "currentDimReduction"),
-        (r"HEATMAP_LAYER_RULES", "HEATMAP_LAYER_RULES"),
+        (r"PANEL5_LAYER_RULES", "PANEL5_LAYER_RULES"),
     ]
 
     @pytest.mark.parametrize("pattern,name", VARS, ids=[v[1] for v in VARS])
@@ -230,7 +230,7 @@ class TestDOMCompleteness:
         "labelling-export-btn", "labelling-import-btn",
         # Panels
         "map-container", "map-osm", "map-embedding", "map-embedding2",
-        "map-rgb", "map-umap", "map-heatmap",
+        "map-rgb", "map-umap", "map-panel5",
         # Panel 6
         "panel6-label-view", "panel6-autolabel-view", "panel6-manual-view",
         "panel6-seg-list", "panel6-labels-list", "panel6-promote-all-btn",

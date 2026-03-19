@@ -66,10 +66,10 @@ class TestExploreRename:
         assert "#map-container.mode-explore" in html
         assert "body.mode-explore #label-controls-bar" in html
 
-    def test_heatmap_layer_rules_has_explore(self, script_text):
+    def test_panel5_layer_rules_has_explore(self, script_text):
         assert "'explore'" in script_text
         # Find the definition block (contains 'explore':) rather than first reference
-        assert "'explore'" in script_text.split("HEATMAP_LAYER_RULES = {")[1][:300]
+        assert "'explore'" in script_text.split("PANEL5_LAYER_RULES = {")[1][:300]
 
     def test_default_mode_is_explore(self, script_text):
         m = re.search(r"let currentPanelMode\s*=\s*'(\w+)'", script_text)
@@ -391,8 +391,8 @@ class TestModeClasses:
                 for mode in self.MODES:
                     assert f"mode-{mode}" in m, f"mode-{mode} missing from classList.remove"
 
-    def test_heatmap_rules_has_all_modes(self, script_text):
-        block = script_text.split("HEATMAP_LAYER_RULES = {")[1][:500]
+    def test_panel5_rules_has_all_modes(self, script_text):
+        block = script_text.split("PANEL5_LAYER_RULES = {")[1][:500]
         for mode in self.MODES:
             assert f"'{mode}'" in block
 

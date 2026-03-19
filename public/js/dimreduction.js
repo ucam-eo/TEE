@@ -1047,8 +1047,8 @@ async function loadHeatmap() {
     if (window.currentEmbeddingYear === currentEmbeddingYear2) {
         sameMsg.style.display = 'block';
         // Remove stale heatmap (e.g. PCA canvas from explore mode)
-        if (heatmapCanvasLayer && window.maps.heatmap && window.maps.heatmap.hasLayer(heatmapCanvasLayer)) {
-            window.maps.heatmap.removeLayer(heatmapCanvasLayer);
+        if (heatmapCanvasLayer && window.maps.panel5 && window.maps.panel5.hasLayer(heatmapCanvasLayer)) {
+            window.maps.panel5.removeLayer(heatmapCanvasLayer);
         }
         return;
     }
@@ -1058,8 +1058,8 @@ async function loadHeatmap() {
     const cacheKey = `${window.currentViewportName}|${window.currentEmbeddingYear}|${currentEmbeddingYear2}`;
     if (cacheKey === _heatmapCacheKey && heatmapCanvasLayer) {
         // Layer already exists with correct data; ensure it's on the map
-        if (window.maps.heatmap && !window.maps.heatmap.hasLayer(heatmapCanvasLayer)) {
-            heatmapCanvasLayer.addTo(window.maps.heatmap);
+        if (window.maps.panel5 && !window.maps.panel5.hasLayer(heatmapCanvasLayer)) {
+            heatmapCanvasLayer.addTo(window.maps.panel5);
         }
         return;
     }
@@ -1127,13 +1127,13 @@ async function loadHeatmap() {
         };
 
         // Remove old heatmap layer
-        if (heatmapCanvasLayer && window.maps.heatmap.hasLayer(heatmapCanvasLayer)) {
-            window.maps.heatmap.removeLayer(heatmapCanvasLayer);
+        if (heatmapCanvasLayer && window.maps.panel5.hasLayer(heatmapCanvasLayer)) {
+            window.maps.panel5.removeLayer(heatmapCanvasLayer);
         }
 
         // Create new heatmap layer
         heatmapCanvasLayer = new HeatmapCanvasLayer(distances, stats);
-        heatmapCanvasLayer.addTo(window.maps.heatmap);
+        heatmapCanvasLayer.addTo(window.maps.panel5);
 
         // Update cache key
         _heatmapCacheKey = cacheKey;
