@@ -1,6 +1,11 @@
 # TEE Backend API Reference
 
-Complete reference for all backend Python modules: HTTP endpoints, library functions, and standalone scripts.
+Complete reference for all backend Python modules: HTTP endpoints, library
+functions, and standalone scripts.
+
+See also: [architecture.md](architecture.md) for system overview,
+[frontend_api.md](frontend_api.md) for the JavaScript API that consumes
+these endpoints.
 
 ---
 
@@ -298,7 +303,11 @@ Cancel a running pipeline. Sends SIGTERM to the subprocess, then cleans up all g
 
 **Depends on:** `lib.tile_renderer`, `lib.viewport_utils`, `lib.config`
 
-#### `GET /api/tiles/<viewport>/<map_id>/<z>/<x>/<y>.png`
+**Note:** Tile endpoints are mounted at the root (`/tiles/...`), not under
+`/api/`.  They bypass all middleware via `TileShortcircuitMiddleware` for
+performance.
+
+#### `GET /tiles/<viewport>/<map_id>/<z>/<x>/<y>.png`
 
 Serve a single map tile.
 
@@ -306,7 +315,7 @@ Serve a single map tile.
 - `z`, `x`, `y`: standard slippy-map tile coordinates
 
 ```
-GET /api/tiles/cambridge/2024/12/2048/1362.png
+GET /tiles/cambridge/2024/12/2048/1362.png
 
 Response: 256x256 PNG image
 Headers:
@@ -317,7 +326,7 @@ Headers:
 
 Returns a transparent 256x256 PNG (with `max-age=0`) for missing or out-of-bounds tiles. Returns HTTP 304 if the client sends a matching `If-None-Match` header.
 
-#### `GET /api/tiles/<viewport>/<map_id>/bounds`
+#### `GET /bounds/<viewport>/<map_id>`
 
 Get geographic bounds and center for a map layer.
 
@@ -329,7 +338,7 @@ Get geographic bounds and center for a map layer.
 }
 ```
 
-#### `GET /api/tiles/health`
+#### `GET /tiles/health`
 
 List all viewports and their available map layers.
 
