@@ -54,8 +54,8 @@ Stop the viewport status poller.
 - **panelName** `string` -- `"embedding"` (Panel 3) or `"embedding2"` (Panel 6)
 - **year** `string` -- year to display (e.g. `"2024"`)
 
-Replace the PCA tile layer on the specified panel with tiles for the given year.
-Called when pyramids become ready or when the user switches years.
+Replace the embedding tile layer on the specified panel with tiles for the given
+year.  Called when pyramids become ready or when the user switches years.
 
 #### `window.makeDraggable(panel, handle)`
 - **panel** `HTMLElement` -- element to make draggable
