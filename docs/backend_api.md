@@ -123,10 +123,12 @@ List all viewports with metadata. Private viewports are filtered based on owners
 
 #### `GET /api/viewports/current`
 
-Get the currently active viewport.
+Get the currently active viewport. The active viewport is stored in a symlink
+(`active_viewport` → viewport file). If no viewports exist or none has been
+selected, returns `success: false`.
 
 ```json
-// Response 200
+// Response 200 (viewport active)
 {
   "success": true,
   "viewport": {
@@ -135,6 +137,9 @@ Get the currently active viewport.
     "center": [52.20, 0.12]
   }
 }
+
+// Response 200 (no active viewport — no viewports exist or none selected)
+{ "success": false, "error": "No active viewport" }
 ```
 
 #### `POST /api/viewports/switch`
