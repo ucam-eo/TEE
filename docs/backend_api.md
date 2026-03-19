@@ -587,21 +587,29 @@ Client configuration (currently empty, reserved for future use).
 ```python
 from lib.config import (
     DATA_DIR,        # Base data dir (default ~/data)
-    MOSAICS_DIR,     # DATA_DIR / 'mosaics'
-    PYRAMIDS_DIR,    # DATA_DIR / 'pyramids'
-    VECTORS_DIR,     # DATA_DIR / 'vectors'
-    EMBEDDINGS_DIR,  # DATA_DIR / 'embeddings' (tile cache)
-    PROGRESS_DIR,    # DATA_DIR / 'progress'
+    MOSAICS_DIR,     # DATA_DIR / 'mosaics' — intermediate mosaics from GeoTessera
+    PYRAMIDS_DIR,    # DATA_DIR / 'pyramids' — PNG tile pyramids per viewport/year
+    VECTORS_DIR,     # DATA_DIR / 'vectors'  — TEE's processed vectors (uint8 quantized, per viewport/year)
+    EMBEDDINGS_DIR,  # DATA_DIR / 'embeddings' — GeoTessera tile cache (raw int8 tiles, shared across viewports)
+    PROGRESS_DIR,    # DATA_DIR / 'progress' — pipeline progress JSON files
     APP_DIR,         # Project root
-    VIEWPORTS_DIR,   # APP_DIR / 'viewports'
+    VIEWPORTS_DIR,   # APP_DIR / 'viewports' — viewport definition files (.txt) + configs (.json)
 )
 
-# Check if a pyramid level exists (PNG or TIF)
+# Check if a pyramid level exists
 pyramid_exists(year_dir: Path) -> bool
 
 # Create all required directories
 ensure_dirs() -> None
 ```
+
+**`VECTORS_DIR` vs `EMBEDDINGS_DIR`** — these follow the naming convention
+(see [architecture.md §12](architecture.md#12-terminology-embeddings-vs-vectors)):
+
+| Directory | Contains | Format | Scope |
+|---|---|---|---|
+| `EMBEDDINGS_DIR` (`data/embeddings/`) | Raw GeoTessera tiles | int8 quantized (pre-dequantization) | Shared tile cache across all viewports |
+| `VECTORS_DIR` (`data/vectors/`) | TEE's processed data | uint8 re-quantized + coords + metadata | Per viewport, per year |
 
 **Used by:** Nearly every module in the project.
 

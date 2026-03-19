@@ -24,8 +24,8 @@ VIEWPORTS_DIR = APP_DIR / 'viewports'
 
 
 def pyramid_exists(year_dir):
-    """Check if pyramid level_0 exists in either PNG or GeoTIFF format."""
-    return (year_dir / 'level_0.png').exists() or (year_dir / 'level_0.tif').exists()
+    """Check if pyramid level_0.png exists."""
+    return (year_dir / 'level_0.png').exists()
 
 
 def ensure_dirs():
