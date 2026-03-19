@@ -697,9 +697,10 @@ Create a new viewport file from geographic bounds (WGS84).
 
 **Raises:**
 - `ValueError` — invalid bounds: longitude outside ±180, latitude outside ±90,
-  or min ≥ max (e.g. `min_lon >= max_lon`)
-- `FileExistsError` — a viewport with that name already exists. The API layer
-  (`POST /api/viewports/create`) checks for this before calling, returning 409.
+  or min ≥ max. Surfaced as HTTP 400 `"Invalid longitude/latitude range"` by
+  `POST /api/viewports/create`.
+- `FileExistsError` — viewport name already taken. Surfaced as HTTP 409
+  `"Viewport already exists"` by `POST /api/viewports/create`.
 
 ```python
 path = create_viewport_from_bounds(
@@ -721,7 +722,7 @@ Remove the active viewport symlink and `.active` file.
 
 ### 2.4 `lib/viewport_ops.py` — Viewport Operations
 
-**Overview:** Pure functions for viewport readiness checks, data size calculation, and data deletion. Extracted from `api/views/viewports.py`.
+**Overview:** Pure functions for viewport readiness checks, data size calculation, and data deletion.
 
 ```python
 from lib.viewport_ops import check_readiness, delete_viewport_data, compute_data_size
@@ -743,7 +744,7 @@ status = check_readiness("cambridge", years_requested=[2023, 2024])
 ```
 
 Checks:
-- **vectors:** `vectors/<name>/<year>/metadata.json` + `all_embeddings_uint8.npy.gz` (or `.npy`)
+- **vectors:** `vectors/<name>/<year>/metadata.json` + `all_embeddings_uint8.npy.gz`
 - **mosaics:** `mosaics/<name>_embeddings_*.tif`
 - **pyramids:** `pyramids/<name>/<year>/level_0.png`
 
