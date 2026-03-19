@@ -312,7 +312,7 @@ TEE/
 │   ├── viewport_utils.py       Viewport reading/validation
 │   ├── viewport_writer.py      Viewport creation/symlink
 │   ├── viewport_ops.py         Readiness checks, data deletion
-│   ├── pipeline.py             Two-stage pipeline runner
+│   ├── pipeline.py             Pipeline runner (subprocess launcher)
 │   ├── progress_tracker.py     JSON progress file writer
 │   ├── tile_renderer.py        GeoTIFF/PNG tile rendering
 │   └── evaluation_engine.py    ML classifiers, learning curves

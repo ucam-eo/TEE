@@ -687,7 +687,7 @@ compute_data_size("cambridge")  # 142.3
 
 ### 2.5 `lib/pipeline.py` — Pipeline Orchestration
 
-**Overview:** Pipeline for viewport data processing: download embedding tiles, create PNG pyramids, extract vectors. Supports cancellation via SIGTERM and real-time progress forwarding from subprocess to pipeline progress file.
+**Overview:** Pipeline for viewport data processing: download embedding tiles, create PNG pyramids, extract vectors. Supports cancellation via SIGTERM. The subprocess writes progress directly to `{viewport}_pipeline_progress.json` (single source of truth); the pipeline handles cancellation, error detection, and final "complete" status.
 
 ```python
 from lib.pipeline import PipelineRunner, cancel_pipeline, is_pipeline_cancelled
@@ -735,7 +735,7 @@ runner.update_progress("process", stage_percent=50, message="Fetching mosaic..."
 runner.wait_for_file(Path("pyramids/cambridge/2024/level_0.png"), min_size_bytes=1024)
 ```
 
-**Internal progress forwarding:** During `run_script()`, the pipeline reads `{viewport}_process_progress.json` every 1 second and maps the subprocess percent (0-100) into the stage's allocated range.
+**Progress model:** The subprocess (`process_viewport.py`) writes directly to `{viewport}_pipeline_progress.json` — no forwarding layer. The pipeline only writes the final "complete" or "error" status after the subprocess exits.
 
 ---
 

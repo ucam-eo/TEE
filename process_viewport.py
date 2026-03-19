@@ -244,7 +244,7 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         return (year, True, "already exists")
 
     # --- FETCH MOSAIC ---
-    _progress(0, f"[{year}] Connecting to GeoTessera...")
+    _progress(1, f"[{year}] Connecting to GeoTessera...")
     print(f"  [{year}] Fetching mosaic...")
     t0 = _time.monotonic()
 
@@ -294,19 +294,18 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
                     downloaded_mb = (_dir_size(str(EMBEDDINGS_DIR)) - size_before) / (1024 * 1024)
                     elapsed = _time.monotonic() - t0
                     # Asymptotic percentage (0→55%) so the bar keeps moving
-                    fetch_pct = int(55 * (1 - 1 / (1 + tick * 0.15)))
+                    fetch_pct = max(1, int(55 * (1 - 1 / (1 + tick * 0.15))))
                     gt_status = _fetch_status[0]
                     if downloaded_mb > 0.1:
                         if not data_started:
                             data_started = True
                             print(f"  [{year}] Download started after {elapsed:.0f}s")
                         speed_mbs = downloaded_mb / elapsed if elapsed > 0 else 0
-                        msg = f"[{year}] {gt_status or 'Downloading'}: {downloaded_mb:.1f} MB ({speed_mbs:.1f} MB/s)" if gt_status else f"[{year}] Downloading tiles: {downloaded_mb:.1f} MB ({speed_mbs:.1f} MB/s)"
-                        _progress(fetch_pct, msg)
+                        _progress(fetch_pct, f"[{year}] Downloading tiles ({downloaded_mb:.1f} MB, {speed_mbs:.1f} MB/s)")
                     elif gt_status:
                         _progress(fetch_pct, f"[{year}] {gt_status}")
                     else:
-                        _progress(fetch_pct, f"[{year}] Connecting to GeoTessera ({elapsed:.0f}s)...")
+                        _progress(fetch_pct, f"[{year}] Waiting for GeoTessera registry ({elapsed:.0f}s)")
             if _fetch_result[3] is not None:
                 raise _fetch_result[3]
             mosaic, transform, crs = _fetch_result[0], _fetch_result[1], _fetch_result[2]
@@ -431,7 +430,7 @@ def main():
         sys.exit(1)
 
     # Initialize progress tracker
-    progress = ProgressTracker(f"{viewport_id}_process")
+    progress = ProgressTracker(f"{viewport_id}_pipeline")
     progress.update("starting", f"Initializing processing for {viewport_id}...")
 
     # Directories
@@ -458,7 +457,7 @@ def main():
 
     if not years_to_process:
         print("\nAll years already processed!")
-        progress.complete(f"All years already processed for {viewport_id}")
+        progress.update("processing", f"All years already processed for {viewport_id}", percent=95)
         return
 
     print(f"\nProcessing {len(years_to_process)} year(s): {years_to_process}")
@@ -470,7 +469,7 @@ def main():
         for year in years_to_process
     ]
 
-    progress.update("processing", f"Processing {len(years_to_process)} year(s)...", percent=5)
+    progress.update("processing", f"Starting {len(years_to_process)} year(s)...", percent=1)
 
     n = len(years_to_process)
     if max_workers == 1:
@@ -498,10 +497,10 @@ def main():
 
     if failed and not succeeded:
         summary = '; '.join(f"{y}: {m}" for y, m in failed)
-        progress.error(f"All years failed for {viewport_id} — {summary}")
+        progress.update("processing", f"All years failed — {summary}", percent=95)
         sys.exit(1)
     else:
-        progress.complete(f"Processed {len(succeeded)} year(s) for {viewport_id}")
+        progress.update("processing", f"Processed {len(succeeded)} year(s)", percent=95)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 Shared pipeline orchestration for viewport data processing.
-Single source of truth for: Process viewport → Satellite pyramids
-Used by both web_server.py and setup_viewport.py
+Launches process_viewport.py as a subprocess. Progress is written
+directly by the subprocess to {viewport}_pipeline_progress.json.
+The pipeline handles cancellation, error detection, and final status.
 """
 
-import json
 import subprocess
 import logging
 import signal
@@ -15,14 +15,9 @@ from pathlib import Path
 import time
 
 from lib.progress_tracker import ProgressTracker
-from lib.config import PYRAMIDS_DIR, VECTORS_DIR, PROGRESS_DIR, pyramid_exists
+from lib.config import PYRAMIDS_DIR, VECTORS_DIR, pyramid_exists
 
 logger = logging.getLogger(__name__)
-
-# Pipeline stage progress allocation
-STAGE_PROGRESS = {
-    'process': (0, 100),    # Download tiles + pyramids + vectors
-}
 
 # Global registry of active pipeline processes (for cancellation)
 _active_pipelines = {}  # viewport_name -> {'process': Popen, 'cancelled': bool}
@@ -72,58 +67,8 @@ class PipelineRunner:
         """
         self.project_root = Path(project_root)
         self.venv_python = venv_python or Path(__import__('sys').executable)
-        self.progress = None  # Unified pipeline progress tracker
+        self.progress = None  # Pipeline progress tracker (for final status only)
         self.viewport_name = None  # Set when running pipeline
-        self._last_percent = 0  # Track last reported percent for monotonicity
-        self._active_stage = None  # (stage_name, viewport_name) during subprocess runs
-
-    def update_progress(self, stage: str, stage_percent: int, message: str,
-                        current_file: str = "", current_value: int = 0, total_value: int = 0):
-        """Update unified pipeline progress (monotonically increasing).
-
-        Args:
-            stage: Stage name ('process', 'satellite')
-            stage_percent: Progress within this stage (0-100)
-            message: Status message
-            current_file: File currently being processed
-            current_value: Byte-level progress (e.g. bytes downloaded)
-            total_value: Byte-level total (e.g. total bytes to download)
-        """
-        if not self.progress:
-            return
-
-        start, end = STAGE_PROGRESS.get(stage, (0, 100))
-        # Map stage_percent (0-100) to the stage's allocated range
-        overall_percent = start + int((end - start) * stage_percent / 100)
-        # Enforce monotonicity — never report a lower percent than before
-        overall_percent = max(overall_percent, self._last_percent)
-        self._last_percent = overall_percent
-        self.progress.update("processing", message, current_value=current_value,
-                             total_value=total_value, current_file=current_file,
-                             percent=overall_percent)
-
-    def _poll_substage_progress(self):
-        """Read the active sub-operation's progress file and forward ALL fields to pipeline."""
-        if not self._active_stage:
-            return
-        stage_name, viewport_name = self._active_stage
-        sub_file = PROGRESS_DIR / f"{viewport_name}_{stage_name}_progress.json"
-        if not sub_file.exists():
-            return
-        try:
-            with open(sub_file) as f:
-                sub_data = json.load(f)
-            if sub_data.get('status') in ('complete', 'error'):
-                return
-            sub_percent = sub_data.get('percent', 0)
-            sub_message = sub_data.get('message', '')
-            if sub_percent > 0 or sub_message:
-                self.update_progress(stage_name, sub_percent, sub_message,
-                                     current_file=sub_data.get('current_file', ''),
-                                     current_value=sub_data.get('current_value', 0),
-                                     total_value=sub_data.get('total_value', 0))
-        except (ValueError, IOError, OSError):
-            pass
 
     def _stream_pipe(self, pipe, label, lines_out):
         """Read lines from a pipe, log them, and collect into lines_out."""
@@ -187,9 +132,6 @@ class PipelineRunner:
 
             start_time = time.time()
             while not done_event.wait(timeout=1.0):
-                # Forward sub-operation progress to pipeline
-                self._poll_substage_progress()
-
                 # Check if cancelled
                 if self.viewport_name and is_pipeline_cancelled(self.viewport_name):
                     try:
@@ -346,31 +288,18 @@ class PipelineRunner:
                 return True
             return False
 
-        # Process viewport (download + pyramids + vectors)
-        self.update_progress('process', 0, "Processing viewport...")
-        self._active_stage = ('process', viewport_name)
+        # Run subprocess (writes progress directly to {vp}_pipeline_progress.json)
         success, error = self.stage_1_process_viewport(viewport_name, years_str or "")
-        self._active_stage = None
         if not success:
             self.progress.error(f"Processing failed: {error}")
             return False, error
         if check_cancelled():
             return False, "Cancelled by user"
-        self.update_progress('process', 100, "Viewport processed")
 
         logger.info(f"\n{'=' * 70}")
         logger.info(f"PIPELINE COMPLETE: {viewport_name}")
         logger.info(f"{'=' * 70}\n")
 
         self.progress.complete(f"Pipeline complete for {viewport_name}")
-
-        # Clean up per-stage progress files (subprocess temp files)
-        for stage in ('process',):
-            stage_file = PROGRESS_DIR / f"{viewport_name}_{stage}_progress.json"
-            try:
-                if stage_file.exists():
-                    stage_file.unlink()
-            except OSError:
-                pass
 
         return True, None
