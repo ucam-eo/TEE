@@ -630,6 +630,59 @@ const CLASSIFIER_LABELS = {
 **Purpose:** Schema dropdown, floating tree browser for structured label
 ontologies (e.g. UKHab), label selection for both manual labels and seg clusters.
 
+### Schema File Formats
+
+A schema defines a hierarchical tree of label names and optional codes.  The
+user loads a schema via the "Schema" dropdown in the viewer header.  Three
+modes are available:
+
+- **None** — no schema, user types label names freely
+- **UKHab** — built-in UK Habitat Classification v2, loaded from
+  `/schemas/ukhab-v2.json`
+- **Custom** — user uploads a file (JSON or tab-indented text)
+
+**JSON format** — `{name, tree}` object:
+
+```json
+{
+  "name": "My Schema",
+  "tree": [
+    {
+      "code": "w",
+      "name": "Woodland",
+      "children": [
+        { "code": "w1", "name": "Broadleaved woodland", "children": [
+          { "code": "w1a", "name": "Lowland mixed deciduous", "children": [] }
+        ]},
+        { "code": "w2", "name": "Coniferous woodland", "children": [] }
+      ]
+    },
+    {
+      "code": "g",
+      "name": "Grassland",
+      "children": []
+    }
+  ]
+}
+```
+
+Alternatively, a flat JSON array `[{code, name, children}, ...]` is accepted
+(the name defaults to the filename).
+
+**Tab-indented text format** — one label per line, indented with tabs or
+4 spaces.  Optional code prefix before the name:
+
+```
+w Woodland
+    w1 Broadleaved woodland
+        w1a Lowland mixed deciduous
+    w2 Coniferous woodland
+g Grassland
+```
+
+When a label is selected from the schema tree, its `code` and `name` are set
+as the active manual label (or filled into a segmentation cluster input).
+
 ### Bridged State (Object.defineProperty)
 
 | Property | Type | Description |
