@@ -213,7 +213,7 @@ actual storage is module-private.
 
 | Module | Properties on `window` |
 |---|---|
-| `app.js` | `maps`, `currentViewportName`, `currentEmbeddingYear`, `viewportStatus`, `currentPanelMode`, `TILE_SERVER`, `labels`, `markers`, `isLoggedIn`, `definedLabels`, `embeddingLabels`, `labelColors` |
+| `app.js` | `currentViewportName`, `currentEmbeddingYear`, `viewportStatus`, `currentPanelMode`, `TILE_SERVER`, `heatmapSatelliteLayer`, `isLoggedIn` |
 | `maps.js` | `viewportBounds`, `satelliteSources`, `currentSatelliteSource`, `TRIANGLE_ICON`, `HEATMAP_LAYER_RULES`, `persistentLabelMarkers` |
 | `vectors.js` | `localVectors`, `explorerResults` |
 | `labels.js` | `manualLabels`, `currentManualLabel`, `savedLabels`, `currentSearchCache`, `manualClassOverlays`, `_classMatchCache`, `isPolygonDrawing`, `labelMode` |
@@ -549,7 +549,6 @@ JSON exports, or IndexedDB and renaming would break existing user data.
 | `manualLabel` entries | `label.embeddings` (plural, `number[][]`) | Same — union-mode polygon labels store per-pixel vectors here. Serialized to localStorage and JSON exports. |
 | `savedLabel` entries | `label.embedding` | Stored in `localStorage` key `tee_labels_{viewport}`. Renaming breaks reload of existing saved labels. |
 | `segLabel` entries | `segLabel.embedding` | Transient (not persisted), but the field feeds into `addManualLabel()` which serializes it. |
-| `app.js` | `embeddingLabels` variable | Deprecated legacy label system, kept as empty stub. Not exposed on `window`. Will be removed in a future cleanup. |
 | `app.js` | `window.currentEmbeddingYear` | Refers to the year of the Tessera model output, not the data format. "Embedding year" is correct domain terminology here. |
 | `IndexedDB` cache | Old entries have `.embeddings` | `vectors.js` auto-migrates on read: if `.values` is missing but `.embeddings` exists, it renames the property in memory. No cache clear needed. |
 | Files on disk | `all_embeddings_uint8.npy.gz` | Correct — these ARE uint8 embeddings (pre-dequantization). |

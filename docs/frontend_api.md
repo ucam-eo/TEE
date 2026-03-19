@@ -30,17 +30,13 @@ label management, progress tracking, and the `window.onload` entry point.
 
 | Property | Type | Description |
 |---|---|---|
-| `window.maps` | `{osm, embedding, rgb, heatmap, embedding2}` | Leaflet map instances |
 | `window.currentViewportName` | `string` | Active viewport name (e.g. `"cambridge"`) |
 | `window.currentEmbeddingYear` | `string` | Year for Panel 3 embeddings (e.g. `"2025"`) |
 | `window.viewportStatus` | `object` | Server + client readiness flags (see [data structures](#91-viewportstatus)) |
 | `window.currentPanelMode` | `string` | `"explore"` / `"change-detection"` / `"labelling"` / `"validation"` |
 | `window.TILE_SERVER` | `string` | Tile server base URL (default: `window.location.origin`) |
-| `window.labels` | `{osm: [], embedding: [], rgb: []}` | Legacy marker labels |
-| `window.markers` | `{osm: {}, embedding: {}, rgb: {}}` | Legacy marker objects |
+| `window.heatmapSatelliteLayer` | `L.TileLayer \| null` | Satellite base layer on Panel 5 |
 | `window.isLoggedIn` | `boolean` | Whether user is authenticated |
-| `window.definedLabels` | `string[]` | Legacy embedding label names |
-| `window.labelColors` | `{label: string}` | Legacy label color map |
 
 ### Functions
 
@@ -68,40 +64,6 @@ Adds mousedown/mousemove/mouseup listeners for drag behaviour.
 
 #### `window.doLogout()`
 POST to `/api/auth/logout` and redirect to login page.
-
-#### `window.updateLabelCount()`
-Recalculate and display total embedding label count.
-
-#### `window.saveLabels()` / `window.loadLabels()` / `window.clearAllLabels()`
-Legacy label persistence to/from localStorage.
-
-#### `window.exportLabels()`
-Export legacy marker labels as JSON file download.
-
-#### `window.createLabelDialog()`
-Prompt user for a new embedding label name, then show color picker modal.
-
-#### `window.confirmLabelColorSelection(label)`
-- **label** `string` -- label name
-
-Finalise label creation with selected color from the color picker modal.
-
-#### `window.updateLabelDropdown()`
-Rebuild the `#active-label` dropdown from `definedLabels`.
-
-#### `window.getColorForLabel(label)` -> `string`
-- **label** `string` -- label name
-- **Returns:** hex color string
-
-#### `window.invertColor(hexColor)` -> `string`
-- **hexColor** `string` -- e.g. `"#FF0000"`
-- **Returns:** inverted hex color
-
-#### `window.nextLabelColor()` -> `string`
-- **Returns:** next unused color from a curated 20-color palette
-
-#### `window.exportLabelsJSON()`
-Export embedding labels (name + 128-dim vectors) as JSON file.
 
 #### `window.showProgressModal(title)` / `window.hideProgressModal()`
 Show/hide the full-screen progress overlay.
@@ -164,9 +126,6 @@ Switch Panel 6 to a different year and update the heatmap.
 
 #### `window.syncMaps()`
 Install move/zoom listeners to keep all 5 geographic panels in sync.
-
-#### `window.addMarker(panel, lat, lon, label)` / `window.removeMarker(panel, lat, lon)`
-Add/remove a named marker on a specific map panel.
 
 #### `window.makeColoredTriangleIcon(fillColor)` -> `L.divIcon`
 - **fillColor** `string` -- hex color
