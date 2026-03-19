@@ -315,20 +315,6 @@ Read progress from the JSON file written by `ProgressTracker`. The `operation_id
 
 Possible `status` values: `"starting"`, `"processing"`, `"complete"`, `"error"`, `"not_started"`.
 
-#### `GET /api/operations/pipeline-status/<viewport_name>`
-
-Get task-level status from the in-memory `tasks` dict (not the progress file).
-
-```json
-// Response 200
-{
-  "success": true,
-  "operation_id": "cambridge_full_pipeline",
-  "status": "starting",
-  "current_stage": "initialization",
-  "error": null
-}
-```
 
 #### `POST /api/viewports/<viewport_name>/cancel-processing`
 
@@ -348,7 +334,7 @@ Cancel a running pipeline. Sends SIGTERM to the subprocess, then cleans up all g
 
 ### 1.4 Tiles — `api/views/tiles.py`
 
-**Overview:** Slippy-map tile server. Serves 256x256 PNG tiles from pre-built pyramid GeoTIFFs or PNGs. Supports ETag/304 caching and returns transparent tiles for missing data.
+**Overview:** [Slippy map](https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames) tile server. Serves 256x256 PNG tiles from pre-built PNG pyramids. Supports ETag/304 caching and returns transparent tiles for missing data.
 
 **Depends on:** `lib.tile_renderer`, `lib.viewport_utils`, `lib.config`
 
@@ -361,7 +347,7 @@ performance.
 Serve a single map tile.
 
 - `map_id`: year string (`"2017"` .. `"2025"`). Satellite imagery is served by external providers (ESRI, Google), not this tile server.
-- `z`, `x`, `y`: standard slippy-map tile coordinates
+- `z`, `x`, `y`: standard [slippy map tile coordinates](https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames)
 
 ```
 GET /tiles/cambridge/2024/12/2048/1362.png
@@ -706,7 +692,7 @@ status = check_readiness("cambridge", years_requested=[2023, 2024])
 Checks:
 - **vectors:** `vectors/<name>/<year>/metadata.json` + `all_embeddings_uint8.npy.gz` (or `.npy`)
 - **mosaics:** `mosaics/<name>_embeddings_*.tif`
-- **pyramids:** `pyramids/<name>/<year>/level_0.{png,tif}`
+- **pyramids:** `pyramids/<name>/<year>/level_0.png`
 
 #### `delete_viewport_data(viewport_name, bounds=None) -> list[str]`
 
@@ -822,7 +808,7 @@ progress.cleanup()  # delete the progress file
 
 ### 2.7 `lib/tile_renderer.py` — Tile Rendering
 
-**Overview:** Pure tile rendering functions for the map tile server. Handles coordinate math, GeoTIFF and PNG pyramid rendering, and pyramid path resolution. All rendering functions are LRU-cached keyed by `(path, z, x, y, mtime)`.
+**Overview:** Pure tile rendering functions for the [slippy map](https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames) tile server. Handles coordinate math, PNG pyramid rendering, and pyramid path resolution. All rendering functions are LRU-cached keyed by `(path, z, x, y, mtime)`.
 
 ```python
 from lib.tile_renderer import (
@@ -835,7 +821,7 @@ from lib.tile_renderer import (
 
 #### `tile_to_bbox(x, y, zoom) -> tuple`
 
-Convert slippy-map tile coordinates to geographic bounding box.
+Convert [slippy map](https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames) tile coordinates to geographic bounding box.
 
 ```python
 tile_to_bbox(2048, 1362, 12)
@@ -845,7 +831,7 @@ tile_to_bbox(2048, 1362, 12)
 
 #### `get_pyramid_path(viewport, map_id, zoom_level) -> tuple | None`
 
-Resolve the pyramid file path for a viewport/map/zoom. Tries PNG first, falls back to GeoTIFF.
+Resolve the pyramid PNG file path for a viewport/map/zoom.
 
 ```python
 get_pyramid_path("cambridge", "2024", 12)
@@ -864,17 +850,9 @@ get_pyramid_path("cambridge", "2024", 12)
 | 6-7 | 4 |
 | 0-5 | 5 (most downsampled) |
 
-#### `render_tile(tif_path, z, x, y, _mtime=0) -> bytes | None`
-
-Render a 256x256 PNG tile from a GeoTIFF pyramid level. Returns `None` for out-of-bounds tiles. Cached (LRU, maxsize=2048).
-
-```python
-png_bytes = render_tile("/data/pyramids/cambridge/2024/level_0.tif", 12, 2048, 1362)
-```
-
 #### `render_tile_png(png_path, z, x, y, _mtime=0) -> bytes | None`
 
-Render a 256x256 PNG tile from a PNG pyramid level. Reads `pyramid_meta.json` for the affine transform. Cached (LRU, maxsize=2048).
+Render a 256x256 PNG tile from a PNG pyramid level. Reads `pyramid_meta.json` for the affine transform. Returns `None` for out-of-bounds tiles. Cached (LRU, maxsize=2048).
 
 ---
 
@@ -1060,7 +1038,7 @@ vectors/<viewport>/<year>/
 
 ### 3.2 `create_pyramids.py`
 
-**Overview:** Legacy script for creating satellite RGB pyramids from GeoTIFF files. No longer used in the main pipeline — satellite imagery is now served by external providers (ESRI, Google). Kept for potential offline use.
+**Overview:** Legacy script for creating satellite RGB pyramids. No longer used — satellite imagery is served by external providers (ESRI, Google). Kept for potential offline use.
 
 **Key function:**
 

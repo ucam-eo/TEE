@@ -54,33 +54,6 @@ def operations_progress(request, operation_id):
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 
-def pipeline_status(request, viewport_name):
-    """Get status of viewport pipeline processing."""
-    try:
-        validate_viewport_name(viewport_name)
-    except ValueError as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=400)
-    try:
-        operation_id = f"{viewport_name}_full_pipeline"
-        with tasks_lock:
-            if operation_id in tasks:
-                status_info = tasks[operation_id]
-                return JsonResponse({
-                    'success': True,
-                    'operation_id': operation_id,
-                    **status_info
-                })
-            else:
-                return JsonResponse({
-                    'success': False,
-                    'status': 'no_pipeline',
-                    'message': 'No pipeline operation found for this viewport'
-                })
-
-    except Exception as e:
-        logger.error(f"Error getting pipeline status: {e}")
-        return JsonResponse({'success': False, 'error': str(e)}, status=400)
-
 
 def cancel_processing(request, viewport_name):
     """Cancel viewport processing pipeline and clean up all generated files."""

@@ -2,8 +2,7 @@ from django.urls import path
 from .auth_views import auth_login, auth_logout, auth_change_password, auth_status
 from .views.viewports import (list_viewports, current_viewport, switch_viewport,
     create_viewport, delete_viewport, add_years, available_years, is_ready)
-from .views.pipeline import (
-    operations_progress, pipeline_status, cancel_processing)
+from .views.pipeline import operations_progress, cancel_processing
 from .views.vector_data import serve_vector_data
 from .views.config import get_config
 from .views.evaluation import upload_shapefile, class_pixel_counts, run_evaluation, download_model, finish_classifier
@@ -26,7 +25,6 @@ urlpatterns = [
     path('viewports/<str:viewport_name>/cancel-processing', cancel_processing),
     # Pipeline
     path('operations/progress/<str:operation_id>', operations_progress),
-    path('operations/pipeline-status/<str:viewport_name>', pipeline_status),
     # Vector data
     path('vector-data/<str:viewport>/<str:year>/<str:filename>', serve_vector_data),
     # Config
