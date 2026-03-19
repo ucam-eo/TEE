@@ -469,13 +469,18 @@ def main():
         for year in years_to_process
     ]
 
-    progress.update("processing", f"Starting {len(years_to_process)} year(s)...", percent=1)
+    progress.update("processing", f"Connecting to GeoTessera...", percent=1)
+    print(f"  Initializing GeoTessera...")
+    t_init = _time.monotonic()
+    tessera = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
+    init_secs = _time.monotonic() - t_init
+    print(f"  GeoTessera ready ({init_secs:.1f}s)")
+    progress.update("processing", f"Processing {len(years_to_process)} year(s)...", percent=3)
 
     # Process years sequentially so progress is reported for each year.
     # (Parallel workers can't share the ProgressTracker, and each spawns
     # a separate GeoTessera instance with its own 28s registry download.)
     n = len(years_to_process)
-    tessera = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
     results = []
     for i, year in enumerate(years_to_process):
         results.append(
