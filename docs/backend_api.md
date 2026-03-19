@@ -144,13 +144,14 @@ selected, returns `success: false`.
 
 #### `POST /api/viewports/switch`
 
-Switch the active viewport.
+Switch the active viewport. Reports data readiness (pyramids, vectors) and
+pipeline status if processing is in progress.
 
 ```json
 // Request
 { "name": "cambridge" }
 
-// Response 200
+// Response 200 (viewport exists)
 {
   "success": true,
   "message": "Switched to viewport 'cambridge'",
@@ -159,6 +160,12 @@ Switch the active viewport.
   "pyramids_ready": true,
   "vectors_ready": true
 }
+
+// Response 404 (viewport does not exist)
+{ "success": false, "error": "Viewport not found" }
+
+// Response 400 (invalid name — contains path separators or special chars)
+{ "success": false, "error": "Invalid viewport name: ..." }
 ```
 
 #### `POST /api/viewports/create`

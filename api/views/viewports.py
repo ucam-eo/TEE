@@ -134,10 +134,10 @@ def switch_viewport(request):
         except ValueError as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
-        set_active_viewport(viewport_name)
-
-        viewport = read_viewport_file(viewport_name)
+        viewport = read_viewport_file(viewport_name)  # raises FileNotFoundError if missing
         viewport['name'] = viewport_name
+
+        set_active_viewport(viewport_name)
 
         response_data = {
             'success': True,
