@@ -683,5 +683,37 @@ sudo ./manage.sh   # option 5: pull sk818/tee:stable, restart, health-check
 Docker volumes on production: `-v /data:/data -v /data/viewports:/app/viewports`
 
 The Dockerfile runs: migrate → collectstatic → waitress on port 8001.
-Waitress is configured with `--send-bytes=1` to support streaming responses
-(evaluation NDJSON).
+NDJSON streaming responses are padded to 18KB per line to flush waitress's
+default output buffer without needing `--send-bytes=1`.
+
+---
+
+## 16. Known Technical Debt
+
+### Dual label systems
+
+`labels.js` contains two independent label systems that should be unified:
+
+| | Manual Labels | Saved Labels (Auto-label) |
+|---|---|---|
+| **Created by** | User clicks (pins, polygons) or promoted k-means clusters | Saving an explorer similarity search |
+| **Storage key** | `manualLabels_{viewport}` | `tee_labels_{viewport}` |
+| **Overlay** | `DirectCanvasLayer` per class on `maps.rgb` | `PersistentLabelOverlay` on `maps.rgb` |
+| **Label types** | point, polygon, similarity | similarity only |
+| **Panel 4 coloring** | `updatePanel4ManualLabels()` | `updateUMAPColorsFromLabels()` |
+| **Export formats** | JSON, GeoJSON, Shapefile, JPG | JSON, GeoJSON |
+
+The manual label system is newer and more capable.  The saved label system is
+older and more limited.  They duplicate overlay rendering, Panel 4 coloring,
+export, and persistence logic.  A future refactoring should unify them under
+the manual label system.
+
+**Warning:** A previous refactoring attempt (extracting viewer.html into ES
+modules) introduced many subtle cross-module bugs.  Any unification should be
+done incrementally with thorough testing, not as a big-bang rewrite.
+
+### Double quantization in vector pipeline
+
+See [§13 Vector Data Pipeline](#13-vector-data-pipeline) — the pipeline
+dequantizes int8→float32 then re-quantizes float32→uint8.  Will be resolved
+by the Zarr migration.
