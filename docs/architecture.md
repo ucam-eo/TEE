@@ -387,3 +387,225 @@ All map panels share unified click and double-click handlers installed in
 
 The 250ms delay is necessary because Leaflet fires `click` before `dblclick`.
 The timeout is cancelled if a second click arrives within the window.
+
+---
+
+## 9. Third-Party Dependencies
+
+All frontend dependencies are loaded from CDNs — there is no build step, no
+`node_modules`, no bundler.
+
+| Library | Version | Source | Used for |
+|---|---|---|---|
+| Leaflet | 1.9.4 | unpkg CDN (`<script>`) | All geographic map panels (1-3, 5-6) |
+| Leaflet.Draw | 1.0.4 | unpkg CDN (`<script>`) | Polygon drawing on Panel 2 |
+| Three.js | 0.163.0 | jsdelivr CDN (ES module via `importmap`) | 3D scatter plot on Panel 4 |
+| OrbitControls | 0.163.0 | jsdelivr CDN (ES module via `importmap`) | Pan/rotate/zoom on Panel 4 |
+| Chart.js | latest | jsdelivr CDN (`<script>`) | Learning curve charts in validation |
+| shp-write | 0.3.2 | unpkg CDN (loaded dynamically on export) | ESRI Shapefile export |
+
+The Three.js imports use an `importmap` in `viewer.html`:
+
+```html
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+        "three/addons/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/controls/OrbitControls.js"
+    }
+}
+</script>
+```
+
+This allows `dimreduction.js` to use bare `import * as THREE from 'three'`.
+
+---
+
+## 10. HTML Panel Structure
+
+The 6-panel grid lives inside `#map-container` in `viewer.html`.  Each panel
+is a `<div class="panel">` containing a header and a content area.  Key element
+IDs an agent needs to know:
+
+```
+#map-container (CSS grid, 3x2)
+  ├── Panel 1: .panel
+  │     ├── #panel1-title (span)
+  │     ├── #map-osm (Leaflet map div)
+  │     └── #val-class-table-panel (validation mode only)
+  │
+  ├── Panel 2: .panel
+  │     ├── #panel2-title (span)
+  │     ├── #satellite-source-selector (dropdown: esri/google)
+  │     └── #map-rgb (Leaflet map div)
+  │
+  ├── Panel 3: .panel
+  │     ├── #panel3-title (span)
+  │     ├── #embedding-year-selector (year dropdown)
+  │     └── #map-embedding (Leaflet map div)
+  │
+  ├── Panel 4: .panel
+  │     ├── #panel4-title (span)
+  │     ├── #dim-reduction-selector (PCA/UMAP dropdown)
+  │     ├── #map-umap (Three.js container div)
+  │     └── #change-stats-panel (change-detection mode only)
+  │
+  ├── Panel 5: .panel
+  │     ├── #panel5-title (span)
+  │     ├── #map-heatmap (Leaflet map div)
+  │     ├── #heatmap-waiting-message (shown when vectors not ready)
+  │     ├── #heatmap-same-year-message (shown when years match)
+  │     └── #val-cm-panel (confusion matrix, validation mode only)
+  │
+  └── Panel 6: .panel
+        ├── #panel6-header-text (span, note: not #panel6-title)
+        ├── #embedding-year-selector-2 (year dropdown, change-detection)
+        ├── #map-embedding2 (Leaflet map div)
+        ├── #panel6-autolabel-view (auto-label sub-view)
+        │     ├── #seg-controls (k-means k=, -/+, Go, Clear)
+        │     ├── #panel6-seg-list (cluster list)
+        │     └── #panel6-promote-all-btn
+        ├── #panel6-manual-view (manual label sub-view)
+        │     ├── #manual-label-name (input)
+        │     ├── #manual-label-color (color picker)
+        │     └── #manual-labels-list (label list)
+        └── #val-controls-panel (validation mode only)
+              ├── #val-dropzone (shapefile upload)
+              ├── #val-field-select (field selector)
+              ├── classifier checkboxes (.val-clf-header)
+              └── #val-run-btn / #val-cancel-btn
+```
+
+**Important:** Panel 6 header uses `#panel6-header-text`, not `#panel6-title`.
+All other panels use `#panelN-title`.
+
+---
+
+## 11. Geotransform (Lat/Lon ↔ Pixel Conversion)
+
+The geotransform is a 6-parameter affine transformation stored in
+`localVectors.metadata.geotransform`:
+
+```
+{ a: pixelWidth,   b: 0,   c: originLon,
+  d: 0,            e: pixelHeight (negative),  f: originLat }
+```
+
+**Pixel → Geographic:**
+```javascript
+lon = c + px * a     // px = pixel column (x)
+lat = f + py * e     // py = pixel row (y), e is negative so lat decreases
+```
+
+**Geographic → Pixel:**
+```javascript
+px = Math.round((lon - c) / a)
+py = Math.round((lat - f) / e)
+```
+
+**Embedding extraction** (in `vectors.js` `localExtract`):
+```javascript
+const gt = localVectors.metadata.geotransform;
+const px = Math.round((lon - gt.c) / gt.a);
+const py = Math.round((lat - gt.f) / gt.e);
+const idx = gridLookupIndex(localVectors.gridLookup, px, py);
+if (idx >= 0) {
+    return localVectors.embeddings.subarray(idx * 128, (idx + 1) * 128);
+}
+```
+
+Note: `a` is typically ~0.00009 (about 10m in degrees at UK latitudes).
+`e` is negative (latitude decreases going down the raster).
+
+---
+
+## 12. Vector Data Pipeline
+
+When vectors are downloaded to the browser, they go through these steps:
+
+1. **Server stores** uint8 quantized embeddings + quantization params + pixel
+   coordinates in `viewports/{name}/vectors/{year}/`:
+   - `all_embeddings_uint8.npy.gz` — shape (N, 128), dtype uint8
+   - `quantization.json` — `{dim_min: float32[128], dim_max: float32[128]}`
+   - `pixel_coords.npy.gz` — shape (N, 2), dtype int32 (px, py pairs)
+   - `metadata.json` — geotransform, mosaic dimensions
+
+2. **`vectors.js` downloads** all four files via `/api/vector-data/{viewport}/{year}/`
+
+3. **Client-side dequantization:**
+   ```
+   float32_value = uint8_value / 255.0 * (dim_max - dim_min) + dim_min
+   ```
+
+4. **Stored in IndexedDB** cache (`tee_vector_cache` store) to avoid re-downloading
+
+5. **Set as `window.localVectors`** — triggers dependency cascade
+   (PCA computation, label controls enable, etc.)
+
+---
+
+## 13. Testing
+
+TEE has static analysis tests in `validation/` that verify the frontend HTML and
+JS haven't regressed during refactoring.  **Run after any frontend change:**
+
+```bash
+cd /path/to/TEE && venv/bin/pytest validation/ -v
+```
+
+### Test files
+
+| File | What it checks |
+|---|---|
+| `test_viewer_html.py` | HTML structure (panel IDs, no duplicate IDs), JS syntax (all script blocks parse), feature presence (polygon drawing, schema system, keyboard shortcuts) |
+| `test_refactoring_guards.py` | Backend: all view functions exist, URL routing complete, lib modules export expected functions, `window.*` exports present in JS files |
+
+### Key test classes in `test_viewer_html.py`
+
+- `TestExploreRename` — no residual "simple" mode references
+- `TestManualLabelMode` — manual label UI elements exist
+- `TestClassificationOverlay` — classify button and overlay elements
+- `TestSchemaSystem` — schema functions present in JS
+- `TestPolygonDrawing` — Leaflet.Draw CDN, polygon state vars, click handlers
+- `TestJSSyntax` — all `<script>` blocks parse without syntax errors
+- `TestHTMLStructure` — starts with DOCTYPE, no duplicate IDs, panel structure
+
+### When tests fail
+
+If a test fails after a code change, it usually means:
+- A `window.*` function was renamed/removed without updating the test
+- An HTML element ID was changed
+- A JS syntax error was introduced
+
+Fix the code or update the test assertion — never skip tests.
+
+---
+
+## 14. Deployment
+
+### Local development
+
+```bash
+python3 manage.py runserver 8001   # Django dev server
+```
+
+### Docker build and push (for production)
+
+```bash
+docker buildx build --platform linux/amd64 \
+    --build-arg GIT_VERSION="$(git describe --tags --always)" \
+    -t sk818/tee:stable --push .
+```
+
+### Production server (michael)
+
+```bash
+ssh michael
+sudo ./manage.sh   # option 5: pull sk818/tee:stable, restart, health-check
+```
+
+Docker volumes on production: `-v /data:/data -v /data/viewports:/app/viewports`
+
+The Dockerfile runs: migrate → collectstatic → waitress on port 8001.
+Waitress is configured with `--send-bytes=1` to support streaming responses
+(evaluation NDJSON).

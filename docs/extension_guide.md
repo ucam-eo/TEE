@@ -523,6 +523,103 @@ To add a 7th panel:
 
 ---
 
+## 7. Adding a New Backend Endpoint
+
+### Step 1: Create the view function
+
+In `api/views/` (either in an existing file or a new one):
+
+```python
+# api/views/myfeature.py
+import json
+from django.http import JsonResponse
+
+def my_endpoint(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    body = json.loads(request.body)
+    # ... process ...
+    return JsonResponse({"result": "ok"})
+```
+
+### Step 2: Register the URL
+
+In `api/urls.py`, add the route:
+
+```python
+from .views.myfeature import my_endpoint
+
+urlpatterns = [
+    # ... existing routes ...
+    path('myfeature/do-thing', my_endpoint),
+]
+```
+
+All paths in `api/urls.py` are prefixed with `/api/` by `tee_project/urls.py`.
+
+### Step 3: Add auth requirement (if needed)
+
+If the endpoint modifies data, add it to `WRITE_ENDPOINTS` in
+`api/middleware.py`:
+
+```python
+WRITE_ENDPOINTS = {
+    # ... existing ...
+    '/api/myfeature/do-thing',
+}
+```
+
+### Step 4: Call from JavaScript
+
+```javascript
+const resp = await fetch('/api/myfeature/do-thing', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ param1: 'value' }),
+});
+const data = await resp.json();
+```
+
+### Step 5: Run tests
+
+```bash
+venv/bin/pytest validation/ -v
+```
+
+---
+
+## 8. Adding a New Dimensionality Reduction Method
+
+### Step 1: Add to `dimreduction.js`
+
+In `loadDimReduction()`, add a branch for the new method alongside `pca` and
+`umap`:
+
+```javascript
+} else if (dimMethod === 'tsne') {
+    // Compute t-SNE (e.g., via a Web Worker)
+    umapContainer.innerHTML = '<div ...>Computing t-SNE...</div>';
+    await new Promise(resolve => setTimeout(resolve, 50));
+    points = computeTSNE(window.localVectors);
+}
+```
+
+The function must return an array of `{x, y, z, lat, lon}` objects.  The
+`UMAPScene` class renders any 3D point cloud regardless of the reduction method.
+
+### Step 2: Add to the selector dropdown
+
+In `viewer.html`, add an option to `#dim-reduction-selector`:
+
+```html
+<option value="tsne">t-SNE</option>
+```
+
+The change listener in `dimreduction.js` already calls
+`loadDimReduction(selectedValue)` for any selected value.
+
+---
+
 ## Common Extension Points
 
 | Extension | Primary file | Key function/object |
@@ -537,3 +634,17 @@ To add a 7th panel:
 | New dim reduction method | `dimreduction.js` | `loadDimReduction()` |
 | New export format | `labels.js` | `doExportManualLabels()` |
 | Custom tile overlay | `maps.js` | `L.pixelatedTileLayer()` or `L.tileLayer()` |
+
+---
+
+## Checklist: Before Submitting Any Change
+
+1. **Run tests:** `venv/bin/pytest validation/ -v` — all 350 tests must pass
+2. **Check JS syntax:** browser console should show no errors on load
+3. **Verify `window.*` exports:** if you add a function other modules call,
+   expose it at the bottom of the file with `window.myFunction = myFunction`
+4. **Update docs:** if you added a new `window.*` export, add it to
+   `frontend_api.md`.  If you added a backend endpoint, add it to
+   `backend_api.md`
+5. **Test on multiple browsers:** Safari can behave differently (especially with
+   Web Workers when dev console is open — see architecture.md §9)

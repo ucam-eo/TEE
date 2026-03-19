@@ -16,7 +16,8 @@ property exposed on `window.*` is documented here.
 7. [evaluation.js](#7-evaluationjs)
 8. [schema.js](#8-schemajs)
 9. [Key Data Structures](#9-key-data-structures)
-10. [Cross-Module Communication Patterns](#10-cross-module-communication-patterns)
+10. [Frontend → Backend API Calls](#10-frontend--backend-api-calls)
+11. [Cross-Module Communication Patterns](#11-cross-module-communication-patterns)
 
 ---
 
@@ -838,37 +839,69 @@ Render schema tree as HTML string (recursive).
 
 ---
 
-## 10. Cross-Module Communication Patterns
+## 10. Frontend → Backend API Calls
 
-### 10.1 Explorer Flow (vectors.js -> maps.js -> dimreduction.js)
+Which JS modules call which backend endpoints:
+
+| JS Module | HTTP Call | Backend Endpoint |
+|---|---|---|
+| `app.js` | `GET` | `/api/viewports/{name}/is-ready` (poller) |
+| `app.js` | `GET` | `/api/operations/progress/{id}` (pipeline progress) |
+| `app.js` | `POST` | `/api/auth/logout` |
+| `maps.js` | `GET` | `/api/viewports/current` |
+| `vectors.js` | `GET` | `/api/vector-data/{viewport}/{year}/all_embeddings_uint8.npy.gz` |
+| `vectors.js` | `GET` | `/api/vector-data/{viewport}/{year}/quantization.json` |
+| `vectors.js` | `GET` | `/api/vector-data/{viewport}/{year}/pixel_coords.npy.gz` |
+| `vectors.js` | `GET` | `/api/vector-data/{viewport}/{year}/metadata.json` |
+| `evaluation.js` | `POST` | `/api/evaluation/upload-shapefile` (FormData) |
+| `evaluation.js` | `POST` | `/api/evaluation/run` (streaming NDJSON response) |
+| `evaluation.js` | `POST` | `/api/evaluation/finish-classifier` |
+| `evaluation.js` | `GET` | `/api/evaluation/download-model/{name}` |
+| `evaluation.js` | `POST` | `/api/evaluation/class-pixel-counts` |
+| `schema.js` | `GET` | `/schemas/ukhab-v2.json` (static file) |
+| (viewer.html inline) | `GET` | `/api/auth/status` |
+| (viewer.html inline) | `GET` | `/api/config` |
+
+Tile requests bypass the Django middleware stack via `TileShortcircuitMiddleware`:
+
+| Source | URL Pattern |
+|---|---|
+| Leaflet tile layers | `/tiles/{viewport}/{year}/{z}/{x}/{y}.png` |
+| Viewport bounds | `/bounds/{viewport}/{year}` |
+
+---
+
+## 11. Cross-Module Communication Patterns
+
+### 11.1 Explorer Flow (vectors.js -> maps.js -> dimreduction.js)
 
 1. User double-clicks on any map panel
 2. `maps.js` calls `window.explorerClick(lat, lon)` (from `vectors.js`)
 3. `vectors.js` extracts embedding, runs `localSearchSimilar()`, creates `DirectCanvasLayer` on `maps.rgb`
 4. `vectors.js` calls `window.umapCanvasLayer.highlightSimilarPoints(matches)` (from `dimreduction.js`)
 
-### 10.2 Label Save Flow (labels.js -> vectors.js -> dimreduction.js)
+### 11.2 Label Save Flow (labels.js -> vectors.js -> dimreduction.js)
 
 1. User clicks "Save Label" in the modal
 2. `labels.js` reads `window.currentSearchCache` and `window.explorerResults` (from `vectors.js`)
 3. `labels.js` calls `window.clearExplorerResults()` (from `vectors.js`)
 4. `labels.js` calls `window.updateUMAPColorsFromLabels()` (from `dimreduction.js`)
 
-### 10.3 Segmentation Promote Flow (segmentation.js -> labels.js -> vectors.js)
+### 11.3 Segmentation Promote Flow (segmentation.js -> labels.js -> vectors.js)
 
 1. User clicks promote arrow on a cluster
 2. `segmentation.js` calls `window.addManualLabel(entry)` (from `labels.js`)
 3. `segmentation.js` creates `window.DirectCanvasLayer(pixels, ...)` (from `vectors.js`)
 4. `segmentation.js` calls `window.updatePanel4ManualLabels()` (from `dimreduction.js`)
 
-### 10.4 Dependency Cascade (app.js orchestrates all modules)
+### 11.4 Dependency Cascade (app.js orchestrates all modules)
 
 1. Poller detects `has_vectors: true`
 2. `evaluateDependencies()` fires `vectors-download` -> downloads vectors
 3. Sets `vectors_downloaded: true`, re-evaluates
 4. Fires `label-controls` (enables UI), `panel4-pca` (computes PCA), `panel5-heatmap` (loads heatmap)
 
-### 10.5 Year Switch (maps.js -> vectors.js -> labels.js -> dimreduction.js)
+### 11.5 Year Switch (maps.js -> vectors.js -> labels.js -> dimreduction.js)
 
 1. User changes year in dropdown
 2. `maps.js` `switchEmbeddingYear()` removes old tile layer, creates new one

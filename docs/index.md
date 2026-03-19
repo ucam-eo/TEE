@@ -14,10 +14,10 @@ across years, and evaluate classifiers against ground-truth shapefiles.
 
 | Document | Description |
 |---|---|
-| [architecture.md](architecture.md) | System architecture, panel layout, module graph, state management |
-| [frontend_api.md](frontend_api.md) | JavaScript API reference for all 8 ES modules |
+| [architecture.md](architecture.md) | System architecture, panel layout, module graph, state management, dependencies, testing, deployment |
+| [frontend_api.md](frontend_api.md) | JavaScript API reference for all 8 ES modules, data structures, frontend→backend call map |
 | [backend_api.md](backend_api.md) | Python HTTP endpoints, library modules, standalone scripts |
-| [extension_guide.md](extension_guide.md) | Recipes for adding panels, classifiers, data sources, label types |
+| [extension_guide.md](extension_guide.md) | Recipes for adding panels, classifiers, data sources, endpoints, label types — with checklist |
 
 ---
 
