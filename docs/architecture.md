@@ -145,16 +145,19 @@ import/export between modules; `dimreduction.js` is the only module that uses
         │
         ▼
   POST /api/viewports/create
+  (api/views/viewports.py)
         │
         ▼
   Pipeline (background thread)         User opens viewer.html?viewport=X
-    ├─ download embedding tiles            │
-    │   from GeoTessera                    ▼
-    ├─ create PNG pyramids ──────────► Tile server serves /tiles/{vp}/{year}/{z}/{x}/{y}.png
+  (lib/pipeline.py)                        │
+    ├─ download embedding tiles            ▼
+    │   via GeoTessera library         Tile server serves /tiles/{vp}/{year}/{z}/{x}/{y}.png
+    ├─ create PNG pyramids ──────────► (api/views/tiles.py → lib/tile_renderer.py)
+    │   (create_pyramids.py)
     ├─ extract uint8 vectors ────────► /api/vector-data/{vp}/{year}/*.npy.gz
-    └─ compute UMAP                        │
-                                           ▼
-                                      vectors.js downloads to IndexedDB
+    │   (lib/viewport_ops.py)              │
+    └─ write metadata                      ▼
+        (lib/viewport_writer.py)      vectors.js downloads to IndexedDB
                                            │
                                       ┌────┴────┐
                                       │         │
@@ -166,16 +169,20 @@ import/export between modules; `dimreduction.js` is the only module that uses
                                       │
                                       ▼
                               Label creation (explore/labelling mode)
+                              (labels.js)
                                       │
                                       ▼
                               Export as JSON/GeoJSON/Shapefile
+                              (labels.js → exportManualLabelsShapefile)
                                       │
                                       ▼
                               Upload ground-truth shapefile
                               for evaluation (validation mode)
+                              (api/views/evaluation.py → upload_shapefile)
                                       │
                                       ▼
                               POST /api/evaluation/run
+                              (api/views/evaluation.py → lib/evaluation_engine.py)
                               (streaming NDJSON results)
 ```
 
