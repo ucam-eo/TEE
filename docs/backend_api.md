@@ -958,7 +958,7 @@ for event in run_learning_curve(embeddings, labels, ["nn", "rf"], [50, 100, 500]
 
 ### 3.1 `process_viewport.py`
 
-**Overview:** Single-script pipeline that downloads embedding tiles from GeoTessera, creates RGB pyramids, and extracts quantised vectors for each requested year. Runs as a subprocess launched by `PipelineRunner`.
+**Overview:** Single-script pipeline that downloads embedding tiles via the GeoTessera library, creates RGB pyramids, and extracts quantised vectors for each requested year. Runs as a subprocess launched by `PipelineRunner`.
 
 **Usage:**
 

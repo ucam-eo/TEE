@@ -2,7 +2,8 @@
 
 Tessera Embeddings Explorer (TEE) is a Django + vanilla JavaScript web application
 for interactive exploration of satellite embedding vectors produced by the
-[GeoTessera](https://github.com/ucam-eo/geotessera) foundation model.  Users
+[Tessera](https://github.com/ucam-eo/tessera) foundation model (accessed via
+the [GeoTessera](https://github.com/ucam-eo/geotessera) Python library).  Users
 define geographic viewports, browse PCA/UMAP projections of 128-dimensional
 embeddings, create land-cover labels via similarity search, run change-detection
 across years, and evaluate classifiers against ground-truth shapefiles.
@@ -52,4 +53,4 @@ TEE/
 The frontend is vanilla JavaScript with no build step.  Modules communicate
 through `window.*` properties bridged via `Object.defineProperty`.  The backend
 is Django served by Waitress WSGI, with a background pipeline that downloads
-embedding tiles from GeoTessera and builds pyramids + vector data.
+embedding tiles via the GeoTessera library and builds pyramids + vector data.
