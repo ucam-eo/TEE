@@ -94,7 +94,7 @@ Check current auth state.
 
 ### 1.2 Viewports — `api/views/viewports.py`
 
-**Overview:** CRUD for viewports (geographic areas of interest). Each viewport is a named bounding box that owns pyramids, vectors, and label data. Enforces per-user disk quotas and ownership checks.
+**Overview:** CRUD for viewports (geographic areas of interest). Each viewport is a named bounding box that owns pyramids, vectors, and label data. Viewports are owned by Django users (when authentication is enabled); ownership is checked on write operations and disk quotas are enforced per-user.
 
 **Depends on:** `lib.viewport_utils`, `lib.viewport_writer`, `lib.viewport_ops`, `lib.pipeline`, `lib.config`
 
