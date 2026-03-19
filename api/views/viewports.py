@@ -472,6 +472,26 @@ def add_years(request, viewport_name):
             if not isinstance(y, int) or y < MIN_YEAR or y > MAX_YEAR:
                 return JsonResponse({'success': False, 'error': f'Invalid year: {y}. Must be {MIN_YEAR}-{MAX_YEAR}.'}, status=400)
 
+        # Check year availability on GeoTessera for this region
+        try:
+            import geotessera as gt
+            tessera = gt.GeoTessera()
+            vp_bounds = viewport.get('bounds', {})
+            bounds_tuple = (vp_bounds['minLon'], vp_bounds['minLat'], vp_bounds['maxLon'], vp_bounds['maxLat'])
+            unavailable = []
+            for y in new_years:
+                tiles = tessera.registry.load_blocks_for_region(bounds_tuple, y)
+                if not tiles:
+                    unavailable.append(y)
+            if unavailable:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'No GeoTessera data available for year(s) {unavailable} at this location. '
+                             f'Available years can be checked at https://geotessera.org'
+                }, status=400)
+        except Exception as e:
+            logger.warning(f"[ADD YEARS] Could not check GeoTessera availability: {e}")
+
         # Check no pipeline is already running
         operation_id = f"{viewport_name}_full_pipeline"
         with tasks_lock:

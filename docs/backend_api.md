@@ -240,13 +240,24 @@ Delete a viewport and all associated data (mosaics, pyramids, vectors, labels, p
 #### `POST /api/viewports/<viewport_name>/add-years`
 
 Add years to an existing viewport and re-trigger the pipeline for the new years.
+Validates year range (2017–2025) and checks GeoTessera data availability before
+starting the pipeline. Cancels any in-progress pipeline for this viewport.
 
 ```json
 // Request
 { "years": [2022] }
 
-// Response 200
+// Response 200 (success)
 { "success": true, "message": "Added years [2022]", "years": [2022, 2023, 2024] }
+
+// Response 400 (year not available on GeoTessera)
+{ "success": false, "error": "No GeoTessera data available for year(s) [2022] at this location." }
+
+// Response 400 (invalid year)
+{ "success": false, "error": "Invalid year: 2030. Must be 2017-2025." }
+
+// Response 404 (viewport not found)
+{ "success": false, "error": "Viewport xyz not found" }
 ```
 
 #### `GET /api/viewports/<viewport_name>/available-years`
