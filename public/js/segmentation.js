@@ -258,43 +258,47 @@ async function runKMeans(k) {
     };
 
     segWorker.onmessage = (e) => {
-        segAssignments = new Int32Array(e.data.assignments);
-        const centroids = new Float32Array(e.data.centroids);
-        const nearestIdxArr = new Int32Array(e.data.nearestIdx);
-        const maxDistArr = new Float64Array(e.data.maxDist);
+        try {
+            segAssignments = new Int32Array(e.data.assignments);
+            const centroids = new Float32Array(e.data.centroids);
+            const nearestIdxArr = new Int32Array(e.data.nearestIdx);
+            const maxDistArr = new Float64Array(e.data.maxDist);
 
-        const counts = new Int32Array(k);
-        for (let i = 0; i < N; i++) counts[segAssignments[i]]++;
+            const counts = new Int32Array(k);
+            for (let i = 0; i < N; i++) counts[segAssignments[i]]++;
 
-        const gt = segVectors.metadata.geotransform;
-        segLabels = [];
-        for (let c = 0; c < k; c++) {
-            if (counts[c] === 0) continue;
-            const hex = SEG_PALETTE[c % SEG_PALETTE.length];
-            const color = hex;
-            const ni = nearestIdxArr[c];
-            const px = segVectors.coords[ni * 2], py = segVectors.coords[ni * 2 + 1];
-            segLabels.push({
-                id: c, color, hex, name: `Cluster ${c + 1}`, count: counts[c],
-                embedding: Array.from(segVectors.embeddings.subarray(ni * dim, (ni + 1) * dim)),
-                sourcePixel: { lat: gt.f + py * gt.e, lon: gt.c + px * gt.a },
-                threshold: maxDistArr[c],
-                centroid: Array.from(centroids.subarray(c * dim, (c + 1) * dim))
-            });
+            const gt = segVectors.metadata.geotransform;
+            segLabels = [];
+            for (let c = 0; c < k; c++) {
+                if (counts[c] === 0) continue;
+                const hex = SEG_PALETTE[c % SEG_PALETTE.length];
+                const color = hex;
+                const ni = nearestIdxArr[c];
+                const px = segVectors.coords[ni * 2], py = segVectors.coords[ni * 2 + 1];
+                segLabels.push({
+                    id: c, color, hex, name: `Cluster ${c + 1}`, count: counts[c],
+                    embedding: Array.from(segVectors.embeddings.subarray(ni * dim, (ni + 1) * dim)),
+                    sourcePixel: { lat: gt.f + py * gt.e, lon: gt.c + px * gt.a },
+                    threshold: maxDistArr[c],
+                    centroid: Array.from(centroids.subarray(c * dim, (c + 1) * dim))
+                });
+            }
+
+            showSegmentationOverlay();
+            showSegmentationPanel();
+
+            // Update k controls
+            document.getElementById('seg-k-input').value = k;
+            document.getElementById('seg-k-minus').disabled = (k <= 2);
+            document.getElementById('seg-k-plus').disabled = (k >= 20);
+            document.getElementById('seg-clear-btn').style.display = '';
+        } catch (err) {
+            console.error('[SEG] onmessage error:', err);
+        } finally {
+            segRunning = false;
+            btn.disabled = false;
+            btn.style.opacity = '';
         }
-
-        showSegmentationOverlay();
-        showSegmentationPanel();
-
-        // Update k controls
-        document.getElementById('seg-k-input').value = k;
-        document.getElementById('seg-k-minus').disabled = (k <= 2);
-        document.getElementById('seg-k-plus').disabled = (k >= 20);
-
-        segRunning = false;
-        btn.disabled = false;
-        btn.style.opacity = '';
-        document.getElementById('seg-clear-btn').style.display = '';
     };
 
     segWorker.postMessage(

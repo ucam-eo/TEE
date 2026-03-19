@@ -2280,19 +2280,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Segmentation event wiring
     document.getElementById('seg-run-btn').addEventListener('click', () => {
         const k = parseInt(document.getElementById('seg-k-input').value) || 5;
-        runKMeans(Math.max(2, Math.min(20, k)));
+        window.runKMeans(Math.max(2, Math.min(20, k)));
     });
     document.getElementById('seg-k-minus').addEventListener('click', () => {
         const input = document.getElementById('seg-k-input');
         const k = Math.max(2, (parseInt(input.value) || 5) - 1);
         input.value = k;
-        if (!segRunning) runKMeans(k);
+        if (!window.segRunning) window.runKMeans(k);
     });
     document.getElementById('seg-k-plus').addEventListener('click', () => {
         const input = document.getElementById('seg-k-input');
         const k = Math.min(20, (parseInt(input.value) || 5) + 1);
         input.value = k;
-        if (!segRunning) runKMeans(k);
+        if (!window.segRunning) window.runKMeans(k);
     });
     document.getElementById('seg-k-input').addEventListener('change', () => {
         const input = document.getElementById('seg-k-input');
