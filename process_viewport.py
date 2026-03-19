@@ -255,11 +255,15 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
             # Run fetch in a thread so we can report download progress
             import threading as _threading
             _fetch_result = [None, None, None, None]  # mosaic, transform, crs, error
+            _fetch_status = [None]  # latest status message from GeoTessera callback
             def _do_fetch():
                 try:
+                    def _gt_progress(current, total, status):
+                        _fetch_status[0] = f"{status} ({current}/{total})"
                     m, t, c = tessera.fetch_mosaic_for_region(
                         bbox=bounds, year=year,
                         target_crs='EPSG:4326', auto_download=True,
+                        progress_callback=_gt_progress,
                     )
                     _fetch_result[:3] = [m, t, c]
                 except Exception as ex:
@@ -291,14 +295,17 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
                     elapsed = _time.monotonic() - t0
                     # Asymptotic percentage (0→55%) so the bar keeps moving
                     fetch_pct = int(55 * (1 - 1 / (1 + tick * 0.15)))
+                    gt_status = _fetch_status[0]
                     if downloaded_mb > 0.1:
                         if not data_started:
                             data_started = True
                             print(f"  [{year}] Download started after {elapsed:.0f}s")
                         speed_mbs = downloaded_mb / elapsed if elapsed > 0 else 0
-                        _progress(fetch_pct, f"[{year}] Downloading tiles: {downloaded_mb:.1f} MB ({speed_mbs:.1f} MB/s, {elapsed:.0f}s)")
+                        msg = f"[{year}] {gt_status or 'Downloading'}: {downloaded_mb:.1f} MB ({speed_mbs:.1f} MB/s)" if gt_status else f"[{year}] Downloading tiles: {downloaded_mb:.1f} MB ({speed_mbs:.1f} MB/s)"
+                        _progress(fetch_pct, msg)
+                    elif gt_status:
+                        _progress(fetch_pct, f"[{year}] {gt_status}")
                     else:
-                        # Connection/registry phase — no data yet
                         _progress(fetch_pct, f"[{year}] Connecting to GeoTessera ({elapsed:.0f}s)...")
             if _fetch_result[3] is not None:
                 raise _fetch_result[3]
