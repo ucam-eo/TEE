@@ -532,48 +532,6 @@ function syncMaps() {
     });
 }
 
-// Add marker
-function addMarker(panel, lat, lon, label) {
-    const key = `${lat.toFixed(6)},${lon.toFixed(6)}`;
-
-    // Check if marker already exists (remove it)
-    if (window.markers[panel][key]) {
-        removeMarker(panel, lat, lon);
-        return;
-    }
-
-    // Create marker
-    const marker = L.marker([lat, lon], {
-        title: label
-    }).addTo(window.maps[panel]);
-
-    marker.bindPopup(`<div class="marker-popup">${label}</div>`);
-
-    // Store marker
-    window.markers[panel][key] = marker;
-    window.labels[panel].push([lat, lon, label]);
-
-    window.updateLabelCount();
-    console.log(`Added '${label}' at (${lat.toFixed(4)}, ${lon.toFixed(4)}) on ${panel} panel`);
-}
-
-// Remove marker
-function removeMarker(panel, lat, lon) {
-    const key = `${lat.toFixed(6)},${lon.toFixed(6)}`;
-
-    if (window.markers[panel][key]) {
-        window.maps[panel].removeLayer(window.markers[panel][key]);
-        delete window.markers[panel][key];
-
-        // Remove from labels
-        window.labels[panel] = window.labels[panel].filter(
-            ([la, lo]) => Math.abs(la - lat) > 0.00001 || Math.abs(lo - lon) > 0.00001
-        );
-
-        window.updateLabelCount();
-        console.log(`Removed marker at (${lat.toFixed(4)}, ${lon.toFixed(4)}) from ${panel} panel`);
-    }
-}
 // Cross-panel triangle markers (one per geographic panel, cleared on each new click)
 let crossPanelMarkers = {osm: null, rgb: null, embedding: null, heatmap: null, embedding2: null};
 let persistentLabelMarkers = []; // {labelId, markers: {osm, rgb, ...}}
@@ -981,8 +939,6 @@ window.switchEmbeddingYear = switchEmbeddingYear;
 window.refreshLabelsForYear = refreshLabelsForYear;
 window.switchEmbeddingYear2 = switchEmbeddingYear2;
 window.syncMaps = syncMaps;
-window.addMarker = addMarker;
-window.removeMarker = removeMarker;
 window.makeColoredTriangleIcon = makeColoredTriangleIcon;
 window.setCrossPanelMarker = setCrossPanelMarker;
 window.clearCrossPanelMarkers = clearCrossPanelMarkers;

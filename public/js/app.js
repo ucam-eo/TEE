@@ -41,20 +41,6 @@ let TILE_SERVER = window.location.origin; // default, overridden by /api/config
 let currentEmbeddingYear = '2025';
 let currentViewportName = 'tile_aligned';
 
-// Storage for labels: {panel: [[lat, lon, label], ...]}
-let labels = {
-    'osm': [],
-    'embedding': [],
-    'rgb': []
-};
-
-// Storage for marker objects: {panel: {key: marker}}
-let markers = {
-    'osm': {},
-    'embedding': {},
-    'rgb': {}
-};
-
 // Map instances
 let maps = {};
 
@@ -384,179 +370,7 @@ function refreshEmbeddingTileLayer(panelName, year) {
 
 // Satellite tile sources for Panel 2
 
-// Helper function to get viewport-specific localStorage key
-function getLabelsStorageKey() {
-    return `${currentViewportName}_labels_3panel`;
-}
 
-// Save labels to localStorage
-function saveLabels() {
-    const saveData = {
-        // Old system: markers on maps
-        labels: labels,
-        embeddingYear: currentEmbeddingYear,
-        // New system: embeddings for similarity search
-        definedLabels: definedLabels,
-        embeddingLabels: embeddingLabels,
-        labelColors: labelColors
-    };
-    localStorage.setItem(getLabelsStorageKey(), JSON.stringify(saveData));
-    const oldTotal = Object.values(labels).reduce((sum, arr) => sum + arr.length, 0);
-    const newTotal = Object.values(embeddingLabels).reduce((sum, arr) => sum + arr.length, 0);
-    console.log(`✓ Saved to ${getLabelsStorageKey()}: ${oldTotal} markers + ${newTotal} embeddings with colors`);
-}
-
-// Load labels from localStorage
-function loadLabels() {
-    const storageKey = getLabelsStorageKey();
-    let stored = localStorage.getItem(storageKey);
-
-    if (stored) {
-        try {
-            const saveData = JSON.parse(stored);
-
-            // Restore old marker system
-            if (saveData.labels) {
-                Object.keys(saveData.labels).forEach(panel => {
-                    saveData.labels[panel].forEach(([lat, lon, label]) => {
-                        window.addMarker(panel, lat, lon, label);
-                    });
-                });
-                const oldCount = Object.values(saveData.labels).reduce((sum, arr) => sum + arr.length, 0);
-                console.log(`✓ Loaded ${oldCount} markers`);
-            }
-
-            // Restore new embedding labels system
-            if (saveData.definedLabels && saveData.embeddingLabels) {
-                definedLabels = saveData.definedLabels;
-                embeddingLabels = saveData.embeddingLabels;
-                if (saveData.labelColors) {
-                    labelColors = saveData.labelColors;
-                }
-                updateLabelDropdown();
-                updateLabelCount();
-                const newCount = Object.values(embeddingLabels).reduce((sum, arr) => sum + arr.length, 0);
-                console.log(`✓ Loaded ${newCount} embeddings for ${definedLabels.length} labels with colors`);
-            }
-        } catch (error) {
-            console.error('Error loading labels:', error);
-        }
-    }
-}
-
-// Clear all labels
-function clearAllLabels() {
-    if (!confirm('Clear all labels?')) return;
-
-    Object.keys(markers).forEach(panel => {
-        Object.values(markers[panel]).forEach(marker => {
-            maps[panel].removeLayer(marker);
-        });
-        markers[panel] = {};
-        labels[panel] = [];
-    });
-
-    updateLabelCount();
-    console.log('Cleared all labels');
-}
-
-// Export labels to JSON
-function exportLabels() {
-    const exportData = {
-        embeddingYear: currentEmbeddingYear,
-        labels: labels,
-        timestamp: new Date().toISOString()
-    };
-    const dataStr = JSON.stringify(exportData, null, 2);
-    const dataBlob = new Blob([dataStr], {type: 'application/json'});
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${currentViewportName}_labels_${currentEmbeddingYear}_${Date.now()}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    console.log('Exported labels to JSON file');
-}
-
-// =====================================================================
-// EMBEDDING LABELING SYSTEM
-// =====================================================================
-
-// Label management
-let definedLabels = [];  // List of all defined labels
-let embeddingLabels = {}; // DEPRECATED — legacy label system, kept as empty stub
-let labelColors = {};    // {label: "#FF0000", ...}
-let labelPixels = {}; // {key: {label: 'road', coordinate: {lat, lon}}} for visualization
-
-// Similarity search tracking
-let similarPixels = {};          // {key: {label, coordinate, embedding, distance, rectangle, marker}}
-let isSimilaritySearchActive = false;
-let activeSearchLabel = null;
-
-
-
-// Pick a contrastive color not already in use. Never offers yellow or black.
-function nextLabelColor() {
-    // Curated palette of distinct, saturated hues (no yellow, no black)
-    const palette = [
-        '#FF6B6B', // red
-        '#4ECDC4', // teal
-        '#45B7D1', // sky blue
-        '#96CEB4', // sage green
-        '#DDA15E', // amber/orange
-        '#BC6C25', // brown
-        '#9B59B6', // purple
-        '#E74C3C', // crimson
-        '#1ABC9C', // turquoise
-        '#3498DB', // blue
-        '#E67E22', // orange
-        '#2ECC71', // emerald
-        '#8E44AD', // dark purple
-        '#E84393', // pink
-        '#00CEC9', // cyan
-        '#6C5CE7', // indigo
-        '#FD79A8', // light pink
-        '#00B894', // mint
-        '#D63031', // dark red
-        '#0984E3', // bright blue
-    ];
-
-    // Collect all colors currently in use
-    const usedColors = new Set();
-    for (const c of Object.values(labelColors)) usedColors.add(c.toUpperCase());
-    for (const l of window.savedLabels) if (l.color) usedColors.add(l.color.toUpperCase());
-
-    // Return first unused palette color
-    for (const c of palette) {
-        if (!usedColors.has(c.toUpperCase())) return c;
-    }
-
-    // All palette colors used — generate a random saturated hue (avoid yellow 40-70 deg, black)
-    let hue;
-    do { hue = Math.floor(Math.random() * 360); } while (hue >= 40 && hue <= 70);
-    const sat = 65 + Math.floor(Math.random() * 20); // 65-85%
-    const lit = 45 + Math.floor(Math.random() * 15); // 45-60%
-    // Convert HSL to hex
-    const h = hue, s = sat / 100, l = lit / 100;
-    const a2 = s * Math.min(l, 1 - l);
-    const f = n => { const k = (n + h / 30) % 12; return l - a2 * Math.max(Math.min(k - 3, 9 - k, 1), -1); };
-    const toHex = x => Math.round(x * 255).toString(16).padStart(2, '0');
-    return '#' + toHex(f(0)) + toHex(f(8)) + toHex(f(4));
-}
-
-// Create a new label
-function createLabelDialog() {
-    const labelName = prompt('Enter new label name (e.g., "road", "building", "tree"):');
-    if (labelName && labelName.trim()) {
-        const label = labelName.trim();
-        if (definedLabels.includes(label)) {
-            alert(`Label "${label}" already exists!`);
-            return;
-        }
-
-        showColorPickerModal(label, nextLabelColor());
-    }
-}
 
 function showColorPickerModal(label, defaultColor) {
     // Create modal backdrop
@@ -619,48 +433,7 @@ function showColorPickerModal(label, defaultColor) {
     colorPicker.focus();
 }
 
-function confirmLabelColorSelection(label) {
-    const selectedColor = document.getElementById('label-color-picker').value;
 
-    if (definedLabels.includes(label)) {
-        alert(`Label "${label}" already exists!`);
-        return;
-    }
-
-    definedLabels.push(label);
-    definedLabels.sort();
-    embeddingLabels[label] = [];
-    labelColors[label] = selectedColor;
-
-    // Close modal
-    const backdrop = document.getElementById('color-picker-backdrop');
-    if (backdrop) backdrop.remove();
-
-    // Update UI
-    updateLabelDropdown();
-    saveLabels();
-    console.log(`Created label: "${label}" with color ${selectedColor}`);
-}
-
-// Update the active label dropdown
-function updateLabelDropdown() {            const select = document.getElementById('active-label');
-    if (!select) {
-        console.error('[DROPDOWN] ERROR: Could not find element with id="active-label"');
-        return;
-    }
-    select.innerHTML = '';
-    if (definedLabels.length === 0) {                select.innerHTML = '<option value="">No labels yet</option>';
-        select.disabled = true;
-    } else {                definedLabels.forEach(label => {
-            const option = document.createElement('option');
-            option.value = label;
-            option.textContent = label;
-            select.appendChild(option);
-        });
-        select.value = definedLabels[0];
-        select.disabled = false;
-    }
-}
 
 
 // Update coordinates display on mouse move over embedding map
@@ -671,84 +444,8 @@ function updateCoordinatesDisplay(lat, lon) {
     }
 }
 
-// Get a color for a label (for visualization)
-function getColorForLabel(label) {
-    // Use user-selected color if available
-    if (labelColors[label]) {
-        return labelColors[label];
-    }
 
-    // Fallback to predefined colors
-    const colors = {
-        'road': '#FF6B6B',
-        'building': '#4ECDC4',
-        'tree': '#45B7D1',
-        'water': '#96CEB4',
-        'grass': '#FFEAA7',
-        'car': '#DDA15E',
-        'person': '#BC6C25'
-    };
-    if (colors[label]) return colors[label];
 
-    // Generate consistent color from label name as last resort
-    let hash = 0;
-    for (let i = 0; i < label.length; i++) {
-        hash = label.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const color = '#' + (Math.abs(hash) % 0xFFFFFF).toString(16).padStart(6, '0');
-    return color;
-}
-
-// Invert RGB color: (R, G, B) -> (255-R, 255-G, 255-B)
-function invertColor(hexColor) {
-    // Remove # if present
-    const color = hexColor.replace('#', '');
-    // Parse hex to RGB
-    const r = parseInt(color.substr(0, 2), 16);
-    const g = parseInt(color.substr(2, 2), 16);
-    const b = parseInt(color.substr(4, 2), 16);
-    // Invert: 255 - value
-    const invR = (255 - r).toString(16).padStart(2, '0');
-    const invG = (255 - g).toString(16).padStart(2, '0');
-    const invB = (255 - b).toString(16).padStart(2, '0');
-    return '#' + invR + invG + invB;
-}
-
-// Calculate pixel size in degrees (10m x 10m)
-
-// Delete a labeled pixel
-function deleteLabeledPixel(key, pixelData) {
-    // Confirm deletion
-    if (!confirm(`Delete labeled pixel "${pixelData.label}"?`)) {
-        return;
-    }
-
-    // Find and remove the embedding from the label's embedding array
-    const embeddingIndex = embeddingLabels[pixelData.label].findIndex(emb =>
-        JSON.stringify(emb) === JSON.stringify(pixelData.embedding)
-    );
-
-    if (embeddingIndex !== -1) {
-        embeddingLabels[pixelData.label].splice(embeddingIndex, 1);
-        console.log(`[DELETE] Removed embedding from label "${pixelData.label}"`);
-    }
-
-    // Remove the visual elements (rectangle and marker)
-    if (pixelData.rectangle) {
-        maps.embedding.removeLayer(pixelData.rectangle);
-    }
-    if (pixelData.marker) {
-        maps.embedding.removeLayer(pixelData.marker);
-    }
-
-    // Remove from tracking
-    delete labelPixels[key];
-
-    // Update label count
-    updateLabelCount();
-
-    console.log(`[DELETE] Deleted labeled pixel at key "${key}"`);
-}
 
 // Highlight labeled pixel on embedding map as rectangle
 function highlightLabeledPixel(lat, lon, label, key) {
@@ -824,38 +521,7 @@ function highlightLabeledPixel(lat, lon, label, key) {
     labelPixels[key].marker = marker;
 }
 
-// Update label count display
-function updateLabelCount() {
-    let totalEmbeddings = 0;
-    Object.values(embeddingLabels).forEach(embs => {
-        totalEmbeddings += embs.length;
-    });
-}
 
-// Export labels to JSON file
-function exportLabelsJSON() {
-    if (definedLabels.length === 0 || Object.values(embeddingLabels).every(e => e.length === 0)) {
-        alert('No labeled embeddings to export!');
-        return;
-    }
-
-    // Build export data sorted by label name
-    const exportData = definedLabels.map(label => ({
-        label: label,
-        embedding: embeddingLabels[label]
-    }));
-
-    const dataStr = JSON.stringify(exportData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `embedding_labels_${Date.now()}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-
-    console.log(`✓ Exported ${definedLabels.length} labels with ${Object.values(embeddingLabels).reduce((sum, e) => sum + e.length, 0)} embeddings`);
-}
 
 // Import labels from JSON file
 function importLabelsJSON(event) {
@@ -1088,7 +754,6 @@ window.onload = async function() {
         }
     }, 100);
 
-    loadLabels();
     await window.loadSavedLabels();  // Load label definitions from localStorage, recompute pixels from vectors
     window.updateThresholdDisplay();  // Initialize threshold display
 
@@ -1185,16 +850,8 @@ Object.defineProperties(window, {
     viewportStatus:        { get() { return viewportStatus; },       set(v) { viewportStatus = v; },       configurable: true },
     currentPanelMode:      { get() { return currentPanelMode; },     set(v) { currentPanelMode = v; },     configurable: true },
     TILE_SERVER:           { get() { return TILE_SERVER; },          set(v) { TILE_SERVER = v; },          configurable: true },
-    labels:                { get() { return labels; },               set(v) { labels = v; },               configurable: true },
-    markers:               { get() { return markers; },              set(v) { markers = v; },              configurable: true },
     heatmapSatelliteLayer: { get() { return heatmapSatelliteLayer; }, set(v) { heatmapSatelliteLayer = v; }, configurable: true },
     isLoggedIn:            { get() { return isLoggedIn; },           set(v) { isLoggedIn = v; },           configurable: true },
-    definedLabels:         { get() { return definedLabels; },        set(v) { definedLabels = v; },        configurable: true },
-    labelColors:           { get() { return labelColors; },          set(v) { labelColors = v; },          configurable: true },
-    labelPixels:           { get() { return labelPixels; },          set(v) { labelPixels = v; },          configurable: true },
-    similarPixels:         { get() { return similarPixels; },        set(v) { similarPixels = v; },        configurable: true },
-    isSimilaritySearchActive: { get() { return isSimilaritySearchActive; }, set(v) { isSimilaritySearchActive = v; }, configurable: true },
-    activeSearchLabel:     { get() { return activeSearchLabel; },    set(v) { activeSearchLabel = v; },    configurable: true },
 });
 
 // ===== BRIDGE: functions → window (for HTML onclick & cross-module calls) =====
@@ -1204,21 +861,8 @@ window.startPoller = startPoller;
 window.stopPoller = stopPoller;
 window.refreshEmbeddingTileLayer = refreshEmbeddingTileLayer;
 window.makeDraggable = makeDraggable;
-window.updateLabelCount = updateLabelCount;
-window.saveLabels = saveLabels;
-window.loadLabels = loadLabels;
-window.clearAllLabels = clearAllLabels;
-window.exportLabels = exportLabels;
-window.createLabelDialog = createLabelDialog;
-window.confirmLabelColorSelection = confirmLabelColorSelection;
-window.updateLabelDropdown = updateLabelDropdown;
 window.updateCoordinatesDisplay = updateCoordinatesDisplay;
-window.getColorForLabel = getColorForLabel;
-window.invertColor = invertColor;
-window.deleteLabeledPixel = deleteLabeledPixel;
 window.highlightLabeledPixel = highlightLabeledPixel;
-window.nextLabelColor = nextLabelColor;
-window.exportLabelsJSON = exportLabelsJSON;
 window.showProgressModal = showProgressModal;
 window.hideProgressModal = hideProgressModal;
 window.pollOperationProgress = pollOperationProgress;
