@@ -94,8 +94,13 @@ Leaflet layer from `maps.heatmap` based on these rules.
 
 ## 3. Module Dependency Graph
 
-All 8 modules are loaded as ES modules via `<script type="module">` in
-`viewer.html`.  They communicate through `window.*` properties.  There is no
+ES modules (ECMAScript modules) are the browser's native module system, loaded
+with `<script type="module">` instead of plain `<script>`.  Each module has its
+own scope — variables declared in one file are not visible in another unless
+explicitly exported or attached to `window`.
+
+All 8 modules are loaded as ES modules in `viewer.html`.  They communicate
+through `window.*` properties bridged via `Object.defineProperty`.  There is no
 import/export between modules; `dimreduction.js` is the only module that uses
 `import` (for Three.js and OrbitControls).
 
