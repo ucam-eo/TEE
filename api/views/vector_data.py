@@ -10,8 +10,7 @@ from lib.config import VECTORS_DIR
 logger = logging.getLogger(__name__)
 
 ALLOWED_FILES = {
-    'all_embeddings.npy', 'pixel_coords.npy', 'metadata.json',
-    'pixel_coords.npy.gz',
+    'pixel_coords.npy', 'pixel_coords.npy.gz', 'metadata.json',
     'all_embeddings_uint8.npy.gz', 'quantization.json',
 }
 

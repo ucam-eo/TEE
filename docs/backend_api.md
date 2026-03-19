@@ -536,7 +536,6 @@ Serve a vector data file. Allowed filenames:
 | Filename | Description | Content-Type |
 |---|---|---|
 | `all_embeddings_uint8.npy.gz` | Quantised uint8 embeddings | `application/gzip` |
-| `all_embeddings.npy` | Float32 embeddings (legacy) | `application/octet-stream` |
 | `pixel_coords.npy` / `.npy.gz` | Pixel coordinates | `application/gzip` or `octet-stream` |
 | `metadata.json` | Mosaic dimensions, transform, stats | `application/json` |
 | `quantization.json` | Per-dimension min/max for dequantization | `application/json` |
