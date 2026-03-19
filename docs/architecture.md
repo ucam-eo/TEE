@@ -572,19 +572,20 @@ GeoTessera and produces vector files for the browser:
 ```
 GeoTessera remote storage        process_viewport.py           Stored on disk
 ─────────────────────────        ───────────────────           ──────────────
-int8 embeddings + scales  ──►  dequantize to float32    ──►  uint8 quantized
-(per-tile, native UTM)         reproject to EPSG:4326        (per-viewport)
-                               merge into mosaic
+int8 + float32 scales     ──►  dequantize to float32    ──►  uint8 + per-dim min/max
+(per-tile, native UTM,         reproject to EPSG:4326        (per-viewport, EPSG:4326,
+ per-pixel scales)             merge into mosaic               per-dimension min/max)
                                crop to viewport bounds
                                re-quantize to uint8
 ```
 
-**Known inefficiency (temporary):** The pipeline dequantizes int8→float32,
+**Known inefficiency (temporary):** The pipeline dequantizes int8×scales→float32,
 reprojects all 128 bands with bilinear interpolation, then re-quantizes
-float32→uint8.  This is wasteful:
+float32→uint8 with a different scheme (per-dimension min/max instead of
+per-pixel scales).  This is wasteful:
 
 - **Double quantization** — original int8 values are dequantized then
-  re-quantized with different min/max, introducing rounding error
+  re-quantized with a different method, introducing rounding error
 - **Bilinear interpolation on embeddings** — interpolating between two
   learned embedding vectors produces semantically meaningless values;
   nearest-neighbor would be more appropriate

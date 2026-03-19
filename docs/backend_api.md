@@ -608,8 +608,8 @@ ensure_dirs() -> None
 
 | Directory | Contains | Format | Scope |
 |---|---|---|---|
-| `EMBEDDINGS_DIR` (`data/embeddings/`) | Raw GeoTessera tiles | int8 quantized (pre-dequantization) | Shared tile cache across all viewports |
-| `VECTORS_DIR` (`data/vectors/`) | TEE's processed data | uint8 re-quantized + coords + metadata | Per viewport, per year |
+| `EMBEDDINGS_DIR` (`data/embeddings/`) | Raw GeoTessera tiles | int8 + float32 scales (per-pixel dequantization) | Shared tile cache across all viewports |
+| `VECTORS_DIR` (`data/vectors/`) | TEE's processed data | uint8 + per-dimension min/max (re-quantized after reproject) | Per viewport, per year |
 
 **Used by:** Nearly every module in the project.
 
