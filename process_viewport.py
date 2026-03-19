@@ -243,8 +243,24 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         print(f"  [{year}] Already processed (pyramids + vectors exist), skipping")
         return (year, True, "already exists")
 
+    # --- ESTIMATE DOWNLOAD SIZE ---
+    # Query registry for expected tile sizes (embedding + scales per tile)
+    expected_mb = 0
+    try:
+        tiles_needed = tessera.registry.load_blocks_for_region(bounds, year)
+        reg = tessera.registry._registry_gdf
+        for _, tile_lon, tile_lat in tiles_needed:
+            match = reg[(reg['lon'] == tile_lon) & (reg['lat'] == tile_lat) & (reg['year'] == year)]
+            if len(match) > 0:
+                row = match.iloc[0]
+                expected_mb += (row.get('file_size', 0) + row.get('scales_size', 0)) / (1024 * 1024)
+        if expected_mb > 0:
+            print(f"  [{year}] Expected download: {expected_mb:.1f} MB ({len(tiles_needed)} tiles)")
+    except Exception:
+        pass  # registry not available yet or format changed
+
     # --- FETCH MOSAIC ---
-    _progress(1, f"[{year}] Connecting to GeoTessera...")
+    _progress(1, f"[{year}] Fetching {expected_mb:.0f} MB..." if expected_mb > 0 else f"[{year}] Fetching mosaic...")
     print(f"  [{year}] Fetching mosaic...")
     t0 = _time.monotonic()
 
@@ -285,27 +301,28 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
 
             ft = _threading.Thread(target=_do_fetch, daemon=True)
             ft.start()
-            tick = 0
             data_started = False
             while ft.is_alive():
                 ft.join(timeout=2)
                 if ft.is_alive():
-                    tick += 1
                     downloaded_mb = (_dir_size(str(EMBEDDINGS_DIR)) - size_before) / (1024 * 1024)
                     elapsed = _time.monotonic() - t0
-                    # Asymptotic percentage (0→55%) so the bar keeps moving
-                    fetch_pct = max(1, int(55 * (1 - 1 / (1 + tick * 0.15))))
-                    gt_status = _fetch_status[0]
                     if downloaded_mb > 0.1:
                         if not data_started:
                             data_started = True
                             print(f"  [{year}] Download started after {elapsed:.0f}s")
                         speed_mbs = downloaded_mb / elapsed if elapsed > 0 else 0
-                        _progress(fetch_pct, f"[{year}] Downloading tiles ({downloaded_mb:.1f} MB, {speed_mbs:.1f} MB/s)")
-                    elif gt_status:
-                        _progress(fetch_pct, f"[{year}] {gt_status}")
+                        if expected_mb > 0:
+                            dl_pct = min(55, int(55 * downloaded_mb / expected_mb))
+                            _progress(max(1, dl_pct), f"[{year}] Downloading: {downloaded_mb:.1f}/{expected_mb:.0f} MB ({int(100*downloaded_mb/expected_mb)}%, {speed_mbs:.1f} MB/s)")
+                        else:
+                            _progress(1, f"[{year}] Downloading: {downloaded_mb:.1f} MB ({speed_mbs:.1f} MB/s)")
                     else:
-                        _progress(fetch_pct, f"[{year}] Waiting for GeoTessera registry ({elapsed:.0f}s)")
+                        gt_status = _fetch_status[0]
+                        if gt_status:
+                            _progress(1, f"[{year}] {gt_status}")
+                        else:
+                            _progress(1, f"[{year}] Waiting for tiles ({elapsed:.0f}s)")
             if _fetch_result[3] is not None:
                 raise _fetch_result[3]
             mosaic, transform, crs = _fetch_result[0], _fetch_result[1], _fetch_result[2]
