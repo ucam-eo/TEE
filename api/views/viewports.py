@@ -228,7 +228,38 @@ def create_viewport(request):
         except ValueError as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
+        # Check for duplicate name
+        viewport_path = VIEWPORTS_DIR / f"{name}.txt"
+        if viewport_path.exists():
+            return JsonResponse({'success': False, 'error': f'Viewport "{name}" already exists'}, status=409)
+
+        # Validate years
         years = data.get('years')
+        if years:
+            valid_range = range(2017, 2026)
+            invalid = [y for y in years if y not in valid_range]
+            if invalid:
+                return JsonResponse({'success': False, 'error': f'Years out of range (2017-2025): {invalid}'}, status=400)
+
+            # Check year availability on GeoTessera for this region
+            try:
+                import geotessera as gt
+                tessera = gt.GeoTessera()
+                unavailable = []
+                for y in years:
+                    tiles = tessera.registry.load_blocks_for_region(bounds, y)
+                    if not tiles:
+                        unavailable.append(y)
+                if unavailable:
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'No GeoTessera data available for year(s) {unavailable} at this location. '
+                                 f'Available years can be checked at https://geotessera.org'
+                    }, status=400)
+            except Exception as e:
+                logger.warning(f"[NEW VIEWPORT] Could not check GeoTessera availability: {e}")
+                # Don't block creation — the pipeline will handle the error
+
         logger.info(f"[NEW VIEWPORT] API received years: {years} (type: {type(years).__name__})")
 
         # Per-user disk quota check

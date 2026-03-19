@@ -170,7 +170,18 @@ pipeline status if processing is in progress.
 
 #### `POST /api/viewports/create`
 
-Create a new viewport from geographic bounds. Triggers the processing pipeline automatically. Enforces disk quota for non-admin users.
+Create a new viewport from geographic bounds. Triggers the processing pipeline
+automatically. Enforces disk quota for non-admin users.
+
+**Validation (checked in order):**
+1. Bounds format: 4 comma-separated floats
+2. Bounds range: `-180 ≤ minLon < maxLon ≤ 180`, `-90 ≤ minLat < maxLat ≤ 90`
+3. Name: alphanumeric + underscores/hyphens, ≤128 chars, no path separators
+4. Duplicate check: name must not already exist
+5. Years range: each year must be in 2017–2025
+6. GeoTessera availability: checks the registry for each requested year at the
+   given bounds. Returns an error if any year has no data for the region.
+7. Disk quota: estimated viewport size must fit within user's quota
 
 ```json
 // Request
@@ -182,13 +193,28 @@ Create a new viewport from geographic bounds. Triggers the processing pipeline a
   "private": false
 }
 
-// Response 200
+// Response 200 (success)
 {
   "success": true,
   "message": "Viewport 'cambridge' created — pipeline started",
   "viewport": { "name": "cambridge", "bounds": {...}, "center": [...] },
   "data_preparing": true
 }
+
+// Response 400 (invalid bounds)
+{ "success": false, "error": "Invalid longitude range" }
+
+// Response 400 (years out of range)
+{ "success": false, "error": "Years out of range (2017-2025): [2030]" }
+
+// Response 400 (year not available on GeoTessera)
+{ "success": false, "error": "No GeoTessera data available for year(s) [2019] at this location." }
+
+// Response 409 (duplicate name)
+{ "success": false, "error": "Viewport \"cambridge\" already exists" }
+
+// Response 403 (quota exceeded)
+{ "success": false, "error": "Disk quota exceeded. ..." }
 ```
 
 #### `POST /api/viewports/delete`
