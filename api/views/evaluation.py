@@ -89,7 +89,7 @@ def upload_shapefile(request):
         gdf = gdf.to_crs(epsg=4326)
 
     # Cache for run step
-    _uploaded_shapefile["path"] = str(shp_path)
+    _uploaded_shapefile["path"] = str(shp_files[0])
     _uploaded_shapefile["gdf"] = gdf
 
     # Build field info
