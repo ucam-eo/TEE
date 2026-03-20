@@ -106,11 +106,12 @@ Labels are stored in browser localStorage (private, survive reloads). Labels can
 
 ### Export Options
 
-A consolidated **Export** dropdown provides three formats:
+A consolidated **Export** dropdown provides four formats:
 
-- **Labels (JSON)** — compact metadata for sharing and re-importing into TEE
-- **Labels (GeoJSON)** — FeatureCollection with 10m polygons per pixel, aligned to zoom-18 Mercator projection for pixel-perfect overlay in QGIS/GIS tools. Properties include `label_name`, `label_color`, `distance`, and `threshold`.
-- **Map (JPG)** — high-resolution satellite image with label overlays and legend, rendered at zoom level 18
+- **JSON (full)** — compact metadata with embeddings for re-importing into TEE
+- **GeoJSON** — FeatureCollection with point and polygon geometries for GIS tools
+- **ESRI Shapefile (ZIP)** — standard `.shp/.dbf/.shx/.prj` bundle for ArcGIS, QGIS, etc.
+- **Map (JPG)** — high-resolution satellite image with label overlays and legend
 
 ## Quick Start
 
@@ -236,7 +237,7 @@ TEE supports optional per-user authentication. When enabled, unauthenticated use
 
 ### Enabling Authentication
 
-Authentication is controlled by the presence of a `passwd` file in the data directory (`/data/passwd`). If no passwd file exists, auth is disabled and all users have open access with no quota limits.
+Authentication uses Django's built-in auth system. It activates automatically when at least one Django `User` exists. If no users exist, auth is disabled and all users have open access.
 
 ### Managing Users (Docker)
 
@@ -258,15 +259,9 @@ TEE Management
   6) Exit
 ```
 
-The script manages the `/data/passwd` file directly on the host and uses the Docker image to generate bcrypt password hashes — no extra dependencies needed.
-
 ### Disabling Authentication
 
-Remove all users via the management script (option 3), or delete the passwd file:
-```bash
-rm /data/passwd
-```
-When the last user is removed, the script deletes the passwd file automatically, returning to open access. No server restart is needed — the passwd file is re-read on every request.
+Remove all users via the management script (option 3). When no Django users exist, auth is automatically disabled and all users have open access.
 
 ### The `admin` User
 
@@ -278,11 +273,7 @@ The `admin` user has special privileges:
 
 Each non-admin user has a disk quota for viewport data (default 2 GB). Set per-user quotas via the management script (option 4) — accepts values like `4G`, `512M`, or bare MB.
 
-The quota is stored as an optional third field in the passwd file:
-```
-admin:$2b$05$hash
-user2:$2b$05$hash:4096
-```
+Quotas are configured per user via the management script (option 4).
 
 ### Changing Passwords
 
@@ -301,7 +292,7 @@ export TEE_HTTPS=1
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TEE_DATA_DIR` | `~/data` | Data directory (mosaics, pyramids, vectors, passwd) |
+| `TEE_DATA_DIR` | `~/data` | Data directory (mosaics, pyramids, vectors) |
 | `TEE_APP_DIR` | Project root | Application directory (auto-detected from `lib/config.py`) |
 | `TEE_MODE` | `desktop` | `desktop` (DEBUG=True) or `production` (DEBUG=False, security headers) |
 | `TEE_HTTPS` | unset | Set to `1` to mark session cookies as `Secure` (for HTTPS) |
@@ -522,7 +513,7 @@ TEE/
 │   └── wsgi.py                        # WSGI entry point (used by waitress)
 │
 ├── api/                               # Django app — API endpoints
-│   ├── middleware.py                   # Auth middleware (passwd file + sessions)
+│   ├── middleware.py                   # Auth middleware (Django auth + demo mode)
 │   ├── auth_views.py                  # Login/logout/status/change-password
 │   ├── tasks.py                       # Background task tracking
 │   ├── helpers.py                     # Shared utilities
