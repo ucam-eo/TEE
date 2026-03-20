@@ -4,7 +4,7 @@
 
 # TEE: Tessera Embeddings Explorer
 
-**Version 3.4** | [Docker Hub](https://hub.docker.com/r/sk818/tee) | [User Guide](public/user_guide.md)
+**Alpha 3.7.0** | [Documentation](docs/index.md) | [Docker Hub](https://hub.docker.com/r/sk818/tee) | [User Guide](public/user_guide.md)
 
 A system for downloading, processing, and visualizing Sentinel-2 satellite embeddings (2018-2025) with an interactive web interface.
 
@@ -18,8 +18,6 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - **Visualizes** embeddings through an interactive web-based viewer
 - **Enables** temporal analysis by switching between years
 
-![TEE Screenshot](tee-screen.png)
-![TEE Screenshot 2](tee-screen2.png)
 
 ## Features
 
@@ -58,7 +56,8 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - **Similarity expansion** — each pin/polygon captures an embedding; adjust the per-class similarity slider to expand coverage to nearby pixels in embedding space
 - **Classification** — click Classify to generate a full-viewport nearest-centroid classification in Panel 5, respecting per-class thresholds
 - **Panel 4 integration** — manual label classes are colored in the PCA/UMAP scatter plot for visual verification
-- **Schema support** — load a classification scheme (UKHab v2 or custom JSON/CSV) for standardized class names and codes
+- **Schema support** — load a classification scheme (UKHab v2, HOTW, or custom JSON/text) for standardized class names and codes
+- **Label sharing** — contribute labels to the Tessera global habitat directory (private, embedding-only) or share geolocated labels with other users on the same server (public, ESRI Shapefile)
 - **Timeline** — track how each manual label class's coverage changes across years
 
 ### Segmentation (K-Means Clustering)
@@ -96,7 +95,7 @@ The viewer includes a **6-panel layout** toggle for advanced analysis:
 2. **RGB** — Satellite imagery with label painting tools
 3. **Embeddings Y1** — First year embeddings with similarity search
 4. **PCA / UMAP** — Dimensionality reduction of embedding space (PCA computed in-browser, UMAP server-side)
-5. **Heatmap** — Temporal distance heatmap (Y1 vs Y2 pixel-by-pixel differences)
+5. **Panel 5** — Temporal distance heatmap / classification results / segmentation overlay (mode-dependent)
 6. **Embeddings Y2** — Second year embeddings for temporal comparison
 
 A **Labelling** mode replaces Panel 6 with label management — choose between **Auto-label** (K-means segmentation + promoted labels) and **Manual Label** (hand-placed pins, polygons, and similarity-based expansion with per-class thresholds). A **Validation** mode replaces the bottom row with a controls panel and a learning-curve chart for evaluating classifier performance on uploaded ground-truth shapefiles.

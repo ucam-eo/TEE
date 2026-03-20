@@ -286,13 +286,13 @@ initialisation sequence.  It consists of:
 TEE/
 ├── public/
 │   ├── js/
-│   │   ├── app.js              Application init, dependency system (47K)
-│   │   ├── maps.js             Map creation, sync, click handlers (39K)
-│   │   ├── vectors.js          Vector download, search, canvas layers (36K)
-│   │   ├── labels.js           Manual + saved labels, polygon, export (108K)
-│   │   ├── segmentation.js     K-means clustering, seg overlay (23K)
-│   │   ├── dimreduction.js     PCA, UMAP, heatmap, Three.js (52K)
-│   │   ├── evaluation.js       Validation pipeline UI (37K)
+│   │   ├── app.js              Application init, dependency system (25K)
+│   │   ├── maps.js             Map creation, sync, click handlers (37K)
+│   │   ├── vectors.js          Vector download, search, canvas layers (35K)
+│   │   ├── labels.js           Labels, polygon, sharing, export (118K)
+│   │   ├── segmentation.js     K-means clustering, seg overlay (22K)
+│   │   ├── dimreduction.js     PCA, UMAP, heatmap, Three.js (50K)
+│   │   ├── evaluation.js       Validation pipeline UI (36K)
 │   │   └── schema.js           Schema browser, label selection (13K)
 │   ├── viewer.html             6-panel viewer layout
 │   ├── viewport_selector.html  Viewport list / creation page
