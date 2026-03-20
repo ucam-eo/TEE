@@ -240,12 +240,20 @@ def create_viewport(request):
             logger.info(f"[NEW VIEWPORT] Removing stale viewport file for '{name}'")
             viewport_path.unlink(missing_ok=True)
 
-        # Clean up any leftover data directories from a prior deletion
+        # Clean up any leftover data/progress from a prior deletion
         import shutil
         for leftover_dir in [PYRAMIDS_DIR / name, VECTORS_DIR / name]:
             if leftover_dir.exists():
                 logger.info(f"[NEW VIEWPORT] Cleaning up leftover directory: {leftover_dir}")
                 shutil.rmtree(leftover_dir, ignore_errors=True)
+        for leftover_progress in PROGRESS_DIR.glob(f'{name}_*_progress.json'):
+            leftover_progress.unlink(missing_ok=True)
+            logger.info(f"[NEW VIEWPORT] Cleaned up stale progress file: {leftover_progress.name}")
+        # Clear stale task entry
+        from api.tasks import tasks, tasks_lock
+        operation_id = f"{name}_full_pipeline"
+        with tasks_lock:
+            tasks.pop(operation_id, None)
 
         # Validate years
         years = data.get('years')
