@@ -180,9 +180,11 @@ automatically. Enforces disk quota for non-admin users.
 3. Name: alphanumeric + underscores/hyphens, ≤128 chars, no path separators
 4. Duplicate check: name must not already exist
 5. Years range: each year must be in 2017–2025
-6. GeoTessera availability: checks the registry for each requested year at the
-   given bounds. Returns an error if any year has no data for the region.
-7. Disk quota: estimated viewport size must fit within user's quota
+6. Disk quota: estimated viewport size must fit within user's quota
+
+Note: GeoTessera availability is NOT checked at creation time (would block
+for ~28s downloading the registry). Unavailable years are reported as errors
+by the pipeline.
 
 ```json
 // Request
@@ -207,9 +209,6 @@ automatically. Enforces disk quota for non-admin users.
 
 // Response 400 (years out of range)
 { "success": false, "error": "Years out of range (2017-2025): [2030]" }
-
-// Response 400 (year not available on GeoTessera)
-{ "success": false, "error": "No GeoTessera data available for year(s) [2019] at this location." }
 
 // Response 409 (duplicate name)
 { "success": false, "error": "Viewport \"cambridge\" already exists" }
@@ -241,8 +240,7 @@ Delete a viewport and all associated data (mosaics, pyramids, vectors, labels, p
 #### `POST /api/viewports/<viewport_name>/add-years`
 
 Add years to an existing viewport and re-trigger the pipeline for the new years.
-Validates year range (2017–2025) and checks GeoTessera data availability before
-starting the pipeline. Cancels any in-progress pipeline for this viewport.
+Validates year range (2017–2025). Cancels any in-progress pipeline for this viewport.
 
 ```json
 // Request
@@ -250,9 +248,6 @@ starting the pipeline. Cancels any in-progress pipeline for this viewport.
 
 // Response 200 (success)
 { "success": true, "message": "Added years [2022]", "years": [2022, 2023, 2024] }
-
-// Response 400 (year not available on GeoTessera)
-{ "success": false, "error": "No GeoTessera data available for year(s) [2022] at this location." }
 
 // Response 400 (invalid year)
 { "success": false, "error": "Invalid year: 2030. Must be 2017-2025." }

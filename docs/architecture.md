@@ -218,7 +218,7 @@ actual storage is module-private.
 
 | Module | Properties on `window` |
 |---|---|
-| `app.js` | `currentViewportName`, `currentEmbeddingYear`, `viewportStatus`, `currentPanelMode`, `TILE_SERVER`, `heatmapSatelliteLayer`, `isLoggedIn` |
+| `app.js` | `currentViewportName`, `currentEmbeddingYear`, `viewportStatus`, `currentPanelMode`, `TILE_SERVER`, `panel5SatelliteLayer`, `isLoggedIn` |
 | `maps.js` | `viewportBounds`, `satelliteSources`, `currentSatelliteSource`, `TRIANGLE_ICON`, `PANEL5_LAYER_RULES`, `persistentLabelMarkers` |
 | `vectors.js` | `localVectors`, `explorerResults` |
 | `labels.js` | `manualLabels`, `currentManualLabel`, `savedLabels`, `currentSearchCache`, `manualClassOverlays`, `_classMatchCache`, `isPolygonDrawing`, `labelMode` |
@@ -350,7 +350,7 @@ and zoom level:
 ```javascript
 function syncMaps() {
     let syncing = false;
-    const geoPanels = ['osm', 'embedding', 'rgb', 'heatmap', 'embedding2'];
+    const geoPanels = ['osm', 'embedding', 'rgb', 'panel5', 'embedding2'];
 
     function doSync(sourcePanel) {
         if (syncing) return;

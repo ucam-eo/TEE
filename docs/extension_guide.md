@@ -655,14 +655,14 @@ Schemas define hierarchical label ontologies for structured labelling.  See
 }
 ```
 
-2. In `schema.js`, add a branch in `loadSchema()`:
+2. In `schema.js`, add an entry to the `builtinSchemas` lookup in `loadSchema()`:
 
 ```javascript
-} else if (mode === 'corine') {
-    const resp = await fetch('/schemas/corine.json');
-    if (!resp.ok) throw new Error('Failed to load CORINE schema');
-    activeSchema = await resp.json();
-}
+const builtinSchemas = {
+    ukhab: { url: '/schemas/ukhab-v2.json', label: 'UKHab' },
+    hotw:  { url: '/schemas/hotw.json',      label: 'HOTW' },
+    corine: { url: '/schemas/corine.json',   label: 'CORINE' },  // NEW
+};
 ```
 
 3. In `viewer.html`, add an option to the schema dropdown menu (search for
@@ -708,7 +708,7 @@ No code changes needed — users can already upload custom schemas via the
 
 ## Checklist: Before Submitting Any Change
 
-1. **Run tests:** `venv/bin/pytest validation/ -v` — all 350 tests must pass
+1. **Run tests:** `venv/bin/pytest validation/ -v` — all tests must pass
 2. **Check JS syntax:** browser console should show no errors on load
 3. **Verify `window.*` exports:** if you add a function other modules call,
    expose it at the bottom of the file with `window.myFunction = myFunction`

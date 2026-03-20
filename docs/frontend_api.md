@@ -35,7 +35,7 @@ label management, progress tracking, and the `window.onload` entry point.
 | `window.viewportStatus` | `object` | Server + client readiness flags (see [data structures](#91-viewportstatus)) |
 | `window.currentPanelMode` | `string` | `"explore"` / `"change-detection"` / `"labelling"` / `"validation"` |
 | `window.TILE_SERVER` | `string` | Tile server base URL (default: `window.location.origin`) |
-| `window.heatmapSatelliteLayer` | `L.TileLayer \| null` | Satellite base layer on Panel 5 |
+| `window.panel5SatelliteLayer` | `L.TileLayer \| null` | Satellite base layer on Panel 5 |
 | `window.isLoggedIn` | `boolean` | Whether user is authenticated |
 
 ### Functions
