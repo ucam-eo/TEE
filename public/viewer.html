@@ -783,14 +783,15 @@
             <button id="labelling-share-btn" style="padding: 6px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" onclick="toggleShareDropdown()" title="Share labels with the Tessera team or other users">Share</button>
             <div id="share-dropdown" style="display:none; position:absolute; top:100%; right:0; background:#2d2d2d; border:1px solid #555; border-radius:6px; padding:14px; z-index:1000; width:320px; box-shadow:0 4px 12px rgba(0,0,0,0.5); font-size:12px; color:#ccc;">
                 <div style="margin-bottom:10px; font-weight:600; font-size:13px; color:white;">Share Labels</div>
-                <div style="margin-bottom:10px;">
-                    <label style="display:block; margin-bottom:4px; cursor:pointer;" title="Shares only embeddings and label names for the Tessera global habitat directory. Not visible to other users.">
-                        <input type="radio" name="share-privacy" value="private" checked> Keep locations private
+                <div style="margin-bottom:10px; display:flex; border:1px solid #555; border-radius:4px; overflow:hidden;">
+                    <label style="flex:1; text-align:center; padding:7px 4px; cursor:pointer; font-size:11px; background:#444; color:white; transition:background 0.15s;" title="Shares only embeddings and label names for the Tessera global habitat directory. Not visible to other users." id="share-opt-private">
+                        <input type="radio" name="share-privacy" value="private" checked style="display:none;"> &#128274; Private
                     </label>
-                    <label style="display:block; cursor:pointer;" title="Shares geolocated labels so other users of this viewport can import them.">
-                        <input type="radio" name="share-privacy" value="public"> Share locations (visible to other users)
+                    <label style="flex:1; text-align:center; padding:7px 4px; cursor:pointer; font-size:11px; background:#2d2d2d; color:#888; transition:background 0.15s;" title="Shares geolocated labels so other users of this viewport can import them." id="share-opt-public">
+                        <input type="radio" name="share-privacy" value="public" style="display:none;"> &#127760; Public
                     </label>
                 </div>
+                <div id="share-privacy-hint" style="font-size:10px; color:#888; margin-bottom:8px;">Shares embeddings + labels only (for the Tessera global habitat directory). Not visible to other users.</div>
                 <input id="share-name" placeholder="Your name" style="width:100%; padding:5px 8px; margin-bottom:6px; background:#444; border:1px solid #666; border-radius:3px; color:white; font-size:12px; box-sizing:border-box;">
                 <input id="share-email" placeholder="Email" style="width:100%; padding:5px 8px; margin-bottom:6px; background:#444; border:1px solid #666; border-radius:3px; color:white; font-size:12px; box-sizing:border-box;">
                 <input id="share-org" placeholder="Organization" style="width:100%; padding:5px 8px; margin-bottom:8px; background:#444; border:1px solid #666; border-radius:3px; color:white; font-size:12px; box-sizing:border-box;">

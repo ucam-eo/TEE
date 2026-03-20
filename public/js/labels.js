@@ -2477,6 +2477,25 @@ function toggleShareDropdown() {
     if (importDD) importDD.style.display = 'none';
     dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
     document.getElementById('share-status').textContent = '';
+    // Wire up toggle styling on first open
+    if (!dropdown._wired) {
+        dropdown._wired = true;
+        const optPrivate = document.getElementById('share-opt-private');
+        const optPublic = document.getElementById('share-opt-public');
+        const hint = document.getElementById('share-privacy-hint');
+        function updateToggle() {
+            const isPrivate = document.querySelector('input[name="share-privacy"]:checked').value === 'private';
+            optPrivate.style.background = isPrivate ? '#444' : '#2d2d2d';
+            optPrivate.style.color = isPrivate ? 'white' : '#888';
+            optPublic.style.background = isPrivate ? '#2d2d2d' : '#444';
+            optPublic.style.color = isPrivate ? '#888' : 'white';
+            hint.textContent = isPrivate
+                ? 'Shares embeddings + labels only (for the Tessera global habitat directory). Not visible to other users.'
+                : 'Shares geolocated labels as a shapefile. Visible to all users of this viewport.';
+        }
+        optPrivate.addEventListener('click', updateToggle);
+        optPublic.addEventListener('click', updateToggle);
+    }
 }
 
 function toggleImportDropdown() {
