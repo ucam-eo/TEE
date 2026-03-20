@@ -67,7 +67,7 @@ There are four modes, set via `window.setPanelLayout(mode)`:
 
 | Mode | Panel 1 | Panel 2 | Panel 3 | Panel 4 | Panel 5 | Panel 6 |
 |---|---|---|---|---|---|---|
-| `explore` | OSM | Satellite | Embeddings | PCA/UMAP | Change Heatmap + Seg overlay | Embeddings (year 2) |
+| `explore` | OSM | Satellite | Embeddings | PCA/UMAP | (blank) | (blank) |
 | `change-detection` | OSM | Satellite | Embeddings | Change Distribution | Change Heatmap | Embeddings (year 2) |
 | `labelling` | OSM | Satellite | Embeddings | PCA/UMAP | Classification results | Auto-label / Manual Label |
 | `validation` | Classes | Evaluation year | Embeddings | Performance chart | Confusion Matrix | Controls |
@@ -76,20 +76,21 @@ Mode is stored in `localStorage` and restored on reload via `restorePanelMode()`
 
 ### 2.2 Panel 5 Layer Rules
 
-Panel 5 (`maps.panel5`) has three optional layers whose visibility is governed
-by a declarative rules table in `maps.js`:
+Panels 5 and 6 have optional layers whose visibility is governed by a
+declarative rules table in `maps.js`:
 
 ```javascript
 const PANEL5_LAYER_RULES = {
-    'explore':          { satellite: false, heatmapCanvas: true,  segOverlay: true  },
-    'change-detection': { satellite: false, heatmapCanvas: true,  segOverlay: false },
-    'labelling':        { satellite: true,  heatmapCanvas: false, segOverlay: true  },
-    'validation':       { satellite: false, heatmapCanvas: false, segOverlay: false },
+    'explore':          { satellite: false, heatmapCanvas: true,  segOverlay: true,  embedding2: false },
+    'change-detection': { satellite: false, heatmapCanvas: true,  segOverlay: false, embedding2: true  },
+    'labelling':        { satellite: true,  heatmapCanvas: false, segOverlay: true,  embedding2: false },
+    'validation':       { satellite: false, heatmapCanvas: false, segOverlay: false, embedding2: false },
 };
 ```
 
-The function `applyHeatmapLayerRule(layer, shouldShow)` adds or removes a
-Leaflet layer from `maps.panel5` based on these rules.
+The function `applyLayerRule(layer, shouldShow, map)` adds or removes a
+Leaflet layer from any map based on these rules.  The convenience wrapper
+`applyHeatmapLayerRule(layer, shouldShow)` targets `maps.panel5`.
 
 ---
 

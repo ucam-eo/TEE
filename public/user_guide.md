@@ -32,8 +32,8 @@ A 3-panel overview for browsing embeddings and running similarity searches.
 | 2 | **Satellite** | Esri or Google satellite imagery (toggle in header) |
 | 3 | **Tessera Embeddings** | Embedding visualization with year selector |
 | 4 | **PCA (Embedding Space)** | 3D scatter plot of embeddings (PCA or UMAP) |
-| 5 | **Change Heatmap** | Pixel-by-pixel temporal distance between Y1 and Y2 |
-| 6 | **Tessera Embeddings** | Second year's embeddings for comparison |
+| 5 | | (available in other modes) |
+| 6 | | (available in other modes) |
 
 Double-click any pixel to run a similarity search. Adjust the threshold slider and save results as labels.
 

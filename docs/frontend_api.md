@@ -157,8 +157,11 @@ In manual label mode, drop a colored point label at the given location.
 #### `window.calculatePixelBounds(lat, lon)` -> `[[sw_lat, sw_lon], [ne_lat, ne_lon]]`
 Calculate geographic bounds of a 10m x 10m pixel centered at the given lat/lon.
 
+#### `window.applyLayerRule(layer, shouldShow, map)`
+Add or remove a Leaflet layer from the given map based on the boolean flag.
+
 #### `window.applyHeatmapLayerRule(layer, shouldShow)`
-Add or remove a Leaflet layer from `maps.panel5` based on the boolean flag.
+Convenience wrapper: calls `applyLayerRule(layer, shouldShow, maps.panel5)`.
 
 #### `window.setPanelLayout(mode)`
 - **mode** `string` -- `"explore"`, `"change-detection"`, `"labelling"`, or `"validation"`

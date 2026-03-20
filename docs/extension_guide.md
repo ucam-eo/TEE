@@ -54,11 +54,11 @@ In `maps.js`, add the new mode to `PANEL5_LAYER_RULES`:
 ```javascript
 // In maps.js, inside the PANEL5_LAYER_RULES object:
 const PANEL5_LAYER_RULES = {
-    'explore':          { satellite: false, heatmapCanvas: true,  segOverlay: true  },
-    'change-detection': { satellite: false, heatmapCanvas: true,  segOverlay: false },
-    'labelling':        { satellite: true,  heatmapCanvas: false, segOverlay: true  },
-    'validation':       { satellite: false, heatmapCanvas: false, segOverlay: false },
-    'comparison':       { satellite: true,  heatmapCanvas: false, segOverlay: false },  // NEW
+    'explore':          { satellite: false, heatmapCanvas: true,  segOverlay: true,  embedding2: false },
+    'change-detection': { satellite: false, heatmapCanvas: true,  segOverlay: false, embedding2: true  },
+    'labelling':        { satellite: true,  heatmapCanvas: false, segOverlay: true,  embedding2: false },
+    'validation':       { satellite: false, heatmapCanvas: false, segOverlay: false, embedding2: false },
+    'comparison':       { satellite: true,  heatmapCanvas: false, segOverlay: false, embedding2: true  },  // NEW
 };
 ```
 

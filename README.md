@@ -95,8 +95,8 @@ The viewer includes a **6-panel layout** toggle for advanced analysis:
 2. **RGB** — Satellite imagery with label painting tools
 3. **Embeddings Y1** — First year embeddings with similarity search
 4. **PCA / UMAP** — Dimensionality reduction of embedding space (PCA computed in-browser, UMAP server-side)
-5. **Panel 5** — Temporal distance heatmap / classification results / segmentation overlay (mode-dependent)
-6. **Embeddings Y2** — Second year embeddings for temporal comparison
+5. **Panel 5** — Change heatmap / classification results / segmentation overlay (mode-dependent)
+6. **Panel 6** — Second year embeddings (change-detection mode) or blank (explore mode)
 
 A **Labelling** mode replaces Panel 6 with label management — choose between **Auto-label** (K-means segmentation + promoted labels) and **Manual Label** (hand-placed pins, polygons, and similarity-based expansion with per-class thresholds). A **Validation** mode replaces the bottom row with a controls panel and a learning-curve chart for evaluating classifier performance on uploaded ground-truth shapefiles.
 
