@@ -17,7 +17,13 @@ class Command(BaseCommand):
         self.stdout.write('  %-20s %-10s %s' % ('USER', 'ROLE', 'QUOTA'))
         self.stdout.write('  %-20s %-10s %s' % ('----', '----', '-----'))
         for user in users:
-            role = 'admin' if user.is_superuser else 'user'
+            if user.is_superuser:
+                role = 'admin'
+            else:
+                try:
+                    role = 'enroller' if user.profile.can_enrol else 'user'
+                except Exception:
+                    role = 'user'
             if user.is_superuser:
                 quota_str = 'unlimited'
             else:

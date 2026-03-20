@@ -87,6 +87,28 @@ cmd_quota() {
     docker exec "$CONTAINER" python3 manage.py tee_setquota "$username" "$quota_mb"
 }
 
+cmd_grant_enroller() {
+    cmd_list
+
+    read -rp "Username to grant enroller: " username
+    if [ -z "$username" ]; then
+        die "Username cannot be empty"; return 1
+    fi
+
+    docker exec "$CONTAINER" python3 manage.py tee_setenroller "$username"
+}
+
+cmd_revoke_enroller() {
+    cmd_list
+
+    read -rp "Username to revoke enroller: " username
+    if [ -z "$username" ]; then
+        die "Username cannot be empty"; return 1
+    fi
+
+    docker exec "$CONTAINER" python3 manage.py tee_setenroller "$username" --revoke
+}
+
 cmd_update() {
     echo "Pulling $IMAGE..."
     docker pull "$IMAGE"
@@ -121,8 +143,10 @@ while true; do
     echo "  2) Add user"
     echo "  3) Remove user"
     echo "  4) Set quota"
-    echo "  5) Update container"
-    echo "  6) Exit"
+    echo "  5) Grant enroller"
+    echo "  6) Revoke enroller"
+    echo "  7) Update container"
+    echo "  8) Exit"
     echo ""
     read -rp "Choice: " choice
 
@@ -131,8 +155,10 @@ while true; do
         2) cmd_add ;;
         3) cmd_remove ;;
         4) cmd_quota ;;
-        5) cmd_update ;;
-        6) exit 0 ;;
+        5) cmd_grant_enroller ;;
+        6) cmd_revoke_enroller ;;
+        7) cmd_update ;;
+        8) exit 0 ;;
         *) echo "Invalid choice" ;;
     esac
 done
