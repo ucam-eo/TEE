@@ -18,6 +18,9 @@ See also: [architecture.md](architecture.md) for system overview,
 4. [Adding a New Label Type](#4-adding-a-new-label-type)
 5. [Adding a New JS Module](#5-adding-a-new-js-module)
 6. [Modifying Panel Titles and Layout](#6-modifying-panel-titles-and-layout)
+7. [Adding a New Backend Endpoint](#7-adding-a-new-backend-endpoint)
+8. [Adding a New Dimensionality Reduction Method](#8-adding-a-new-dimensionality-reduction-method)
+9. [Adding a Custom Schema](#9-adding-a-custom-schema)
 
 ---
 
