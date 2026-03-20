@@ -530,6 +530,36 @@ class TestJSSyntax:
 
 
 # ────────────────────────────────────────────
+# Label sharing
+# ────────────────────────────────────────────
+
+class TestLabelSharing:
+    def test_share_dropdown_exists(self, html):
+        assert 'share-dropdown' in html
+
+    def test_share_privacy_toggle(self, html):
+        assert 'share-privacy' in html
+
+    def test_import_dropdown_exists(self, html):
+        assert 'import-dropdown' in html
+
+    def test_import_share_badge(self, html):
+        assert 'import-share-badge' in html
+
+    def test_submit_share_function(self, script_text):
+        assert 'function submitShare' in script_text
+
+    def test_build_shapefile_zip_function(self, script_text):
+        assert 'function buildShapefileZip' in script_text
+
+    def test_load_shared_labels_list(self, script_text):
+        assert 'function loadSharedLabelsList' in script_text
+
+    def test_import_shared_labels(self, script_text):
+        assert 'function importSharedLabels' in script_text
+
+
+# ────────────────────────────────────────────
 # HTML well-formedness
 # ────────────────────────────────────────────
 

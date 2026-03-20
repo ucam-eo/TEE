@@ -37,6 +37,7 @@ System architecture for the Tessera Embeddings Explorer.
                               | vectors/   |
                               | mosaics/   |
                               | progress/  |
+                              | share/     |
                               +------------+
 ```
 
@@ -175,6 +176,10 @@ import/export between modules; `dimreduction.js` is the only module that uses
                               Export as JSON/GeoJSON/Shapefile
                               (labels.js → exportManualLabelsShapefile)
                                       │
+                                      ├──► Share labels (public/private)
+                                      │    POST /api/share/submit
+                                      │    (api/views/share.py → /data/share/)
+                                      │
                                       ▼
                               Upload ground-truth shapefile
                               for evaluation (validation mode)
@@ -305,6 +310,7 @@ TEE/
 │       ├── tiles.py            Tile server
 │       ├── vector_data.py      Vector file serving
 │       ├── evaluation.py       ML evaluation endpoints
+│       ├── share.py            Label sharing (submit/list/download)
 │       └── config.py           Static files, health, config
 │
 ├── lib/

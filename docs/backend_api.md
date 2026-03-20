@@ -19,6 +19,7 @@ these endpoints.
    - [Evaluation](#15-evaluation--apiviewsevaluationpy)
    - [Vector Data](#16-vector-data--apiviewsvector_datapy)
    - [Config & Health](#17-config--health--apiviewsconfigpy)
+   - [Label Sharing](#19-label-sharing--apiviewssharepy)
 2. [Library Modules](#2-library-modules)
    - [lib/config.py](#21-libconfigpy--paths--directories)
    - [lib/viewport_utils.py](#22-libviewport_utilspy--viewport-readingvalidation)
@@ -519,6 +520,109 @@ GET /api/evaluation/download-model/rf
 
 Response: application/octet-stream (joblib file)
 Content-Disposition: attachment; filename="rf.joblib"
+```
+
+---
+
+### 1.9 Label Sharing — `api/views/share.py`
+
+**Overview:** Share labels with the Tessera team (private mode — embedding+label
+pairs only, no locations) or with other users (public mode — ESRI Shapefile with
+geolocations).  Private shares are invisible to other users.  Write-only API
+(no delete/update).  Overwrites on re-submit.
+
+**Depends on:** `lib.config`, `lib.viewport_utils`
+
+#### `POST /api/share/submit`
+
+Submit labels for sharing.  Content-Type determines the mode:
+
+**Private share** (`application/json`):
+
+```json
+// Request
+{
+  "format": "private",
+  "user": { "name": "Alice", "email": "alice@cam.ac.uk", "organization": "Cambridge" },
+  "viewport": "cambridge",
+  "schema": { "mode": "ukhab", "data": null },
+  "labels": [
+    { "name": "Woodland", "code": "w1a", "embedding": [0.12, -0.34, ...], "type": "point" }
+  ]
+}
+
+// Response 200
+{ "status": "ok", "path": "alice_at_cam_ac_uk/cambridge" }
+```
+
+**Public share** (`multipart/form-data`):
+
+```
+POST /api/share/submit
+Content-Type: multipart/form-data
+
+metadata: JSON string (format, user, viewport, viewport_bounds, schema)
+labels: shapefile ZIP file
+```
+
+```json
+// Response 200
+{ "status": "ok", "path": "alice_at_cam_ac_uk/cambridge" }
+```
+
+**Validation:** user.name, user.email, user.organization, format, viewport all
+required.  Email sanitized: `@` → `_at_`, `.` → `_`.
+
+#### `GET /api/share/list/<viewport_name>`
+
+List public shares available for a viewport.  Private shares are excluded.
+
+```json
+// Response 200
+{
+  "shares": [
+    {
+      "name": "Alice",
+      "email": "alice@cam.ac.uk",
+      "organization": "Cambridge",
+      "shared_at": "2026-03-20T12:00:00+00:00",
+      "sanitized_email": "alice_at_cam_ac_uk"
+    }
+  ]
+}
+```
+
+#### `GET /api/share/download/<sanitized_email>/<viewport_name>`
+
+Download a public share as shapefile ZIP.  Returns 404 for private shares.
+
+```
+GET /api/share/download/alice_at_cam_ac_uk/cambridge
+
+Response: application/zip
+Content-Disposition: attachment; filename="shared_labels_Alice_cambridge.zip"
+```
+
+**Storage structure:**
+
+```
+/data/share/
+  <sanitized_email>/
+    <viewport>/
+      metadata.json    — user info, format, viewport, schema, shared_at
+      labels.json      — private mode: [{name, code, embedding, type}, ...]
+      labels.zip       — public mode: ESRI shapefile
+```
+
+**Error responses:**
+
+```json
+// 400 — missing/invalid fields
+{ "error": "user.name, user.email, and user.organization are required" }
+{ "error": "format must be \"private\" or \"public\"" }
+
+// 404 — share not found (or private)
+{ "error": "Share not found" }
 ```
 
 ---

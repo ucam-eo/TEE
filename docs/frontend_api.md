@@ -428,6 +428,45 @@ Export the current map view as a JPG image.
 #### `window.updateThresholdDisplay()`
 Update the threshold display and re-filter explorer results.
 
+### Functions -- Label Sharing
+
+#### `window.toggleShareDropdown()`
+Toggle the share dropdown menu visibility. Hides the import dropdown if open.
+
+#### `window.toggleImportDropdown()`
+Toggle the import dropdown menu visibility. Calls `loadSharedLabelsList()` to
+refresh the list of available shares. Hides the share dropdown if open.
+
+#### `window.submitShare()`
+Collect the current manual labels, build a shapefile ZIP via
+`buildShapefileZip()`, and POST to `/api/share/submit`. Reads the privacy
+toggle (`#share-privacy`) to determine public vs private sharing. Shows a
+success/error toast on completion.
+
+#### `window.collectPrivateShareData()` -> `object`
+Gather the data needed for a private share: viewport name, user email,
+GeoJSON feature collection, and base64-encoded shapefile ZIP.
+
+#### `window.buildShapefileZip()` -> `Promise<Blob>`
+Build an ESRI Shapefile ZIP from the current manual labels using `shp-write`.
+Returns a `Blob` containing the ZIP bytes.
+
+#### `window.loadSharedLabelsList()` -> `Promise<void>`
+Fetch `GET /api/share/list/<viewport>` and render the list of available public
+shares into the import dropdown. Updates the `#import-share-badge` count.
+
+#### `window.importSharedLabels(shareId)` -> `Promise<void>`
+- **shareId** `string` -- share identifier from the list
+
+Download shared labels and merge them into the current manual labels array.
+Rebuilds overlays and re-renders the label list.
+
+#### `window.updateImportBadge(count)`
+- **count** `number` -- number of available shares
+
+Update the badge on the import button showing how many shared label sets are
+available for the current viewport.
+
 ### Functions -- Timeline
 
 #### `window.showLabelTimeline(labelName)` -> `Promise<void>`

@@ -368,6 +368,9 @@ class TestBackendLibraries:
         ("lib/tile_renderer.py", [
             "render_tile_png", "tile_to_bbox", "get_pyramid_path",
         ]),
+        ("api/views/share.py", [
+            "submit_share", "list_shares", "download_share",
+        ]),
     ]
 
     @pytest.mark.parametrize("path,functions", NEW_LIBS, ids=[p for p, _ in NEW_LIBS])
