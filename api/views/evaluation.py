@@ -66,7 +66,8 @@ def upload_shapefile(request):
 
     try:
         gdfs = [gpd.read_file(shp) for shp in shp_files]
-        gdf = gpd.pd.concat(gdfs, ignore_index=True) if len(gdfs) > 1 else gdfs[0]
+        import pandas as pd
+        gdf = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True)) if len(gdfs) > 1 else gdfs[0]
     except Exception as e:
         return JsonResponse({"error": f"Failed to read shapefile: {e}"}, status=400)
 
