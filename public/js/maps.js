@@ -824,6 +824,15 @@ function setPanelLayout(mode) {
     applyHeatmapLayerRule(window.heatmapCanvasLayer, rules.heatmapCanvas);
     applyHeatmapLayerRule(window.segOverlay, rules.segOverlay);
 
+    // Panel 6: hide embedding tile layer in explore mode (panel is blank)
+    if (mode === 'explore' && window.embedding2Layer && window.maps.embedding2) {
+        window.maps.embedding2.removeLayer(window.embedding2Layer);
+    } else if (mode !== 'explore' && window.embedding2Layer && window.maps.embedding2) {
+        if (!window.maps.embedding2.hasLayer(window.embedding2Layer)) {
+            window.embedding2Layer.addTo(window.maps.embedding2);
+        }
+    }
+
     // Hide classify button for all modes; labelling mode re-shows it if needed
     const classifyBtn = document.getElementById('manual-classify-btn');
     if (classifyBtn) classifyBtn.style.display = 'none';

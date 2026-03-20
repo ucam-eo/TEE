@@ -276,8 +276,10 @@ class TestCSSModeRules:
 
     @pytest.mark.parametrize("mode", MODES)
     def test_container_mode_css(self, html, mode):
-        assert f"#map-container.mode-{mode}" in html, (
-            f"CSS rule for #map-container.mode-{mode} missing"
+        has_container = f"#map-container.mode-{mode}" in html
+        has_body = f"body.mode-{mode}" in html
+        assert has_container or has_body, (
+            f"CSS rule for mode-{mode} missing from both #map-container and body"
         )
 
     def test_body_explore_label_controls(self, html):

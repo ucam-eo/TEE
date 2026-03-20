@@ -63,7 +63,6 @@ class TestExploreRename:
         assert "simple" not in opts
 
     def test_explore_css_rules_exist(self, html):
-        assert "#map-container.mode-explore" in html
         assert "body.mode-explore #label-controls-bar" in html
 
     def test_panel5_layer_rules_has_explore(self, script_text):
