@@ -59,14 +59,14 @@ def upload_shapefile(request):
     except zipfile.BadZipFile:
         return JsonResponse({"error": "Invalid zip file"}, status=400)
 
-    # Find the .shp file
+    # Find all .shp files (shp-write splits points and polygons into separate files)
     shp_files = list(Path(tmp_dir).rglob("*.shp"))
     if not shp_files:
         return JsonResponse({"error": "No .shp file found in zip"}, status=400)
 
-    shp_path = shp_files[0]
     try:
-        gdf = gpd.read_file(shp_path)
+        gdfs = [gpd.read_file(shp) for shp in shp_files]
+        gdf = gpd.pd.concat(gdfs, ignore_index=True) if len(gdfs) > 1 else gdfs[0]
     except Exception as e:
         return JsonResponse({"error": f"Failed to read shapefile: {e}"}, status=400)
 
