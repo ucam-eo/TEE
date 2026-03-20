@@ -235,24 +235,29 @@ def create_viewport(request):
         if viewport_path.exists() and config_path.exists():
             return JsonResponse({'success': False, 'error': f'Viewport "{name}" already exists. Delete it first.'}, status=409)
 
-        # Thorough cleanup of any leftover state from prior viewport with same name
-        import shutil
-        from api.tasks import tasks, tasks_lock
-        viewport_path.unlink(missing_ok=True)
-        config_path.unlink(missing_ok=True)
-        cancel_pipeline(name)  # kill any running pipeline for this name
-        operation_id = f"{name}_full_pipeline"
-        with tasks_lock:
-            tasks.pop(operation_id, None)
-        for leftover_dir in [PYRAMIDS_DIR / name, VECTORS_DIR / name]:
-            if leftover_dir.exists():
-                logger.info(f"[NEW VIEWPORT] Cleaning up leftover: {leftover_dir}")
-                shutil.rmtree(leftover_dir, ignore_errors=True)
-        for leftover in PROGRESS_DIR.glob(f'{name}_*'):
-            leftover.unlink(missing_ok=True)
-        if MOSAICS_DIR.exists():
-            for f in MOSAICS_DIR.glob(f'{name}_*'):
-                f.unlink(missing_ok=True)
+        # Clean up leftover state only if stale files actually exist
+        has_stale = (viewport_path.exists() or
+                     (PYRAMIDS_DIR / name).exists() or
+                     (VECTORS_DIR / name).exists() or
+                     any(PROGRESS_DIR.glob(f'{name}_*')))
+        if has_stale:
+            import shutil
+            from api.tasks import tasks, tasks_lock
+            logger.info(f"[NEW VIEWPORT] Cleaning up stale data for '{name}'")
+            viewport_path.unlink(missing_ok=True)
+            config_path.unlink(missing_ok=True)
+            cancel_pipeline(name)
+            operation_id = f"{name}_full_pipeline"
+            with tasks_lock:
+                tasks.pop(operation_id, None)
+            for leftover_dir in [PYRAMIDS_DIR / name, VECTORS_DIR / name]:
+                if leftover_dir.exists():
+                    shutil.rmtree(leftover_dir, ignore_errors=True)
+            for leftover in PROGRESS_DIR.glob(f'{name}_*'):
+                leftover.unlink(missing_ok=True)
+            if MOSAICS_DIR.exists():
+                for f in MOSAICS_DIR.glob(f'{name}_*'):
+                    f.unlink(missing_ok=True)
 
         # Validate years
         years = data.get('years')
@@ -262,24 +267,8 @@ def create_viewport(request):
             if invalid:
                 return JsonResponse({'success': False, 'error': f'Years out of range (2017-2025): {invalid}'}, status=400)
 
-            # Check year availability on GeoTessera for this region
-            try:
-                import geotessera as gt
-                tessera = gt.GeoTessera()
-                unavailable = []
-                for y in years:
-                    tiles = tessera.registry.load_blocks_for_region(bounds, y)
-                    if not tiles:
-                        unavailable.append(y)
-                if unavailable:
-                    return JsonResponse({
-                        'success': False,
-                        'error': f'No GeoTessera data available for year(s) {unavailable} at this location. '
-                                 f'Available years can be checked at https://geotessera.org'
-                    }, status=400)
-            except Exception as e:
-                logger.warning(f"[NEW VIEWPORT] Could not check GeoTessera availability: {e}")
-                # Don't block creation — the pipeline will handle the error
+            # Note: GeoTessera availability is NOT checked here (would block for 28s
+            # downloading the registry). The pipeline reports unavailable years as errors.
 
         logger.info(f"[NEW VIEWPORT] API received years: {years} (type: {type(years).__name__})")
 
@@ -493,25 +482,8 @@ def add_years(request, viewport_name):
             if not isinstance(y, int) or y < MIN_YEAR or y > MAX_YEAR:
                 return JsonResponse({'success': False, 'error': f'Invalid year: {y}. Must be {MIN_YEAR}-{MAX_YEAR}.'}, status=400)
 
-        # Check year availability on GeoTessera for this region
-        try:
-            import geotessera as gt
-            tessera = gt.GeoTessera()
-            vp_bounds = viewport.get('bounds', {})
-            bounds_tuple = (vp_bounds['minLon'], vp_bounds['minLat'], vp_bounds['maxLon'], vp_bounds['maxLat'])
-            unavailable = []
-            for y in new_years:
-                tiles = tessera.registry.load_blocks_for_region(bounds_tuple, y)
-                if not tiles:
-                    unavailable.append(y)
-            if unavailable:
-                return JsonResponse({
-                    'success': False,
-                    'error': f'No GeoTessera data available for year(s) {unavailable} at this location. '
-                             f'Available years can be checked at https://geotessera.org'
-                }, status=400)
-        except Exception as e:
-            logger.warning(f"[ADD YEARS] Could not check GeoTessera availability: {e}")
+        # Note: GeoTessera availability is NOT checked here (would block for 28s).
+        # The pipeline reports unavailable years as errors.
 
         # Check no pipeline is already running
         operation_id = f"{viewport_name}_full_pipeline"
