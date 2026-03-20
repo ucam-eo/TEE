@@ -2613,10 +2613,20 @@ async function submitShare() {
                 labels: labels,
             };
 
+            let body;
+            try {
+                body = JSON.stringify(payload);
+            } catch (jsonErr) {
+                status.textContent = `JSON error: ${jsonErr.message}`;
+                status.style.color = '#e53e3e';
+                console.error('[SHARE] JSON.stringify failed:', jsonErr, payload);
+                return;
+            }
+
             const resp = await fetch('/api/share/submit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+                body: body,
             });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Submit failed');
