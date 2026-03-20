@@ -228,20 +228,24 @@ def create_viewport(request):
         except ValueError as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
-        # Check for duplicate name — allow re-creation if no data exists
-        # (e.g. after a cancelled pipeline left the viewport file behind)
+        # Check for duplicate name
         viewport_path = VIEWPORTS_DIR / f"{name}.txt"
         if viewport_path.exists():
-            # Check if this is a stale viewport (no pyramids or vectors)
-            has_pyramids = (PYRAMIDS_DIR / name).exists() and any((PYRAMIDS_DIR / name).iterdir()) if (PYRAMIDS_DIR / name).exists() else False
-            has_vectors = (VECTORS_DIR / name).exists() and any((VECTORS_DIR / name).iterdir()) if (VECTORS_DIR / name).exists() else False
-            if has_pyramids or has_vectors:
-                return JsonResponse({'success': False, 'error': f'Viewport "{name}" already exists'}, status=409)
-            # Stale viewport — clean up and allow re-creation
+            # Check if this viewport is currently listed (has an active config)
+            # If the viewport was "deleted" but files linger, allow re-creation
+            config_path = VIEWPORTS_DIR / f"{name}_config.json"
+            if config_path.exists():
+                return JsonResponse({'success': False, 'error': f'Viewport "{name}" already exists. Delete it first.'}, status=409)
+            # Stale viewport file — clean up and allow re-creation
             logger.info(f"[NEW VIEWPORT] Removing stale viewport file for '{name}'")
             viewport_path.unlink(missing_ok=True)
-            config_path = VIEWPORTS_DIR / f"{name}_config.json"
-            config_path.unlink(missing_ok=True)
+
+        # Clean up any leftover data directories from a prior deletion
+        import shutil
+        for leftover_dir in [PYRAMIDS_DIR / name, VECTORS_DIR / name]:
+            if leftover_dir.exists():
+                logger.info(f"[NEW VIEWPORT] Cleaning up leftover directory: {leftover_dir}")
+                shutil.rmtree(leftover_dir, ignore_errors=True)
 
         # Validate years
         years = data.get('years')
