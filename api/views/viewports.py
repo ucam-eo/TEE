@@ -291,7 +291,10 @@ def create_viewport(request):
                     )
                 }, status=403)
 
+        import time as _time
+        t0 = _time.monotonic()
         create_viewport_from_bounds(name, bounds, description)
+        logger.info(f"[NEW VIEWPORT] create_viewport_from_bounds: {(_time.monotonic()-t0)*1000:.0f}ms")
 
         viewport = read_viewport_file(name)
         viewport['name'] = name
@@ -301,10 +304,10 @@ def create_viewport(request):
         config_file = VIEWPORTS_DIR / f"{name}_config.json"
         with open(config_file, 'w') as f:
             json.dump(config, f)
-        logger.info(f"[NEW VIEWPORT] Saved config: {config_file}")
 
-        logger.info(f"[NEW VIEWPORT] Triggering data download for new viewport '{name}' with years={years}...")
+        logger.info(f"[NEW VIEWPORT] Triggering pipeline for '{name}' years={years}")
         trigger_data_download_and_processing(name, years=years)
+        logger.info(f"[NEW VIEWPORT] Response ready: {(_time.monotonic()-t0)*1000:.0f}ms total")
 
         return JsonResponse({
             'success': True,
