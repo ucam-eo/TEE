@@ -807,7 +807,7 @@ function setPanelLayout(mode) {
 
     // Static panel titles per mode
     const titles = {
-        'explore':          { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'PCA (Embedding Space)', p5: 'Change Heatmap',  p6: 'Tessera Embeddings' },
+        'explore':          { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'PCA (Embedding Space)', p5: '',  p6: '' },
         'change-detection': { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'Change Distribution',    p5: 'Change Heatmap',  p6: 'Tessera Embeddings' },
         'labelling':        { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'PCA (Embedding Space)', p5: 'Classification results',    p6: 'Auto-label' },
         'validation':       { p1: 'Classes',       p3: 'Evaluation year',    p4: 'Performance',           p5: 'Confusion Matrix', p6: 'Controls' },
