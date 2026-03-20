@@ -1728,7 +1728,7 @@ function confirmSaveLabel() {
     const srcLat = labelData.source_pixel.lat;
     const srcLon = labelData.source_pixel.lon;
     const entry = { labelId: labelData.id, markers: {} };
-    ['osm', 'rgb', 'embedding', 'heatmap', 'embedding2'].forEach(key => {
+    ['osm', 'rgb', 'embedding', 'panel5', 'embedding2'].forEach(key => {
         if (window.maps[key]) {
             entry.markers[key] = L.marker([srcLat, srcLon], { icon: coloredIcon })
                 .bindTooltip(name, { direction: 'top', offset: [0, -20] })

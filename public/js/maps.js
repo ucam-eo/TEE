@@ -506,7 +506,7 @@ function switchEmbeddingYear2(year) {
 // Synchronize all maps - any panel can trigger sync to all others
 function syncMaps() {
     let syncing = false;
-    const geoPanels = ['osm', 'embedding', 'rgb', 'heatmap', 'embedding2'];
+    const geoPanels = ['osm', 'embedding', 'rgb', 'panel5', 'embedding2'];
 
     function doSync(sourcePanel) {
         if (syncing) return;
@@ -576,7 +576,7 @@ function handleUnifiedClick(lat, lon) {
     clearCrossPanelMarkers();
 
     // Place marker on all geographic panels
-    ['osm', 'rgb', 'embedding', 'heatmap', 'embedding2'].forEach(panel => {
+    ['osm', 'rgb', 'embedding', 'panel5', 'embedding2'].forEach(panel => {
         setCrossPanelMarker(panel, lat, lon);
     });
 
