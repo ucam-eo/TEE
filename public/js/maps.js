@@ -774,20 +774,24 @@ function calculatePixelBounds(lat, lon) {
 // SIMILARITY SEARCH FUNCTIONS
 // =====================================================================
 
-// Declarative layer rules for maps.panel5 (Panel 5) per mode
+// Declarative layer rules per mode
 // true = add layer if it exists, false = remove if present
 const PANEL5_LAYER_RULES = {
-    'explore':          { satellite: false, heatmapCanvas: true,  segOverlay: true  },
-    'change-detection': { satellite: false, heatmapCanvas: true,  segOverlay: false },
-    'labelling':        { satellite: true,  heatmapCanvas: false, segOverlay: true  },
-    'validation':       { satellite: false, heatmapCanvas: false, segOverlay: false },
+    'explore':          { satellite: false, heatmapCanvas: true,  segOverlay: true,  embedding2: false },
+    'change-detection': { satellite: false, heatmapCanvas: true,  segOverlay: false, embedding2: true  },
+    'labelling':        { satellite: true,  heatmapCanvas: false, segOverlay: true,  embedding2: false },
+    'validation':       { satellite: false, heatmapCanvas: false, segOverlay: false, embedding2: false },
 };
 
+function applyLayerRule(layer, shouldShow, map) {
+    if (!layer || !map) return;
+    const onMap = map.hasLayer(layer);
+    if (shouldShow && !onMap) layer.addTo(map);
+    else if (!shouldShow && onMap) map.removeLayer(layer);
+}
+
 function applyHeatmapLayerRule(layer, shouldShow) {
-    if (!layer || !window.maps.panel5) return;
-    const onMap = window.maps.panel5.hasLayer(layer);
-    if (shouldShow && !onMap) layer.addTo(window.maps.panel5);
-    else if (!shouldShow && onMap) window.maps.panel5.removeLayer(layer);
+    applyLayerRule(layer, shouldShow, window.maps.panel5);
 }
 
 // Panel layout: explore / change-detection / labelling
@@ -824,14 +828,8 @@ function setPanelLayout(mode) {
     applyHeatmapLayerRule(window.heatmapCanvasLayer, rules.heatmapCanvas);
     applyHeatmapLayerRule(window.segOverlay, rules.segOverlay);
 
-    // Panel 6: hide embedding tile layer in explore mode (panel is blank)
-    if (mode === 'explore' && window.embedding2Layer && window.maps.embedding2) {
-        window.maps.embedding2.removeLayer(window.embedding2Layer);
-    } else if (mode !== 'explore' && window.embedding2Layer && window.maps.embedding2) {
-        if (!window.maps.embedding2.hasLayer(window.embedding2Layer)) {
-            window.embedding2Layer.addTo(window.maps.embedding2);
-        }
-    }
+    // Panel 6: embedding2 tile layer visibility from rules
+    applyLayerRule(window.embedding2Layer, rules.embedding2, window.maps.embedding2);
 
     // Hide classify button for all modes; labelling mode re-shows it if needed
     const classifyBtn = document.getElementById('manual-classify-btn');

@@ -99,8 +99,9 @@ const dependencyRegistry = [
                 if (alt) window.currentEmbeddingYear2 = String(alt);
             }
             refreshEmbeddingTileLayer('embedding2', window.currentEmbeddingYear2);
-            // In explore mode, Panel 6 is blank — remove the layer we just created
-            if (currentPanelMode === 'explore' && window.embedding2Layer && maps.embedding2) {
+            // Apply declarative layer rules (e.g. explore mode hides Panel 6 tiles)
+            const rules = window.PANEL5_LAYER_RULES[currentPanelMode] || window.PANEL5_LAYER_RULES['explore'];
+            if (!rules.embedding2 && window.embedding2Layer && maps.embedding2) {
                 maps.embedding2.removeLayer(window.embedding2Layer);
             }
         },
