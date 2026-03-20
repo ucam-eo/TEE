@@ -1220,7 +1220,7 @@ async function exportManualLabelsShapefile() {
         };
 
         if (typeof shpwrite !== 'undefined' && shpwrite.zip) {
-            const content = await shpwrite.zip(gj);
+            const content = await shpwrite.zip(gj, {outputType: 'blob'});
             downloadFile(content, `manual-labels-${window.currentViewportName || 'export'}.zip`, 'application/zip');
         } else {
             // Fallback: download as GeoJSON instead
@@ -2568,7 +2568,7 @@ async function buildShapefileZip() {
     const gj = { type: 'FeatureCollection', features: [...points, ...polygons] };
 
     if (typeof shpwrite !== 'undefined' && shpwrite.zip) {
-        return await shpwrite.zip(gj);
+        return await shpwrite.zip(gj, {outputType: 'blob'});
     }
     return null;
 }
