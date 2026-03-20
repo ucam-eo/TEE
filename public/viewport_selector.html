@@ -1836,10 +1836,17 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
         }
 
         // Load viewports list
+        // Sequenced viewport list loader — prevents stale responses from
+        // overwriting newer ones (e.g. delete's refresh arriving after create's)
+        let _loadViewportsSeq = 0;
         async function loadViewports() {
+            const seq = ++_loadViewportsSeq;
             try {
                 const response = await fetch('/api/viewports/list');
                 const data = await response.json();
+
+                // Only apply if this is still the latest request
+                if (seq !== _loadViewportsSeq) return;
 
                 if (data.success) {
                     lastLoadedViewports = data.viewports;
