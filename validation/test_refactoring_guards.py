@@ -371,6 +371,9 @@ class TestBackendLibraries:
         ("api/views/share.py", [
             "submit_share", "list_shares", "download_share",
         ]),
+        ("api/views/enrolment.py", [
+            "create_enrolled_user", "list_enrolled_users", "disable_enrolled_user",
+        ]),
     ]
 
     @pytest.mark.parametrize("path,functions", NEW_LIBS, ids=[p for p, _ in NEW_LIBS])
@@ -411,6 +414,9 @@ class TestBackendViewsIntact:
         ],
         "api/auth_views.py": [
             "auth_login", "auth_logout", "auth_status", "auth_change_password",
+        ],
+        "api/views/enrolment.py": [
+            "create_enrolled_user", "list_enrolled_users", "disable_enrolled_user",
         ],
     }
 

@@ -735,6 +735,21 @@
                     <input type="file" id="import-viewport-file" accept=".json,.geojson" style="display: none;">
                 </div>
 
+                <!-- Manage Users (visible to enrollers and admins) -->
+                <div class="section" id="enrolSection" style="display:none;">
+                    <button class="btn btn-toggle" onclick="toggleEnrolPanel()">Manage Users</button>
+                    <div id="enrolPanel" style="display:none; margin-top:8px; padding:10px; background:#f8f9fa; border-radius:6px;">
+                        <div style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap;">
+                            <input id="enrol-username" placeholder="Username" style="flex:1; min-width:80px; padding:5px 8px; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+                            <input id="enrol-password" type="password" placeholder="Password" style="flex:1; min-width:80px; padding:5px 8px; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+                            <input id="enrol-quota" type="number" value="2048" style="width:70px; padding:5px 8px; border:1px solid #ccc; border-radius:4px; font-size:12px;" title="Quota (MB)">
+                            <button onclick="createEnrolledUser()" style="padding:5px 12px; background:#38a169; color:white; border:none; border-radius:4px; font-size:12px; cursor:pointer;">Create</button>
+                        </div>
+                        <div id="enrol-status" style="font-size:11px; margin-bottom:6px;"></div>
+                        <div id="enrol-list" style="font-size:12px; max-height:200px; overflow-y:auto;"></div>
+                    </div>
+                </div>
+
                 <!-- Create New Viewport -->
                 <div class="section auth-required">
                     <button class="btn btn-toggle" onclick="toggleCreateForm()">+ Create New Viewport</button>
@@ -863,12 +878,98 @@
                 document.getElementById('loginBtn').style.display = '';
                 document.querySelectorAll('.auth-required').forEach(el => el.style.display = 'none');
             }
+            // Show enrolment panel for enrollers and admins
+            if (data.is_enroller) {
+                document.getElementById('enrolSection').style.display = '';
+            }
         }).catch(() => {});
 
         function doLogout() {
             fetch('/api/auth/logout', {method: 'POST'}).then(() => {
                 window.location.href = '/login.html';
             });
+        }
+
+        // ── Enrolment ──
+        function toggleEnrolPanel() {
+            const panel = document.getElementById('enrolPanel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            if (panel.style.display === 'block') loadEnrolledUsers();
+        }
+
+        async function createEnrolledUser() {
+            const status = document.getElementById('enrol-status');
+            const username = document.getElementById('enrol-username').value.trim();
+            const password = document.getElementById('enrol-password').value;
+            const quota = parseInt(document.getElementById('enrol-quota').value) || 2048;
+
+            if (!username || !password) {
+                status.textContent = 'Username and password required';
+                status.style.color = '#dc3545';
+                return;
+            }
+            try {
+                const resp = await fetch('/api/enrol/create-user', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password, quota_mb: quota}),
+                });
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                    status.textContent = `Created user "${username}"`;
+                    status.style.color = '#28a745';
+                    document.getElementById('enrol-username').value = '';
+                    document.getElementById('enrol-password').value = '';
+                    loadEnrolledUsers();
+                } else {
+                    status.textContent = data.error || 'Failed';
+                    status.style.color = '#dc3545';
+                }
+            } catch (e) {
+                status.textContent = 'Network error';
+                status.style.color = '#dc3545';
+            }
+        }
+
+        async function loadEnrolledUsers() {
+            const list = document.getElementById('enrol-list');
+            try {
+                const resp = await fetch('/api/enrol/list-users');
+                const data = await resp.json();
+                if (!data.success || !data.users.length) {
+                    list.innerHTML = '<span style="color:#999;">No enrolled users</span>';
+                    return;
+                }
+                list.innerHTML = data.users.map(u => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid #eee;">
+                        <span>${u.username} <span style="color:#888; font-size:10px;">${u.quota_mb}MB${u.created_by ? ' by ' + u.created_by : ''}${u.can_enrol ? ' [enroller]' : ''}</span></span>
+                        <span>
+                            ${u.is_admin ? '<span style="color:#667eea; font-size:10px;">admin</span>' :
+                              u.is_active ?
+                                `<button onclick="toggleEnrolledUser('${u.username}', false)" style="font-size:10px; padding:2px 6px; background:#ff5252; color:white; border:none; border-radius:3px; cursor:pointer;">Disable</button>` :
+                                `<button onclick="toggleEnrolledUser('${u.username}', true)" style="font-size:10px; padding:2px 6px; background:#38a169; color:white; border:none; border-radius:3px; cursor:pointer;">Enable</button>`
+                            }
+                        </span>
+                    </div>
+                `).join('');
+            } catch (e) {
+                list.innerHTML = '<span style="color:#dc3545;">Failed to load users</span>';
+            }
+        }
+
+        async function toggleEnrolledUser(username, enable) {
+            try {
+                const resp = await fetch('/api/enrol/disable-user', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, enable}),
+                });
+                const data = await resp.json();
+                if (resp.ok) loadEnrolledUsers();
+                else alert(data.error || 'Failed');
+            } catch (e) {
+                alert('Network error');
+            }
         }
 
         // Wrap global fetch to redirect on 401 (only for logged-in users)

@@ -86,8 +86,19 @@ def auth_status(request):
     enabled = auth_enabled()
     logged_in = request.user.is_authenticated if enabled else False
     user = request.user.username if logged_in else None
-    return JsonResponse({
+    is_admin = request.user.is_superuser if logged_in else False
+    is_enroller = False
+    if logged_in and not is_admin:
+        try:
+            is_enroller = request.user.profile.can_enrol
+        except Exception:
+            pass
+    resp = {
         'auth_enabled': enabled,
         'logged_in': logged_in,
         'user': user,
-    })
+    }
+    if logged_in:
+        resp['is_admin'] = is_admin
+        resp['is_enroller'] = is_admin or is_enroller
+    return JsonResponse(resp)

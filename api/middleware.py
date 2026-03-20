@@ -49,6 +49,8 @@ WRITE_ENDPOINTS = {
     '/api/evaluation/upload-shapefile',
     '/api/evaluation/run',
     '/api/share/submit',
+    '/api/enrol/create-user',
+    '/api/enrol/disable-user',
 }
 
 

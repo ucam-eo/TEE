@@ -7,6 +7,7 @@ from .views.vector_data import serve_vector_data
 from .views.config import get_config
 from .views.evaluation import upload_shapefile, class_pixel_counts, run_evaluation, download_model, finish_classifier
 from .views.share import submit_share, list_shares, download_share
+from .views.enrolment import create_enrolled_user, list_enrolled_users, disable_enrolled_user
 
 urlpatterns = [
     # Auth
@@ -40,4 +41,8 @@ urlpatterns = [
     path('share/submit', submit_share),
     path('share/list/<str:viewport_name>', list_shares),
     path('share/download/<str:sanitized_email>/<str:viewport_name>', download_share),
+    # Enrolment
+    path('enrol/create-user', create_enrolled_user),
+    path('enrol/list-users', list_enrolled_users),
+    path('enrol/disable-user', disable_enrolled_user),
 ]
