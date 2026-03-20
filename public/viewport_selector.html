@@ -1321,16 +1321,21 @@
                     // Update current viewport and refresh UI to show it as active
                     currentViewport = data.viewport;
                     updateCurrentViewportDisplay();
-                    loadViewports(); // Refresh list to show as active
+                    await loadViewports(); // Refresh list to show the new viewport
                     drawViewportBox();
 
                     // Hide the create form and show processing status in left sidebar
                     document.getElementById('createForm').classList.remove('open');
                     document.getElementById('mapClickInstruction').style.display = 'none';
-                    document.getElementById('processingSection').style.display = 'block';
+                    const procSection = document.getElementById('processingSection');
+                    procSection.style.display = 'block';
+                    document.getElementById('processingViewportName').textContent = name;
                     document.getElementById('cancelProcessingBtn').style.display = 'inline-block';
                     document.getElementById('mapInfoLabel').textContent = '';
                     document.getElementById('mapInfoValue').textContent = '';
+
+                    // Scroll processing section into view
+                    procSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
                     // Start progress polling for the new viewport
                     startProgressPolling(name);
