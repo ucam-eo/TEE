@@ -342,7 +342,7 @@ TEE/
 
 ## 7. Map Synchronization
 
-All five geographic Leaflet maps (`osm`, `embedding`, `rgb`, `heatmap`,
+All five geographic Leaflet maps (`osm`, `embedding`, `rgb`, `panel5`,
 `embedding2`) are synchronized via `syncMaps()` in `maps.js`.  When any panel
 fires a `move` or `zoom` event, all other panels are updated to the same center
 and zoom level:

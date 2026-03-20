@@ -141,7 +141,7 @@ A consolidated **Export** dropdown provides three formats:
 
    **Or build from source:**
    ```bash
-   git clone https://github.com/sk818/TEE.git tee
+   git clone https://github.com/ucam-eo/TEE.git tee
    cd tee
    docker build -t tee .
    docker run -p 8001:8001 -v ~/tee_data:/data tee
@@ -158,7 +158,7 @@ A consolidated **Export** dropdown provides three formats:
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/sk818/TEE.git tee
+   git clone https://github.com/ucam-eo/TEE.git tee
    cd tee
    ```
 
@@ -211,7 +211,7 @@ Data is stored in `~/data/` by default (override with `TEE_DATA_DIR`). Logs go t
 **First-time setup:**
 ```bash
 cd /opt
-sudo git clone https://github.com/sk818/TEE.git tee
+sudo git clone https://github.com/ucam-eo/TEE.git tee
 cd /opt/tee
 sudo bash deploy.sh          # Creates tee user, venv, data dirs
 sudo -u tee /opt/tee/venv/bin/python3 scripts/manage_users.py add admin
@@ -385,7 +385,7 @@ python3 compute_umap.py {viewport_name} {year}
 
 Check pipeline status via:
 ```bash
-curl http://localhost:8001/api/operations/pipeline-status/{viewport_name}
+curl http://localhost:8001/api/operations/progress/{viewport_name}_pipeline
 ```
 
 ## API Reference
@@ -657,6 +657,6 @@ If you use this project in research, please cite:
   title={TEE: Tessera Embeddings Explorer},
   author={Keshav, S. and Claude Opus 4.6},
   year={2025},
-  url={https://github.com/sk818/TEE}
+  url={https://github.com/ucam-eo/TEE}
 }
 ```

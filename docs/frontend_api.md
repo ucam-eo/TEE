@@ -908,7 +908,7 @@ Which JS modules call which backend endpoints:
 | `evaluation.js` | `POST` | `/api/evaluation/run` (streaming NDJSON response) |
 | `evaluation.js` | `POST` | `/api/evaluation/finish-classifier` |
 | `evaluation.js` | `GET` | `/api/evaluation/download-model/{name}` |
-| `evaluation.js` | `POST` | `/api/evaluation/class-pixel-counts` |
+| `evaluation.js` | `POST` | `/api/evaluation/class-counts` |
 | `schema.js` | `GET` | `/schemas/ukhab-v2.json` (static file) |
 | (viewer.html inline) | `GET` | `/api/auth/status` |
 | (viewer.html inline) | `GET` | `/api/config` |

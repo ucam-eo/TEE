@@ -273,7 +273,7 @@
 
 <p>The <strong>Active</strong> bar appears below, showing the current label name, color, and instructions.</p>
 
-<p><strong>Schema support:</strong> Click <strong>Schema</strong> in the header to load a classification scheme (UKHab v2 or a custom JSON/CSV). A floating tree window opens &mdash; click any entry to set it as the active label with its code and color pre-filled.</p>
+<p><strong>Schema support:</strong> Click <strong>Schema</strong> in the header to load a classification scheme (UKHab v2, HOTW, or a custom JSON/text). A floating tree window opens &mdash; click any entry to set it as the active label with its code and color pre-filled.</p>
 
 <h3>Placing Point Labels (Pins)</h3>
 
@@ -591,6 +591,17 @@ predicted_names = [names[i] for i in predictions]</code></pre>
     <tr><td><strong>GeoJSON</strong></td><td>Points and polygons as a FeatureCollection, compatible with QGIS and GIS tools</td></tr>
     <tr><td><strong>ESRI Shapefile (ZIP)</strong></td><td>Zipped <code>.shp</code>/<code>.dbf</code>/<code>.shx</code>/<code>.prj</code> &mdash; the standard GIS interchange format. Can be shared with others and also uploaded back into TEE's Validation mode as ground-truth training data.</td></tr>
 </table>
+
+<h2>Sharing Labels</h2>
+
+<p>TEE supports two sharing modes, accessed via the <strong>Share</strong> button in the manual label toolbar:</p>
+
+<ul>
+    <li><strong>Private</strong> &mdash; sends only embedding vectors and label metadata (no geographic coordinates) to the Tessera global habitat directory. This contributes to improving Tessera's habitat classification without revealing your study site locations. Private shares are invisible to other users.</li>
+    <li><strong>Public</strong> &mdash; uploads a full ESRI Shapefile (with geolocations) that other users on the same server can browse and import for the same viewport. Public shares appear in the <strong>Import</strong> dropdown for anyone viewing that viewport.</li>
+</ul>
+
+<p>To share labels, set up your manual labels, click <strong>Share</strong>, choose Private or Public, fill in your name/email/organization, and click Submit. To import shared labels from other users, click <strong>Import</strong> and select from the list of available public shares.</p>
 
 <h2>PCA / UMAP Visualization (Panel 4)</h2>
 

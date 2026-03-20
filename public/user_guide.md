@@ -152,7 +152,7 @@ Before placing any labels, you must set the active label class:
 
 The **Active** bar appears below, showing the current label name, color, and instructions.
 
-**Schema support:** Click **Schema** in the header to load a classification scheme (UKHab v2 or a custom JSON/CSV). A floating tree window opens — click any entry to set it as the active label with its code and color pre-filled.
+**Schema support:** Click **Schema** in the header to load a classification scheme (UKHab v2, HOTW, or a custom JSON/text). A floating tree window opens — click any entry to set it as the active label with its code and color pre-filled.
 
 ### Placing Point Labels (Pins)
 
@@ -422,6 +422,15 @@ In manual label mode, the **Export** button in the labelling toolbar provides:
 | **JSON** | Compact metadata including embeddings and thresholds, for re-importing into TEE |
 | **GeoJSON** | Points and polygons as a FeatureCollection, compatible with QGIS and GIS tools |
 | **ESRI Shapefile (ZIP)** | Zipped `.shp`/`.dbf`/`.shx`/`.prj` — the standard GIS interchange format. Can be shared with others and also uploaded back into TEE's Validation mode as ground-truth training data. |
+
+## Sharing Labels
+
+TEE supports two sharing modes, accessed via the **Share** button in the manual label toolbar:
+
+- **Private** — sends only embedding vectors and label metadata (no geographic coordinates) to the Tessera global habitat directory. This contributes to improving Tessera's habitat classification without revealing your study site locations. Private shares are invisible to other users.
+- **Public** — uploads a full ESRI Shapefile (with geolocations) that other users on the same server can browse and import for the same viewport. Public shares appear in the **Import** dropdown for anyone viewing that viewport.
+
+To share labels, set up your manual labels, click **Share**, choose Private or Public, fill in your name/email/organization, and click Submit. To import shared labels from other users, click **Import** and select from the list of available public shares.
 
 ## PCA / UMAP Visualization (Panel 4)
 

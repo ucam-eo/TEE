@@ -24,15 +24,16 @@ across years, and evaluate classifiers against ground-truth shapefiles.
 ## Key Features
 
 - **Six-panel viewer** with four modes: explore, change-detection, labelling, validation
-- **Client-side similarity search** over 128-dim float32 embeddings (~1M vectors) using brute-force L2
+- **Client-side similarity search** over 128-dim float32 embeddings (~250K vectors per viewport) using brute-force L2
 - **PCA and UMAP** dimensionality reduction rendered as interactive 3D scatter plots (Three.js)
 - **K-means segmentation** via inline Web Worker with K-means++ initialisation
 - **Change-detection heatmap** comparing per-pixel embedding distances across years
 - **Manual labelling** with point, polygon, and similarity-expansion label types
-- **Hierarchical schema browser** for structured label ontologies (e.g. UKHab)
+- **Hierarchical schema browser** for structured label ontologies (UKHab, HOTW, or custom)
 - **ML evaluation pipeline** with streaming NDJSON learning curves (k-NN, RF, MLP, spatial MLP, U-Net)
 - **Confusion matrix** with interactive pop-up and percentage toggle
 - **Export** labels as JSON, GeoJSON, or ESRI Shapefile; download trained models
+- **Label sharing** — contribute to the Tessera global habitat directory (private) or share with other users (public)
 
 ---
 

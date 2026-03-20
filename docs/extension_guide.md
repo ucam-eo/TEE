@@ -452,7 +452,7 @@ Panel IDs follow the pattern:
 - Panel 2: `#map-rgb` (Leaflet map)
 - Panel 3: `#map-embedding` (Leaflet map)
 - Panel 4: `#map-umap` (Three.js container)
-- Panel 5: `#map-heatmap` (Leaflet map)
+- Panel 5: `#map-panel5` (Leaflet map)
 - Panel 6: `#map-embedding2` (Leaflet map) + HTML controls
 
 ---

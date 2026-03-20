@@ -17,9 +17,9 @@ these endpoints.
    - [Pipeline & Progress](#13-pipeline--progress--apiviewspipelinepy)
    - [Tiles](#14-tiles--apiviewstilespy)
    - [Evaluation](#15-evaluation--apiviewsevaluationpy)
-   - [Vector Data](#16-vector-data--apiviewsvector_datapy)
-   - [Config & Health](#17-config--health--apiviewsconfigpy)
-   - [Label Sharing](#19-label-sharing--apiviewssharepy)
+   - [Label Sharing](#16-label-sharing--apiviewssharepy)
+   - [Vector Data](#17-vector-data--apiviewsvector_datapy)
+   - [Config & Health](#18-config--health--apiviewsconfigpy)
 2. [Library Modules](#2-library-modules)
    - [lib/config.py](#21-libconfigpy--paths--directories)
    - [lib/viewport_utils.py](#22-libviewport_utilspy--viewport-readingvalidation)
@@ -519,7 +519,7 @@ Content-Disposition: attachment; filename="rf.joblib"
 
 ---
 
-### 1.9 Label Sharing — `api/views/share.py`
+### 1.6 Label Sharing — `api/views/share.py`
 
 **Overview:** Share labels with the Tessera team (private mode — embedding+label
 pairs only, no locations) or with other users (public mode — ESRI Shapefile with
@@ -622,7 +622,7 @@ Content-Disposition: attachment; filename="shared_labels_Alice_cambridge.zip"
 
 ---
 
-### 1.6 Vector Data — `api/views/vector_data.py`
+### 1.7 Vector Data — `api/views/vector_data.py`
 
 **Overview:** Serve raw vector data files for client-side operations (similarity search, UMAP, etc.). Files are served from the `vectors/<viewport>/<year>/` directory.
 
@@ -647,7 +647,7 @@ Response: application/gzip (binary file)
 
 ---
 
-### 1.7 Config & Health — `api/views/config.py`
+### 1.8 Config & Health — `api/views/config.py`
 
 **Overview:** Static file serving, health check, and client configuration.
 
@@ -1284,7 +1284,7 @@ with tasks_lock:
 
 #### `TileShortcircuitMiddleware`
 
-Performance optimisation: tile and bounds requests (`/api/tiles/`) skip all other middleware and go directly to the view.
+Performance optimisation: tile and bounds requests (`/tiles/`) skip all other middleware and go directly to the view.
 
 #### `DemoModeMiddleware`
 
