@@ -245,6 +245,8 @@ function setLabelMode(mode) {
         }
     }
     localStorage.setItem('labelMode', mode);
+    // Update shared labels badge
+    updateImportBadge();
 }
 
 function setCurrentManualLabel() {
@@ -2467,6 +2469,279 @@ document.addEventListener('DOMContentLoaded', () => {
 // ===== END PERSISTENT LABEL SYSTEM =====
 
 
+// ===== LABEL SHARING =====
+
+function toggleShareDropdown() {
+    const dropdown = document.getElementById('share-dropdown');
+    const importDD = document.getElementById('import-dropdown');
+    if (importDD) importDD.style.display = 'none';
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+    document.getElementById('share-status').textContent = '';
+}
+
+function toggleImportDropdown() {
+    const dropdown = document.getElementById('import-dropdown');
+    const shareDD = document.getElementById('share-dropdown');
+    if (shareDD) shareDD.style.display = 'none';
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+    if (dropdown.style.display === 'block') {
+        loadSharedLabelsList();
+    }
+}
+
+function collectPrivateShareData() {
+    const labels = [];
+    // From manualLabels
+    for (const l of manualLabels) {
+        if (l.embedding) {
+            labels.push({ name: l.name, code: l.code || null, embedding: l.embedding, type: l.type });
+        }
+        // Union-mode polygons: include individual embeddings
+        if (l.embeddings && l.embeddings.length > 0) {
+            for (const emb of l.embeddings) {
+                labels.push({ name: l.name, code: l.code || null, embedding: emb, type: l.type });
+            }
+        }
+    }
+    // From savedLabels
+    for (const l of savedLabels) {
+        if (l.embedding) {
+            labels.push({ name: l.name, code: null, embedding: l.embedding, type: 'similarity' });
+        }
+    }
+    return labels;
+}
+
+async function buildShapefileZip() {
+    // Dynamically load shp-write if needed
+    if (typeof shpwrite === 'undefined') {
+        await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/@mapbox/shp-write@0.3.2/shpwrite.js';
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
+    }
+
+    const points = [];
+    const polygons = [];
+
+    for (const l of manualLabels) {
+        const props = { name: l.name, color: l.color, code: l.code || '', type: l.type };
+        if (l.type === 'polygon' && l.vertices) {
+            const ring = l.vertices.map(v => [v[1], v[0]]);
+            ring.push(ring[0]);
+            polygons.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: props });
+        } else {
+            points.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [l.lon, l.lat] }, properties: props });
+        }
+    }
+    // Include savedLabels as points
+    for (const l of savedLabels) {
+        if (l.source_pixel) {
+            const props = { name: l.name, color: l.color, code: '', type: 'similarity' };
+            points.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [l.source_pixel.lon, l.source_pixel.lat] }, properties: props });
+        }
+    }
+
+    const gj = { type: 'FeatureCollection', features: [...points, ...polygons] };
+
+    if (typeof shpwrite !== 'undefined' && shpwrite.zip) {
+        return await shpwrite.zip(gj);
+    }
+    return null;
+}
+
+async function submitShare() {
+    const status = document.getElementById('share-status');
+    const privacy = document.querySelector('input[name="share-privacy"]:checked').value;
+    const name = document.getElementById('share-name').value.trim();
+    const email = document.getElementById('share-email').value.trim();
+    const org = document.getElementById('share-org').value.trim();
+
+    if (!name || !email || !org) {
+        status.textContent = 'Please fill in all fields';
+        status.style.color = '#e53e3e';
+        return;
+    }
+
+    const totalLabels = manualLabels.length + savedLabels.length;
+    if (totalLabels === 0) {
+        status.textContent = 'No labels to share';
+        status.style.color = '#e53e3e';
+        return;
+    }
+
+    // Build schema info
+    let schemaInfo = { mode: window.activeSchemaMode || 'none', data: null };
+    if (window.activeSchemaMode === 'custom' && window.activeSchema) {
+        schemaInfo.data = window.activeSchema;
+    }
+
+    status.textContent = 'Submitting...';
+    status.style.color = '#888';
+
+    try {
+        if (privacy === 'private') {
+            const labels = collectPrivateShareData();
+            const payload = {
+                format: 'private',
+                user: { name, email, organization: org },
+                viewport: window.currentViewportName,
+                schema: schemaInfo,
+                labels: labels,
+            };
+
+            const resp = await fetch('/api/share/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Submit failed');
+
+            status.textContent = `Shared ${labels.length} labels (private)`;
+            status.style.color = '#38a169';
+
+            if (document.getElementById('share-download-copy').checked) {
+                downloadFile(JSON.stringify(payload, null, 2),
+                    `shared_labels_private_${window.currentViewportName}.json`, 'application/json');
+            }
+        } else {
+            // Public mode: build shapefile ZIP
+            const zipContent = await buildShapefileZip();
+            if (!zipContent) {
+                status.textContent = 'Failed to create shapefile';
+                status.style.color = '#e53e3e';
+                return;
+            }
+
+            const metadata = {
+                format: 'public',
+                user: { name, email, organization: org },
+                viewport: window.currentViewportName,
+                viewport_bounds: window.viewportBounds ? {
+                    minLat: window.viewportBounds[0][0], minLon: window.viewportBounds[0][1],
+                    maxLat: window.viewportBounds[1][0], maxLon: window.viewportBounds[1][1],
+                } : null,
+                schema: schemaInfo,
+            };
+
+            const formData = new FormData();
+            formData.append('metadata', JSON.stringify(metadata));
+            formData.append('labels', new Blob([zipContent], { type: 'application/zip' }), 'labels.zip');
+
+            const resp = await fetch('/api/share/submit', {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Submit failed');
+
+            const featureCount = manualLabels.length + savedLabels.length;
+            status.textContent = `Shared ${featureCount} labels (public)`;
+            status.style.color = '#38a169';
+
+            if (document.getElementById('share-download-copy').checked) {
+                downloadFile(zipContent,
+                    `shared_labels_public_${window.currentViewportName}.zip`, 'application/zip');
+            }
+        }
+    } catch (e) {
+        status.textContent = `Error: ${e.message}`;
+        status.style.color = '#e53e3e';
+    }
+}
+
+async function loadSharedLabelsList() {
+    const section = document.getElementById('import-shared-section');
+    section.innerHTML = '<span style="color:#888; font-size:11px;">Loading...</span>';
+
+    try {
+        const resp = await fetch(`/api/share/list/${window.currentViewportName}`);
+        const data = await resp.json();
+        const shares = data.shares || [];
+
+        if (shares.length === 0) {
+            section.innerHTML = '<span style="color:#888; font-size:11px;">No shared labels for this viewport</span>';
+            return;
+        }
+
+        section.innerHTML = '<div style="color:#aaa; font-size:10px; margin-bottom:4px; padding:0 0 2px;">SHARED LABELS</div>';
+        for (const s of shares) {
+            const date = s.shared_at ? new Date(s.shared_at).toLocaleDateString() : '';
+            const btn = document.createElement('button');
+            btn.style.cssText = 'display:block; width:100%; padding:6px 0; background:none; border:none; color:#ccc; font-size:12px; text-align:left; cursor:pointer;';
+            btn.onmouseover = () => btn.style.background = '#444';
+            btn.onmouseout = () => btn.style.background = 'none';
+            btn.textContent = `${s.name} (${s.organization}) — ${date}`;
+            btn.title = s.email;
+            btn.onclick = () => {
+                document.getElementById('import-dropdown').style.display = 'none';
+                importSharedLabels(s.sanitized_email, window.currentViewportName);
+            };
+            section.appendChild(btn);
+        }
+    } catch (e) {
+        section.innerHTML = '<span style="color:#e53e3e; font-size:11px;">Failed to load shared labels</span>';
+    }
+}
+
+async function importSharedLabels(sanitizedEmail, viewport) {
+    try {
+        const resp = await fetch(`/api/share/download/${sanitizedEmail}/${viewport}`);
+        if (!resp.ok) {
+            const data = await resp.json();
+            alert(data.error || 'Download failed');
+            return;
+        }
+        const buf = await resp.arrayBuffer();
+        await window.importShapefile(buf);
+        console.log(`[SHARE] Imported shared labels from ${sanitizedEmail}/${viewport}`);
+    } catch (e) {
+        alert(`Error importing shared labels: ${e.message}`);
+    }
+}
+
+async function updateImportBadge() {
+    try {
+        const resp = await fetch(`/api/share/list/${window.currentViewportName}`);
+        const data = await resp.json();
+        const count = (data.shares || []).length;
+        const badge = document.getElementById('import-share-badge');
+        if (badge) {
+            if (count > 0) {
+                badge.textContent = count;
+                badge.style.display = '';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+    } catch (e) {
+        // silently ignore
+    }
+}
+
+// Close dropdowns on outside click
+document.addEventListener('click', function(e) {
+    const shareDD = document.getElementById('share-dropdown');
+    const shareBtn = document.getElementById('labelling-share-btn');
+    if (shareDD && shareDD.style.display !== 'none' &&
+        !shareDD.contains(e.target) && e.target !== shareBtn) {
+        shareDD.style.display = 'none';
+    }
+    const importDD = document.getElementById('import-dropdown');
+    const importBtn = document.getElementById('labelling-import-btn');
+    if (importDD && importDD.style.display !== 'none' &&
+        !importDD.contains(e.target) && e.target !== importBtn) {
+        importDD.style.display = 'none';
+    }
+});
+
+// ===== END LABEL SHARING =====
+
+
 // ── Window bridges for state shared with inline scripts ──
 
 Object.defineProperty(window, 'manualLabels', {
@@ -2548,6 +2823,15 @@ window.cancelPolygonDrawing = cancelPolygonDrawing;
 window.handlePolygonComplete = handlePolygonComplete;
 window.pointInPolygon = pointInPolygon;
 window.rasterizePolygon = rasterizePolygon;
+
+// Label sharing
+window.toggleShareDropdown = toggleShareDropdown;
+window.toggleImportDropdown = toggleImportDropdown;
+window.submitShare = submitShare;
+window.buildShapefileZip = buildShapefileZip;
+window.loadSharedLabelsList = loadSharedLabelsList;
+window.importSharedLabels = importSharedLabels;
+window.updateImportBadge = updateImportBadge;
 
 // Import/Export
 window.exportManualLabels = exportManualLabels;

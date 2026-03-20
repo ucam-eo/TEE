@@ -6,6 +6,7 @@ from .views.pipeline import operations_progress, cancel_processing
 from .views.vector_data import serve_vector_data
 from .views.config import get_config
 from .views.evaluation import upload_shapefile, class_pixel_counts, run_evaluation, download_model, finish_classifier
+from .views.share import submit_share, list_shares, download_share
 
 urlpatterns = [
     # Auth
@@ -35,4 +36,8 @@ urlpatterns = [
     path('evaluation/run', run_evaluation),
     path('evaluation/finish-classifier', finish_classifier),
     path('evaluation/download-model/<str:classifier>', download_model),
+    # Label sharing
+    path('share/submit', submit_share),
+    path('share/list/<str:viewport_name>', list_shares),
+    path('share/download/<str:sanitized_email>/<str:viewport_name>', download_share),
 ]

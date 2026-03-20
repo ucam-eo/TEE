@@ -429,7 +429,7 @@ class TestToolbarButtons:
     def test_labelling_share_btn_disabled(self, soup):
         btn = soup.find("button", id="labelling-share-btn")
         assert btn, "#labelling-share-btn missing"
-        assert btn.has_attr("disabled"), "Share button should be disabled"
+        assert "toggleShareDropdown" in str(btn), "Share button should call toggleShareDropdown"
 
     def test_toolbar_hidden_css(self, html):
         assert "body:not(.mode-labelling) .labelling-toolbar" in html

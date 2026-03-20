@@ -17,6 +17,7 @@ PYRAMIDS_DIR = DATA_DIR / 'pyramids'
 VECTORS_DIR = DATA_DIR / 'vectors'
 EMBEDDINGS_DIR = DATA_DIR / 'embeddings'
 PROGRESS_DIR = DATA_DIR / 'progress'
+SHARE_DIR = DATA_DIR / 'share'
 
 # Application directory - defaults to project root (parent of lib/)
 APP_DIR = Path(os.environ.get('TEE_APP_DIR', Path(__file__).resolve().parent.parent))
@@ -30,5 +31,5 @@ def pyramid_exists(year_dir):
 
 def ensure_dirs():
     """Create all required directories if they don't exist."""
-    for d in [DATA_DIR, MOSAICS_DIR, PYRAMIDS_DIR, VECTORS_DIR, EMBEDDINGS_DIR, PROGRESS_DIR, VIEWPORTS_DIR]:
+    for d in [DATA_DIR, MOSAICS_DIR, PYRAMIDS_DIR, VECTORS_DIR, EMBEDDINGS_DIR, PROGRESS_DIR, SHARE_DIR, VIEWPORTS_DIR]:
         d.mkdir(parents=True, exist_ok=True)

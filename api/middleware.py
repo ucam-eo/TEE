@@ -48,6 +48,7 @@ WRITE_ENDPOINTS = {
     '/api/downloads/process',
     '/api/evaluation/upload-shapefile',
     '/api/evaluation/run',
+    '/api/share/submit',
 }
 
 
