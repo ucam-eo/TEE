@@ -32,7 +32,7 @@ def load_vectors(viewport, year):
     """Load dequantized float32 vectors + pixel coords + metadata."""
     vector_dir = VECTORS_DIR / viewport / str(year)
 
-    emb_path = vector_dir / "all_vectors_uint8.npy.gz"
+    emb_path = vector_dir / "all_embeddings_uint8.npy.gz"
     quant_path = vector_dir / "quantization.json"
     coords_path = vector_dir / "pixel_coords.npy.gz"
     meta_path = vector_dir / "metadata.json"
