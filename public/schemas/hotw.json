@@ -1,0 +1,3158 @@
+{
+  "name": "HOTW Continental Guides",
+  "tree": [
+    {
+      "code": "AA",
+      "name": "Oceania",
+      "children": [
+        {
+          "code": "AA1",
+          "name": "Coniferous Forest",
+          "children": [
+            {
+              "code": "AA1A",
+              "name": "NZ Kauri Forest",
+              "children": []
+            },
+            {
+              "code": "AA1B",
+              "name": "NZ Podocarpus Forest",
+              "children": []
+            },
+            {
+              "code": "AA1C",
+              "name": "New Caledonian Araucaria Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "AA2",
+          "name": "Desert and Xeric",
+          "children": [
+            {
+              "code": "AA2",
+              "name": "New Zealand Grassland",
+              "children": []
+            },
+            {
+              "code": "AA2A",
+              "name": "Antarctic Polar Desert",
+              "children": []
+            },
+            {
+              "code": "AA2B",
+              "name": "Galapagos Opuntia woodlands",
+              "children": []
+            },
+            {
+              "code": "AA2C",
+              "name": "Falklands Steppe",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "AA3",
+          "name": "Temperate Broadleaf Forest",
+          "children": [
+            {
+              "code": "AA3A",
+              "name": "New Zealand Beech Forest",
+              "children": []
+            },
+            {
+              "code": "AA3B",
+              "name": "New Zealand Mixed Forest",
+              "children": []
+            },
+            {
+              "code": "AA3C",
+              "name": "New Zealand Elfin Forest and shrubland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "AA4",
+          "name": "Tropical Moist Forest",
+          "children": [
+            {
+              "code": "AA4A",
+              "name": "Sulawesi Lowland Rainforest",
+              "children": []
+            },
+            {
+              "code": "AA4B",
+              "name": "Lesser Sundas Lowland Rainforest",
+              "children": []
+            },
+            {
+              "code": "AA4C",
+              "name": "Moluccan Lowland Forest",
+              "children": []
+            },
+            {
+              "code": "AA4D",
+              "name": "Pacific Lowland Volcanic Forest",
+              "children": []
+            },
+            {
+              "code": "AA4F",
+              "name": "Wetar Gorge Forests",
+              "children": []
+            },
+            {
+              "code": "AA4G",
+              "name": "New Caledonian Rainforest",
+              "children": []
+            },
+            {
+              "code": "AA4I",
+              "name": "Sulawesi Montane and Cloud Forest",
+              "children": []
+            },
+            {
+              "code": "AA4J",
+              "name": "Moluccan Montane Forest",
+              "children": []
+            },
+            {
+              "code": "AA4K",
+              "name": "Montane limestone karst forest",
+              "children": []
+            },
+            {
+              "code": "AA4L",
+              "name": "Galapagos Scalesia Cloudforest",
+              "children": []
+            },
+            {
+              "code": "AA4LM",
+              "name": "Pacific Islands Cloudforest",
+              "children": []
+            },
+            {
+              "code": "AA4N",
+              "name": "Christmas Island tropical evergreen forest",
+              "children": []
+            },
+            {
+              "code": "AA4O",
+              "name": "Lord Howe Rainforest",
+              "children": []
+            },
+            {
+              "code": "AA4P",
+              "name": "Rata Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "AA5",
+          "name": "Tropical Dry Forest",
+          "children": [
+            {
+              "code": "AA5A",
+              "name": "Lesser Sundas lowland monsoon",
+              "children": []
+            },
+            {
+              "code": "AA5B",
+              "name": "Tangkoko coastal monsoon forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "AA6",
+          "name": "Savanna and Woodland",
+          "children": [
+            {
+              "code": "AA6A",
+              "name": "Alba Open Savanna",
+              "children": []
+            },
+            {
+              "code": "AA6B",
+              "name": "Pacific Savanna",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "AA7",
+          "name": "Grassland and Steppe",
+          "children": [
+            {
+              "code": "AA7A",
+              "name": "Lesser Sundas natural and semi‑natural grasslands",
+              "children": []
+            },
+            {
+              "code": "AA7B",
+              "name": "Pacific Grassland",
+              "children": []
+            },
+            {
+              "code": "AA7B",
+              "name": "Subantarctic Tussock Grasslands",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "AA8",
+          "name": "Heathland and Scrub",
+          "children": [
+            {
+              "code": "AA8A",
+              "name": "New Caledonian Heathland",
+              "children": []
+            },
+            {
+              "code": "AA8B",
+              "name": "New Zealand Coast Heathland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "AA9",
+          "name": "Sclerophyll Forest",
+          "children": [
+            {
+              "code": "AA9A",
+              "name": "Timor Montane Sclerophyll Forest",
+              "children": []
+            },
+            {
+              "code": "AA9B",
+              "name": "New Caledonian Sclerophyll Forest",
+              "children": []
+            },
+            {
+              "code": "AA9C",
+              "name": "Phyllica Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "AA10",
+          "name": "Tundra and Alpine",
+          "children": [
+            {
+              "code": "AA10B",
+              "name": "New Zealand Alpine Tundra and Tussock",
+              "children": []
+            },
+            {
+              "code": "AA10C",
+              "name": "Subantarctic Tundra",
+              "children": []
+            },
+            {
+              "code": "AA10D",
+              "name": "Megaherb Tundra",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "AA11",
+          "name": "Freshwater Wetlands",
+          "children": [
+            {
+              "code": "AA11A",
+              "name": "Pacific Rivers",
+              "children": []
+            },
+            {
+              "code": "AA11B",
+              "name": "Pacific Tropical Freshwater Wetlands",
+              "children": []
+            },
+            {
+              "code": "AA11E",
+              "name": "Pacific Bogs and Fens",
+              "children": []
+            },
+            {
+              "code": "AA11E",
+              "name": "Peat Swamps",
+              "children": []
+            },
+            {
+              "code": "AA11F",
+              "name": "Antarctic Fast Ice and Icebergs",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "AA12",
+          "name": "Coastal and Marine",
+          "children": [
+            {
+              "code": "AA12A",
+              "name": "Pacific Tropical Mangroves",
+              "children": []
+            },
+            {
+              "code": "AA12B",
+              "name": "Oceanic Temperate Mangrove",
+              "children": []
+            },
+            {
+              "code": "AA12C",
+              "name": "Pacific Tidal Mudflats and Estuaries",
+              "children": []
+            },
+            {
+              "code": "AA12D",
+              "name": "Pacific Salt Marsh",
+              "children": []
+            },
+            {
+              "code": "AA12E",
+              "name": "Pacific Tropical Sandy beaches",
+              "children": []
+            },
+            {
+              "code": "AA12F",
+              "name": "Oceanic Temperate and Subantarctic Sandy beaches",
+              "children": []
+            },
+            {
+              "code": "AA12G",
+              "name": "Oceanic Tropical Rocky shore and headlands",
+              "children": []
+            },
+            {
+              "code": "AA12H",
+              "name": "Temperate and Subantarctic Rocky Shore and Headlands",
+              "children": []
+            },
+            {
+              "code": "AA12I",
+              "name": "Atolls and Cays",
+              "children": []
+            },
+            {
+              "code": "AA12J",
+              "name": "Tropical Pacific and Indian Ocean Pelagic",
+              "children": []
+            },
+            {
+              "code": "AA12K",
+              "name": "Tropical Atlantic Pelagic Waters",
+              "children": []
+            },
+            {
+              "code": "AA12L",
+              "name": "Southern Pacific Temperate Pelagic Waters",
+              "children": []
+            },
+            {
+              "code": "AA12M",
+              "name": "Southern Atlantic and Indian Temperate Pelagic Waters",
+              "children": []
+            },
+            {
+              "code": "AA12N",
+              "name": "Antarctic and Subantarctic Pelagic Waters",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "AAi",
+      "name": "Antarctic Islands",
+      "children": [
+        {
+          "code": "AAi10",
+          "name": "Tundra and Alpine",
+          "children": [
+            {
+              "code": "AAi10A",
+              "name": "Antarctic Tundra",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "AAi11",
+          "name": "Freshwater Wetlands",
+          "children": [
+            {
+              "code": "AAi11C",
+              "name": "Oceanic Temperate Freshwater Wetlands",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "Af",
+      "name": "Afrotropic",
+      "children": [
+        {
+          "code": "Af1",
+          "name": "Coniferous Forest",
+          "children": [
+            {
+              "code": "Af1A",
+              "name": "Maghreb Fir and Cedar Forest",
+              "children": []
+            },
+            {
+              "code": "Af1B",
+              "name": "Maghreb Juniper Open Woodland",
+              "children": []
+            },
+            {
+              "code": "Af1C",
+              "name": "Afrotropical Montane Dry Mixed Woodland",
+              "children": []
+            },
+            {
+              "code": "Af1D",
+              "name": "Maghreb Pine Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Af2",
+          "name": "Desert and Xeric",
+          "children": [
+            {
+              "code": "Af2A",
+              "name": "Saharan Reg Desert",
+              "children": []
+            },
+            {
+              "code": "Af2B",
+              "name": "Namib Rock Desert",
+              "children": []
+            },
+            {
+              "code": "Af2C",
+              "name": "Saharan Erg Desert",
+              "children": []
+            },
+            {
+              "code": "Af2D",
+              "name": "Namib Sand Desert",
+              "children": []
+            },
+            {
+              "code": "Af2E",
+              "name": "Rocky Hamada and Massif",
+              "children": []
+            },
+            {
+              "code": "Af2F",
+              "name": "Nama Karoo",
+              "children": []
+            },
+            {
+              "code": "Af2G",
+              "name": "Succulent Karoo",
+              "children": []
+            },
+            {
+              "code": "Af2H",
+              "name": "Maghreb Hot Shrub Desert",
+              "children": []
+            },
+            {
+              "code": "Af2I",
+              "name": "Afrotropical Hot Shrub Desert",
+              "children": []
+            },
+            {
+              "code": "Af2J",
+              "name": "Spiny Forest",
+              "children": []
+            },
+            {
+              "code": "Af2L",
+              "name": "Dragon’s Blood Tree Semi-desert",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Af3",
+          "name": "Temperate Broadleaf Forest",
+          "children": [
+            {
+              "code": "Af3A",
+              "name": "Laurel Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Af4",
+          "name": "Tropical Moist Forest",
+          "children": [
+            {
+              "code": "Af4A",
+              "name": "Afrotropical Lowland Rainforest",
+              "children": []
+            },
+            {
+              "code": "Af4C",
+              "name": "Monsoon Forest",
+              "children": []
+            },
+            {
+              "code": "Af4D",
+              "name": "East Coast Forest Matrix",
+              "children": []
+            },
+            {
+              "code": "Af4E",
+              "name": "South Coast Forest Matrix",
+              "children": []
+            },
+            {
+              "code": "Af4F",
+              "name": "(African) Swamp Forest",
+              "children": []
+            },
+            {
+              "code": "Af4G",
+              "name": "(African) Moist Montane Forest",
+              "children": []
+            },
+            {
+              "code": "Af4J",
+              "name": "Indian Ocean Lowland Rainforest",
+              "children": []
+            },
+            {
+              "code": "Af4K",
+              "name": "Indian Ocean Montane Rainforest",
+              "children": []
+            },
+            {
+              "code": "Af4L",
+              "name": "Seychelles Granite Forest",
+              "children": []
+            },
+            {
+              "code": "Af4M",
+              "name": "Mavunda",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Af5",
+          "name": "Tropical Dry Forest",
+          "children": [
+            {
+              "code": "Af5A",
+              "name": "Malagasy Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "Af5B",
+              "name": "Angolan Deciduous Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Af6",
+          "name": "Savanna and Woodland",
+          "children": [
+            {
+              "code": "Af6A",
+              "name": "Mopane",
+              "children": []
+            },
+            {
+              "code": "Af6B",
+              "name": "Northern Dry Thorn Savanna",
+              "children": []
+            },
+            {
+              "code": "Af6C",
+              "name": "Kalahari Dry Thorn Savanna",
+              "children": []
+            },
+            {
+              "code": "Af6D",
+              "name": "Moist Mixed Savanna",
+              "children": []
+            },
+            {
+              "code": "Af6E",
+              "name": "Miombo",
+              "children": []
+            },
+            {
+              "code": "Af6F",
+              "name": "Guinea Savanna",
+              "children": []
+            },
+            {
+              "code": "Af6G",
+              "name": "Inselbergs and Koppies",
+              "children": []
+            },
+            {
+              "code": "Af6H",
+              "name": "Gusu",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Af7",
+          "name": "Grassland and Steppe",
+          "children": [
+            {
+              "code": "Af7A",
+              "name": "Afrotropical Grassland",
+              "children": []
+            },
+            {
+              "code": "Af7E",
+              "name": "Malagasy Grassland and Savanna",
+              "children": []
+            },
+            {
+              "code": "Af7F",
+              "name": "African Montane Grassland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Af8",
+          "name": "Heathland and Scrub",
+          "children": [
+            {
+              "code": "Af8A",
+              "name": "Fynbos",
+              "children": []
+            },
+            {
+              "code": "Af8B",
+              "name": "Strandveld",
+              "children": []
+            },
+            {
+              "code": "Af8C",
+              "name": "Renosterveld",
+              "children": []
+            },
+            {
+              "code": "Af8D",
+              "name": "Maghreb Maquis",
+              "children": []
+            },
+            {
+              "code": "Af8E",
+              "name": "Maghreb Garrigue",
+              "children": []
+            },
+            {
+              "code": "Af8F",
+              "name": "Maghreb Broadleaf Woodland",
+              "children": []
+            },
+            {
+              "code": "Af8G",
+              "name": "Albany Thicket",
+              "children": []
+            },
+            {
+              "code": "Af8H",
+              "name": "Tapia",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Af10",
+          "name": "Tundra and Alpine",
+          "children": [
+            {
+              "code": "Af10A",
+              "name": "Afroparamo",
+              "children": []
+            },
+            {
+              "code": "Af10B",
+              "name": "High Atlas Alpine Meadow",
+              "children": []
+            },
+            {
+              "code": "Af10C",
+              "name": "(Afro) Montane Heath",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Af11",
+          "name": "Freshwater Wetlands",
+          "children": [
+            {
+              "code": "Af11A",
+              "name": "Afrotropical Deep Freshwater Marsh",
+              "children": []
+            },
+            {
+              "code": "Af11B",
+              "name": "Afrotropical Shallow Freshwater Marsh",
+              "children": []
+            },
+            {
+              "code": "Af11C",
+              "name": "North African Temperate Wetland",
+              "children": []
+            },
+            {
+              "code": "Af11D",
+              "name": "South African Temperate Wetland",
+              "children": []
+            },
+            {
+              "code": "Af11E",
+              "name": "Freshwater Lakes and Ponds",
+              "children": []
+            },
+            {
+              "code": "Af11F",
+              "name": "Afrotropical Rivers",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Af12",
+          "name": "Coastal and Marine",
+          "children": [
+            {
+              "code": "Af12A",
+              "name": "Afrotropical Mangrove",
+              "children": []
+            },
+            {
+              "code": "Af12B",
+              "name": "(African) Salt Pans and Lakes",
+              "children": []
+            },
+            {
+              "code": "Af12C",
+              "name": "(African) Tidal Mudflats and Estuaries",
+              "children": []
+            },
+            {
+              "code": "Af12D",
+              "name": "(African) Salt Marsh",
+              "children": []
+            },
+            {
+              "code": "Af12E",
+              "name": "(African) Sandy Beach and Dunes",
+              "children": []
+            },
+            {
+              "code": "Af12F",
+              "name": "(African) Rocky Shoreline",
+              "children": []
+            },
+            {
+              "code": "Af12G",
+              "name": "(African) Offshore Islands",
+              "children": []
+            },
+            {
+              "code": "Af12H",
+              "name": "African Temperate Pelagic Waters",
+              "children": []
+            },
+            {
+              "code": "Af12K",
+              "name": "African Tropical Pelagicic",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "An",
+      "name": "Oceania (Annexe)",
+      "children": [
+        {
+          "code": "An4",
+          "name": "Tropical Moist Forest",
+          "children": [
+            {
+              "code": "An4E",
+              "name": "Pacific Lowland Karst Forest",
+              "children": []
+            },
+            {
+              "code": "An4H",
+              "name": "Lesser Sundas Montane Forest",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "As",
+      "name": "Asia",
+      "children": [
+        {
+          "code": "As1",
+          "name": "Coniferous Forest",
+          "children": [
+            {
+              "code": "As1A",
+              "name": "Siberian Tundra Taiga",
+              "children": []
+            },
+            {
+              "code": "As1B",
+              "name": "Siberian Spruce Taiga",
+              "children": []
+            },
+            {
+              "code": "As1C",
+              "name": "Siberian Larch Taiga",
+              "children": []
+            },
+            {
+              "code": "As1D",
+              "name": "Siberian Pine Taiga",
+              "children": []
+            },
+            {
+              "code": "As1E",
+              "name": "Asian Coniferous Peat Woodland",
+              "children": []
+            },
+            {
+              "code": "As1F",
+              "name": "Himalayan Pine Forest",
+              "children": []
+            },
+            {
+              "code": "As1G",
+              "name": "Middle Eastern Pine Forest",
+              "children": []
+            },
+            {
+              "code": "As1H",
+              "name": "East Asian Pine Forest",
+              "children": []
+            },
+            {
+              "code": "As1I",
+              "name": "Asian Tropical Pine Forest",
+              "children": []
+            },
+            {
+              "code": "As1J",
+              "name": "Pacific Conifer Forest",
+              "children": []
+            },
+            {
+              "code": "As1K",
+              "name": "Himalayan Spruce-Fir Forest",
+              "children": []
+            },
+            {
+              "code": "As1L",
+              "name": "Fir-Rhododendron Forest",
+              "children": []
+            },
+            {
+              "code": "As1M",
+              "name": "West Asian Juniper Woodland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "As2",
+          "name": "Desert and Xeric",
+          "children": [
+            {
+              "code": "As2A",
+              "name": "Asian Cold Erg Desert",
+              "children": []
+            },
+            {
+              "code": "As2B",
+              "name": "Turanian Dune Desert",
+              "children": []
+            },
+            {
+              "code": "As2C",
+              "name": "Middle Eastern Erg Desert",
+              "children": []
+            },
+            {
+              "code": "As2D",
+              "name": "Asian Cold Reg and Hamada",
+              "children": []
+            },
+            {
+              "code": "As2E",
+              "name": "Middle Eastern Reg",
+              "children": []
+            },
+            {
+              "code": "As2F",
+              "name": "Middle Eastern Hamada and Massif",
+              "children": []
+            },
+            {
+              "code": "As2G",
+              "name": "Himalayan Alpine Desert",
+              "children": []
+            },
+            {
+              "code": "As2H",
+              "name": "Caspian Sagebrush Desert",
+              "children": []
+            },
+            {
+              "code": "As2I",
+              "name": "Caspian Shrub Desert",
+              "children": []
+            },
+            {
+              "code": "As2J",
+              "name": "Mongolian Shrub Desert",
+              "children": []
+            },
+            {
+              "code": "As2K",
+              "name": "Middle Eastern Shrub Desert",
+              "children": []
+            },
+            {
+              "code": "As2L",
+              "name": "Mongolian Desert Steppe",
+              "children": []
+            },
+            {
+              "code": "As2M",
+              "name": "Indian Desert Steppe",
+              "children": []
+            },
+            {
+              "code": "As2N",
+              "name": "Iranian Montane Desert Steppe",
+              "children": []
+            },
+            {
+              "code": "As2O",
+              "name": "Middle Eastern Thorn Scrub",
+              "children": []
+            },
+            {
+              "code": "As2P",
+              "name": "Deccan Thorn Scrub",
+              "children": []
+            },
+            {
+              "code": "As2Q",
+              "name": "Bagan Thorn Scrub",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "As3",
+          "name": "Temperate Broadleaf Forest",
+          "children": [
+            {
+              "code": "As3A",
+              "name": "Manchurian Mixed Forest",
+              "children": []
+            },
+            {
+              "code": "As3B",
+              "name": "Pacific Temperate Oak Forest",
+              "children": []
+            },
+            {
+              "code": "As3C",
+              "name": "Asian Mixed Mesophytic Forest",
+              "children": []
+            },
+            {
+              "code": "As3D",
+              "name": "Hyrcanian Temperate Deciduous Rainforest",
+              "children": []
+            },
+            {
+              "code": "As3E",
+              "name": "Himalayan Temperate Mixed Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "As3F",
+              "name": "Siberian Subarctic Riparian Woodland",
+              "children": []
+            },
+            {
+              "code": "As3G",
+              "name": "Turanian Riparian Scrub",
+              "children": []
+            },
+            {
+              "code": "As3H",
+              "name": "East Asian Riparian Forest",
+              "children": []
+            },
+            {
+              "code": "As3I",
+              "name": "Snowbed and Krummholz",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "As4",
+          "name": "Tropical Moist Forest",
+          "children": [
+            {
+              "code": "As4A",
+              "name": "Asian Lowland Tropical Rainforest",
+              "children": []
+            },
+            {
+              "code": "As4B",
+              "name": "Southeast Asian Semi-Evergreen Rainforest",
+              "children": []
+            },
+            {
+              "code": "As4C",
+              "name": "Malabar Semi-evergreen Rainforest",
+              "children": []
+            },
+            {
+              "code": "As4D",
+              "name": "Sunda Montane Rainforest",
+              "children": []
+            },
+            {
+              "code": "As4E",
+              "name": "Indochinese Montane Rainforest",
+              "children": []
+            },
+            {
+              "code": "As4F",
+              "name": "Philippine Montane Rainforest",
+              "children": []
+            },
+            {
+              "code": "As4G",
+              "name": "Shola Forest",
+              "children": []
+            },
+            {
+              "code": "As4H",
+              "name": "Himalayan Subtropical Broadleaf Forest",
+              "children": []
+            },
+            {
+              "code": "As4I",
+              "name": "Chinese Subtropical Rainforest",
+              "children": []
+            },
+            {
+              "code": "As4J",
+              "name": "Asian Peat Swamp Forest",
+              "children": []
+            },
+            {
+              "code": "As4K",
+              "name": "Kerangas",
+              "children": []
+            },
+            {
+              "code": "As4L",
+              "name": "Asian Limestone Forest",
+              "children": []
+            },
+            {
+              "code": "As4M",
+              "name": "Lowland Tropical Bamboo Forest",
+              "children": []
+            },
+            {
+              "code": "As4N",
+              "name": "Montane Tropical Bamboo Forest",
+              "children": []
+            },
+            {
+              "code": "As4O",
+              "name": "Temperate Bamboo Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "As5",
+          "name": "Tropical Dry Forest",
+          "children": [
+            {
+              "code": "As5A",
+              "name": "Indian Moist Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "As5B",
+              "name": "Southeast Asian Moist Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "As5C",
+              "name": "Sal Forest",
+              "children": []
+            },
+            {
+              "code": "As5D",
+              "name": "Indian Dry Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "As5E",
+              "name": "Southeast Asian Dry Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "As5F",
+              "name": "Teak Forest",
+              "children": []
+            },
+            {
+              "code": "As5G",
+              "name": "East Deccan Evergreen Scrub",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "As6",
+          "name": "Savanna and Woodland",
+          "children": [
+            {
+              "code": "As6A",
+              "name": "Middle Eastern Savanna",
+              "children": []
+            },
+            {
+              "code": "As6B",
+              "name": "Southwest Arabian Savanna",
+              "children": []
+            },
+            {
+              "code": "As6C",
+              "name": "Indochinese Savanna",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "As7",
+          "name": "Grassland and Steppe",
+          "children": [
+            {
+              "code": "As7A",
+              "name": "Asian Forest Steppe",
+              "children": []
+            },
+            {
+              "code": "As7B",
+              "name": "Terai Flooded Grassland",
+              "children": []
+            },
+            {
+              "code": "As7C",
+              "name": "Southeast Asian Flooded Grassland",
+              "children": []
+            },
+            {
+              "code": "As7D",
+              "name": "Indian Tropical Grassland",
+              "children": []
+            },
+            {
+              "code": "As7E",
+              "name": "East Asian Temperate Grassland",
+              "children": []
+            },
+            {
+              "code": "As7F",
+              "name": "East Asian Montane Grassland",
+              "children": []
+            },
+            {
+              "code": "As7G",
+              "name": "Asian Alpine Meadow and Steppe",
+              "children": []
+            },
+            {
+              "code": "As7H",
+              "name": "Shola Grasslands",
+              "children": []
+            },
+            {
+              "code": "As7J",
+              "name": "Mongolian Grass Steppe",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "As8",
+          "name": "Heathland and Scrub",
+          "children": [
+            {
+              "code": "As8A",
+              "name": "Middle Eastern Maquis",
+              "children": []
+            },
+            {
+              "code": "As8B",
+              "name": "Batha-Garrigue",
+              "children": []
+            },
+            {
+              "code": "As8C",
+              "name": "Asian Moorland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "As10",
+          "name": "Tundra and Alpine",
+          "children": [
+            {
+              "code": "As10A",
+              "name": "Asian Polar Desert",
+              "children": []
+            },
+            {
+              "code": "As10B",
+              "name": "Asian Cryptic Tundra",
+              "children": []
+            },
+            {
+              "code": "As10C",
+              "name": "Siberian Rocky Tundra",
+              "children": []
+            },
+            {
+              "code": "As10D",
+              "name": "Siberian Boggy Tundra",
+              "children": []
+            },
+            {
+              "code": "As10E",
+              "name": "Siberian Shrubby Tundra",
+              "children": []
+            },
+            {
+              "code": "As10F",
+              "name": "Asian Alpine and Nivel Tundra",
+              "children": []
+            },
+            {
+              "code": "As10G",
+              "name": "Kinabalu Paramo",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "As11",
+          "name": "Freshwater Wetlands",
+          "children": [
+            {
+              "code": "As11A",
+              "name": "Asian Tropical Wetland",
+              "children": []
+            },
+            {
+              "code": "As11B",
+              "name": "Asian Temperate Wetland",
+              "children": []
+            },
+            {
+              "code": "As11C",
+              "name": "Freshwater Swamp Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "As12",
+          "name": "Coastal and Marine",
+          "children": [
+            {
+              "code": "As12A",
+              "name": "Asian Mangrove Forest",
+              "children": []
+            },
+            {
+              "code": "As12B",
+              "name": "Asian Salt Marsh",
+              "children": []
+            },
+            {
+              "code": "As12C",
+              "name": "Asian Tidal Mudflat",
+              "children": []
+            },
+            {
+              "code": "As12D",
+              "name": "Asian Salt Pan",
+              "children": []
+            },
+            {
+              "code": "As12E",
+              "name": "Asian Tropical Rocky Coastline",
+              "children": []
+            },
+            {
+              "code": "As12F",
+              "name": "Asian Arctic and Temperate Rocky Coastline",
+              "children": []
+            },
+            {
+              "code": "As12G",
+              "name": "Asian Sandy Beach",
+              "children": []
+            },
+            {
+              "code": "As12H",
+              "name": "Asian Temperate and Arctic  Pelagic",
+              "children": []
+            },
+            {
+              "code": "As12I",
+              "name": "Asian Tropical Pelagic Waters",
+              "children": []
+            },
+            {
+              "code": "As12J",
+              "name": "Asian Tropical Cay and Islands",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "Au",
+      "name": "Australasia",
+      "children": [
+        {
+          "code": "Au2",
+          "name": "Desert and Xeric",
+          "children": [
+            {
+              "code": "Au2A",
+              "name": "Dune Spinifex Desert",
+              "children": []
+            },
+            {
+              "code": "Au2B",
+              "name": "Dunecrest Canegrass",
+              "children": []
+            },
+            {
+              "code": "Au2C",
+              "name": "Rocky Spinifex Desert",
+              "children": []
+            },
+            {
+              "code": "Au2D",
+              "name": "Chenopod Shrubland",
+              "children": []
+            },
+            {
+              "code": "Au2E",
+              "name": "Gibber Chenopodland",
+              "children": []
+            },
+            {
+              "code": "Au2F",
+              "name": "Samphire Flat",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Au4",
+          "name": "Tropical Moist Forest",
+          "children": [
+            {
+              "code": "Au4A",
+              "name": "Australasian Lowland Rainforest",
+              "children": []
+            },
+            {
+              "code": "Au4B",
+              "name": "Australian Subtropical Rainforest",
+              "children": []
+            },
+            {
+              "code": "Au4C",
+              "name": "Australasian Tropical Montane Rainforest",
+              "children": []
+            },
+            {
+              "code": "Au4D",
+              "name": "New Guinea Hill Forest",
+              "children": []
+            },
+            {
+              "code": "Au4E",
+              "name": "New Guinea High-Montane Rainforest",
+              "children": []
+            },
+            {
+              "code": "Au4F",
+              "name": "Nothofagus Forest",
+              "children": []
+            },
+            {
+              "code": "Au4G",
+              "name": "Australian Temperate Rainforest",
+              "children": []
+            },
+            {
+              "code": "Au4H",
+              "name": "Australasian Littoral Rainforest",
+              "children": []
+            },
+            {
+              "code": "Au4I",
+              "name": "Australasian Swamp Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Au5",
+          "name": "Tropical Dry Forest",
+          "children": [
+            {
+              "code": "Au5A",
+              "name": "Australian Dry Vineforest",
+              "children": []
+            },
+            {
+              "code": "Au5B",
+              "name": "Australasian Monsoon Vineforest",
+              "children": []
+            },
+            {
+              "code": "Au5C",
+              "name": "Brigalow",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Au6",
+          "name": "Savanna and Woodland",
+          "children": [
+            {
+              "code": "Au6A",
+              "name": "Open Eucalypt Savanna",
+              "children": []
+            },
+            {
+              "code": "Au6B",
+              "name": "Spinifex Eucalypt Savanna",
+              "children": []
+            },
+            {
+              "code": "Au6C",
+              "name": "Tetrodonta Woodland Savanna",
+              "children": []
+            },
+            {
+              "code": "Au6D",
+              "name": "Shrubby Eucalypt Savanna",
+              "children": []
+            },
+            {
+              "code": "Au6F",
+              "name": "Northern Acacia Savanna",
+              "children": []
+            },
+            {
+              "code": "Au6G",
+              "name": "Melaleuca Savanna",
+              "children": []
+            },
+            {
+              "code": "Au6H",
+              "name": "Melaleuca Riverine Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Au7",
+          "name": "Grassland and Steppe",
+          "children": [
+            {
+              "code": "Au7A",
+              "name": "Tropical Tussock Grassland",
+              "children": []
+            },
+            {
+              "code": "Au7B",
+              "name": "AustralianTemperate Tussock Grassland",
+              "children": []
+            },
+            {
+              "code": "Au7C",
+              "name": "Australian Montane Grassland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Au8",
+          "name": "Heathland and Scrub",
+          "children": [
+            {
+              "code": "Au8A",
+              "name": "Wallum and Ausbos",
+              "children": []
+            },
+            {
+              "code": "Au8B",
+              "name": "Arid Heathland",
+              "children": []
+            },
+            {
+              "code": "Au8C",
+              "name": "(Australasian) Tropical Heathland",
+              "children": []
+            },
+            {
+              "code": "Au8D",
+              "name": "Kwongan Heathland",
+              "children": []
+            },
+            {
+              "code": "Au8F",
+              "name": "(Australasian) Montane Heathland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Au9",
+          "name": "Sclerophyll Forest",
+          "children": [
+            {
+              "code": "Au9A",
+              "name": "Grassy Wet Sclerophyll Forest",
+              "children": []
+            },
+            {
+              "code": "Au9B",
+              "name": "Rainforest Wet Sclerophyll Forest",
+              "children": []
+            },
+            {
+              "code": "Au9C",
+              "name": "Karri Forest",
+              "children": []
+            },
+            {
+              "code": "Au9D",
+              "name": "Grassy Dry Sclerophyll Forest",
+              "children": []
+            },
+            {
+              "code": "Au9E",
+              "name": "Heathy Dry Sclerophyll Forest",
+              "children": []
+            },
+            {
+              "code": "Au9F",
+              "name": "Jarrah-Marri Forest",
+              "children": []
+            },
+            {
+              "code": "Au9G",
+              "name": "Ironbark-Box Woodland",
+              "children": []
+            },
+            {
+              "code": "Au9H",
+              "name": "Inland Riverine Woodland",
+              "children": []
+            },
+            {
+              "code": "Au9I",
+              "name": "Sheoak Riparian Forest",
+              "children": []
+            },
+            {
+              "code": "Au9J",
+              "name": "Subalpine Eucalypt Woodland",
+              "children": []
+            },
+            {
+              "code": "Au9K",
+              "name": "Inland Rocky Shrubby Woodland",
+              "children": []
+            },
+            {
+              "code": "Au9L",
+              "name": "Mixed Sandplain Woodland",
+              "children": []
+            },
+            {
+              "code": "Au9M",
+              "name": "Heathy Mallee",
+              "children": []
+            },
+            {
+              "code": "Au9N",
+              "name": "Shrubby and Chenopod Mallee",
+              "children": []
+            },
+            {
+              "code": "Au9O",
+              "name": "Spinifex Mallee",
+              "children": []
+            },
+            {
+              "code": "Au9P",
+              "name": "Western Eucalypt Woodland",
+              "children": []
+            },
+            {
+              "code": "Au9Q",
+              "name": "Grassy Mulga",
+              "children": []
+            },
+            {
+              "code": "Au9R",
+              "name": "Spinifex Mulga",
+              "children": []
+            },
+            {
+              "code": "Au9S",
+              "name": "Yilgarn Mixed Woodland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Au10",
+          "name": "Tundra and Alpine",
+          "children": [
+            {
+              "code": "Au10A",
+              "name": "Australian Alpine Tundra",
+              "children": []
+            },
+            {
+              "code": "Au10B",
+              "name": "Austroparamo",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Au11",
+          "name": "Freshwater Wetlands",
+          "children": [
+            {
+              "code": "Au11A",
+              "name": "Australasian Tropical Freshwater Wetland",
+              "children": []
+            },
+            {
+              "code": "Au11B",
+              "name": "Australian Temperate Wetland",
+              "children": []
+            },
+            {
+              "code": "Au11C",
+              "name": "Lignum Swamp",
+              "children": []
+            },
+            {
+              "code": "Au11D",
+              "name": "(European) Montane Bog and Fen",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Au12",
+          "name": "Coastal and Marine",
+          "children": [
+            {
+              "code": "Au12A",
+              "name": "Australasian Tropical Mangrove Forest",
+              "children": []
+            },
+            {
+              "code": "Au12B",
+              "name": "Australian Temperate Mangrove",
+              "children": []
+            },
+            {
+              "code": "Au12C",
+              "name": "Australasian Sandy Beach",
+              "children": []
+            },
+            {
+              "code": "Au12D",
+              "name": "Australasian Sandy Cay",
+              "children": []
+            },
+            {
+              "code": "Au12E",
+              "name": "Australian Salt Pan",
+              "children": []
+            },
+            {
+              "code": "Au12F",
+              "name": "Australian Coastal Salt Marsh",
+              "children": []
+            },
+            {
+              "code": "Au12G",
+              "name": "Australasian Tidal Mudflat",
+              "children": []
+            },
+            {
+              "code": "Au12H",
+              "name": "Australasian Rocky Headland",
+              "children": []
+            },
+            {
+              "code": "Au12I",
+              "name": "Australasian Tropical Pelagic Waters",
+              "children": []
+            },
+            {
+              "code": "Au12J",
+              "name": "Australian Temperate Pelagic Waters",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "Eu",
+      "name": "Europe",
+      "children": [
+        {
+          "code": "Eu1",
+          "name": "Coniferous Forest",
+          "children": [
+            {
+              "code": "Eu1A",
+              "name": "European Tundra Taiga",
+              "children": []
+            },
+            {
+              "code": "Eu1B",
+              "name": "Subalpine Timberline Woodland",
+              "children": []
+            },
+            {
+              "code": "Eu1C",
+              "name": "European Coniferous Peat Woodland",
+              "children": []
+            },
+            {
+              "code": "Eu1D",
+              "name": "European Pine Taiga",
+              "children": []
+            },
+            {
+              "code": "Eu1E",
+              "name": "European Spruce-Fir Taiga",
+              "children": []
+            },
+            {
+              "code": "Eu1F",
+              "name": "European Montane Pine Forest",
+              "children": []
+            },
+            {
+              "code": "Eu1G",
+              "name": "Mediterranean Pine Forest",
+              "children": []
+            },
+            {
+              "code": "Eu1H",
+              "name": "Mediterranean Juniper and Cypress Forest",
+              "children": []
+            },
+            {
+              "code": "Eu1I",
+              "name": "European Montane Spruce-Fir Forest",
+              "children": []
+            },
+            {
+              "code": "Eu1J",
+              "name": "Subalpine Krummholz",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Eu2",
+          "name": "Desert and Xeric",
+          "children": [
+            {
+              "code": "Eu2A",
+              "name": "Caspian Wormwood Desert",
+              "children": []
+            },
+            {
+              "code": "Eu2B",
+              "name": "Caucasian Shrub Desert",
+              "children": []
+            },
+            {
+              "code": "Eu2C",
+              "name": "Caucasian Montane Desert Steppe",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Eu3",
+          "name": "Temperate Broadleaf Forest",
+          "children": [
+            {
+              "code": "Eu3A",
+              "name": "European Temperate Oak Forest",
+              "children": []
+            },
+            {
+              "code": "Eu3B",
+              "name": "European Beech Forest",
+              "children": []
+            },
+            {
+              "code": "Eu3C",
+              "name": "European Deciduous Rainforest",
+              "children": []
+            },
+            {
+              "code": "Eu3D",
+              "name": "European Temperate Mixed Forest",
+              "children": []
+            },
+            {
+              "code": "Eu3E",
+              "name": "European Montane Mixed Forest",
+              "children": []
+            },
+            {
+              "code": "Eu3F",
+              "name": "Mediterranean Oak Forest",
+              "children": []
+            },
+            {
+              "code": "Eu3G",
+              "name": "European Subarctic Riparian Woodland",
+              "children": []
+            },
+            {
+              "code": "Eu3H",
+              "name": "European Temperate Riparian Forest",
+              "children": []
+            },
+            {
+              "code": "Eu3I",
+              "name": "Mediterranean Riparian Forest",
+              "children": []
+            },
+            {
+              "code": "Eu3J",
+              "name": "Caspian Riparian Scrub",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Eu6",
+          "name": "Savanna and Woodland",
+          "children": [
+            {
+              "code": "Eu6A",
+              "name": "Middle Eastern Savanna",
+              "children": []
+            },
+            {
+              "code": "Eu6B",
+              "name": "Oak Dehesa",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Eu7",
+          "name": "Grassland and Steppe",
+          "children": [
+            {
+              "code": "Eu7A",
+              "name": "Wet Grassland",
+              "children": []
+            },
+            {
+              "code": "Eu7B",
+              "name": "European Temperate Grassland and Savanna",
+              "children": []
+            },
+            {
+              "code": "Eu7C",
+              "name": "Puszta and Pontic Steppe",
+              "children": []
+            },
+            {
+              "code": "Eu7D",
+              "name": "Iberian Steppe",
+              "children": []
+            },
+            {
+              "code": "Eu7E",
+              "name": "European Forest Steppe",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Eu8",
+          "name": "Heathland and Scrub",
+          "children": [
+            {
+              "code": "Eu8A",
+              "name": "European Garrigue",
+              "children": []
+            },
+            {
+              "code": "Eu8B",
+              "name": "European Maquis",
+              "children": []
+            },
+            {
+              "code": "Eu8C",
+              "name": "Lowland Heath",
+              "children": []
+            },
+            {
+              "code": "Eu8D",
+              "name": "Montane Heath and Moorland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Eu10",
+          "name": "Tundra and Alpine",
+          "children": [
+            {
+              "code": "Eu10A",
+              "name": "European Polar Desert",
+              "children": []
+            },
+            {
+              "code": "Eu10B",
+              "name": "European Cryptic Tundra",
+              "children": []
+            },
+            {
+              "code": "Eu10C",
+              "name": "European Rocky Tundra",
+              "children": []
+            },
+            {
+              "code": "Eu10D",
+              "name": "European Shrubby Tundra",
+              "children": []
+            },
+            {
+              "code": "Eu10E",
+              "name": "European Boggy Tundra",
+              "children": []
+            },
+            {
+              "code": "Eu10F",
+              "name": "European Alpine Tundra",
+              "children": []
+            },
+            {
+              "code": "Eu10G",
+              "name": "European Nival Rocky Tundra",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Eu11",
+          "name": "Freshwater Wetlands",
+          "children": [
+            {
+              "code": "Eu11A",
+              "name": "European Shallow Freshwater Marsh",
+              "children": []
+            },
+            {
+              "code": "Eu11B",
+              "name": "European Mountain Streams and Rivers",
+              "children": []
+            },
+            {
+              "code": "Eu11C",
+              "name": "European Reedbed",
+              "children": []
+            },
+            {
+              "code": "Eu11D",
+              "name": "European Temperate Peatland",
+              "children": []
+            },
+            {
+              "code": "Eu11E",
+              "name": "European Freshwater Lakes, Dams, and Ponds",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Eu12",
+          "name": "Coastal and Marine",
+          "children": [
+            {
+              "code": "Eu12A",
+              "name": "European Arctic and Temperate Rocky Coastline",
+              "children": []
+            },
+            {
+              "code": "Eu12B",
+              "name": "Mediterranean to Caspian Rocky Coastline",
+              "children": []
+            },
+            {
+              "code": "Eu12C",
+              "name": "European Sandy Shore and Dune",
+              "children": []
+            },
+            {
+              "code": "Eu12D",
+              "name": "European Coastal Salt Marsh",
+              "children": []
+            },
+            {
+              "code": "Eu12E",
+              "name": "European Soda Pan and Inland Salt Marsh",
+              "children": []
+            },
+            {
+              "code": "Eu12F",
+              "name": "Mediterranean to Caspian Pelagic Waters",
+              "children": []
+            },
+            {
+              "code": "Eu12G",
+              "name": "Arctic and Temperate Pelagic Waters",
+              "children": []
+            },
+            {
+              "code": "Eu12H",
+              "name": "European Tidal Flat and Estuary",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "Ne",
+      "name": "Nearctic",
+      "children": [
+        {
+          "code": "Ne1",
+          "name": "Coniferous Forest",
+          "children": [
+            {
+              "code": "Ne1A",
+              "name": "Nearctic Subarctic Woodland",
+              "children": []
+            },
+            {
+              "code": "Ne1B",
+              "name": "Boreal Conifer Forest",
+              "children": []
+            },
+            {
+              "code": "Ne1C",
+              "name": "Nearctic Montane Spruce-Fir Forest",
+              "children": []
+            },
+            {
+              "code": "Ne1D",
+              "name": "Nearctic Montane Mixed-Conifer Forest",
+              "children": []
+            },
+            {
+              "code": "Ne1E",
+              "name": "Ponderosa Pine Forest",
+              "children": []
+            },
+            {
+              "code": "Ne1F",
+              "name": "Eastern Pine Savanna",
+              "children": []
+            },
+            {
+              "code": "Ne1G",
+              "name": "High-Elevation Pine Woodland",
+              "children": []
+            },
+            {
+              "code": "Ne1H",
+              "name": "Jack Pine Forest",
+              "children": []
+            },
+            {
+              "code": "Ne1I",
+              "name": "Lodgepole Pine Forest",
+              "children": []
+            },
+            {
+              "code": "Ne1J",
+              "name": "Nearctic Temperate Rainforest",
+              "children": []
+            },
+            {
+              "code": "Ne1K",
+              "name": "Pinyon-Juniper Woodland",
+              "children": []
+            },
+            {
+              "code": "Ne1L",
+              "name": "Madrean Pine-Oak Woodland",
+              "children": []
+            },
+            {
+              "code": "Ne1L",
+              "name": "Madrean Pine-Oak Woodland+F2:F1245",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Ne2",
+          "name": "Desert and Xeric",
+          "children": [
+            {
+              "code": "Ne2A",
+              "name": "Chihuahuan Desert",
+              "children": []
+            },
+            {
+              "code": "Ne2B",
+              "name": "Sonoran Desert",
+              "children": []
+            },
+            {
+              "code": "Ne2C",
+              "name": "Mojave Desert",
+              "children": []
+            },
+            {
+              "code": "Ne2D",
+              "name": "Nearctic Desolate Desert",
+              "children": []
+            },
+            {
+              "code": "Ne2E",
+              "name": "Sagebrush Shrubland",
+              "children": []
+            },
+            {
+              "code": "Ne2F",
+              "name": "Tamaulipan Mezquital",
+              "children": []
+            },
+            {
+              "code": "Ne2G",
+              "name": "Eastern Mesquite",
+              "children": []
+            },
+            {
+              "code": "Ne2H",
+              "name": "Rocky Canyon",
+              "children": []
+            },
+            {
+              "code": "Ne2I",
+              "name": "Central Mexican Succulent Matorral",
+              "children": []
+            },
+            {
+              "code": "Ne2J",
+              "name": "Caribbean Thornscrub",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Ne3",
+          "name": "Temperate Broadleaf Forest",
+          "children": [
+            {
+              "code": "Ne3A",
+              "name": "Bald Cypress–Tupelo Gum Swamp",
+              "children": []
+            },
+            {
+              "code": "Ne3B",
+              "name": "Nearctic Temperate Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "Ne3C",
+              "name": "Nearctic Temperate Mixed Forest",
+              "children": []
+            },
+            {
+              "code": "Ne3D",
+              "name": "Western Riparian Woodland",
+              "children": []
+            },
+            {
+              "code": "Ne3E",
+              "name": "Aspen Forest and Parkland",
+              "children": []
+            },
+            {
+              "code": "Ne3F",
+              "name": "Coastal Hammock, Chenier, and Woodlot",
+              "children": []
+            },
+            {
+              "code": "Ne3G",
+              "name": "Subarctic Riparian Woodland and Boreal Shrubland Mosaic",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Ne4",
+          "name": "Tropical Moist Forest",
+          "children": [
+            {
+              "code": "Ne4A",
+              "name": "Mesoamerican Cloudforest",
+              "children": []
+            },
+            {
+              "code": "Ne4B",
+              "name": "Mesoamerican Semi-Evergreen Forest",
+              "children": []
+            },
+            {
+              "code": "Ne4C",
+              "name": "Karst Forest Mogotes and Cenotes",
+              "children": []
+            },
+            {
+              "code": "Ne4E",
+              "name": "Petén Swamp Forest",
+              "children": []
+            },
+            {
+              "code": "Ne4F",
+              "name": "Wet ‘Ōhi‘a Lehua–Koa Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Ne5",
+          "name": "Tropical Dry Forest",
+          "children": [
+            {
+              "code": "Ne5A",
+              "name": "Mesoamerican Pacific Dry Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "Ne5B",
+              "name": "Yucatán Dry Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "Ne5C",
+              "name": "Mamane-Neio Dry Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Ne6",
+          "name": "Savanna and Woodland",
+          "children": [
+            {
+              "code": "Ne6A",
+              "name": "Nearctic Oak-Juniper Woodland",
+              "children": []
+            },
+            {
+              "code": "Ne6B",
+              "name": "California Oak Savanna",
+              "children": []
+            },
+            {
+              "code": "Ne6C",
+              "name": "Madrean Encinal",
+              "children": []
+            },
+            {
+              "code": "Ne6D",
+              "name": "Florida Scrub",
+              "children": []
+            },
+            {
+              "code": "Ne6E",
+              "name": "Foothill Oak Shrubland",
+              "children": []
+            },
+            {
+              "code": "Ne6F",
+              "name": "Mesoamerican Savanna and Grassland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Ne7",
+          "name": "Grassland and Steppe",
+          "children": [
+            {
+              "code": "Ne7A",
+              "name": "Shortgrass Prairie",
+              "children": []
+            },
+            {
+              "code": "Ne7B",
+              "name": "Tallgrass Prairie",
+              "children": []
+            },
+            {
+              "code": "Ne7C",
+              "name": "Mixed-Grass Prairie",
+              "children": []
+            },
+            {
+              "code": "Ne7D",
+              "name": "Eastern Glades and Barrens",
+              "children": []
+            },
+            {
+              "code": "Ne7E",
+              "name": "Chihuahuan Desert Grassland",
+              "children": []
+            },
+            {
+              "code": "Ne7F",
+              "name": "Mexican Bunchgrass and Zacatonal",
+              "children": []
+            },
+            {
+              "code": "Ne7G",
+              "name": "Hawaiian Grasslands",
+              "children": []
+            },
+            {
+              "code": "Ne7H",
+              "name": "Central Barrens (treated as part of Ne7H)",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Ne8",
+          "name": "Heathland and Scrub",
+          "children": [
+            {
+              "code": "Ne8A",
+              "name": "Pacific Chaparral",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Ne10",
+          "name": "Tundra and Alpine",
+          "children": [
+            {
+              "code": "Ne10A",
+              "name": "Nearctic Polar Desert",
+              "children": []
+            },
+            {
+              "code": "Ne10B",
+              "name": "Nearctic Rocky Tundra",
+              "children": []
+            },
+            {
+              "code": "Ne10C",
+              "name": "Nearctic Cryptic Tundra",
+              "children": []
+            },
+            {
+              "code": "Ne10D",
+              "name": "Nearctic Boggy Tundra",
+              "children": []
+            },
+            {
+              "code": "Ne10E",
+              "name": "Nearctic Shrub Tundra",
+              "children": []
+            },
+            {
+              "code": "Ne10F",
+              "name": "Nearctic Alpine Tundra",
+              "children": []
+            },
+            {
+              "code": "Ne10G",
+              "name": "Nearctic Glacier and Scree",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Ne11",
+          "name": "Freshwater Wetlands",
+          "children": [
+            {
+              "code": "Ne11A",
+              "name": "Nearctic Reedbed Marshes",
+              "children": []
+            },
+            {
+              "code": "Ne11B",
+              "name": "Nearctic Sedge and Grassland Marshes",
+              "children": []
+            },
+            {
+              "code": "Ne11C",
+              "name": "Nearctic Boreal Bog and Fen",
+              "children": []
+            },
+            {
+              "code": "Ne11D",
+              "name": "Nearctic Open Water",
+              "children": []
+            },
+            {
+              "code": "Ne11E",
+              "name": "Nearctic Vernal Pools and Ephemeral Wetlands",
+              "children": []
+            },
+            {
+              "code": "Ne11F",
+              "name": "Nearctic Upland Rivers",
+              "children": []
+            },
+            {
+              "code": "Ne11G",
+              "name": "Nearctic Lowland Rivers",
+              "children": []
+            },
+            {
+              "code": "Ne11H",
+              "name": "Nearctic Limestone Caves",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Ne12",
+          "name": "Coastal and Marine",
+          "children": [
+            {
+              "code": "Ne12A",
+              "name": "Mesoamerican Mangroves",
+              "children": []
+            },
+            {
+              "code": "Ne12B",
+              "name": "Nearctic Tidal Mudflat",
+              "children": []
+            },
+            {
+              "code": "Ne12C",
+              "name": "Nearctic Salt Marsh",
+              "children": []
+            },
+            {
+              "code": "Ne12D",
+              "name": "Nearctic Sandy Beach and Dunes",
+              "children": []
+            },
+            {
+              "code": "Ne12E",
+              "name": "Nearctic Rocky Coastline",
+              "children": []
+            },
+            {
+              "code": "Ne12F",
+              "name": "Nearctic Pelagic Waters",
+              "children": []
+            },
+            {
+              "code": "Ne12G",
+              "name": "Nearctic Coral Reefs and Cays",
+              "children": []
+            },
+            {
+              "code": "Ne12H",
+              "name": "Nearctic Kelp Beds",
+              "children": []
+            },
+            {
+              "code": "Ne12I",
+              "name": "Nearctic Seacliffs and Offshore Islands",
+              "children": []
+            },
+            {
+              "code": "Ne12J",
+              "name": "North American Playas",
+              "children": []
+            },
+            {
+              "code": "Ne12K",
+              "name": "North American Arctic Coastline",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "Sa",
+      "name": "Neotropic",
+      "children": [
+        {
+          "code": "Sa1",
+          "name": "Coniferous Forest",
+          "children": [
+            {
+              "code": "Sa1A",
+              "name": "Monkey Puzzle Forest",
+              "children": []
+            },
+            {
+              "code": "Sa1B",
+              "name": "Brazilian Auracaria Forest",
+              "children": []
+            },
+            {
+              "code": "Sa1C",
+              "name": "Neotropical Pine-oak Woodland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Sa2",
+          "name": "Desert and Xeric",
+          "children": [
+            {
+              "code": "Sa2A",
+              "name": "Atacama Barren Desert",
+              "children": []
+            },
+            {
+              "code": "Sa2B",
+              "name": "Loma Fog Desert",
+              "children": []
+            },
+            {
+              "code": "Sa2C",
+              "name": "Sechura Desert",
+              "children": []
+            },
+            {
+              "code": "Sa2D",
+              "name": "Dry Chaco",
+              "children": []
+            },
+            {
+              "code": "Sa2E",
+              "name": "Interandean Thornscrub",
+              "children": []
+            },
+            {
+              "code": "Sa2F",
+              "name": "Tumbesian Thornscrub",
+              "children": []
+            },
+            {
+              "code": "Sa2G",
+              "name": "South Andean Espinal",
+              "children": []
+            },
+            {
+              "code": "Sa2H",
+              "name": "Guajiran Thornscrub",
+              "children": []
+            },
+            {
+              "code": "Sa2J",
+              "name": "Desert Puna",
+              "children": []
+            },
+            {
+              "code": "Sa2L",
+              "name": "Succulent Puna",
+              "children": []
+            },
+            {
+              "code": "Sa2M",
+              "name": "Patagonian Steppe",
+              "children": []
+            },
+            {
+              "code": "Sa2N",
+              "name": "Prepuna Desert",
+              "children": []
+            },
+            {
+              "code": "Sa2P",
+              "name": "Sertao Caatinga",
+              "children": []
+            },
+            {
+              "code": "Sa2Q",
+              "name": "Monte",
+              "children": []
+            },
+            {
+              "code": "Sa2R",
+              "name": "Serrano Monte",
+              "children": []
+            },
+            {
+              "code": "Sa2Z",
+              "name": "Sechura  Riparian scrub",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Sa3",
+          "name": "Temperate Broadleaf Forest",
+          "children": [
+            {
+              "code": "Sa3",
+              "name": "Espinal Flooded Forest",
+              "children": []
+            },
+            {
+              "code": "Sa3A",
+              "name": "Valdivian Wet  Mixed  Forest",
+              "children": []
+            },
+            {
+              "code": "Sa3B",
+              "name": "Magellenic Temperate Rainforest",
+              "children": []
+            },
+            {
+              "code": "Sa3C",
+              "name": "Elfin and Polylepis Forest",
+              "children": []
+            },
+            {
+              "code": "Sa3D",
+              "name": "Lenga",
+              "children": []
+            },
+            {
+              "code": "Sa3E",
+              "name": "Dry Eflin Forest",
+              "children": []
+            },
+            {
+              "code": "Sa3G",
+              "name": "Andean Dry Riparian Forest",
+              "children": []
+            },
+            {
+              "code": "Sa3H",
+              "name": "Chilean Nothofagus mixed Forest",
+              "children": []
+            },
+            {
+              "code": "Sa3H",
+              "name": "Humbolt Riparian Scrub",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Sa4",
+          "name": "Tropical Moist Forest",
+          "children": [
+            {
+              "code": "Sa4",
+              "name": "Amazonian Foothill Forest",
+              "children": []
+            },
+            {
+              "code": "Sa4",
+              "name": "Brazilian Atlantic Rainforest",
+              "children": []
+            },
+            {
+              "code": "Sa4",
+              "name": "East Andean Foothill Forest",
+              "children": []
+            },
+            {
+              "code": "Sa4",
+              "name": "Guiana Cloudforest",
+              "children": []
+            },
+            {
+              "code": "Sa4",
+              "name": "Guianan Lowland Rainforest",
+              "children": []
+            },
+            {
+              "code": "Sa4B",
+              "name": "Amazonian Terrafirma Rainforest",
+              "children": []
+            },
+            {
+              "code": "Sa4C",
+              "name": "Choco Lowland Rainforest",
+              "children": []
+            },
+            {
+              "code": "Sa4D",
+              "name": "Mesoamerican Lowland Rainforest",
+              "children": []
+            },
+            {
+              "code": "Sa4E",
+              "name": "Parana Semi-evergreen Rainforest",
+              "children": []
+            },
+            {
+              "code": "Sa4F",
+              "name": "Guianan Lowland Rainforest",
+              "children": []
+            },
+            {
+              "code": "Sa4F",
+              "name": "Magdalena Rainforest",
+              "children": []
+            },
+            {
+              "code": "Sa4I",
+              "name": "Choco Foothill Forest",
+              "children": []
+            },
+            {
+              "code": "Sa4I",
+              "name": "Ephemeral Islands",
+              "children": []
+            },
+            {
+              "code": "Sa4J",
+              "name": "Neotropical Semi-evergreen Rainforest",
+              "children": []
+            },
+            {
+              "code": "Sa4K",
+              "name": "Central American Semi-evergreen Forest",
+              "children": []
+            },
+            {
+              "code": "Sa4O",
+              "name": "Riparian White Sands Forest",
+              "children": []
+            },
+            {
+              "code": "Sa4O.1",
+              "name": "Upland White Sands Forest",
+              "children": []
+            },
+            {
+              "code": "Sa4P",
+              "name": "North Andean Cloudforest",
+              "children": []
+            },
+            {
+              "code": "Sa4Q",
+              "name": "Atlantic Cloudforest",
+              "children": []
+            },
+            {
+              "code": "Sa4S",
+              "name": "Humid Yungas",
+              "children": []
+            },
+            {
+              "code": "Sa4T",
+              "name": "North Andean Temperate Cloudforest",
+              "children": []
+            },
+            {
+              "code": "Sa4W",
+              "name": "West Amazon Bamboo Forest",
+              "children": []
+            },
+            {
+              "code": "Sa4X",
+              "name": "Neotropical Riparian Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Sa5",
+          "name": "Tropical Dry Forest",
+          "children": [
+            {
+              "code": "Sa5A",
+              "name": "Tumbesian Dry Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "Sa5B",
+              "name": "Atlantic Dry Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "Sa5C",
+              "name": "Llanos Dry Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "Sa5D",
+              "name": "Maranon Dry Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "Sa5F",
+              "name": "Chiquitano Dry Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "Sa5G",
+              "name": "Central American Dry Deciduous Forest",
+              "children": []
+            },
+            {
+              "code": "Sa5H",
+              "name": "Agreste Caatinga Dry Forest",
+              "children": []
+            },
+            {
+              "code": "Sa5I",
+              "name": "Carrasco Caatinga Scrub",
+              "children": []
+            },
+            {
+              "code": "Sa5J",
+              "name": "Yungas Dry Deciduous Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Sa6",
+          "name": "Savanna and Woodland",
+          "children": [
+            {
+              "code": "Sa6A",
+              "name": "Treed Cerrado",
+              "children": []
+            },
+            {
+              "code": "Sa6B",
+              "name": "Open Treed Cerrado",
+              "children": []
+            },
+            {
+              "code": "Sa6C",
+              "name": "Ridgeline Cerrado",
+              "children": []
+            },
+            {
+              "code": "Sa6D",
+              "name": "Flooded Chaco",
+              "children": []
+            },
+            {
+              "code": "Sa6Y",
+              "name": "West Amazonian Savana",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Sa7",
+          "name": "Grassland and Steppe",
+          "children": [
+            {
+              "code": "Sa7",
+              "name": "Amazonian Flooded Savanna",
+              "children": []
+            },
+            {
+              "code": "Sa7A",
+              "name": "Llanos and  Guianan Savanna",
+              "children": []
+            },
+            {
+              "code": "Sa7B",
+              "name": "Argentinean Flooded Grasslands",
+              "children": []
+            },
+            {
+              "code": "Sa7C",
+              "name": "Beni and Pantanal Flooded Savanna",
+              "children": []
+            },
+            {
+              "code": "Sa7D",
+              "name": "Pampas and Campo",
+              "children": []
+            },
+            {
+              "code": "Sa7E",
+              "name": "Cerrado Grassland",
+              "children": []
+            },
+            {
+              "code": "Sa7F",
+              "name": "Atlantic Montane Grassland",
+              "children": []
+            },
+            {
+              "code": "Sa7F",
+              "name": "Central American Flooded Grassland",
+              "children": []
+            },
+            {
+              "code": "Sa7K",
+              "name": "Tussock Puna",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Sa8",
+          "name": "Heathland and Scrub",
+          "children": [
+            {
+              "code": "Sa8A",
+              "name": "Tepuyan Sclerophyll Scrubland",
+              "children": []
+            },
+            {
+              "code": "Sa8B",
+              "name": "Rainforest Scrubland",
+              "children": []
+            },
+            {
+              "code": "Sa8C",
+              "name": "Chilean Mattoral",
+              "children": []
+            },
+            {
+              "code": "Sa8E",
+              "name": "Magallenic Shrubland",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Sa9",
+          "name": "Sclerophyll Forest",
+          "children": [
+            {
+              "code": "Sa9A",
+              "name": "Chilean Sclerophyll Forest",
+              "children": []
+            },
+            {
+              "code": "Sa9B",
+              "name": "Cerradao Sclerophyl Forest",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Sa10",
+          "name": "Tundra and Alpine",
+          "children": [
+            {
+              "code": "Sa10A",
+              "name": "Paramo",
+              "children": []
+            },
+            {
+              "code": "Sa10B",
+              "name": "Andean Alpine Tundra",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Sa11",
+          "name": "Freshwater Wetlands",
+          "children": [
+            {
+              "code": "Sa11",
+              "name": "Paramo bog",
+              "children": []
+            },
+            {
+              "code": "Sa11",
+              "name": "Patagonian Bofedale",
+              "children": []
+            },
+            {
+              "code": "Sa11A",
+              "name": "Varzea & Igapo Forest.jpg",
+              "children": []
+            },
+            {
+              "code": "Sa11C",
+              "name": "Palm Swamp Forest",
+              "children": []
+            },
+            {
+              "code": "Sa11D",
+              "name": "Peten Tidal Forest",
+              "children": []
+            },
+            {
+              "code": "Sa11E",
+              "name": "Neotropical Freshwater Marsh",
+              "children": []
+            },
+            {
+              "code": "Sa11F",
+              "name": "South American Temperate Wetlands",
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "Sa12",
+          "name": "Coastal and Marine",
+          "children": [
+            {
+              "code": "Sa12A",
+              "name": "Neotropical Mangroves",
+              "children": []
+            },
+            {
+              "code": "Sa12B",
+              "name": "Neotropical Coastal Lagoon",
+              "children": []
+            },
+            {
+              "code": "Sa12C",
+              "name": "South American Tidal Salt Marsh",
+              "children": []
+            },
+            {
+              "code": "Sa12D",
+              "name": "Neotropical Tidal Mudflat",
+              "children": []
+            },
+            {
+              "code": "Sa12E",
+              "name": "Neotropical Sandy Beach",
+              "children": []
+            },
+            {
+              "code": "Sa12F",
+              "name": "South American Temperate Sandy Beach",
+              "children": []
+            },
+            {
+              "code": "Sa12G",
+              "name": "South American Rocky Shore",
+              "children": []
+            },
+            {
+              "code": "Sa12H",
+              "name": "South American Temperate Salt Flats",
+              "children": []
+            },
+            {
+              "code": "Sa12I",
+              "name": "Altiplano Salt Pan",
+              "children": []
+            },
+            {
+              "code": "Sa12J",
+              "name": "Neotropicak Cay and Islands",
+              "children": []
+            },
+            {
+              "code": "Sa12J",
+              "name": "Neotropical  Pelagic Waters",
+              "children": []
+            },
+            {
+              "code": "Sa12K",
+              "name": "South American Temperate Pelagic Waters",
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

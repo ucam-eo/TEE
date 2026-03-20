@@ -66,14 +66,20 @@ async function loadSchema(mode) {
         return;
     }
 
-    if (mode === 'ukhab') {
+    const builtinSchemas = {
+        ukhab: { url: '/schemas/ukhab-v2.json', label: 'UKHab' },
+        hotw:  { url: '/schemas/hotw.json',      label: 'HOTW' },
+    };
+
+    if (builtinSchemas[mode]) {
+        const schema = builtinSchemas[mode];
         try {
-            const resp = await fetch('/schemas/ukhab-v2.json');
-            if (!resp.ok) throw new Error('Failed to load UKHab schema');
+            const resp = await fetch(schema.url);
+            if (!resp.ok) throw new Error(`Failed to load ${schema.label} schema`);
             activeSchema = await resp.json();
         } catch (e) {
-            console.error('[SCHEMA] Failed to load UKHab:', e);
-            alert('Failed to load UKHab schema. Make sure /schemas/ukhab-v2.json exists.');
+            console.error(`[SCHEMA] Failed to load ${schema.label}:`, e);
+            alert(`Failed to load ${schema.label} schema.`);
             activeSchemaMode = 'none';
             activeSchema = null;
         }
