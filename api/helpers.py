@@ -20,7 +20,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 VENV_PYTHON = PROJECT_ROOT / "venv" / "bin" / "python3"
 if not VENV_PYTHON.exists():
     VENV_PYTHON = sys.executable
-logger.info(f"Using Python: {VENV_PYTHON}")
+logger.debug(f"Using Python: {VENV_PYTHON}")
 
 # Year range constant (used in multiple views)
 MIN_YEAR = 2018
