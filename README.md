@@ -4,7 +4,7 @@
 
 # TEE: Tessera Embeddings Explorer
 
-**Alpha 3.7.0** | [Documentation](docs/index.md) | [Docker Hub](https://hub.docker.com/r/sk818/tee) | [User Guide](public/user_guide.md)
+**Alpha 3.7.1** | [Documentation](docs/index.md) | [Docker Hub](https://hub.docker.com/r/sk818/tee) | [User Guide](public/user_guide.md)
 
 A system for downloading, processing, and visualizing Sentinel-2 satellite embeddings (2018-2025) with an interactive web interface.
 
