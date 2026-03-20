@@ -1192,7 +1192,7 @@ async function exportManualLabelsShapefile() {
             // Dynamically load shp-write
             await new Promise((resolve, reject) => {
                 const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/shp-write@0.3.2/shpwrite.js';
+                script.src = 'https://cdn.jsdelivr.net/npm/@mapbox/shp-write@0.4.3/shpwrite.js';
                 script.onload = resolve;
                 script.onerror = reject;
                 document.head.appendChild(script);
@@ -2537,7 +2537,7 @@ async function buildShapefileZip() {
     if (typeof shpwrite === 'undefined') {
         await new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/shp-write@0.3.2/shpwrite.js';
+            script.src = 'https://cdn.jsdelivr.net/npm/@mapbox/shp-write@0.4.3/shpwrite.js';
             script.onload = resolve;
             script.onerror = reject;
             document.head.appendChild(script);
