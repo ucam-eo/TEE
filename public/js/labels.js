@@ -2509,23 +2509,24 @@ function toggleImportDropdown() {
 }
 
 function collectPrivateShareData() {
+    const toArray = (v) => v ? Array.from(v) : null;  // Float32Array → plain Array for JSON
     const labels = [];
     // From manualLabels
     for (const l of manualLabels) {
         if (l.embedding) {
-            labels.push({ name: l.name, code: l.code || null, embedding: l.embedding, type: l.type });
+            labels.push({ name: l.name, code: l.code || null, embedding: toArray(l.embedding), type: l.type });
         }
         // Union-mode polygons: include individual embeddings
         if (l.embeddings && l.embeddings.length > 0) {
             for (const emb of l.embeddings) {
-                labels.push({ name: l.name, code: l.code || null, embedding: emb, type: l.type });
+                labels.push({ name: l.name, code: l.code || null, embedding: toArray(emb), type: l.type });
             }
         }
     }
     // From savedLabels
     for (const l of savedLabels) {
         if (l.embedding) {
-            labels.push({ name: l.name, code: null, embedding: l.embedding, type: 'similarity' });
+            labels.push({ name: l.name, code: null, embedding: toArray(l.embedding), type: 'similarity' });
         }
     }
     return labels;
