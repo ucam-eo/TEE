@@ -228,32 +228,31 @@ def create_viewport(request):
         except ValueError as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
-        # Check for duplicate name
+        # Check for duplicate name — if it exists in the viewport list, reject.
+        # If stale files remain from a prior deletion, clean them up.
         viewport_path = VIEWPORTS_DIR / f"{name}.txt"
-        if viewport_path.exists():
-            # Check if this viewport is currently listed (has an active config)
-            # If the viewport was "deleted" but files linger, allow re-creation
-            config_path = VIEWPORTS_DIR / f"{name}_config.json"
-            if config_path.exists():
-                return JsonResponse({'success': False, 'error': f'Viewport "{name}" already exists. Delete it first.'}, status=409)
-            # Stale viewport file — clean up and allow re-creation
-            logger.info(f"[NEW VIEWPORT] Removing stale viewport file for '{name}'")
-            viewport_path.unlink(missing_ok=True)
+        config_path = VIEWPORTS_DIR / f"{name}_config.json"
+        if viewport_path.exists() and config_path.exists():
+            return JsonResponse({'success': False, 'error': f'Viewport "{name}" already exists. Delete it first.'}, status=409)
 
-        # Clean up any leftover data/progress from a prior deletion
+        # Thorough cleanup of any leftover state from prior viewport with same name
         import shutil
-        for leftover_dir in [PYRAMIDS_DIR / name, VECTORS_DIR / name]:
-            if leftover_dir.exists():
-                logger.info(f"[NEW VIEWPORT] Cleaning up leftover directory: {leftover_dir}")
-                shutil.rmtree(leftover_dir, ignore_errors=True)
-        for leftover_progress in PROGRESS_DIR.glob(f'{name}_*_progress.json'):
-            leftover_progress.unlink(missing_ok=True)
-            logger.info(f"[NEW VIEWPORT] Cleaned up stale progress file: {leftover_progress.name}")
-        # Clear stale task entry
         from api.tasks import tasks, tasks_lock
+        viewport_path.unlink(missing_ok=True)
+        config_path.unlink(missing_ok=True)
+        cancel_pipeline(name)  # kill any running pipeline for this name
         operation_id = f"{name}_full_pipeline"
         with tasks_lock:
             tasks.pop(operation_id, None)
+        for leftover_dir in [PYRAMIDS_DIR / name, VECTORS_DIR / name]:
+            if leftover_dir.exists():
+                logger.info(f"[NEW VIEWPORT] Cleaning up leftover: {leftover_dir}")
+                shutil.rmtree(leftover_dir, ignore_errors=True)
+        for leftover in PROGRESS_DIR.glob(f'{name}_*'):
+            leftover.unlink(missing_ok=True)
+        if MOSAICS_DIR.exists():
+            for f in MOSAICS_DIR.glob(f'{name}_*'):
+                f.unlink(missing_ok=True)
 
         # Validate years
         years = data.get('years')
