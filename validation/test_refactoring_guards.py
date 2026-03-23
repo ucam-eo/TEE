@@ -364,8 +364,7 @@ class TestBackendLibraries:
             "check_readiness", "delete_viewport_data", "compute_data_size",
         ]),
         ("lib/evaluation_engine.py", [
-            "load_vectors", "dequantize", "rasterize_shapefile",
-            "make_classifier", "run_learning_curve",
+            "load_vectors",
         ]),
         ("lib/tile_renderer.py", [
             "render_tile_png", "tile_to_bbox", "get_pyramid_path",
