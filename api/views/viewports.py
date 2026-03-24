@@ -129,6 +129,20 @@ def current_viewport(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 
+def viewport_info(request, viewport_name):
+    """Get viewport info by name (no global state change — concurrent-safe)."""
+    try:
+        validate_viewport_name(viewport_name)
+    except ValueError as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    try:
+        viewport = read_viewport_file(viewport_name)
+        viewport['name'] = viewport_name
+        return JsonResponse({'success': True, 'viewport': viewport})
+    except FileNotFoundError:
+        return JsonResponse({'success': False, 'error': f'Viewport {viewport_name} not found'}, status=404)
+
+
 def switch_viewport(request):
     """Switch to a different viewport and report processing status."""
     if request.method != 'POST':

@@ -1452,7 +1452,7 @@
                     if (result.ready) {
                         console.log('[VIEWPORT CREATE] ✓ Data is ready, navigating to viewer...');
                         console.log('[VIEWPORT CREATE] Navigating to viewer');
-                        window.location.href = 'viewer.html';
+                        window.location.href = `viewer.html?viewport=${encodeURIComponent(name || currentViewport?.name || '')}`;
                     } else {
                         console.log('[VIEWPORT CREATE] ✗ Pipeline failed:', result.error);
                         document.getElementById('processingMessage').textContent = `✗ ${result.error || 'Processing timeout - please check back in a few minutes'}`;
@@ -1822,7 +1822,7 @@
 
                 if (result.ready) {
                     console.log(`[VIEWER] ${name} is ready, navigating to viewer`);
-                    window.location.href = 'viewer.html';
+                    window.location.href = `viewer.html?viewport=${encodeURIComponent(name || currentViewport?.name || '')}`;
                 } else {
                     // Pipeline still running — show progress and wait
                     console.log(`[VIEWER] ${name} not ready, waiting for pipeline...`);
@@ -1831,7 +1831,7 @@
                     const result = await waitForViewportReady(name);
                     document.getElementById('processingSection').style.display = 'none';
                     if (result.ready) {
-                        window.location.href = 'viewer.html';
+                        window.location.href = `viewer.html?viewport=${encodeURIComponent(name || currentViewport?.name || '')}`;
                     } else {
                         alert(`Processing failed: ${result.error || 'Unknown error. Check server logs.'}`);
                     }

@@ -37,7 +37,12 @@ let satelliteTileLayer = null;
 // Fetch current viewport and update map center/zoom
 async function updateMapViewport() {
     try {
-        const response = await fetch('/api/viewports/current');
+        // Read viewport name from URL parameter (concurrent-safe) or fall back to server
+        const urlParams = new URLSearchParams(window.location.search);
+        const vpParam = urlParams.get('viewport');
+        const response = vpParam
+            ? await fetch(`/api/viewports/${encodeURIComponent(vpParam)}/info`)
+            : await fetch('/api/viewports/current');
         const data = await response.json();
 
         if (data.success && data.viewport) {

@@ -1,7 +1,7 @@
 from django.urls import path
 from .auth_views import auth_login, auth_logout, auth_change_password, auth_status
-from .views.viewports import (list_viewports, current_viewport, switch_viewport,
-    create_viewport, delete_viewport, add_years, available_years, is_ready)
+from .views.viewports import (list_viewports, current_viewport, viewport_info,
+    switch_viewport, create_viewport, delete_viewport, add_years, available_years, is_ready)
 from .views.pipeline import operations_progress, cancel_processing
 from .views.vector_data import serve_vector_data
 from .views.config import get_config
@@ -21,6 +21,7 @@ urlpatterns = [
     path('viewports/switch', switch_viewport),
     path('viewports/create', create_viewport),
     path('viewports/delete', delete_viewport),
+    path('viewports/<str:viewport_name>/info', viewport_info),
     path('viewports/<str:viewport_name>/add-years', add_years),
     path('viewports/<str:viewport_name>/available-years', available_years),
     path('viewports/<str:viewport_name>/is-ready', is_ready),
