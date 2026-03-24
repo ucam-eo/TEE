@@ -51,7 +51,8 @@ def list_viewports(request):
     """List all available viewports."""
     try:
         viewports = lib_list_viewports()
-        active_name = get_active_viewport_name()
+        # Per-session active viewport, fallback to global
+        active_name = request.session.get('active_viewport') or get_active_viewport_name()
 
         viewport_data = []
         for viewport_name in viewports:
@@ -99,8 +100,20 @@ def list_viewports(request):
 
 
 def current_viewport(request):
-    """Get current active viewport."""
+    """Get current active viewport (per-session, falls back to global)."""
     try:
+        # Per-session active viewport (concurrent-safe)
+        session_vp = request.session.get('active_viewport')
+        if session_vp:
+            try:
+                viewport = read_viewport_file(session_vp)
+                viewport['name'] = session_vp
+                return JsonResponse({'success': True, 'viewport': viewport})
+            except FileNotFoundError:
+                # Session points to deleted viewport — clear and fall through
+                del request.session['active_viewport']
+
+        # Fallback: global active viewport (single-user / legacy)
         viewport = get_active_viewport()
         active_name = get_active_viewport_name()
         viewport['name'] = active_name
@@ -137,6 +150,8 @@ def switch_viewport(request):
         viewport = read_viewport_file(viewport_name)  # raises FileNotFoundError if missing
         viewport['name'] = viewport_name
 
+        # Store per-session (concurrent-safe) + global (legacy fallback)
+        request.session['active_viewport'] = viewport_name
         set_active_viewport(viewport_name)
 
         response_data = {
@@ -304,6 +319,9 @@ def create_viewport(request):
         config_file = VIEWPORTS_DIR / f"{name}_config.json"
         with open(config_file, 'w') as f:
             json.dump(config, f)
+
+        # Set as active viewport for this session
+        request.session['active_viewport'] = name
 
         logger.info(f"[NEW VIEWPORT] Triggering pipeline for '{name}' years={years}")
         trigger_data_download_and_processing(name, years=years)
