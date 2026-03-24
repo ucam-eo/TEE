@@ -202,12 +202,11 @@ class PipelineRunner:
         logger.info(f"[PIPELINE] Processing viewport '{viewport_name}' (years: {years_str})...")
         logger.info(f"[PIPELINE]   Python: {self.venv_python}")
 
+        args = ['--viewport', viewport_name]
         if years_str:
-            logger.info(f"[PIPELINE]   $ python process_viewport.py --years {years_str}")
-            result = self.run_script('process_viewport.py', '--years', years_str)
-        else:
-            logger.info(f"[PIPELINE]   $ python process_viewport.py")
-            result = self.run_script('process_viewport.py')
+            args += ['--years', years_str]
+        logger.info(f"[PIPELINE]   $ python process_viewport.py {' '.join(args)}")
+        result = self.run_script('process_viewport.py', *args)
 
         if result.returncode != 0:
             stderr_text = result.stderr.strip() if result.stderr else '(no stderr output)'

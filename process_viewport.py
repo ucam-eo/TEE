@@ -425,6 +425,8 @@ def _process_year_worker(args):
 
 def main():
     parser = argparse.ArgumentParser(description='Process viewport: download + pyramids + vectors')
+    parser.add_argument('--viewport', type=str,
+                        help='Viewport name to process (required for concurrent safety)')
     parser.add_argument('--years', type=str,
                         help='Comma-separated years (e.g., 2024,2025)')
     args = parser.parse_args()
@@ -437,11 +439,18 @@ def main():
     else:
         years = list(DEFAULT_YEARS)
 
-    # Read active viewport
+    # Read viewport — prefer explicit --viewport arg for concurrent safety
     try:
-        viewport = get_active_viewport()
-        viewport_id = viewport['viewport_id']
-        bounds = viewport['bounds_tuple']
+        if args.viewport:
+            from lib.viewport_utils import read_viewport_file
+            viewport = read_viewport_file(args.viewport)
+            viewport_id = args.viewport
+            bounds = viewport['bounds_tuple']
+        else:
+            # Fallback to active viewport (legacy, not concurrent-safe)
+            viewport = get_active_viewport()
+            viewport_id = viewport['viewport_id']
+            bounds = viewport['bounds_tuple']
     except Exception as e:
         print(f"ERROR: Failed to read viewport: {e}", file=sys.stderr)
         sys.exit(1)

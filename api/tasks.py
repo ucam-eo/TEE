@@ -6,7 +6,6 @@ import threading
 
 from lib.pipeline import PipelineRunner
 from lib.progress_tracker import ProgressTracker
-from lib.viewport_writer import set_active_viewport
 from api.helpers import VENV_PYTHON, PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
@@ -22,9 +21,6 @@ def trigger_data_download_and_processing(viewport_name, years=None):
 
     def download_and_process():
         try:
-            logger.info(f"[PIPELINE] Setting {viewport_name} as active viewport...")
-            set_active_viewport(viewport_name)
-
             runner = PipelineRunner(PROJECT_ROOT, VENV_PYTHON)
             years_str = ','.join(str(y) for y in years) if years else None
 
