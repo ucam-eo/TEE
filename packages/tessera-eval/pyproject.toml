@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tessera-eval"
+version = "0.1.0"
+description = "Evaluate habitat classifiers on Tessera satellite embeddings"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "S. Keshav"},
+]
+dependencies = [
+    "numpy>=1.24",
+    "geopandas>=0.14",
+    "rasterio>=1.3",
+    "scikit-learn>=1.3",
+    "affine>=2.4",
+]
+
+[project.optional-dependencies]
+geotessera = ["geotessera>=0.7.5"]
+xgboost = ["xgboost>=1.7"]
+torch = ["torch>=2.0"]
+plot = ["matplotlib>=3.5"]
+all = ["geotessera>=0.7.5", "xgboost>=1.7", "matplotlib>=3.5"]
+
+[project.urls]
+Homepage = "https://github.com/ucam-eo/tessera-eval"

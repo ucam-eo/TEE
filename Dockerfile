@@ -29,6 +29,9 @@ RUN pip3 install --no-cache-dir --break-system-packages --ignore-installed numpy
 # Copy application code
 COPY . .
 
+# Install tessera-eval from local package
+RUN pip3 install --no-cache-dir --break-system-packages packages/tessera-eval/
+
 # Bake git version (passed as build arg since .git is excluded)
 ARG GIT_VERSION=unknown
 RUN echo "$GIT_VERSION" > /app/VERSION
