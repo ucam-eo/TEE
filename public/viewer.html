@@ -740,6 +740,7 @@
                 <option value="validation">Validation</option>
             </select>
             <button id="help-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;" title="Show keyboard shortcuts and help">? Help</button>
+            <a id="feedback-btn" href="#" onclick="openFeedback()" style="padding: 6px 10px; background: transparent; color: #aaa; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 12px; text-decoration: none; white-space: nowrap;" title="Send feedback or report a bug">Feedback</a>
         </div>
 
         <!-- Similarity group (greyed out when vectors not ready) -->
@@ -1368,5 +1369,26 @@
     <script type="module" src="js/labels.js"></script>
     <script type="module" src="js/maps.js"></script>
     <script type="module" src="js/app.js"></script>
+    <script>
+    function openFeedback() {
+        const vp = window.currentViewportName || '(none)';
+        const mode = window.currentPanelMode || '(none)';
+        const version = document.getElementById('teeVersion')?.textContent || '';
+        const url = window.location.href;
+        const body = [
+            `Viewport: ${vp}`,
+            `Mode: ${mode}`,
+            `URL: ${url}`,
+            `Version: ${version}`,
+            `Browser: ${navigator.userAgent}`,
+            '',
+            'Description:',
+            '(Please describe your feedback, bug, or suggestion here)',
+            '',
+            'To include a screenshot: take one with Cmd+Shift+4 (Mac) or Win+Shift+S (Windows), then paste into this email.',
+        ].join('\n');
+        window.location.href = `mailto:sk818@cam.ac.uk?subject=${encodeURIComponent('TEE Feedback — ' + vp)}&body=${encodeURIComponent(body)}`;
+    }
+    </script>
 </body>
 </html>
