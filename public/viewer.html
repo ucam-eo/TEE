@@ -1370,10 +1370,11 @@
     <script type="module" src="js/maps.js"></script>
     <script type="module" src="js/app.js"></script>
     <script>
-    function openFeedback() {
+    async function openFeedback() {
         const vp = window.currentViewportName || '(none)';
         const mode = window.currentPanelMode || '(none)';
-        const version = document.getElementById('teeVersion')?.textContent || '';
+        let version = '';
+        try { version = (await (await fetch('/health')).json()).version || ''; } catch(e) {}
         const url = window.location.href;
         const body = [
             `Viewport: ${vp}`,
