@@ -668,7 +668,7 @@
                         &middot;
                         <a href="/user_guide.html" target="_blank" rel="noopener" style="color: #fff; text-decoration: none;">User Guide</a>
                         &middot;
-                        <a href="mailto:sk818@cam.ac.uk?subject=TEE%20Feedback&body=Description%3A%0A%0ATo%20include%20a%20screenshot%3A%20Cmd%2BShift%2B4%20(Mac)%20or%20Win%2BShift%2BS%20(Windows)%2C%20then%20paste%20into%20this%20email." style="color: #fff; text-decoration: none;">Feedback</a>
+                        <a href="#" onclick="openFeedback(); return false;" style="color: #fff; text-decoration: none;">Feedback</a>
                     </div>
                 </div>
                 <div class="user-info" id="userInfo" style="display:none;">
@@ -887,6 +887,28 @@
                 document.getElementById('enrolSection').style.display = '';
             }
         }).catch(() => {});
+
+        async function openFeedback() {
+            const vp = currentViewport?.name || '(none)';
+            let version = document.getElementById('teeVersion')?.textContent || '';
+            if (!version) {
+                try { version = (await (await fetch('/health')).json()).version || ''; } catch(e) {}
+            }
+            const url = window.location.href;
+            const body = [
+                `Viewport: ${vp}`,
+                `Page: Viewport Manager`,
+                `URL: ${url}`,
+                `Version: ${version}`,
+                `Browser: ${navigator.userAgent}`,
+                '',
+                'Description:',
+                '(Please describe your feedback, bug, or suggestion here)',
+                '',
+                'To include a screenshot: Cmd+Shift+4 (Mac) or Win+Shift+S (Windows), then paste into this email.',
+            ].join('\n');
+            window.location.href = `mailto:sk818@cam.ac.uk?subject=${encodeURIComponent('TEE Feedback — ' + vp)}&body=${encodeURIComponent(body)}`;
+        }
 
         function doLogout() {
             fetch('/api/auth/logout', {method: 'POST'}).then(() => {
