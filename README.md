@@ -66,19 +66,22 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - **Promote** individual clusters (or all at once) to permanent saved labels with full metadata (embedding, source pixel, threshold)
 - Promoted labels support timeline analysis, cross-viewport re-matching, and all other label features
 
-### Validation (Learning Curves)
+### Validation (Learning Curves & Large-Area Evaluation)
 - Upload a ground-truth shapefile (.zip) with expert habitat labels
+- **Two modes:** Viewport (single ~5×5 km area, learning curves) and Large Area (county/country scale, k-fold CV)
 - Select a class field and choose classifiers: k-NN, Random Forest, XGBoost, MLP
 - **Tunable hyperparameters** per classifier (expand with `...` button):
   - **k-NN**: k (1–50), weights (uniform/distance)
   - **Random Forest**: number of trees (10–500), max depth
   - **XGBoost**: boosting rounds (10–500), max depth (1–15), learning rate (0.01–1.0)
   - **MLP**: hidden layer architecture (64,32 / 128,64 / 256,128,64), max iterations (50–1000)
-- **Configurable max training pixels** (default 10,000) — increase up to 100,000 for denser ground truth
-- Runs stratified learning-curve evaluation server-side with log-spaced training sizes (10 up to max) and 5 random repeats each
-- Results rendered as a Chart.js line chart with macro-average F1 vs training pixels (log scale) and shaded ±1 std bands
-- Ground-truth polygons are overlaid on the satellite panel in red with hover tooltips showing class labels
-- Useful for benchmarking how well Tessera embeddings separate habitat classes at different sample sizes
+- **Viewport mode**: stratified learning-curve evaluation with log-spaced training sizes (10 up to max) and 5 random repeats each
+- **Large Area mode**: proper k-fold cross-validation (StratifiedKFold for classification, KFold for regression) on GeoTessera tiles loaded tile-by-tile (memory-bounded)
+- **Regression support**: numeric fields with >20 unique values are automatically detected as regression tasks — shows R², RMSE, MAE instead of F1/confusion matrix
+- **Standalone CLI** for headless batch evaluation: `python scripts/tee_evaluate.py --config eval.json`
+- **Generate Config** button exports a JSON config file for CLI use; **Load Results** replays pre-computed NDJSON results
+- Results rendered as Chart.js charts (learning curves for classification, bar charts for regression) with metrics tables
+- Ground-truth polygons overlaid on the satellite panel in red with hover tooltips showing class labels
 
 ### Cross-Year Label Timeline
 - **Track how label coverage changes over time** — click "Timeline" on any saved label to see pixel counts across all available years (2018–2025)
@@ -98,9 +101,9 @@ The viewer includes a **6-panel layout** toggle for advanced analysis:
 5. **Panel 5** — Change heatmap / classification results / segmentation overlay (mode-dependent)
 6. **Panel 6** — Second year embeddings (change-detection mode) or blank (explore mode)
 
-A **Labelling** mode replaces Panel 6 with label management — choose between **Auto-label** (K-means segmentation + promoted labels) and **Manual Label** (hand-placed pins, polygons, and similarity-based expansion with per-class thresholds). A **Validation** mode replaces the bottom row with a controls panel and a learning-curve chart for evaluating classifier performance on uploaded ground-truth shapefiles.
+A **Labelling** mode replaces Panel 6 with label management — choose between **Auto-label** (K-means segmentation + promoted labels) and **Manual Label** (hand-placed pins, polygons, and similarity-based expansion with per-class thresholds). A **Validation** mode replaces the bottom row with a controls panel and a learning-curve chart for evaluating classifier performance on uploaded ground-truth shapefiles — supporting both single-viewport learning curves and large-area k-fold cross-validation with classification and regression.
 
-Key capabilities: one-click similarity search, real-time threshold control, persistent colored label overlays, cross-panel synchronized markers, manual pin and polygon labelling with classification, UMAP visualization with satellite RGB coloring, temporal distance heatmap, year-based label updates, cross-year label timeline analysis, and ground-truth validation with learning curves.
+Key capabilities: one-click similarity search, real-time threshold control, persistent colored label overlays, cross-panel synchronized markers, manual pin and polygon labelling with classification, UMAP visualization with satellite RGB coloring, temporal distance heatmap, year-based label updates, cross-year label timeline analysis, ground-truth validation with learning curves, large-area k-fold evaluation with regression support, and a standalone CLI for headless batch evaluation.
 
 Labels are stored in browser localStorage (private, survive reloads). Labels can be exported/imported as compact JSON files for sharing — they are portable across viewports since matching uses embedding distance, not coordinates.
 
@@ -486,6 +489,23 @@ Content-Type: application/json
 ```
 Returns: `{training_sizes, classifiers: {<name>: {mean_f1, std_f1}}, classes, total_labelled_pixels, elapsed_seconds, models_available}`
 
+**Run large-area evaluation (k-fold CV):**
+```
+POST /api/evaluation/run-large-area
+Content-Type: application/json
+
+{
+  "field": "UKHab_L2",
+  "year": 2024,
+  "classifiers": ["nn", "rf", "mlp"],
+  "classifier_params": {},
+  "kfold": 5,
+  "max_training_samples": 30000,
+  "seed": 42
+}
+```
+Returns: NDJSON stream with events: `field_start`, `download_progress`, `start`, `fold_result`, `aggregate`, `confusion_matrices`, `done`
+
 **Download trained model:**
 ```
 GET /api/evaluation/download-model/<classifier>
@@ -533,10 +553,19 @@ TEE/
 │   └── README.md                      # Frontend documentation
 │
 ├── scripts/                           # Management scripts
-│   └── manage_users.py                # Add/remove/list users for authentication
+│   └── tee_evaluate.py                # Standalone CLI for large-area evaluation
+│
+├── packages/                          # Reusable Python packages
+│   └── tessera-eval/                  # Evaluation library (classifiers, regressors, k-fold CV)
+│       └── tessera_eval/
+│           ├── classify.py            # Classifier and regressor factories
+│           ├── evaluate.py            # Learning curves and k-fold cross-validation
+│           ├── data.py                # Data loading (TEE vectors, GeoTessera tiles, shapefile)
+│           └── rasterize.py           # Shapefile rasterization
 │
 ├── lib/                               # Python utilities
 │   ├── config.py                      # Centralized configuration (paths, env vars)
+│   ├── evaluation_engine.py           # Shim to tessera-eval library
 │   ├── pipeline.py                    # Unified pipeline orchestration
 │   ├── viewport_utils.py              # Viewport file operations
 │   ├── viewport_writer.py             # Viewport configuration writer
@@ -544,6 +573,14 @@ TEE/
 │
 ├── viewports/                         # Viewport configurations (user-created, gitignored)
 │   └── README.md                      # Viewport directory documentation
+│
+├── tests/                             # Unit tests
+│   ├── test_kfold.py                  # k-fold CV, regression metrics, regressor factory
+│   └── test_cli.py                    # CLI config validation and dry-run tests
+│
+├── validation/                        # Static HTML/JS/Python validation tests
+│   ├── test_refactoring_guards.py     # API, function, DOM, and backend guards
+│   └── test_viewer_html.py            # Viewer HTML structural validation
 │
 ├── download_embeddings.py             # GeoTessera embedding downloader
 ├── create_rgb_embeddings.py           # Convert embeddings to RGB

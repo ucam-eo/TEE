@@ -17,7 +17,9 @@ from tessera_eval.classify import (
     gather_spatial_features,
     augment_spatial,
 )
-from tessera_eval.evaluate import run_learning_curve
+from tessera_eval.evaluate import run_learning_curve, run_kfold_cv, regression_metrics, detect_field_type
+from tessera_eval.classify import make_regressor, available_regressors
+from tessera_eval.data import load_embeddings_for_shapefile
 
 
 def load_vectors(viewport, year):

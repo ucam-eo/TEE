@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 
 import numpy as np
+from rasterio.transform import array_bounds as _array_bounds
+from shapely.geometry import box as _box
 
 
 def dequantize_uint8(quantized, dim_min, dim_max):
@@ -109,3 +111,94 @@ def load_geotessera_tile(embedding_path, scales_path):
     quantized = np.load(embedding_path)
     scales = np.load(scales_path)
     return dequantize_int8(quantized, scales)
+
+
+def load_embeddings_for_shapefile(gdf, field, year, gt_instance, callback=None):
+    """Load embeddings tile-by-tile for all pixels overlapping a shapefile.
+
+    Memory-bounded: processes one GeoTessera tile at a time, only accumulates
+    labelled pixels. Suitable for large-area (county/country) shapefiles.
+
+    Args:
+        gdf: GeoDataFrame with geometry and the target field (EPSG:4326)
+        field: Name of the attribute column to use as labels
+        year: Year of embeddings to load
+        gt_instance: GeoTessera instance (with registry and embeddings_dir)
+        callback: Optional function(current_tile, total_tiles) for progress
+
+    Returns:
+        Tuple of (vectors, labels, class_names, stats) where:
+        - vectors: float32 array, shape (N, 128)
+        - labels: int array, shape (N,) — 0-indexed class labels
+        - class_names: list of str — class name for each label index
+        - stats: dict with tile_count, total_pixels, etc.
+
+    Raises:
+        ValueError: If no labelled pixels found
+    """
+    from sklearn.preprocessing import LabelEncoder
+    from tessera_eval.rasterize import rasterize_shapefile
+
+    bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
+    bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
+
+    tiles = gt_instance.registry.load_blocks_for_region(bbox, year)
+    total_tiles = len(tiles)
+    if total_tiles == 0:
+        raise ValueError(f"No GeoTessera tiles found for bbox {bbox}, year {year}")
+
+    # Fit label encoder on the full shapefile
+    le = LabelEncoder()
+    le.fit(gdf[field].dropna().unique())
+    class_names = le.classes_.tolist()
+
+    all_vectors = []
+    all_labels = []
+    tiles_with_data = 0
+
+    for tile_idx, (yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform) in enumerate(
+        gt_instance.fetch_embeddings(tiles)
+    ):
+        if callback:
+            callback(tile_idx + 1, total_tiles)
+
+        h, w, dim = tile_emb.shape
+
+        # Reproject GDF to tile CRS, then filter to tile bbox
+        tile_bounds = _array_bounds(h, w, tile_transform)
+        gdf_proj = gdf.to_crs(tile_crs) if gdf.crs != tile_crs else gdf
+        tile_gdf = gdf_proj[gdf_proj.intersects(_box(*tile_bounds))]
+        if tile_gdf.empty:
+            continue
+
+        # Rasterize shapefile onto this tile's grid
+        class_raster = rasterize_shapefile(tile_gdf, field, tile_transform, w, h, label_encoder=le)
+
+        # Extract labelled pixels
+        labelled_mask = class_raster > 0
+        n_labelled = int(labelled_mask.sum())
+        if n_labelled == 0:
+            continue
+
+        tiles_with_data += 1
+        # class_raster is 1-based (from rasterize_shapefile), convert to 0-based
+        tile_labels = class_raster[labelled_mask] - 1
+        tile_vectors = tile_emb[labelled_mask]  # (n_labelled, 128)
+
+        all_vectors.append(tile_vectors)
+        all_labels.append(tile_labels)
+
+    if not all_vectors:
+        raise ValueError("No labelled pixels found across any tiles")
+
+    vectors = np.concatenate(all_vectors, axis=0).astype(np.float32)
+    labels = np.concatenate(all_labels, axis=0).astype(np.int32)
+
+    stats = {
+        "tile_count": total_tiles,
+        "tiles_with_data": tiles_with_data,
+        "total_pixels": len(labels),
+        "n_classes": len(class_names),
+    }
+
+    return vectors, labels, class_names, stats

@@ -562,6 +562,51 @@ class TestLabelSharing:
 # HTML well-formedness
 # ────────────────────────────────────────────
 
+# ────────────────────────────────────────────
+# Large-area evaluation
+# ────────────────────────────────────────────
+
+class TestLargeAreaValidation:
+    def test_mode_toggle_exists(self, html):
+        assert 'val-mode-large' in html
+
+    def test_mode_viewport_exists(self, html):
+        assert 'val-mode-viewport' in html
+
+    def test_large_area_year_select(self, html):
+        assert 'val-year-select' in html
+
+    def test_load_results_button_exists(self, html):
+        assert 'val-load-results' in html
+
+    def test_generate_config_button_exists(self, html):
+        assert 'val-generate-config' in html
+
+    def test_regression_panel_exists(self, html):
+        assert 'val-regression-panel' in html
+
+    def test_regression_table_exists(self, html):
+        assert 'val-regression-table' in html
+
+    def test_generate_config_function(self, script_text):
+        assert 'function generateConfig' in script_text
+
+    def test_run_large_area_function(self, script_text):
+        assert 'runLargeAreaEvaluation' in script_text
+
+    def test_set_val_mode_function(self, script_text):
+        assert 'function setValMode' in script_text
+
+    def test_load_results_file_function(self, script_text):
+        assert 'function loadResultsFile' in script_text
+
+    def test_large_area_controls_hidden_by_default(self, html):
+        assert 'val-large-area-controls' in html
+
+    def test_year_select_exists(self, html):
+        assert 'val-year-select' in html
+
+
 class TestHTMLStructure:
     def test_starts_with_doctype(self, html):
         assert html.strip().startswith("<!DOCTYPE html>")

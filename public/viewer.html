@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <meta name="referrer" content="origin" />
     <title>TEE Viewer</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
@@ -307,8 +308,9 @@
         #map-container.mode-validation { grid-template-rows: 1fr 1fr; }
         #map-container.mode-validation .panel:nth-child(4) > .panel-header { display: none !important; }
         #map-container.mode-validation .panel:nth-child(5) { background: #1a1a2e; }
-        #map-container.mode-validation .panel:nth-child(5) > .panel-header { display: none; }
+        #map-container.mode-validation .panel:nth-child(5) > .panel-header { display: none !important; }
         #map-container.mode-validation .panel:nth-child(6) { overflow-y: auto; }
+        #map-container.mode-validation .panel:nth-child(6) > .panel-header { display: none !important; }
         #validation-controls { display: none; }
         #validation-chart-panel { display: none; }
         #map-container.mode-validation #map-umap { display: none; }
@@ -960,7 +962,7 @@
             <!-- Confusion Matrix (shown only in validation mode) -->
             <div id="val-cm-panel">
                 <div class="cm-header">
-                    <h3>Confusion Matrix</h3>
+                    <h3 id="val-cm-title">Confusion Matrix</h3>
                     <select id="cm-classifier-select"></select>
                     <button class="cm-toggle-pct" id="cm-toggle-pct" title="Toggle counts / percentages">%</button>
                     <button class="cm-export-btn" id="cm-export-btn" title="Export evaluation results">Export Results</button>
@@ -969,6 +971,30 @@
                 <div id="cm-filtered-note" style="display:none; padding: 0 16px 4px; font-size: 11px; color: #e8a838;"></div>
                 <div class="cm-scroll">
                     <div class="cm-placeholder">Run an evaluation to see the confusion matrix.</div>
+                </div>
+                <!-- Large-area progress table (shown during tile loading and k-fold) -->
+                <div id="val-progress-panel" style="display:none; padding:12px 16px; overflow-y:auto; flex:1;">
+                    <table id="val-progress-table" style="width:100%; border-collapse:collapse; color:#ccc; font-size:13px;">
+                        <thead>
+                            <tr id="val-progress-thead" style="border-bottom:1px solid #444;"></tr>
+                        </thead>
+                        <tbody id="val-progress-tbody"></tbody>
+                    </table>
+                </div>
+                <!-- Regression metrics table (shown instead of CM for regression tasks) -->
+                <div id="val-regression-panel" style="display:none; padding:16px; overflow:auto;">
+                    <h3 style="color:#eee; margin:0 0 12px;">Regression Metrics</h3>
+                    <table id="val-regression-table" style="width:100%; border-collapse:collapse; color:#ccc; font-size:13px;">
+                        <thead>
+                            <tr style="border-bottom:1px solid #444;">
+                                <th style="text-align:left; padding:6px;">Model</th>
+                                <th style="text-align:right; padding:6px;">R²</th>
+                                <th style="text-align:right; padding:6px;">RMSE</th>
+                                <th style="text-align:right; padding:6px;">MAE</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -984,6 +1010,12 @@
             <div id="map-embedding2" class="map"></div>
             <!-- Validation controls (shown only in validation mode) -->
             <div id="validation-controls" class="validation-panel">
+                <!-- Mode toggle: Viewport vs Large Area -->
+                <div style="display:flex; gap:4px; margin-bottom:8px;">
+                    <button id="val-mode-viewport" class="val-mode-btn active" onclick="setValMode('viewport')" style="flex:1; padding:5px 8px; border:1px solid #555; border-radius:4px 0 0 4px; background:#4a90d9; color:#fff; font-size:12px; cursor:pointer;">Viewport</button>
+                    <button id="val-mode-large" class="val-mode-btn" onclick="setValMode('large-area')" style="flex:1; padding:5px 8px; border:1px solid #555; border-radius:0 4px 4px 0; background:#333; color:#ccc; font-size:12px; cursor:pointer;">Large Area</button>
+                </div>
+
                 <h3>Upload Ground Truth</h3>
                 <div id="val-drop-zone" class="validation-drop-zone">
                     Drop ESRI format .zip here (.shp, .dbf, .shx, .prj)
@@ -1106,9 +1138,31 @@
                     </div>
                 </div>
 
-                <label>Max training pixels</label>
-                <input type="number" id="val-max-train" value="10000" min="100" max="100000" step="1000"
-                    style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+                <!-- Large-area specific controls (hidden in viewport mode) -->
+                <div id="val-large-area-controls" style="display:none;">
+                    <label>Year</label>
+                    <select id="val-year-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+                        <option value="2024">2024</option>
+                        <option value="2025">2025</option>
+                    </select>
+
+                    <label>Max training samples</label>
+                    <input type="number" id="val-max-train-large" value="30000" min="100" max="500000" step="1000"
+                        style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+
+                    <div style="display:flex; gap:6px; margin-top:6px;">
+                        <button id="val-generate-config" onclick="generateConfig()" style="flex:1; padding:6px; border:1px solid #555; border-radius:4px; background:#333; color:#ccc; font-size:12px; cursor:pointer;" title="Download JSON config for CLI use">Generate Config</button>
+                        <button id="val-load-results" onclick="document.getElementById('val-results-file').click()" style="flex:1; padding:6px; border:1px solid #555; border-radius:4px; background:#333; color:#ccc; font-size:12px; cursor:pointer;" title="Load pre-computed NDJSON results">Load Results</button>
+                        <input type="file" id="val-results-file" accept=".ndjson,.jsonl,.json" style="display:none;">
+                    </div>
+                </div>
+
+                <!-- Viewport-mode controls -->
+                <div id="val-viewport-controls">
+                    <label>Max training pixels</label>
+                    <input type="number" id="val-max-train" value="10000" min="100" max="100000" step="1000"
+                        style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+                </div>
 
                 <div style="display:flex; gap:6px;">
                     <button id="val-run-btn" class="validation-run-btn" disabled style="flex:1;" title="Run evaluation on selected classifiers">Run Evaluation</button>

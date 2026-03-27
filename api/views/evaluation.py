@@ -20,6 +20,7 @@ from lib.evaluation_engine import (
     augment_spatial,
     make_classifier,
     run_learning_curve,
+    detect_field_type,
 )
 
 logger = logging.getLogger(__name__)
@@ -476,3 +477,203 @@ def download_model(request, classifier):
         as_attachment=True,
         filename=f"{classifier}_model{ext}",
     )
+
+
+def run_large_area_evaluation(request):
+    """Run large-area evaluation using GeoTessera tile-by-tile loading + k-fold CV.
+
+    Streams NDJSON events (same format as CLI). Accepts config JSON in request body.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    field_name = body.get("field")
+    year = body.get("year", 2024)
+    classifiers = body.get("classifiers", ["nn", "rf"])
+    regressors = body.get("regressors", [])
+    classifier_params = body.get("classifier_params", {})
+    regressor_params = body.get("regressor_params", {})
+    max_train = body.get("max_training_samples")
+    if max_train is not None:
+        max_train = int(max_train)
+    task = body.get("task")  # "classification", "regression", or auto-detect
+
+    if not field_name:
+        return JsonResponse({"error": "field is required"}, status=400)
+
+    gdf = _uploaded_shapefile.get("gdf")
+    if gdf is None:
+        return JsonResponse({"error": "No shapefile uploaded. Upload first."}, status=400)
+
+    if field_name not in gdf.columns:
+        return JsonResponse({"error": f"Field '{field_name}' not found in shapefile"}, status=400)
+
+    # Auto-detect task type
+    if task is None or task == "auto":
+        task = detect_field_type(gdf, field_name)
+
+    is_classification = (task == "classification")
+    _CLF_TO_REG = {"nn": "nn_reg", "rf": "rf_reg", "mlp": "mlp_reg", "xgboost": "xgboost_reg"}
+    if is_classification:
+        model_names = classifiers
+        model_params = classifier_params
+    else:
+        if regressors:
+            model_names = regressors
+            model_params = regressor_params
+        else:
+            # Auto-map classifier names to regressor equivalents
+            model_names = [_CLF_TO_REG.get(c, c) for c in classifiers]
+            model_params = {_CLF_TO_REG.get(c, c): v for c, v in classifier_params.items()}
+
+    def stream():
+        from geotessera import GeoTessera
+        from rasterio.transform import array_bounds as _array_bounds
+        from shapely.geometry import box as _box
+        from sklearn.preprocessing import LabelEncoder as _LabelEncoder
+        from tessera_eval.rasterize import rasterize_shapefile as _rasterize
+        from lib.evaluation_engine import run_learning_curve
+
+        t0 = time.time()
+
+        # Load embeddings tile by tile with streamed progress
+        gt = GeoTessera()
+
+        try:
+            bounds = gdf.total_bounds
+            bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
+            tiles = gt.registry.load_blocks_for_region(bbox, year)
+            total_tiles = len(tiles)
+            if total_tiles == 0:
+                yield json.dumps({"event": "error", "message": f"No GeoTessera tiles found for bbox {bbox}, year {year}"}) + "\n"
+                return
+
+            # Fit label encoder on full shapefile
+            le = _LabelEncoder()
+            le.fit(gdf[field_name].dropna().unique())
+            class_names = le.classes_.tolist()
+
+            all_vectors = []
+            all_labels = []
+            tiles_with_data = 0
+
+            for tile_idx, (yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform) in enumerate(
+                gt.fetch_embeddings(tiles)
+            ):
+                # Stream progress after each tile
+                yield json.dumps({
+                    "event": "download_progress", "tile": tile_idx + 1, "total": total_tiles,
+                }) + "\n"
+
+                h, w, dim = tile_emb.shape
+
+                # Reproject GDF to tile CRS, then filter to tile bbox
+                tile_bounds = _array_bounds(h, w, tile_transform)
+                gdf_proj = gdf.to_crs(tile_crs) if gdf.crs != tile_crs else gdf
+                tile_gdf = gdf_proj[gdf_proj.intersects(_box(*tile_bounds))]
+                if tile_gdf.empty:
+                    continue
+
+                class_raster = _rasterize(tile_gdf, field_name, tile_transform, w, h, label_encoder=le)
+
+                labelled_mask = class_raster > 0
+                n_labelled = int(labelled_mask.sum())
+                if n_labelled == 0:
+                    continue
+
+                tiles_with_data += 1
+                tile_labels = class_raster[labelled_mask] - 1
+                tile_vectors = tile_emb[labelled_mask]
+
+                all_vectors.append(tile_vectors)
+                all_labels.append(tile_labels)
+
+            if not all_vectors:
+                yield json.dumps({"event": "error", "message": "No labelled pixels found across any tiles"}) + "\n"
+                return
+
+            vectors = np.concatenate(all_vectors, axis=0).astype(np.float32)
+            labels = np.concatenate(all_labels, axis=0).astype(np.int32)
+
+            stats = {
+                "tile_count": total_tiles,
+                "tiles_with_data": tiles_with_data,
+                "total_pixels": len(labels),
+                "n_classes": len(class_names),
+            }
+
+        except ValueError as e:
+            yield json.dumps({"event": "error", "message": str(e)}) + "\n"
+            return
+
+        total_labelled = len(labels)
+
+        # Build training sizes
+        all_sizes = [10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000]
+        cap = max_train if max_train else total_labelled
+        training_sizes = [s for s in all_sizes if s <= cap]
+        if not training_sizes or training_sizes[-1] < cap:
+            training_sizes.append(cap)
+
+        # Build class info
+        unique_labels, counts = np.unique(labels, return_counts=True)
+        class_info = []
+        for lbl, cnt in zip(unique_labels, counts):
+            name = class_names[lbl] if lbl < len(class_names) else f"Class {lbl}"
+            class_info.append({"name": str(name), "pixels": int(cnt)})
+
+        # Emit start (same format as viewport mode)
+        yield json.dumps({
+            "event": "start",
+            "classifiers": model_names,
+            "classes": class_info if is_classification else [],
+            "total_labelled_pixels": total_labelled,
+            "confusion_matrix_labels": class_names if is_classification else [],
+            "training_sizes": training_sizes,
+            "stats": stats,
+        }) + "\n"
+
+        # Run learning curve (train=N, test=remainder)
+        for event in run_learning_curve(
+            vectors, labels, model_names, training_sizes,
+            repeats=5, classifier_params=model_params,
+        ):
+            if event["type"] == "progress":
+                yield json.dumps({
+                    "event": "progress",
+                    "size": event["size"],
+                    "classifiers": event["classifiers"],
+                }) + "\n"
+            elif event["type"] == "confusion_matrices":
+                yield json.dumps({
+                    "event": "confusion_matrices",
+                    "confusion_matrices": event["confusion_matrices"],
+                }) + "\n"
+
+        elapsed = time.time() - t0
+        yield json.dumps({
+            "event": "done",
+            "elapsed_seconds": round(elapsed, 1),
+            "field": field_name,
+            "year": year,
+        }) + "\n"
+
+    # Pad each line for immediate flush
+    FLUSH_PAD = 18 * 1024
+
+    def padded_stream():
+        for chunk in stream():
+            if len(chunk) < FLUSH_PAD:
+                yield chunk + " " * (FLUSH_PAD - len(chunk))
+            else:
+                yield chunk
+
+    resp = StreamingHttpResponse(padded_stream(), content_type="application/x-ndjson")
+    resp["Cache-Control"] = "no-cache"
+    resp["Content-Encoding"] = "identity"
+    return resp

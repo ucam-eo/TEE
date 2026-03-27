@@ -33,6 +33,22 @@ let streamDatasetMap = {};
 let lastEvalData = null;
 let cmShowPct = false;
 let cmPopupWindow = null;
+let valMode = 'viewport'; // 'viewport' or 'large-area'
+let valUploadedFilename = null;
+let currentLargeAreaTask = null; // 'classification' or 'regression'
+
+// Regressor labels/colors (extend the classifier palette)
+const REGRESSOR_COLORS = {
+    nn_reg:      { line: 'rgba(255, 159, 64, 1)',  fill: 'rgba(255, 159, 64, 0.15)' },
+    rf_reg:      { line: 'rgba(75, 192, 192, 1)',  fill: 'rgba(75, 192, 192, 0.15)' },
+    xgboost_reg: { line: 'rgba(153, 102, 255, 1)', fill: 'rgba(153, 102, 255, 0.15)' },
+    mlp_reg:     { line: 'rgba(255, 99, 132, 1)',  fill: 'rgba(255, 99, 132, 0.15)' },
+};
+const REGRESSOR_LABELS = { nn_reg: 'k-NN (Reg)', rf_reg: 'Random Forest (Reg)', xgboost_reg: 'XGBoost (Reg)', mlp_reg: 'MLP (Reg)' };
+
+// Merge into lookup objects
+Object.assign(CLASSIFIER_COLORS, REGRESSOR_COLORS);
+Object.assign(CLASSIFIER_LABELS, REGRESSOR_LABELS);
 
 // ── Helper functions ──
 
@@ -106,6 +122,7 @@ async function uploadShapefile(file) {
         }
 
         valFieldData = data.fields;
+        valUploadedFilename = file.name;
         dropZone.textContent = file.name;
         dropZone.classList.add('uploaded');
 
@@ -367,7 +384,7 @@ function handleStreamEvent(ev) {
             };
         });
         createStreamChart(ev.classifiers);
-        showFinishButtons(ev.classifiers);
+        if (valMode !== 'large-area') showFinishButtons(ev.classifiers);
 
         if (ev.classes) {
             const names = ev.classes.map(c => c.name);
@@ -414,9 +431,15 @@ function handleStreamEvent(ev) {
         renderConfusionMatrix(lastChartData);
 
     } else if (ev.event === 'done') {
+        if (!lastChartData) return;
         lastChartData.elapsed_seconds = ev.elapsed_seconds;
-        lastChartData.models_available = ev.models_available;
-        status.textContent = `Done in ${ev.elapsed_seconds}s \u2014 ${lastChartData.total_labelled_pixels.toLocaleString()} pixels, ${lastChartData.classes.length} classes`;
+        lastChartData.models_available = ev.models_available || [];
+        const pixels = lastChartData.total_labelled_pixels || 0;
+        const nClasses = (lastChartData.classes || []).length;
+        const suffix = nClasses > 0
+            ? ` \u2014 ${pixels.toLocaleString()} pixels, ${nClasses} classes`
+            : ` \u2014 ${pixels.toLocaleString()} pixels`;
+        status.textContent = `Done in ${ev.elapsed_seconds}s${suffix}`;
         status.style.color = '#28a745';
         const dlBtn = document.getElementById('cm-download-btn');
         const dlBtnH = document.getElementById('val-download-btn');
@@ -428,10 +451,44 @@ function handleStreamEvent(ev) {
     } else if (ev.event === 'error') {
         status.textContent = ev.message || 'Evaluation error';
         status.style.color = '#dc3545';
+
+    // ── Large-area events ──
+
+    } else if (ev.event === 'download_progress') {
+        status.textContent = `Loading tiles: ${ev.tile} / ${ev.total}`;
+
+    } else if (ev.event === 'field_start') {
+        currentLargeAreaTask = ev.type;
+        status.textContent = `Loading tiles for ${ev.field} (${ev.type})...`;
+
+    } else if (ev.event === 'fold_result') {
+        status.textContent = `Fold ${ev.fold} complete`;
+        appendFoldRow(ev.fold, ev.models);
+        // Accumulate fold data for chart rendering (both tasks)
+        if (lastChartData) {
+            if (!lastChartData._foldResults) lastChartData._foldResults = [];
+            lastChartData._foldResults.push(ev);
+        }
+
+    } else if (ev.event === 'aggregate') {
+        if (lastChartData) {
+            lastChartData.aggregate = ev.models;
+        }
+        appendAggregateRow(ev.models);
+        if (currentLargeAreaTask === 'regression') {
+            renderRegressionResults(ev.models);
+            renderRegressionBarChart(ev.models);
+        } else if (currentLargeAreaTask === 'classification') {
+            renderClassificationBarChart(ev.models);
+        }
     }
 }
 
 async function runEvaluation() {
+    if (valMode === 'large-area') {
+        return runLargeAreaEvaluation();
+    }
+
     const field = document.getElementById('val-field-select').value;
     if (!field) return;
 
@@ -515,28 +572,7 @@ async function runEvaluation() {
             return;
         }
 
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
-            for (const line of lines) {
-                if (!line.trim()) continue;
-                try {
-                    handleStreamEvent(JSON.parse(line));
-                } catch (parseErr) {
-                    console.warn('NDJSON parse error:', parseErr, line);
-                }
-            }
-        }
-        if (buffer.trim()) {
-            try { handleStreamEvent(JSON.parse(buffer)); } catch(e) {}
-        }
-        resetButtons();
+        await readNdjsonStream(resp, resetButtons);
 
     } catch (e) {
         resetButtons();
@@ -557,6 +593,31 @@ async function runEvaluation() {
             status.style.color = '#dc3545';
         }
     }
+}
+
+async function readNdjsonStream(resp, resetButtons) {
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+                handleStreamEvent(JSON.parse(line));
+            } catch (parseErr) {
+                console.warn('NDJSON parse error:', parseErr, line);
+            }
+        }
+    }
+    if (buffer.trim()) {
+        try { handleStreamEvent(JSON.parse(buffer)); } catch(e) {}
+    }
+    if (resetButtons) resetButtons();
 }
 
 // ── Chart rendering (full rebuild, used by metric toggle) ──
@@ -923,13 +984,462 @@ document.getElementById('cm-toggle-pct').addEventListener('click', function() {
     }
 });
 
+// ── Large-area mode ──
+
+function setValMode(mode) {
+    valMode = mode;
+    const vpBtn = document.getElementById('val-mode-viewport');
+    const laBtn = document.getElementById('val-mode-large');
+    const vpControls = document.getElementById('val-viewport-controls');
+    const laControls = document.getElementById('val-large-area-controls');
+    const isLargeArea = mode === 'large-area';
+
+    if (isLargeArea) {
+        vpBtn.style.background = '#333'; vpBtn.style.color = '#ccc'; vpBtn.classList.remove('active');
+        laBtn.style.background = '#4a90d9'; laBtn.style.color = '#fff'; laBtn.classList.add('active');
+        vpControls.style.display = 'none';
+        laControls.style.display = '';
+    } else {
+        vpBtn.style.background = '#4a90d9'; vpBtn.style.color = '#fff'; vpBtn.classList.add('active');
+        laBtn.style.background = '#333'; laBtn.style.color = '#ccc'; laBtn.classList.remove('active');
+        vpControls.style.display = '';
+        laControls.style.display = 'none';
+    }
+
+    // Hide spatial/U-Net classifiers in large-area mode (need 2D grid, not available tile-by-tile)
+    const unsupported = ['spatial_mlp', 'spatial_mlp_5x5', 'unet'];
+    document.querySelectorAll('.val-clf-block').forEach(block => {
+        const cb = block.querySelector('input[type="checkbox"]');
+        if (cb && unsupported.includes(cb.value)) {
+            block.style.display = isLargeArea ? 'none' : '';
+            if (isLargeArea) cb.checked = false;
+        }
+    });
+}
+
+function generateConfig() {
+    const field = document.getElementById('val-field-select').value;
+    if (!field) { alert('Select a field first'); return; }
+
+    const checkboxes = document.querySelectorAll('.val-clf-header input:checked');
+    const classifiers = {};
+    const regressors = {};
+    Array.from(checkboxes).forEach(cb => {
+        const name = cb.value;
+        // Skip spatial classifiers for large-area mode
+        if (name === 'spatial_mlp' || name === 'spatial_mlp_5x5' || name === 'unet') return;
+        const params = {};
+        document.querySelectorAll(`.val-params input[data-clf="${name}"], .val-params select[data-clf="${name}"]`).forEach(el => {
+            const val = el.value.trim();
+            if (val === '') return;
+            const num = Number(val);
+            params[el.dataset.param] = isNaN(num) ? val : num;
+        });
+        // Guess: if name ends with _reg it's a regressor, otherwise classifier
+        if (name.endsWith('_reg')) {
+            regressors[name] = params;
+        } else {
+            classifiers[name] = params;
+        }
+    });
+
+    const config = {
+        "$schema": "tee_evaluate_config_v1",
+        "shapefile": valUploadedFilename || "/path/to/ground_truth.zip",
+        "fields": [{ "name": field, "type": "auto" }],
+        "classifiers": classifiers,
+        "regressors": regressors,
+        "years": [parseInt(document.getElementById('val-year-select').value) || 2024],
+        "max_training_samples": parseInt(document.getElementById('val-max-train-large').value) || 30000,
+        "output_dir": "./eval_output",
+        "dry_run": false,
+        "seed": 42,
+    };
+
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'eval_config.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+async function runLargeAreaEvaluation() {
+    const field = document.getElementById('val-field-select').value;
+    if (!field) return;
+
+    const checkboxes = document.querySelectorAll('.val-clf-header input:checked');
+    const classifiers = [];
+    Array.from(checkboxes).forEach(cb => {
+        const name = cb.value;
+        if (name === 'spatial_mlp' || name === 'spatial_mlp_5x5' || name === 'unet') return;
+        classifiers.push(name);
+    });
+    if (classifiers.length === 0) {
+        document.getElementById('val-status').textContent = 'Select at least one classifier';
+        document.getElementById('val-status').style.color = '#dc3545';
+        return;
+    }
+
+    const params = {};
+    document.querySelectorAll('.val-params input, .val-params select').forEach(el => {
+        const clf = el.dataset.clf;
+        const param = el.dataset.param;
+        if (!clf || !param) return;
+        if (!classifiers.includes(clf)) return;
+        if (!params[clf]) params[clf] = {};
+        const val = el.value.trim();
+        if (val === '') return;
+        const num = Number(val);
+        params[clf][param] = isNaN(num) ? val : num;
+    });
+
+    const btn = document.getElementById('val-run-btn');
+    const cancelBtn = document.getElementById('val-cancel-btn');
+    const status = document.getElementById('val-status');
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+    cancelBtn.style.display = '';
+    status.style.color = '#888';
+
+    lastChartData = null;
+    currentLargeAreaTask = null;
+    if (valChart) { valChart.destroy(); valChart = null; }
+    hideFinishButtons();
+    // Reset regression panel
+    document.getElementById('val-regression-panel').style.display = 'none';
+
+    evalAbortController = new AbortController();
+    let userCancelled = false;
+
+    const t0 = Date.now();
+    const timer = setInterval(() => {
+        if (!lastChartData) {
+            const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
+            status.textContent = `Starting... ${elapsed}s`;
+        }
+    }, 1000);
+
+    function resetButtons() {
+        clearInterval(timer);
+        btn.disabled = false;
+        btn.textContent = 'Run Evaluation';
+        cancelBtn.style.display = 'none';
+        evalAbortController = null;
+    }
+
+    cancelBtn.onclick = () => { userCancelled = true; evalAbortController.abort(); };
+
+    try {
+        const resp = await fetch('/api/evaluation/run-large-area', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                field: field,
+                year: parseInt(document.getElementById('val-year-select').value) || 2024,
+                classifiers: classifiers,
+                classifier_params: params,
+                max_training_samples: parseInt(document.getElementById('val-max-train-large').value) || 30000,
+            }),
+            signal: evalAbortController.signal,
+        });
+
+        if (!resp.ok) {
+            let msg = 'Evaluation failed';
+            try { const data = await resp.json(); msg = data.error || msg; }
+            catch (_) { msg = `Server error (${resp.status})`; }
+            resetButtons();
+            status.textContent = msg;
+            status.style.color = '#dc3545';
+            return;
+        }
+
+        await readNdjsonStream(resp, resetButtons);
+
+    } catch (e) {
+        resetButtons();
+        const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
+        if (e.name === 'AbortError') {
+            status.textContent = userCancelled ? 'Cancelled by user' : `Timed out after ${elapsed}s`;
+            status.style.color = '#f0ad4e';
+        } else {
+            status.textContent = 'Error: ' + e.message;
+            status.style.color = '#dc3545';
+        }
+    }
+}
+
+// ── Large-area progress table ──
+
+let _progressTableTask = null;
+let _progressTableModels = [];
+
+function initProgressTable(modelNames, task) {
+    _progressTableTask = task;
+    _progressTableModels = modelNames;
+    const panel = document.getElementById('val-progress-panel');
+    const thead = document.getElementById('val-progress-thead');
+    const tbody = document.getElementById('val-progress-tbody');
+    const cmScroll = document.querySelector('#val-cm-panel .cm-scroll');
+    if (cmScroll) cmScroll.style.display = 'none';
+    panel.style.display = '';
+
+    const metric = task === 'regression' ? 'R²' : 'F1';
+    thead.innerHTML = '<th style="text-align:left; padding:6px;">Fold</th>'
+        + modelNames.map(n =>
+            `<th style="text-align:right; padding:6px;">${CLASSIFIER_LABELS[n] || n} (${metric})</th>`
+        ).join('');
+    tbody.innerHTML = '';
+}
+
+function appendFoldRow(fold, models) {
+    const tbody = document.getElementById('val-progress-tbody');
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid #333';
+    const metric = _progressTableTask === 'regression' ? 'r2' : 'mean_f1';
+    let cells = `<td style="padding:6px;">Fold ${fold}</td>`;
+    for (const name of _progressTableModels) {
+        const m = models[name] || {};
+        const val = m[metric];
+        cells += `<td style="text-align:right; padding:6px;">${val !== undefined ? val.toFixed(4) : '—'}</td>`;
+    }
+    tr.innerHTML = cells;
+    tbody.appendChild(tr);
+}
+
+function appendAggregateRow(models) {
+    const tbody = document.getElementById('val-progress-tbody');
+    const tr = document.createElement('tr');
+    tr.style.borderTop = '2px solid #666';
+    tr.style.fontWeight = 'bold';
+    const isReg = _progressTableTask === 'regression';
+    const metricKey = isReg ? 'mean_r2' : 'mean_f1';
+    const stdKey = isReg ? 'std_r2' : 'std_f1';
+    let cells = `<td style="padding:6px;">Mean</td>`;
+    for (const name of _progressTableModels) {
+        const m = models[name] || {};
+        const val = m[metricKey];
+        const std = m[stdKey];
+        const text = val !== undefined ? `${val.toFixed(4)} ± ${(std || 0).toFixed(4)}` : '—';
+        cells += `<td style="text-align:right; padding:6px;">${text}</td>`;
+    }
+    tr.innerHTML = cells;
+    tbody.appendChild(tr);
+}
+
+function renderRegressionResults(aggregate) {
+    const panel = document.getElementById('val-regression-panel');
+    const tbody = document.querySelector('#val-regression-table tbody');
+    const cmScroll = document.querySelector('#val-cm-panel .cm-scroll');
+    const cmTitle = document.getElementById('val-cm-title');
+
+    // Hide CM, show regression
+    if (cmScroll) cmScroll.style.display = 'none';
+    if (cmTitle) cmTitle.textContent = 'Regression Metrics';
+    panel.style.display = '';
+
+    tbody.innerHTML = '';
+    for (const [name, metrics] of Object.entries(aggregate)) {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #333';
+        const color = CLASSIFIER_COLORS[name] || { line: '#888' };
+        tr.innerHTML = `
+            <td style="padding:6px;"><span style="color:${color.line}">\u25cf</span> ${CLASSIFIER_LABELS[name] || name}</td>
+            <td style="text-align:right; padding:6px;">${metrics.mean_r2.toFixed(4)} \u00b1 ${metrics.std_r2.toFixed(4)}</td>
+            <td style="text-align:right; padding:6px;">${metrics.mean_rmse.toFixed(4)} \u00b1 ${metrics.std_rmse.toFixed(4)}</td>
+            <td style="text-align:right; padding:6px;">${metrics.mean_mae.toFixed(4)} \u00b1 ${metrics.std_mae.toFixed(4)}</td>
+        `;
+        tbody.appendChild(tr);
+    }
+}
+
+// Inline Chart.js plugin: draws ±std error bars on bar charts.
+// Expects each dataset to have a `_std` array parallel to `data`.
+const errorBarPlugin = {
+    id: 'errorBars',
+    afterDraw(chart) {
+        const ctx = chart.ctx;
+        chart.data.datasets.forEach((ds, dsIdx) => {
+            const stdArr = ds._std;
+            if (!stdArr) return;
+            const meta = chart.getDatasetMeta(dsIdx);
+            meta.data.forEach((bar, i) => {
+                const std = stdArr[i];
+                if (!std || std === 0) return;
+                const yScale = chart.scales.y;
+                const val = ds.data[i];
+                const yTop = yScale.getPixelForValue(val + std);
+                const yBot = yScale.getPixelForValue(val - std);
+                const x = bar.x;
+                const capW = bar.width ? bar.width * 0.3 : 6;
+                ctx.save();
+                ctx.strokeStyle = ds.borderColor instanceof Array ? ds.borderColor[i] : (ds.borderColor || '#fff');
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                // vertical line
+                ctx.moveTo(x, yTop);
+                ctx.lineTo(x, yBot);
+                // top cap
+                ctx.moveTo(x - capW, yTop);
+                ctx.lineTo(x + capW, yTop);
+                // bottom cap
+                ctx.moveTo(x - capW, yBot);
+                ctx.lineTo(x + capW, yBot);
+                ctx.stroke();
+                ctx.restore();
+            });
+        });
+    },
+};
+
+function renderRegressionBarChart(aggregate) {
+    const ctx = document.getElementById('val-chart').getContext('2d');
+    if (valChart) valChart.destroy();
+
+    const modelNames = Object.keys(aggregate);
+    const r2Values = modelNames.map(n => aggregate[n].mean_r2);
+    const r2Std = modelNames.map(n => aggregate[n].std_r2);
+    const colors = modelNames.map(n => (CLASSIFIER_COLORS[n] || { line: '#888' }).line);
+
+    valChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: modelNames.map(n => CLASSIFIER_LABELS[n] || n),
+            datasets: [{
+                label: 'R\u00b2',
+                data: r2Values,
+                backgroundColor: colors.map(c => c.replace('1)', '0.6)')),
+                borderColor: colors,
+                borderWidth: 2,
+                _std: r2Std,
+            }],
+        },
+        plugins: [errorBarPlugin],
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: 'R\u00b2 Score by Model (k-fold CV)',
+                    color: '#eee',
+                    font: { size: 15, weight: 'bold' },
+                },
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#aaa' },
+                    grid: { color: 'rgba(255,255,255,0.08)' },
+                },
+                y: {
+                    min: 0,
+                    title: { display: true, text: 'R\u00b2', color: '#aaa' },
+                    ticks: { color: '#aaa' },
+                    grid: { color: 'rgba(255,255,255,0.08)' },
+                },
+            },
+        },
+    });
+}
+
+function renderClassificationBarChart(aggregate) {
+    const ctx = document.getElementById('val-chart').getContext('2d');
+    if (valChart) valChart.destroy();
+
+    const modelNames = Object.keys(aggregate);
+    const f1Values = modelNames.map(n => aggregate[n].mean_f1);
+    const f1Std = modelNames.map(n => aggregate[n].std_f1);
+    const colors = modelNames.map(n => (CLASSIFIER_COLORS[n] || { line: '#888' }).line);
+
+    valChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: modelNames.map(n => CLASSIFIER_LABELS[n] || n),
+            datasets: [{
+                label: 'Macro F1',
+                data: f1Values,
+                backgroundColor: colors.map(c => c.replace('1)', '0.6)')),
+                borderColor: colors,
+                borderWidth: 2,
+                _std: f1Std,
+            }],
+        },
+        plugins: [errorBarPlugin],
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: 'Macro F1 Score by Model (k-fold CV)',
+                    color: '#eee',
+                    font: { size: 15, weight: 'bold' },
+                },
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#aaa' },
+                    grid: { color: 'rgba(255,255,255,0.08)' },
+                },
+                y: {
+                    min: 0,
+                    max: 1,
+                    title: { display: true, text: 'Macro F1', color: '#aaa' },
+                    ticks: { color: '#aaa' },
+                    grid: { color: 'rgba(255,255,255,0.08)' },
+                },
+            },
+        },
+    });
+}
+
+function loadResultsFile() {
+    const fileInput = document.getElementById('val-results-file');
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const status = document.getElementById('val-status');
+    status.textContent = 'Loading results...';
+    status.style.color = '#888';
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const lines = e.target.result.split('\n').filter(l => l.trim());
+        lastChartData = null;
+        currentLargeAreaTask = null;
+        if (valChart) { valChart.destroy(); valChart = null; }
+
+        for (const line of lines) {
+            try {
+                handleStreamEvent(JSON.parse(line));
+            } catch (err) {
+                console.warn('Parse error in results file:', err);
+            }
+        }
+        status.textContent = `Loaded ${lines.length} events from ${file.name}`;
+        status.style.color = '#28a745';
+    };
+    reader.readAsText(file);
+    fileInput.value = '';
+}
+
+// Wire up Load Results file input
+document.getElementById('val-results-file').addEventListener('change', loadResultsFile);
+
 // ── Expose on window for onclick handlers and test assertions ──
 
 window.uploadShapefile = uploadShapefile;
 window.runEvaluation = runEvaluation;
+window.runLargeAreaEvaluation = runLargeAreaEvaluation;
 window.renderConfusionMatrix = renderConfusionMatrix;
 window.exportEvalResults = exportEvalResults;
 window.openCMPopup = openCMPopup;
+window.setValMode = setValMode;
+window.generateConfig = generateConfig;
+window.loadResultsFile = loadResultsFile;
 Object.defineProperty(window, 'lastEvalData', {
     get: () => lastEvalData,
     set: (v) => { lastEvalData = v; },

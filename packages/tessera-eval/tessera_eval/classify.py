@@ -1,9 +1,9 @@
-"""Classifier factory and spatial feature extraction."""
+"""Classifier and regressor factory, plus spatial feature extraction."""
 
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+from sklearn.neural_network import MLPClassifier, MLPRegressor
 
 
 def available_classifiers():
@@ -151,3 +151,67 @@ def augment_spatial(X, y, window, dim):
         patches[:, ::-1, ::-1, :].copy().reshape(n, -1),
     ]
     return np.concatenate(augmented, axis=0), np.tile(y, 4)
+
+
+def available_regressors():
+    """Return list of available regressor names."""
+    names = ["nn_reg", "rf_reg", "mlp_reg"]
+    try:
+        import xgboost  # noqa: F401
+        names.append("xgboost_reg")
+    except ImportError:
+        pass
+    return names
+
+
+def make_regressor(name, params=None):
+    """Create a regressor instance by name with optional hyperparameters.
+
+    Args:
+        name: Regressor name — one of 'nn_reg', 'rf_reg', 'mlp_reg', 'xgboost_reg'
+        params: Optional dict of hyperparameters
+
+    Returns:
+        scikit-learn compatible regressor (fit/predict interface)
+
+    Raises:
+        ValueError: If name is unknown
+        ImportError: If xgboost_reg is requested but not installed
+    """
+    p = params or {}
+    if name == "nn_reg":
+        return KNeighborsRegressor(
+            n_neighbors=int(p.get("n_neighbors", 5)),
+            weights=p.get("weights", "uniform"),
+            metric="euclidean",
+        )
+    elif name == "rf_reg":
+        max_depth = p.get("max_depth")
+        if max_depth is not None:
+            max_depth = int(max_depth)
+        return RandomForestRegressor(
+            n_estimators=int(p.get("n_estimators", 100)),
+            max_depth=max_depth,
+            n_jobs=-1, random_state=42,
+        )
+    elif name == "xgboost_reg":
+        from xgboost import XGBRegressor
+        return XGBRegressor(
+            n_estimators=int(p.get("n_estimators", 100)),
+            max_depth=int(p.get("max_depth", 6)),
+            learning_rate=float(p.get("learning_rate", 0.3)),
+            n_jobs=-1, random_state=42, verbosity=0,
+        )
+    elif name == "mlp_reg":
+        layers_str = p.get("hidden_layers", "64,32")
+        if isinstance(layers_str, str):
+            hidden = tuple(int(x) for x in layers_str.split(","))
+        else:
+            hidden = (64, 32)
+        return MLPRegressor(
+            hidden_layer_sizes=hidden,
+            max_iter=int(p.get("max_iter", 200)),
+            random_state=42,
+        )
+    else:
+        raise ValueError(f"Unknown regressor: {name}")

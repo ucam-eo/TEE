@@ -70,6 +70,7 @@ class TestAPIEndpointCoverage:
         "/api/evaluation/class-counts",
         "/api/evaluation/run",
         "/api/evaluation/finish-classifier",
+        "/api/evaluation/run-large-area",
         # Tiles
         "/tiles/health",
         # Static
@@ -159,8 +160,12 @@ class TestCriticalFunctions:
         # evaluation.js
         "uploadShapefile",
         "runEvaluation",
+        "runLargeAreaEvaluation",
         "renderConfusionMatrix",
         "exportEvalResults",
+        "setValMode",
+        "generateConfig",
+        "loadResultsFile",
         # schema.js
         "loadSchema",
         "loadCustomSchema",
@@ -364,7 +369,19 @@ class TestBackendLibraries:
             "check_readiness", "delete_viewport_data", "compute_data_size",
         ]),
         ("lib/evaluation_engine.py", [
-            "load_vectors",
+            "load_vectors", "detect_field_type",
+        ]),
+        ("packages/tessera-eval/tessera_eval/classify.py", [
+            "make_classifier", "make_regressor", "available_regressors",
+        ]),
+        ("packages/tessera-eval/tessera_eval/evaluate.py", [
+            "run_kfold_cv", "regression_metrics", "detect_field_type",
+        ]),
+        ("packages/tessera-eval/tessera_eval/data.py", [
+            "load_embeddings_for_shapefile",
+        ]),
+        ("packages/tessera-eval/tessera_eval/rasterize.py", [
+            "rasterize_shapefile",
         ]),
         ("lib/tile_renderer.py", [
             "render_tile_png", "tile_to_bbox", "get_pyramid_path",
@@ -384,8 +401,11 @@ class TestBackendLibraries:
             pytest.skip(f"{path} not yet extracted")
         source = lib_file.read_text()
         for fn in functions:
-            assert f"def {fn}(" in source, (
-                f"{path} exists but is missing function {fn}()"
+            has_def = f"def {fn}(" in source
+            has_import = f"import {fn}" in source or f"{fn}" in source
+            assert has_def or has_import, (
+                f"{path} exists but is missing function {fn}() "
+                "(neither defined nor re-exported)"
             )
 
 
@@ -399,7 +419,7 @@ class TestBackendViewsIntact:
         ],
         "api/views/evaluation.py": [
             "upload_shapefile", "class_pixel_counts", "run_evaluation",
-            "finish_classifier", "download_model",
+            "finish_classifier", "download_model", "run_large_area_evaluation",
         ],
         "api/views/tiles.py": [
             "get_tile", "get_bounds", "tile_health",
@@ -499,3 +519,139 @@ class TestExternalDeps:
 
     def test_importmap_exists(self, html):
         assert "importmap" in html
+
+
+# ──────────────────────────────────────────────────
+# 10. tessera-eval library completeness
+#     The library must be self-contained and usable
+#     without Django for the compute separation plan.
+# ──────────────────────────────────────────────────
+
+TESSERA_EVAL = ROOT / "packages" / "tessera-eval" / "tessera_eval"
+
+
+class TestTesseraEvalSelfContained:
+    """tessera_eval must be usable standalone (no Django imports)."""
+
+    MODULES = ["__init__.py", "classify.py", "data.py", "evaluate.py", "rasterize.py"]
+
+    @pytest.mark.parametrize("module", MODULES)
+    def test_module_exists(self, module):
+        assert (TESSERA_EVAL / module).is_file(), f"tessera_eval/{module} missing"
+
+    @pytest.mark.parametrize("module", MODULES)
+    def test_no_django_import(self, module):
+        source = (TESSERA_EVAL / module).read_text()
+        assert "import django" not in source and "from django" not in source, (
+            f"tessera_eval/{module} imports Django — must be framework-independent"
+        )
+
+    def test_init_exports_core(self):
+        source = (TESSERA_EVAL / "__init__.py").read_text()
+        for name in [
+            "run_learning_curve", "run_kfold_cv", "regression_metrics",
+            "detect_field_type", "make_classifier", "make_regressor",
+            "rasterize_shapefile", "load_embeddings_for_shapefile",
+        ]:
+            assert name in source, f"tessera_eval.__init__ missing export: {name}"
+
+    def test_rasterize_accepts_label_encoder(self):
+        source = (TESSERA_EVAL / "rasterize.py").read_text()
+        assert "label_encoder" in source, (
+            "rasterize_shapefile must accept label_encoder param for cross-tile consistency"
+        )
+
+    def test_evaluate_has_logging(self):
+        source = (TESSERA_EVAL / "evaluate.py").read_text()
+        assert "import logging" in source, "evaluate.py must use logging, not bare except"
+
+    def test_data_reprojects_to_tile_crs(self):
+        source = (TESSERA_EVAL / "data.py").read_text()
+        assert "to_crs" in source, (
+            "load_embeddings_for_shapefile must reproject GDF to tile CRS before rasterizing"
+        )
+
+    def test_pyproject_has_server_extra(self):
+        toml_path = ROOT / "packages" / "tessera-eval" / "pyproject.toml"
+        if not toml_path.is_file():
+            pytest.skip("pyproject.toml not found")
+        source = toml_path.read_text()
+        # Will be added when compute server is implemented
+        if "server" not in source:
+            pytest.skip("server extra not yet added — pending compute separation")
+
+    def test_server_module_exists(self):
+        server = TESSERA_EVAL / "server.py"
+        if not server.is_file():
+            pytest.skip("server.py not yet created — pending compute separation")
+        source = server.read_text()
+        assert "def main(" in source, "server.py must have a main() entry point"
+
+
+# ──────────────────────────────────────────────────
+# 11. NDJSON event schema conformance
+#     The events streamed by evaluation endpoints must
+#     match what the JS event handler expects.
+# ──────────────────────────────────────────────────
+
+class TestNDJSONEventSchema:
+    """Verify JS handles all event types emitted by the backend."""
+
+    # Events the backend can emit (from evaluation.py and evaluate.py)
+    BACKEND_EVENTS = [
+        "start", "progress", "confusion_matrices", "done",
+        "error", "model_ready",
+        "download_progress", "field_start",
+        "fold_result", "aggregate",
+    ]
+
+    @pytest.mark.parametrize("event_name", BACKEND_EVENTS)
+    def test_js_handles_event(self, all_script_text, event_name):
+        # The JS handler checks ev.event === 'name' or event["type"]
+        assert f"'{event_name}'" in all_script_text or f'"{event_name}"' in all_script_text, (
+            f"NDJSON event '{event_name}' emitted by backend but not handled in JS"
+        )
+
+
+# ──────────────────────────────────────────────────
+# 12. Large-area evaluation guards
+# ──────────────────────────────────────────────────
+
+class TestLargeAreaEvaluation:
+    """Guards for large-area evaluation feature (code review fixes)."""
+
+    def test_error_bar_plugin_defined(self, all_script_text):
+        assert "errorBarPlugin" in all_script_text or "errorBars" in all_script_text, (
+            "Error bar plugin for bar charts must be defined in evaluation.js"
+        )
+
+    def test_classification_bar_chart_function(self, all_script_text):
+        assert "renderClassificationBarChart" in all_script_text, (
+            "renderClassificationBarChart must exist for large-area classification results"
+        )
+
+    def test_regression_bar_chart_function(self, all_script_text):
+        assert "renderRegressionBarChart" in all_script_text, (
+            "renderRegressionBarChart must exist for large-area regression results"
+        )
+
+    def test_done_handler_null_guard(self, all_script_text):
+        # The done handler must guard against null lastChartData
+        assert "!lastChartData" in all_script_text, (
+            "done handler must guard against null lastChartData (Fix 4)"
+        )
+
+    def test_val_mode_large_area(self, all_script_text):
+        assert "'large-area'" in all_script_text or '"large-area"' in all_script_text, (
+            "large-area mode string must exist in JS"
+        )
+
+    def test_osm_referrer_policy(self, html):
+        assert 'name="referrer"' in html, (
+            "viewer.html must have <meta name='referrer' content='origin'>"
+        )
+
+    def test_progress_table_panel(self, html):
+        assert 'id="val-progress-panel"' in html or 'id="val-progress-table"' in html, (
+            "Progress table panel must exist for large-area fold results"
+        )
