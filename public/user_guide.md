@@ -576,6 +576,17 @@ Then just type `tee` to start a session.
 
 Embeddings are fetched directly from GeoTessera (`dl2.geotessera.org`) by the compute server — they do not pass through the hosted TEE server.
 
+### Data Privacy
+
+When using `tee-compute`, your ground-truth data stays private:
+
+- **Shapefiles** are uploaded to your local compute server only — they are never sent to the hosted server
+- **Evaluation results** (learning curves, confusion matrices, trained models) remain on your machine
+- **Embeddings** are fetched from GeoTessera's public data store, not from the hosted server
+- **Label sharing** is the only action that sends data to the hosted server, and it requires you to explicitly click Share — it never happens automatically
+
+The hosted server only sees requests for map tiles, satellite imagery, and UI assets — the same data any web browser would request when viewing a map.
+
 ### Command Reference
 
 ```

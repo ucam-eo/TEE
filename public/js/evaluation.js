@@ -371,6 +371,7 @@ function handleStreamEvent(ev) {
     if (ev.event === 'start') {
         lastChartData = {
             training_sizes: [],
+            _plannedSizes: ev.training_sizes || [],
             classifiers: {},
             classes: ev.classes,
             total_labelled_pixels: ev.total_labelled_pixels,
@@ -385,6 +386,14 @@ function handleStreamEvent(ev) {
         });
         createStreamChart(ev.classifiers);
         if (valMode !== 'large-area') showFinishButtons(ev.classifiers);
+        if (valMode === 'large-area') {
+            const pixels = ev.total_labelled_pixels || 0;
+            const stats = ev.stats || {};
+            initResultsTable(ev.classifiers, currentLargeAreaTask || 'classification');
+            setResultsStatus(
+                `${pixels.toLocaleString()} labelled pixels from ${stats.tiles_with_data || '?'}/${stats.tile_count || '?'} tiles. Running learning curve...`
+            );
+        }
 
         if (ev.classes) {
             const names = ev.classes.map(c => c.name);
@@ -411,7 +420,17 @@ function handleStreamEvent(ev) {
             }
         }
         if (valChart) valChart.update();
-        status.textContent = `Training size ${ev.size.toLocaleString()}...`;
+        // Show completed size and what's next
+        const planned = lastChartData._plannedSizes || [];
+        const doneIdx = planned.indexOf(ev.size);
+        if (doneIdx >= 0 && doneIdx < planned.length - 1) {
+            status.textContent = `Done ${ev.size.toLocaleString()}, training ${planned[doneIdx + 1].toLocaleString()}...`;
+        } else {
+            status.textContent = `Training size ${ev.size.toLocaleString()} complete`;
+        }
+        if (valMode === 'large-area') {
+            appendResultsRow(ev.size, ev.classifiers);
+        }
 
     } else if (ev.event === 'model_ready') {
         const btn = document.getElementById('finish-' + ev.classifier);
@@ -456,15 +475,15 @@ function handleStreamEvent(ev) {
 
     } else if (ev.event === 'download_progress') {
         status.textContent = `Loading tiles: ${ev.tile} / ${ev.total}`;
+        showResultsPanel(`Loading embeddings: tile ${ev.tile} / ${ev.total}...`);
 
     } else if (ev.event === 'field_start') {
         currentLargeAreaTask = ev.type;
-        status.textContent = `Loading tiles for ${ev.field} (${ev.type})...`;
+        status.textContent = `Loading embeddings for ${ev.field}...`;
+        showResultsPanel(`Loading embeddings for ${ev.field} (${ev.type})...`);
 
     } else if (ev.event === 'fold_result') {
         status.textContent = `Fold ${ev.fold} complete`;
-        appendFoldRow(ev.fold, ev.models);
-        // Accumulate fold data for chart rendering (both tasks)
         if (lastChartData) {
             if (!lastChartData._foldResults) lastChartData._foldResults = [];
             lastChartData._foldResults.push(ev);
@@ -474,7 +493,6 @@ function handleStreamEvent(ev) {
         if (lastChartData) {
             lastChartData.aggregate = ev.models;
         }
-        appendAggregateRow(ev.models);
         if (currentLargeAreaTask === 'regression') {
             renderRegressionResults(ev.models);
             renderRegressionBarChart(ev.models);
@@ -1107,8 +1125,10 @@ async function runLargeAreaEvaluation() {
     currentLargeAreaTask = null;
     if (valChart) { valChart.destroy(); valChart = null; }
     hideFinishButtons();
-    // Reset regression panel
+    // Reset regression panel and results panel
     document.getElementById('val-regression-panel').style.display = 'none';
+    document.getElementById('val-results-panel').style.display = 'none';
+    document.getElementById('val-results-tbody').innerHTML = '';
 
     evalAbortController = new AbortController();
     let userCancelled = false;
@@ -1170,59 +1190,48 @@ async function runLargeAreaEvaluation() {
     }
 }
 
-// ── Large-area progress table ──
+// ── Large-area results panel (panel 3) ──
 
-let _progressTableTask = null;
-let _progressTableModels = [];
+let _resultsTableModels = [];
 
-function initProgressTable(modelNames, task) {
-    _progressTableTask = task;
-    _progressTableModels = modelNames;
-    const panel = document.getElementById('val-progress-panel');
-    const thead = document.getElementById('val-progress-thead');
-    const tbody = document.getElementById('val-progress-tbody');
-    const cmScroll = document.querySelector('#val-cm-panel .cm-scroll');
-    if (cmScroll) cmScroll.style.display = 'none';
+function showResultsPanel(message) {
+    const panel = document.getElementById('val-results-panel');
+    panel.style.display = '';
+    document.getElementById('val-results-status').textContent = message;
+}
+
+function setResultsStatus(message) {
+    document.getElementById('val-results-status').textContent = message;
+}
+
+function hideResultsPanel() {
+    document.getElementById('val-results-panel').style.display = 'none';
+}
+
+function initResultsTable(modelNames, task) {
+    _resultsTableModels = modelNames;
+    const panel = document.getElementById('val-results-panel');
+    const thead = document.getElementById('val-results-thead');
+    const tbody = document.getElementById('val-results-tbody');
     panel.style.display = '';
 
     const metric = task === 'regression' ? 'R²' : 'F1';
-    thead.innerHTML = '<th style="text-align:left; padding:6px;">Fold</th>'
+    thead.innerHTML = '<th style="text-align:left; padding:6px;">Train size</th>'
         + modelNames.map(n =>
             `<th style="text-align:right; padding:6px;">${CLASSIFIER_LABELS[n] || n} (${metric})</th>`
         ).join('');
     tbody.innerHTML = '';
 }
 
-function appendFoldRow(fold, models) {
-    const tbody = document.getElementById('val-progress-tbody');
+function appendResultsRow(size, classifiers) {
+    const tbody = document.getElementById('val-results-tbody');
     const tr = document.createElement('tr');
     tr.style.borderBottom = '1px solid #333';
-    const metric = _progressTableTask === 'regression' ? 'r2' : 'mean_f1';
-    let cells = `<td style="padding:6px;">Fold ${fold}</td>`;
-    for (const name of _progressTableModels) {
-        const m = models[name] || {};
-        const val = m[metric];
+    let cells = `<td style="padding:6px;">${size.toLocaleString()}</td>`;
+    for (const name of _resultsTableModels) {
+        const m = classifiers[name] || {};
+        const val = m.mean_f1;
         cells += `<td style="text-align:right; padding:6px;">${val !== undefined ? val.toFixed(4) : '—'}</td>`;
-    }
-    tr.innerHTML = cells;
-    tbody.appendChild(tr);
-}
-
-function appendAggregateRow(models) {
-    const tbody = document.getElementById('val-progress-tbody');
-    const tr = document.createElement('tr');
-    tr.style.borderTop = '2px solid #666';
-    tr.style.fontWeight = 'bold';
-    const isReg = _progressTableTask === 'regression';
-    const metricKey = isReg ? 'mean_r2' : 'mean_f1';
-    const stdKey = isReg ? 'std_r2' : 'std_f1';
-    let cells = `<td style="padding:6px;">Mean</td>`;
-    for (const name of _progressTableModels) {
-        const m = models[name] || {};
-        const val = m[metricKey];
-        const std = m[stdKey];
-        const text = val !== undefined ? `${val.toFixed(4)} ± ${(std || 0).toFixed(4)}` : '—';
-        cells += `<td style="text-align:right; padding:6px;">${text}</td>`;
     }
     tr.innerHTML = cells;
     tbody.appendChild(tr);

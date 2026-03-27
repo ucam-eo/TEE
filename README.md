@@ -80,6 +80,7 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - **Regression support**: numeric fields with >20 unique values are automatically detected as regression tasks — shows R², RMSE, MAE instead of F1/confusion matrix
 - **Standalone CLI** for headless batch evaluation: `python scripts/tee_evaluate.py --config eval.json`
 - **Generate Config** button exports a JSON config file for CLI use; **Load Results** replays pre-computed NDJSON results
+- **Local compute server** (`tee-compute`) — run ML evaluation on your own machine while using the hosted server for map tiles and UI. Ground-truth shapefiles and evaluation results never leave your machine. See [Running Evaluation on Your Own Machine](public/user_guide.md#running-evaluation-on-your-own-machine).
 - Results rendered as Chart.js charts (learning curves for classification, bar charts for regression) with metrics tables
 - Ground-truth polygons overlaid on the satellite panel in red with hover tooltips showing class labels
 

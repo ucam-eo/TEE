@@ -651,7 +651,7 @@ class TestLargeAreaEvaluation:
             "viewer.html must have <meta name='referrer' content='origin'>"
         )
 
-    def test_progress_table_panel(self, html):
-        assert 'id="val-progress-panel"' in html or 'id="val-progress-table"' in html, (
-            "Progress table panel must exist for large-area fold results"
+    def test_results_panel_in_panel3(self, html):
+        assert 'id="val-results-panel"' in html, (
+            "Results panel must exist in panel 3 for large-area progress table"
         )

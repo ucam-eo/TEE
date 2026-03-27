@@ -31,6 +31,9 @@ _uploaded_shapefile = {"path": None, "gdf": None}
 # Cache for trained model files: classifier name → temp file path
 _trained_models = {}
 
+# Cache for large-area loaded embeddings: keyed by (field, year)
+_large_area_cache = {"key": None, "vectors": None, "labels": None, "class_names": None, "stats": None}
+
 # Classifiers the user has marked "done" mid-stream (cleared at stream start)
 _finish_classifiers = set()
 
@@ -541,75 +544,84 @@ def run_large_area_evaluation(request):
 
         t0 = time.time()
 
-        # Load embeddings tile by tile with streamed progress
-        gt = GeoTessera()
+        # Check cache — skip tile loading if same field+year
+        cache_key = (field_name, year)
+        if _large_area_cache["key"] == cache_key and _large_area_cache["vectors"] is not None:
+            vectors = _large_area_cache["vectors"]
+            labels = _large_area_cache["labels"]
+            class_names = _large_area_cache["class_names"]
+            stats = _large_area_cache["stats"]
+            logger.info("Large-area cache hit for %s/%s (%d pixels)", field_name, year, len(labels))
+        else:
+            # Load embeddings tile by tile with streamed progress
+            gt = GeoTessera()
 
-        try:
-            bounds = gdf.total_bounds
-            bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
-            tiles = gt.registry.load_blocks_for_region(bbox, year)
-            total_tiles = len(tiles)
-            if total_tiles == 0:
-                yield json.dumps({"event": "error", "message": f"No GeoTessera tiles found for bbox {bbox}, year {year}"}) + "\n"
+            try:
+                bounds = gdf.total_bounds
+                bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
+                tiles = gt.registry.load_blocks_for_region(bbox, year)
+                total_tiles = len(tiles)
+                if total_tiles == 0:
+                    yield json.dumps({"event": "error", "message": f"No GeoTessera tiles found for bbox {bbox}, year {year}"}) + "\n"
+                    return
+
+                # Fit label encoder on full shapefile
+                le = _LabelEncoder()
+                le.fit(gdf[field_name].dropna().unique())
+                class_names = le.classes_.tolist()
+
+                all_vectors = []
+                all_labels = []
+                tiles_with_data = 0
+
+                for tile_idx, (yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform) in enumerate(
+                    gt.fetch_embeddings(tiles)
+                ):
+                    yield json.dumps({
+                        "event": "download_progress", "tile": tile_idx + 1, "total": total_tiles,
+                    }) + "\n"
+
+                    h, w, dim = tile_emb.shape
+                    tile_bounds = _array_bounds(h, w, tile_transform)
+                    gdf_proj = gdf.to_crs(tile_crs) if gdf.crs != tile_crs else gdf
+                    tile_gdf = gdf_proj[gdf_proj.intersects(_box(*tile_bounds))]
+                    if tile_gdf.empty:
+                        continue
+
+                    class_raster = _rasterize(tile_gdf, field_name, tile_transform, w, h, label_encoder=le)
+
+                    labelled_mask = class_raster > 0
+                    if labelled_mask.sum() == 0:
+                        continue
+
+                    tiles_with_data += 1
+                    all_labels.append(class_raster[labelled_mask] - 1)
+                    all_vectors.append(tile_emb[labelled_mask])
+
+                if not all_vectors:
+                    yield json.dumps({"event": "error", "message": "No labelled pixels found across any tiles"}) + "\n"
+                    return
+
+                vectors = np.concatenate(all_vectors, axis=0).astype(np.float32)
+                labels = np.concatenate(all_labels, axis=0).astype(np.int32)
+
+                stats = {
+                    "tile_count": total_tiles,
+                    "tiles_with_data": tiles_with_data,
+                    "total_pixels": len(labels),
+                    "n_classes": len(class_names),
+                }
+
+                # Cache for next run
+                _large_area_cache["key"] = cache_key
+                _large_area_cache["vectors"] = vectors
+                _large_area_cache["labels"] = labels
+                _large_area_cache["class_names"] = class_names
+                _large_area_cache["stats"] = stats
+
+            except ValueError as e:
+                yield json.dumps({"event": "error", "message": str(e)}) + "\n"
                 return
-
-            # Fit label encoder on full shapefile
-            le = _LabelEncoder()
-            le.fit(gdf[field_name].dropna().unique())
-            class_names = le.classes_.tolist()
-
-            all_vectors = []
-            all_labels = []
-            tiles_with_data = 0
-
-            for tile_idx, (yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform) in enumerate(
-                gt.fetch_embeddings(tiles)
-            ):
-                # Stream progress after each tile
-                yield json.dumps({
-                    "event": "download_progress", "tile": tile_idx + 1, "total": total_tiles,
-                }) + "\n"
-
-                h, w, dim = tile_emb.shape
-
-                # Reproject GDF to tile CRS, then filter to tile bbox
-                tile_bounds = _array_bounds(h, w, tile_transform)
-                gdf_proj = gdf.to_crs(tile_crs) if gdf.crs != tile_crs else gdf
-                tile_gdf = gdf_proj[gdf_proj.intersects(_box(*tile_bounds))]
-                if tile_gdf.empty:
-                    continue
-
-                class_raster = _rasterize(tile_gdf, field_name, tile_transform, w, h, label_encoder=le)
-
-                labelled_mask = class_raster > 0
-                n_labelled = int(labelled_mask.sum())
-                if n_labelled == 0:
-                    continue
-
-                tiles_with_data += 1
-                tile_labels = class_raster[labelled_mask] - 1
-                tile_vectors = tile_emb[labelled_mask]
-
-                all_vectors.append(tile_vectors)
-                all_labels.append(tile_labels)
-
-            if not all_vectors:
-                yield json.dumps({"event": "error", "message": "No labelled pixels found across any tiles"}) + "\n"
-                return
-
-            vectors = np.concatenate(all_vectors, axis=0).astype(np.float32)
-            labels = np.concatenate(all_labels, axis=0).astype(np.int32)
-
-            stats = {
-                "tile_count": total_tiles,
-                "tiles_with_data": tiles_with_data,
-                "total_pixels": len(labels),
-                "n_classes": len(class_names),
-            }
-
-        except ValueError as e:
-            yield json.dumps({"event": "error", "message": str(e)}) + "\n"
-            return
 
         total_labelled = len(labels)
 
