@@ -8,6 +8,8 @@
 
 A system for downloading, processing, and visualizing Sentinel-2 satellite embeddings (2018-2025) with an interactive web interface.
 
+**Privacy by design:** Ground-truth labels and evaluation results never leave your machine. All ML evaluation runs locally or on a compute server you control — never on the hosted server. Similarity searches run entirely in your browser.
+
 ## Overview
 
 TEE integrates geospatial data processing with deep learning embeddings to create an interactive exploration platform. The system:
@@ -17,6 +19,7 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - **Extracts** vectors for efficient similarity search
 - **Visualizes** embeddings through an interactive web-based viewer
 - **Enables** temporal analysis by switching between years
+- **Evaluates** classifiers on your own machine with private ground-truth data
 
 
 ## Features

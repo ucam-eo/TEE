@@ -584,6 +584,30 @@ def add_years(request, viewport_name):
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 
+def embedding_coverage(request):
+    """Check which years have GeoTessera embedding coverage for a bbox."""
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    bbox = body.get('bbox')  # [minLon, minLat, maxLon, maxLat]
+    if not bbox or len(bbox) != 4:
+        return JsonResponse({'error': 'bbox is required as [minLon, minLat, maxLon, maxLat]'}, status=400)
+
+    try:
+        from geotessera import GeoTessera
+        gt = GeoTessera()
+        coverage = {}
+        for year in range(2018, 2026):
+            tiles = gt.registry.load_blocks_for_region(tuple(bbox), year)
+            coverage[str(year)] = len(tiles)
+        return JsonResponse({'coverage': coverage})
+    except Exception as e:
+        logger.error(f"Error checking embedding coverage: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 def available_years(request, viewport_name):
     """Get list of years with available data for a viewport."""
     try:

@@ -2,6 +2,8 @@
 
 A guide to using the Tessera Embeddings Explorer (TEE) web interface.
 
+**Privacy by design:** Your ground-truth labels and evaluation results stay private. All ML evaluation runs on your own machine (or a compute server you control) — never on the hosted TEE server. Similarity searches and labelling run entirely in your browser. The only data shared with the server is map tile requests and explicit label sharing (opt-in). See [Data Privacy](#data-privacy) and [Running Evaluation on Your Own Machine](#running-evaluation-on-your-own-machine).
+
 ## Creating a Viewport
 
 A **viewport** is a 5km x 5km geographic area for which TEE downloads and processes Sentinel-2 embeddings.
@@ -656,9 +658,24 @@ The temporal distance heatmap shows pixel-by-pixel embedding differences between
 | Cancel polygon | Escape |
 | Rotate (PCA/UMAP) | Right-click drag |
 
+## Data Privacy
+
+TEE is designed so that your research data stays under your control:
+
+| What | Where it runs | What the server sees |
+|------|--------------|---------------------|
+| Similarity search | Your browser | Nothing — vectors cached in IndexedDB |
+| Labelling (manual & auto) | Your browser | Nothing — labels in localStorage |
+| ML evaluation | Your compute server (`tee-compute`) | Nothing — shapefiles and results stay local |
+| Trained model download | Your compute server | Nothing |
+| Label sharing | Hosted server | Only when you explicitly click Share |
+| Map tiles & satellite imagery | Hosted server | Standard tile requests (same as any web map) |
+
+Ground-truth shapefiles uploaded for evaluation are sent to your compute server, **never** to the hosted TEE server. Evaluation results, learning curves, confusion matrices, and trained models all stay on your machine.
+
 ## Tips
 
 - **Processing time** is roughly the same whether you select 1 year or 8 years — all years download and process in parallel
 - **Features appear incrementally** — the viewer becomes usable as soon as pyramids are built, even before vector extraction completes
-- **Privacy** — all similarity search and labeling runs locally in your browser. Only tile images are fetched from the server
+- **Privacy** — all similarity search and labeling runs locally in your browser. Evaluation runs on your compute server. Only tile images are fetched from the hosted server.
 - **Storage** — each viewport uses ~5GB depending on the number of years processed

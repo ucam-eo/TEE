@@ -1365,6 +1365,9 @@
             // Always show coordinates when box is placed/moved
             showBoundsCoordinates(minLat, maxLat, minLon, maxLon);
 
+            // Check embedding coverage for this bbox
+            checkEmbeddingCoverage(minLon, minLat, maxLon, maxLat);
+
             // Show the naming form only on first placement; subsequent clicks just reposition the box
             if (isFirstPlacement) {
                 document.getElementById('formFields').style.display = 'block';
@@ -1380,13 +1383,44 @@
             }
         }
 
+        async function checkEmbeddingCoverage(minLon, minLat, maxLon, maxLat) {
+            try {
+                const resp = await fetch('/api/viewports/embedding-coverage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bbox: [minLon, minLat, maxLon, maxLat] }),
+                });
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const coverage = data.coverage || {};
+
+                document.querySelectorAll('.year-checkbox').forEach(cb => {
+                    const year = cb.value;
+                    const tiles = coverage[year] || 0;
+                    const label = cb.closest('label');
+                    if (tiles === 0) {
+                        cb.disabled = true;
+                        cb.checked = false;
+                        label.style.opacity = '0.4';
+                        label.title = `No embeddings available for ${year} at this location`;
+                    } else {
+                        cb.disabled = false;
+                        label.style.opacity = '1';
+                        label.title = `${tiles} tiles available`;
+                    }
+                });
+            } catch (e) {
+                console.warn('Failed to check embedding coverage:', e);
+            }
+        }
+
         // Year selection helpers
         function selectAllYears() {
-            document.querySelectorAll('.year-checkbox').forEach(cb => cb.checked = true);
+            document.querySelectorAll('.year-checkbox').forEach(cb => { if (!cb.disabled) cb.checked = true; });
         }
 
         function selectNoYears() {
-            document.querySelectorAll('.year-checkbox').forEach(cb => cb.checked = false);
+            document.querySelectorAll('.year-checkbox').forEach(cb => { if (!cb.disabled) cb.checked = false; });
         }
 
         function getSelectedYears() {
