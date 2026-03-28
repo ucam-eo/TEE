@@ -130,6 +130,28 @@ def gather_spatial_features(vectors, coords, width, height, radius=1,
     return spatial
 
 
+def gather_spatial_features_2d(tile_emb, radius=1):
+    """Extract spatial neighbourhood features from a contiguous 2D tile.
+
+    For each pixel, concatenates the embeddings of all pixels in a
+    (2*radius+1) x (2*radius+1) window centered on it. Edge pixels
+    are zero-padded.
+
+    Args:
+        tile_emb: float32 array, shape (H, W, dim) — contiguous tile embeddings
+        radius: neighbourhood radius (1 for 3x3, 2 for 5x5)
+
+    Returns:
+        float32 array, shape (H, W, window*window*dim) — flattened spatial features
+    """
+    H, W, dim = tile_emb.shape
+    window = 2 * radius + 1
+    padded = np.pad(tile_emb, ((radius, radius), (radius, radius), (0, 0)))
+    windows = np.lib.stride_tricks.sliding_window_view(padded, (window, window, dim))
+    # windows shape: (H, W, 1, window, window, dim)
+    return windows.reshape(H, W, window * window * dim).astype(np.float32)
+
+
 def augment_spatial(X, y, window, dim):
     """4x data augmentation via horizontal/vertical flips of spatial patches.
 

@@ -65,11 +65,8 @@ class TestAPIEndpointCoverage:
         "/api/operations/progress/",
         # Config
         "/api/config",
-        # Evaluation
+        # Evaluation (served by tee-compute, referenced in JS)
         "/api/evaluation/upload-shapefile",
-        "/api/evaluation/class-counts",
-        "/api/evaluation/run",
-        "/api/evaluation/finish-classifier",
         "/api/evaluation/run-large-area",
         # Tiles
         "/tiles/health",
@@ -160,10 +157,8 @@ class TestCriticalFunctions:
         # evaluation.js
         "uploadShapefile",
         "runEvaluation",
-        "runLargeAreaEvaluation",
         "renderConfusionMatrix",
         "exportEvalResults",
-        "setValMode",
         "generateConfig",
         "loadResultsFile",
         # schema.js
@@ -369,7 +364,7 @@ class TestBackendLibraries:
             "check_readiness", "delete_viewport_data", "compute_data_size",
         ]),
         ("lib/evaluation_engine.py", [
-            "load_vectors", "detect_field_type",
+            "detect_field_type",
         ]),
         ("packages/tessera-eval/tessera_eval/classify.py", [
             "make_classifier", "make_regressor", "available_regressors",
@@ -417,10 +412,7 @@ class TestBackendViewsIntact:
             "list_viewports", "current_viewport", "switch_viewport",
             "create_viewport", "delete_viewport", "is_ready",
         ],
-        "api/views/evaluation.py": [
-            "upload_shapefile", "class_pixel_counts", "run_evaluation",
-            "finish_classifier", "download_model", "run_large_area_evaluation",
-        ],
+        # evaluation.py gutted — ML moved to tee-compute (server.py)
         "api/views/tiles.py": [
             "get_tile", "get_bounds", "tile_health",
         ],
@@ -641,9 +633,10 @@ class TestLargeAreaEvaluation:
             "done handler must guard against null lastChartData (Fix 4)"
         )
 
-    def test_val_mode_large_area(self, all_script_text):
-        assert "'large-area'" in all_script_text or '"large-area"' in all_script_text, (
-            "large-area mode string must exist in JS"
+    def test_server_has_multi_shapefile(self):
+        source = (TESSERA_EVAL / "server.py").read_text()
+        assert "clear-shapefiles" in source, (
+            "server.py must support multi-shapefile upload (clear-shapefiles endpoint)"
         )
 
     def test_osm_referrer_policy(self, html):

@@ -66,23 +66,16 @@ TEE integrates geospatial data processing with deep learning embeddings to creat
 - **Promote** individual clusters (or all at once) to permanent saved labels with full metadata (embedding, source pixel, threshold)
 - Promoted labels support timeline analysis, cross-viewport re-matching, and all other label features
 
-### Validation (Learning Curves & Large-Area Evaluation)
-- Upload a ground-truth shapefile (.zip) with expert habitat labels
-- **Two modes:** Viewport (single ~5×5 km area, learning curves) and Large Area (county/country scale, k-fold CV)
-- Select a class field and choose classifiers: k-NN, Random Forest, XGBoost, MLP
-- **Tunable hyperparameters** per classifier (expand with `...` button):
-  - **k-NN**: k (1–50), weights (uniform/distance)
-  - **Random Forest**: number of trees (10–500), max depth
-  - **XGBoost**: boosting rounds (10–500), max depth (1–15), learning rate (0.01–1.0)
-  - **MLP**: hidden layer architecture (64,32 / 128,64 / 256,128,64), max iterations (50–1000)
-- **Viewport mode**: stratified learning-curve evaluation with log-spaced training sizes (10 up to max) and 5 random repeats each
-- **Large Area mode**: proper k-fold cross-validation (StratifiedKFold for classification, KFold for regression) on GeoTessera tiles loaded tile-by-tile (memory-bounded)
-- **Regression support**: numeric fields with >20 unique values are automatically detected as regression tasks — shows R², RMSE, MAE instead of F1/confusion matrix
+### Validation (Learning Curves)
+- Upload one or more ground-truth shapefiles (.zip) — multiple uploads are merged automatically
+- All classifiers available: k-NN, Random Forest, XGBoost, MLP, Spatial MLP (3×3/5×5), U-Net (GPU)
+- Embeddings loaded tile-by-tile from GeoTessera — works at any scale from a single viewport to a country
+- Spatial MLP computes per-tile neighbourhood features; U-Net trains on 256×256 patches around labelled regions
+- **Regression support**: numeric fields with >20 unique values auto-detected — shows R², RMSE, MAE
+- **All ML runs on a compute server** (`tee-compute`) — ground-truth data never leaves your machine
 - **Standalone CLI** for headless batch evaluation: `python scripts/tee_evaluate.py --config eval.json`
-- **Generate Config** button exports a JSON config file for CLI use; **Load Results** replays pre-computed NDJSON results
-- **Local compute server** (`tee-compute`) — run ML evaluation on your own machine while using the hosted server for map tiles and UI. Ground-truth shapefiles and evaluation results never leave your machine. See [Running Evaluation on Your Own Machine](public/user_guide.md#running-evaluation-on-your-own-machine).
-- Results rendered as Chart.js charts (learning curves for classification, bar charts for regression) with metrics tables
-- Ground-truth polygons overlaid on the satellite panel in red with hover tooltips showing class labels
+- Tile data cached between runs — switching classifiers doesn't re-download embeddings
+- Results rendered as learning curves with error bars, confusion matrices, and downloadable trained models
 
 ### Cross-Year Label Timeline
 - **Track how label coverage changes over time** — click "Timeline" on any saved label to see pixel counts across all available years (2018–2025)
@@ -102,7 +95,7 @@ The viewer includes a **6-panel layout** toggle for advanced analysis:
 5. **Panel 5** — Change heatmap / classification results / segmentation overlay (mode-dependent)
 6. **Panel 6** — Second year embeddings (change-detection mode) or blank (explore mode)
 
-A **Labelling** mode replaces Panel 6 with label management — choose between **Auto-label** (K-means segmentation + promoted labels) and **Manual Label** (hand-placed pins, polygons, and similarity-based expansion with per-class thresholds). A **Validation** mode replaces the bottom row with a controls panel and a learning-curve chart for evaluating classifier performance on uploaded ground-truth shapefiles — supporting both single-viewport learning curves and large-area k-fold cross-validation with classification and regression.
+A **Labelling** mode replaces Panel 6 with label management — choose between **Auto-label** (K-means segmentation + promoted labels) and **Manual Label** (hand-placed pins, polygons, and similarity-based expansion with per-class thresholds). A **Validation** mode replaces the bottom row with a controls panel and a learning-curve chart for evaluating classifier performance on uploaded ground-truth shapefiles at any scale, with all classifiers including spatial and U-Net.
 
 Key capabilities: one-click similarity search, real-time threshold control, persistent colored label overlays, cross-panel synchronized markers, manual pin and polygon labelling with classification, UMAP visualization with satellite RGB coloring, temporal distance heatmap, year-based label updates, cross-year label timeline analysis, ground-truth validation with learning curves, large-area k-fold evaluation with regression support, and a standalone CLI for headless batch evaluation.
 

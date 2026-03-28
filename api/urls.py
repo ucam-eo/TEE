@@ -5,7 +5,6 @@ from .views.viewports import (list_viewports, current_viewport, viewport_info,
 from .views.pipeline import operations_progress, cancel_processing
 from .views.vector_data import serve_vector_data
 from .views.config import get_config
-from .views.evaluation import upload_shapefile, class_pixel_counts, run_evaluation, download_model, finish_classifier, run_large_area_evaluation
 from .views.share import submit_share, list_shares, download_share
 from .views.enrolment import create_enrolled_user, list_enrolled_users, disable_enrolled_user
 
@@ -32,13 +31,8 @@ urlpatterns = [
     path('vector-data/<str:viewport>/<str:year>/<str:filename>', serve_vector_data),
     # Config
     path('config', get_config),
-    # Evaluation
-    path('evaluation/upload-shapefile', upload_shapefile),
-    path('evaluation/class-counts', class_pixel_counts),
-    path('evaluation/run', run_evaluation),
-    path('evaluation/finish-classifier', finish_classifier),
-    path('evaluation/download-model/<str:classifier>', download_model),
-    path('evaluation/run-large-area', run_large_area_evaluation),
+    # Evaluation — all ML runs on tee-compute, not Django.
+    # These URLs are proxied through tee-compute to this server (no-op here).
     # Label sharing
     path('share/submit', submit_share),
     path('share/list/<str:viewport_name>', list_shares),

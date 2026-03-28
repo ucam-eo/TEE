@@ -567,13 +567,7 @@ class TestLabelSharing:
 # ────────────────────────────────────────────
 
 class TestLargeAreaValidation:
-    def test_mode_toggle_exists(self, html):
-        assert 'val-mode-large' in html
-
-    def test_mode_viewport_exists(self, html):
-        assert 'val-mode-viewport' in html
-
-    def test_large_area_year_select(self, html):
+    def test_year_select_exists(self, html):
         assert 'val-year-select' in html
 
     def test_load_results_button_exists(self, html):
@@ -594,14 +588,11 @@ class TestLargeAreaValidation:
     def test_run_large_area_function(self, script_text):
         assert 'runLargeAreaEvaluation' in script_text
 
-    def test_set_val_mode_function(self, script_text):
-        assert 'function setValMode' in script_text
+    def test_results_panel_exists(self, html):
+        assert 'val-results-panel' in html
 
     def test_load_results_file_function(self, script_text):
         assert 'function loadResultsFile' in script_text
-
-    def test_large_area_controls_hidden_by_default(self, html):
-        assert 'val-large-area-controls' in html
 
     def test_year_select_exists(self, html):
         assert 'val-year-select' in html

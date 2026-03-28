@@ -1011,12 +1011,6 @@
             <div id="map-embedding2" class="map"></div>
             <!-- Validation controls (shown only in validation mode) -->
             <div id="validation-controls" class="validation-panel">
-                <!-- Mode toggle: Viewport vs Large Area -->
-                <div style="display:flex; gap:4px; margin-bottom:8px;">
-                    <button id="val-mode-viewport" class="val-mode-btn active" onclick="setValMode('viewport')" style="flex:1; padding:5px 8px; border:1px solid #555; border-radius:4px 0 0 4px; background:#4a90d9; color:#fff; font-size:12px; cursor:pointer;">Viewport</button>
-                    <button id="val-mode-large" class="val-mode-btn" onclick="setValMode('large-area')" style="flex:1; padding:5px 8px; border:1px solid #555; border-radius:0 4px 4px 0; background:#333; color:#ccc; font-size:12px; cursor:pointer;">Large Area</button>
-                </div>
-
                 <h3>Upload Ground Truth</h3>
                 <div id="val-drop-zone" class="validation-drop-zone">
                     Drop ESRI format .zip here (.shp, .dbf, .shx, .prj)
@@ -1139,8 +1133,7 @@
                     </div>
                 </div>
 
-                <!-- Large-area specific controls (hidden in viewport mode) -->
-                <div id="val-large-area-controls" style="display:none;">
+                <div>
                     <label>Year</label>
                     <select id="val-year-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
                         <option value="2024">2024</option>
@@ -1158,12 +1151,6 @@
                     </div>
                 </div>
 
-                <!-- Viewport-mode controls -->
-                <div id="val-viewport-controls">
-                    <label>Max training pixels</label>
-                    <input type="number" id="val-max-train" value="10000" min="100" max="100000" step="1000"
-                        style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
-                </div>
 
                 <div style="display:flex; gap:6px;">
                     <button id="val-run-btn" class="validation-run-btn" disabled style="flex:1;" title="Run evaluation on selected classifiers">Run Evaluation</button>

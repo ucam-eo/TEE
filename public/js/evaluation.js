@@ -33,9 +33,9 @@ let streamDatasetMap = {};
 let lastEvalData = null;
 let cmShowPct = false;
 let cmPopupWindow = null;
-let valMode = 'viewport'; // 'viewport' or 'large-area'
 let valUploadedFilename = null;
 let currentLargeAreaTask = null; // 'classification' or 'regression'
+let valUploadedFiles = []; // list of uploaded filenames
 
 // Regressor labels/colors (extend the classifier palette)
 const REGRESSOR_COLORS = {
@@ -161,7 +161,6 @@ function updateClassSummary() {
         summary.textContent = `${field.unique_count} classes \u2014 samples: ${field.samples.slice(0, 5).join(', ')}`;
     }
     addValGeoJsonLayer();
-    fetchClassPixelCounts(fieldName);
 }
 
 async function fetchClassPixelCounts(fieldName) {
@@ -385,8 +384,8 @@ function handleStreamEvent(ev) {
             };
         });
         createStreamChart(ev.classifiers);
-        if (valMode !== 'large-area') showFinishButtons(ev.classifiers);
-        if (valMode === 'large-area') {
+        // Show results table in panel 3 with progress
+        {
             const pixels = ev.total_labelled_pixels || 0;
             const stats = ev.stats || {};
             initResultsTable(ev.classifiers, currentLargeAreaTask || 'classification');
@@ -428,9 +427,7 @@ function handleStreamEvent(ev) {
         } else {
             status.textContent = `Training size ${ev.size.toLocaleString()} complete`;
         }
-        if (valMode === 'large-area') {
-            appendResultsRow(ev.size, ev.classifiers);
-        }
+        appendResultsRow(ev.size, ev.classifiers);
 
     } else if (ev.event === 'model_ready') {
         const btn = document.getElementById('finish-' + ev.classifier);
@@ -503,114 +500,7 @@ function handleStreamEvent(ev) {
 }
 
 async function runEvaluation() {
-    if (valMode === 'large-area') {
-        return runLargeAreaEvaluation();
-    }
-
-    const field = document.getElementById('val-field-select').value;
-    if (!field) return;
-
-    const checkboxes = document.querySelectorAll('.val-clf-header input:checked');
-    const classifiers = Array.from(checkboxes).map(cb => cb.value);
-    if (classifiers.length === 0) {
-        document.getElementById('val-status').textContent = 'Select at least one classifier';
-        document.getElementById('val-status').style.color = '#dc3545';
-        return;
-    }
-
-    const params = {};
-    document.querySelectorAll('.val-params input, .val-params select').forEach(el => {
-        const clf = el.dataset.clf;
-        const param = el.dataset.param;
-        if (!clf || !param) return;
-        if (!classifiers.includes(clf)) return;
-        if (!params[clf]) params[clf] = {};
-        const val = el.value.trim();
-        if (val === '') return;
-        const num = Number(val);
-        params[clf][param] = isNaN(num) ? val : num;
-    });
-
-    const btn = document.getElementById('val-run-btn');
-    const cancelBtn = document.getElementById('val-cancel-btn');
-    const status = document.getElementById('val-status');
-    btn.disabled = true;
-    btn.textContent = 'Running...';
-    cancelBtn.style.display = '';
-    status.style.color = '#888';
-
-    lastChartData = null;
-    if (valChart) { valChart.destroy(); valChart = null; }
-    hideFinishButtons();
-
-    evalAbortController = new AbortController();
-    let userCancelled = false;
-
-    const t0 = Date.now();
-    const timer = setInterval(() => {
-        if (!lastChartData) {
-            const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
-            status.textContent = `Starting... ${elapsed}s`;
-        }
-    }, 1000);
-
-    function resetButtons() {
-        clearInterval(timer);
-        btn.disabled = false;
-        btn.textContent = 'Run Evaluation';
-        cancelBtn.style.display = 'none';
-        evalAbortController = null;
-    }
-
-    cancelBtn.onclick = () => { userCancelled = true; evalAbortController.abort(); };
-
-    try {
-        const resp = await fetch('/api/evaluation/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                viewport: window.currentViewportName,
-                year: window.currentEmbeddingYear,
-                field: field,
-                classifiers: classifiers,
-                params: params,
-                max_train: parseInt(document.getElementById('val-max-train').value) || 10000,
-            }),
-            signal: evalAbortController.signal,
-        });
-
-        if (!resp.ok) {
-            let msg = 'Evaluation failed';
-            try { const data = await resp.json(); msg = data.error || msg; }
-            catch (_) { msg = `Server error (${resp.status})`; }
-            resetButtons();
-            hideFinishButtons();
-            status.textContent = msg;
-            status.style.color = '#dc3545';
-            return;
-        }
-
-        await readNdjsonStream(resp, resetButtons);
-
-    } catch (e) {
-        resetButtons();
-        hideFinishButtons();
-        const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
-        if (e.name === 'AbortError') {
-            if (userCancelled) {
-                status.textContent = 'Cancelled by user';
-            } else {
-                status.textContent = `Timed out after ${elapsed}s \u2014 try fewer classifiers or lower max training pixels`;
-            }
-            status.style.color = '#f0ad4e';
-        } else if (e.name === 'TypeError') {
-            status.textContent = `Connection lost after ${elapsed}s \u2014 the server may have run out of memory`;
-            status.style.color = '#dc3545';
-        } else {
-            status.textContent = 'Error: ' + e.message;
-            status.style.color = '#dc3545';
-        }
-    }
+    return runLargeAreaEvaluation();
 }
 
 async function readNdjsonStream(resp, resetButtons) {
@@ -1002,38 +892,6 @@ document.getElementById('cm-toggle-pct').addEventListener('click', function() {
     }
 });
 
-// ── Large-area mode ──
-
-function setValMode(mode) {
-    valMode = mode;
-    const vpBtn = document.getElementById('val-mode-viewport');
-    const laBtn = document.getElementById('val-mode-large');
-    const vpControls = document.getElementById('val-viewport-controls');
-    const laControls = document.getElementById('val-large-area-controls');
-    const isLargeArea = mode === 'large-area';
-
-    if (isLargeArea) {
-        vpBtn.style.background = '#333'; vpBtn.style.color = '#ccc'; vpBtn.classList.remove('active');
-        laBtn.style.background = '#4a90d9'; laBtn.style.color = '#fff'; laBtn.classList.add('active');
-        vpControls.style.display = 'none';
-        laControls.style.display = '';
-    } else {
-        vpBtn.style.background = '#4a90d9'; vpBtn.style.color = '#fff'; vpBtn.classList.add('active');
-        laBtn.style.background = '#333'; laBtn.style.color = '#ccc'; laBtn.classList.remove('active');
-        vpControls.style.display = '';
-        laControls.style.display = 'none';
-    }
-
-    // Hide spatial/U-Net classifiers in large-area mode (need 2D grid, not available tile-by-tile)
-    const unsupported = ['spatial_mlp', 'spatial_mlp_5x5', 'unet'];
-    document.querySelectorAll('.val-clf-block').forEach(block => {
-        const cb = block.querySelector('input[type="checkbox"]');
-        if (cb && unsupported.includes(cb.value)) {
-            block.style.display = isLargeArea ? 'none' : '';
-            if (isLargeArea) cb.checked = false;
-        }
-    });
-}
 
 function generateConfig() {
     const field = document.getElementById('val-field-select').value;
@@ -1088,12 +946,7 @@ async function runLargeAreaEvaluation() {
     if (!field) return;
 
     const checkboxes = document.querySelectorAll('.val-clf-header input:checked');
-    const classifiers = [];
-    Array.from(checkboxes).forEach(cb => {
-        const name = cb.value;
-        if (name === 'spatial_mlp' || name === 'spatial_mlp_5x5' || name === 'unet') return;
-        classifiers.push(name);
-    });
+    const classifiers = Array.from(checkboxes).map(cb => cb.value);
     if (classifiers.length === 0) {
         document.getElementById('val-status').textContent = 'Select at least one classifier';
         document.getElementById('val-status').style.color = '#dc3545';
@@ -1442,11 +1295,9 @@ document.getElementById('val-results-file').addEventListener('change', loadResul
 
 window.uploadShapefile = uploadShapefile;
 window.runEvaluation = runEvaluation;
-window.runLargeAreaEvaluation = runLargeAreaEvaluation;
 window.renderConfusionMatrix = renderConfusionMatrix;
 window.exportEvalResults = exportEvalResults;
 window.openCMPopup = openCMPopup;
-window.setValMode = setValMode;
 window.generateConfig = generateConfig;
 window.loadResultsFile = loadResultsFile;
 Object.defineProperty(window, 'lastEvalData', {

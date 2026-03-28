@@ -290,20 +290,16 @@ A practical workflow for building a complete land-cover label set:
 3. **Merge related clusters** — if two auto-labelled clusters represent the same land cover (e.g. two shades of grassland), type the **same label name** for both in Panel 6 before promoting. TEE merges them into a single label automatically.
 4. **Fine-tune with pins** — double-click to place a pin on a location that was missed or misclassified, then adjust the **similarity slider** until the highlighted area matches what you want. Save the result as a new label or extend an existing one.
 
-## Validation (Learning Curves & Large-Area Evaluation)
+## Validation (Learning Curves)
 
-The **Validation** panel lets you evaluate how well classifiers can distinguish habitat classes using Tessera embeddings as features, given expert-labelled ground-truth polygons.
+The **Validation** panel lets you evaluate how well classifiers can distinguish habitat classes using Tessera embeddings as features, given expert-labelled ground-truth polygons. Evaluation works at any scale — from a single viewport to an entire country.
 
-Two modes are available, toggled by buttons at the top of Panel 6:
-
-- **Viewport** — evaluates classifiers within the current viewport (~5×5 km) using learning curves with repeated random splits. This is the original mode.
-- **Large Area** — evaluates classifiers on shapefiles covering much larger areas (county or country scale). Embeddings are loaded tile-by-tile from GeoTessera, then the same learning curve is run. Supports both classification and regression.
+All ML evaluation runs on a **compute server** (`tee-compute`), not on the hosted TEE server. See [Running Evaluation on Your Own Machine](#running-evaluation-on-your-own-machine) for setup.
 
 ### Setup
 
 1. Switch the layout dropdown to **Validation**
-2. The bottom row changes to: a controls panel (left), a learning-curve chart (centre), and a confusion matrix panel (right)
-3. Choose **Viewport** or **Large Area** mode using the toggle at the top of Panel 6
+2. The bottom row changes to: a controls panel (right), a learning-curve chart (centre), and a confusion matrix panel (left)
 
 ### Preparing a Ground-Truth Shapefile
 
@@ -325,47 +321,33 @@ zip ground_truth.zip polygons.shp polygons.dbf polygons.shx polygons.prj
 
 ### Uploading Ground Truth
 
-1. Drag and drop the `.zip` onto the upload zone (or click to browse)
+1. Drag and drop one or more `.zip` files onto the upload zone (or click to browse)
 2. The shapefile polygons appear as **red outlines** on the satellite panel (panel 2) with hover tooltips showing class labels
-3. The **Class field** dropdown is populated with the shapefile's attribute columns — each shows the number of unique values and sample entries to help you pick the right one
+3. The **Class field** dropdown is populated with the shapefile's attribute columns — each shows the number of unique values, non-null count, and sample entries
+4. Upload additional shapefiles to merge them — features from all uploads are combined
 
-### Running an Evaluation (Viewport Mode)
+**Multiple shapefiles:** You can upload several shapefiles (e.g., exported viewport labels from different areas). They are merged automatically. Fields present in some shapefiles but not others will show as partial coverage (e.g., "342/500 features").
 
-1. Select a **Class field** — this determines what's being classified (e.g. broad habitat groups vs fine-grained types). The summary shows the number of classes and sample values.
-2. Check the **classifiers** you want to compare:
+### Running an Evaluation
+
+1. Select a **Class field** — TEE automatically detects whether the field is classification (text or few unique values) or regression (numeric with many unique values)
+2. Select the **year** for the embeddings
+3. Check the **classifiers** you want to compare:
    - **k-NN** — k-Nearest Neighbours (default k=5, Euclidean distance)
    - **RF** — Random Forest (default 100 trees)
    - **XGBoost** — Gradient boosted trees (default 100 rounds, max depth 6)
    - **MLP** — Multi-layer perceptron (default 64-32 hidden layers)
-   - **Spatial MLP (3x3)** — MLP that uses a 3x3 neighbourhood of embeddings as input, capturing local spatial context
+   - **Spatial MLP (3x3)** — MLP that uses a 3x3 neighbourhood of embeddings as input, capturing local spatial context. Features computed per-tile with zero-padded edges.
    - **Spatial MLP (5x5)** — same idea with a 5x5 neighbourhood for wider spatial context
-   - **U-Net (GPU)** — a convolutional U-Net trained on the full 2D embedding grid (requires PyTorch/GPU)
-3. *(Optional)* Click the **`...`** button next to any classifier to expand its hyperparameters:
-   - **k-NN**: k (1–50), weights (uniform or distance-weighted)
-   - **Random Forest**: number of trees (10–500), max depth (leave empty for unlimited)
-   - **XGBoost**: boosting rounds (10–500), max depth (1–15), learning rate (0.01–1.0)
-   - **MLP**: hidden layer architecture (64,32 / 128,64 / 256,128,64), max iterations (50–1000)
-   - **Spatial MLP**: hidden layer architecture, max iterations (same options as MLP)
-   - **U-Net**: epochs (5–500), learning rate (0.0001–0.1), depth (3/4/5), base filters (16/32/64)
-4. *(Optional)* Adjust **Max training pixels** (default 10,000). Increase this if your ground truth has dense coverage — training sizes are log-spaced from 10 up to this value (e.g. 30,000 gives sizes 10, 30, 100, 300, 1000, 3000, 10000, 30000).
-5. Click **Run Evaluation** — the server trains each classifier at each training size with 5 random repeats. An elapsed timer shows progress. Typical runtime is 60–120 seconds for 4 classifiers at the default max.
-
-### Running an Evaluation (Large Area Mode)
-
-Large Area mode is designed for shapefiles that cover areas much larger than a single viewport — counties, national parks, or even entire countries. Instead of using pre-extracted viewport vectors, it loads embeddings tile-by-tile from GeoTessera and then runs the same learning curve as Viewport mode.
-
-1. Click **Large Area** at the top of Panel 6
-2. Upload a shapefile as usual (drag-and-drop or click)
-3. Select a **Class field** — TEE automatically detects whether the field is classification (text or few unique values) or regression (numeric with many unique values)
-4. Check the **classifiers** you want to use. Spatial classifiers (3×3, 5×5) and U-Net are not available in Large Area mode — only pixel-level classifiers: k-NN, RF, XGBoost, MLP
-5. Select the **year** for the embeddings
-6. *(Optional)* Adjust **Max training samples** — caps the largest training size in the learning curve
-7. Click **Run Evaluation** — progress shows tile download count, then the learning curve streams results as in Viewport mode
+   - **U-Net (GPU)** — a convolutional U-Net trained on 256x256 patches centered on labelled pixel clusters (requires PyTorch)
+4. *(Optional)* Click the **`...`** button next to any classifier to expand its hyperparameters
+5. *(Optional)* Adjust **Max training samples** — caps the largest training size in the learning curve
+6. Click **Run Evaluation** — progress shows tile download count, then the learning curve streams results
 
 **Additional buttons:**
 
-- **Generate Config** — downloads a JSON config file you can use with the CLI script for headless batch evaluation on a compute node
-- **Load Results** — load a pre-computed `.ndjson` results file (e.g. from a CLI run) and replay the events into the viewer panels
+- **Generate Config** — downloads a JSON config file for CLI batch evaluation
+- **Load Results** — load a pre-computed `.ndjson` results file and replay the events into the viewer panels
 
 ### Regression Support
 
@@ -469,18 +451,18 @@ Two export options are available in the confusion matrix header:
 
 ### Notes
 
-- **Viewport mode** uses the current viewport's pre-extracted embeddings as features. **Large Area mode** loads embeddings directly from GeoTessera tiles
-- All computation runs server-side; runtime scales with max training pixels and number of classifiers
-- Changing the class field updates the polygon hover tooltips on the satellite panel
-- Re-running with different hyperparameters or a different field does not require re-uploading the shapefile
-- In Viewport mode, downloaded models are trained on **all** labelled pixels (not a train/test split), so they represent the best possible fit for deployment
-- Large Area mode uses the same learning curve as Viewport mode — train on N pixels, test on the remainder
-- Spatial classifiers (3×3, 5×5) are not available in Large Area mode because neighbourhood context doesn't work across tile boundaries — only pixel-level classifiers are supported
-- Large Area tile-by-tile processing is memory-bounded: only one tile's embeddings are in memory at a time, with labelled pixels accumulated incrementally
+- All evaluation runs on the compute server (`tee-compute`), not on the hosted TEE server
+- Embeddings are loaded tile-by-tile from GeoTessera — works at any scale from a single viewport to an entire country
+- Re-running with different classifiers reuses cached tile data (no re-download)
+- Re-running with a different field or year reloads tiles
+- Downloaded models are trained on **all** labelled pixels (not a train/test split), so they represent the best possible fit for deployment
+- Spatial classifiers compute per-tile neighbourhood features with zero-padded edges (<1% edge effect per tile)
+- U-Net trains on 256×256 patches centered on clusters of labelled pixels, with sliding-window prediction
+- Tile-by-tile processing is memory-bounded: only one tile is in memory at a time
 
 ## Running Evaluation on Your Own Machine
 
-By default, all ML evaluation runs on the hosted server (tee.cl.cam.ac.uk). As the number of users grows, you may want to run compute locally on your laptop or on a dedicated GPU server. The `tee-compute` command makes this easy — it runs the evaluation locally and proxies everything else (UI, tiles, label sharing) to the hosted server.
+All ML evaluation runs on a compute server (`tee-compute`) — the hosted TEE server does not run ML. The `tee-compute` command runs evaluation locally and proxies everything else (UI, tiles, label sharing) to the hosted server.
 
 ### How It Works
 
