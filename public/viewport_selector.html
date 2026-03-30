@@ -1873,12 +1873,17 @@
             }
 
             try {
-                // Switch to this viewport first
-                await fetch('/api/viewports/switch', {
+                // Switch to this viewport first and wait for it
+                const switchResp = await fetch('/api/viewports/switch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name }),
                 });
+                if (!switchResp.ok) {
+                    const err = await switchResp.json().catch(() => ({}));
+                    alert(`Failed to switch viewport: ${err.error || switchResp.statusText}`);
+                    return;
+                }
 
                 const response = await fetch(`/api/viewports/${name}/is-ready`);
                 const result = await response.json();
@@ -1900,8 +1905,8 @@
                     }
                 }
             } catch (error) {
-                console.error('[VIEWER] Error checking readiness:', error);
-                alert('Error checking data status');
+                console.error('[VIEWER] Error:', error);
+                alert(`Error opening viewer: ${error.message || error}`);
             }
         }
 
