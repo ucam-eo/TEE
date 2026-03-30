@@ -867,10 +867,15 @@ function setPanelLayout(mode) {
         'validation-controls', 'val-cm-panel',
     ];
 
-    // Hide all switchable content
+    // Hide all switchable content and reset positioning
     for (const id of SWITCHABLE) {
         const el = document.getElementById(id);
-        if (el) el.style.display = 'none';
+        if (el) {
+            el.style.display = 'none';
+            el.style.position = '';
+            el.style.inset = '';
+            el.style.zIndex = '';
+        }
     }
 
     // Apply per-panel
@@ -904,11 +909,19 @@ function setPanelLayout(mode) {
             if (titleEl) titleEl.textContent = spec.title;
         }
 
-        // Show specified content overlay (and hide the map underneath)
+        // Show specified content overlay (hide the map, cover the panel)
         if (spec.content && spec.content !== 'hidden') {
             if (map) map.style.display = 'none';
             const el = document.getElementById(spec.content);
-            if (el) el.style.display = el.dataset.displayMode || 'block';
+            if (el) {
+                el.style.display = el.dataset.displayMode || 'block';
+                el.style.position = 'absolute';
+                el.style.inset = '0';
+                el.style.zIndex = '400';
+                if (!el.style.background && !el.style.backgroundColor) {
+                    el.style.background = '#2a2a2a';
+                }
+            }
         }
 
         // Show additional content in same panel
