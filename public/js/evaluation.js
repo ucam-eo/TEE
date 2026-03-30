@@ -143,7 +143,12 @@ async function uploadShapefile(file) {
         valGeoJsonData = data.geojson;
         addValGeoJsonLayer();
     } catch (e) {
-        status.textContent = 'Network error: ' + e.message;
+        const msg = e.message || String(e);
+        if (msg.includes('string did not match') || msg.includes('Failed to fetch')) {
+            status.textContent = 'Upload failed — is the compute server running? (tee-compute on port 8002)';
+        } else {
+            status.textContent = 'Upload error: ' + msg;
+        }
         status.style.color = '#dc3545';
     }
 }

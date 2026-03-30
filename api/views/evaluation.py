@@ -24,22 +24,25 @@ def _proxy_to_compute(request, path):
     if request.META.get("QUERY_STRING"):
         target += f"?{request.META['QUERY_STRING']}"
 
-    # Forward headers
-    headers = {}
-    content_type = request.content_type
-    if content_type:
-        headers["Content-Type"] = content_type
-
     try:
-        resp = _requests.request(
-            method=request.method,
-            url=target,
-            headers=headers,
-            data=request.body if request.method != "GET" else None,
-            files={k: (f.name, f, f.content_type) for k, f in request.FILES.items()} if request.FILES else None,
-            stream=True,
-            timeout=600,
-        )
+        if request.FILES:
+            # Multipart file upload — forward files, let requests set Content-Type
+            files = {k: (f.name, f, f.content_type) for k, f in request.FILES.items()}
+            resp = _requests.request(
+                method=request.method, url=target,
+                files=files, stream=True, timeout=600,
+            )
+        else:
+            # JSON or other request — forward body and Content-Type
+            headers = {}
+            if request.content_type:
+                headers["Content-Type"] = request.content_type
+            resp = _requests.request(
+                method=request.method, url=target,
+                headers=headers,
+                data=request.body if request.method != "GET" else None,
+                stream=True, timeout=600,
+            )
     except _requests.ConnectionError:
         return JsonResponse(
             {"error": f"Compute server not available at {COMPUTE_URL}. Is tee-compute running?"},
@@ -47,6 +50,9 @@ def _proxy_to_compute(request, path):
         )
     except _requests.Timeout:
         return JsonResponse({"error": "Compute server timed out"}, status=504)
+    except Exception as e:
+        logger.error("Proxy error for %s: %s", path, e)
+        return JsonResponse({"error": f"Proxy error: {e}"}, status=502)
 
     # Stream response back
     proxy_headers = {}
