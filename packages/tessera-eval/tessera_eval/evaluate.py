@@ -68,6 +68,8 @@ def run_learning_curve(vectors, labels, classifier_names, training_sizes,
             train_idx = []
             for cls in range(n_classes):
                 cls_indices = np.where(labels == cls)[0]
+                if len(cls_indices) == 0:
+                    continue
                 n_take = min(per_class, int(0.8 * len(cls_indices)))
                 n_take = max(1, n_take)
                 chosen = rng.choice(cls_indices, size=n_take, replace=False)

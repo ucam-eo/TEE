@@ -110,6 +110,8 @@ def upload_shapefile():
     _uploaded_shapefiles.append((uploaded.filename, gdf))
     _merged_gdf = None  # invalidate cache
     _tile_cache["key"] = None  # invalidate tile cache
+    logger.info("Uploaded '%s': %d features, %d fields",
+                uploaded.filename, len(gdf), len([c for c in gdf.columns if c != "geometry"]))
 
     merged = _get_merged_gdf()
 
@@ -339,19 +341,23 @@ def run_large_area():
                     "n_classes": len(class_names),
                 }
 
+                unet_patches = all_unet_patches if all_unet_patches else []
+
                 # Cache
                 _tile_cache.update({
                     "key": cache_key, "vectors": vectors, "labels": labels,
                     "class_names": class_names, "stats": stats,
                     "spatial_3x3": spatial_3x3, "spatial_5x5": spatial_5x5,
+                    "unet_patches": unet_patches,
                 })
 
-            except ValueError as e:
+            except Exception as e:
                 yield json.dumps({"event": "error", "message": str(e)}) + "\n"
                 return
         else:
             spatial_3x3 = _tile_cache.get("spatial_3x3")
             spatial_5x5 = _tile_cache.get("spatial_5x5")
+            unet_patches = _tile_cache.get("unet_patches", [])
 
         total_labelled = len(vectors)
 
@@ -370,7 +376,7 @@ def run_large_area():
             class_info.append({"name": str(name), "pixels": int(cnt)})
 
         # Filter classifiers that the user hasn't installed deps for
-        active_names = []
+        active_models = []
         for name in model_names:
             if name == "unet":
                 try:
@@ -380,12 +386,11 @@ def run_large_area():
                         continue
                 except ImportError:
                     continue
-            active_names.append(name)
-        model_names = active_names
+            active_models.append(name)
 
         yield json.dumps({
             "event": "start",
-            "classifiers": model_names,
+            "classifiers": active_models,
             "classes": class_info if is_classification else [],
             "total_labelled_pixels": total_labelled,
             "confusion_matrix_labels": class_names if is_classification else [],
@@ -395,7 +400,7 @@ def run_large_area():
 
         # Run learning curve
         for event in run_learning_curve(
-            vectors, labels, model_names, training_sizes,
+            vectors, labels, active_models, training_sizes,
             repeats=5, classifier_params=model_params,
             spatial_vectors=spatial_3x3, spatial_vectors_5x5=spatial_5x5,
             finish_classifiers=_finish_classifiers,
@@ -416,12 +421,11 @@ def run_large_area():
         valid_class_names = [class_names[lbl] if lbl < len(class_names) else f"Class {lbl}"
                              for lbl in sorted(np.unique(labels))]
 
-        for name in model_names:
+        for name in active_models:
             try:
                 if name == "unet" and needs_unet:
                     from tessera_eval.unet import train_unet_on_patches
                     import torch as _torch
-                    unet_patches = _tile_cache.get("_unet_patches", all_unet_patches if 'all_unet_patches' in dir() else [])
                     if unet_patches:
                         n_cls = len(np.unique(labels))
                         model = train_unet_on_patches(unet_patches, n_cls, model_params.get("unet", {}))
