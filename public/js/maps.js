@@ -845,13 +845,12 @@ function setPanelLayout(mode) {
             { content: 'panel6-label-view',     title: 'Auto-label' },
         ],
         'validation': [
-            { content: 'hidden' },
+            { content: 'validation-controls',   title: 'Controls',         header: false, flow: true },
             { content: null,                    title: 'Satellite' },
             { content: 'val-class-table-panel', title: 'Ground Truth',     header: false },
             { content: 'val-results-panel',     title: 'Progress',         header: false },
             { content: 'validation-chart-panel',title: 'Learning Curves',  header: false },
-            { content: 'validation-controls',   title: '',                 header: false, order: -1,
-              also: ['val-cm-panel'], flow: true },
+            { content: 'val-cm-panel',          title: 'Confusion Matrix', header: false },
         ],
     };
 

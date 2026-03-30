@@ -304,7 +304,7 @@
 
         /* Validation: grid layout */
         #map-container.mode-validation { grid-template-rows: 1fr 1fr; }
-        #map-container.mode-validation .panel:nth-child(6) { overflow-y: auto; }
+        #map-container.mode-validation .panel:nth-child(1) { overflow-y: auto; }
 
         .validation-panel {
             padding: 16px;
@@ -856,6 +856,61 @@
         <div class="panel">
             <div class="panel-header"><span id="panel1-title">OpenStreetMap</span></div>
             <div id="map-osm" class="map"></div>
+            <!-- Validation controls (shown in validation mode, panel 1) -->
+            <div id="validation-controls" class="validation-panel">
+                <h3>Upload Ground Truth</h3>
+                <div id="val-drop-zone" class="validation-drop-zone">
+                    Drop ESRI format .zip here (.shp, .dbf, .shx, .prj)
+                    <input type="file" id="val-file-input" accept=".zip" style="display:none;">
+                </div>
+
+                <label for="val-field-select">Class field</label>
+                <select id="val-field-select" disabled>
+                    <option value="">-- upload shapefile first --</option>
+                </select>
+                <div id="val-class-summary" style="margin-top: 6px; color: #999; font-size: 12px;"></div>
+
+                <label>Classifiers</label>
+                <div class="val-classifiers">
+                    <div class="val-clf-block"><label class="val-clf-header"><input type="checkbox" value="nn"><span>k-NN</span><button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button></label><div class="val-params"><label>k <input type="number" data-clf="nn" data-param="n_neighbors" value="5" min="1" max="50"></label><label>Weights <select data-clf="nn" data-param="weights"><option value="uniform">uniform</option><option value="distance">distance</option></select></label></div></div>
+                    <div class="val-clf-block"><label class="val-clf-header"><input type="checkbox" value="rf"><span>Random Forest</span><button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button></label><div class="val-params"><label>Trees <input type="number" data-clf="rf" data-param="n_estimators" value="100" min="10" max="500" step="10"></label><label>Max depth <input type="number" data-clf="rf" data-param="max_depth" value="" min="1" max="50" placeholder="None"></label></div></div>
+                    <div class="val-clf-block"><label class="val-clf-header"><input type="checkbox" value="xgboost"><span>XGBoost</span><button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button></label><div class="val-params"><label>Rounds <input type="number" data-clf="xgboost" data-param="n_estimators" value="100" min="10" max="500" step="10"></label><label>Max depth <input type="number" data-clf="xgboost" data-param="max_depth" value="6" min="1" max="15"></label><label>Learn rate <input type="number" data-clf="xgboost" data-param="learning_rate" value="0.3" min="0.01" max="1" step="0.01"></label></div></div>
+                    <div class="val-clf-block"><label class="val-clf-header"><input type="checkbox" value="mlp"><span>MLP</span><button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button></label><div class="val-params"><label>Layers <select data-clf="mlp" data-param="hidden_layers"><option value="64,32" selected>64, 32</option><option value="128,64">128, 64</option><option value="256,128,64">256, 128, 64</option></select></label><label>Max iter <input type="number" data-clf="mlp" data-param="max_iter" value="200" min="50" max="1000" step="50"></label></div></div>
+                    <div class="val-clf-block"><label class="val-clf-header"><input type="checkbox" value="spatial_mlp"><span>Spatial MLP (3×3)</span><button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button></label><div class="val-params"><label>Layers <select data-clf="spatial_mlp" data-param="hidden_layers"><option value="256,128" selected>256, 128</option><option value="512,256">512, 256</option><option value="512,256,128">512, 256, 128</option></select></label><label>Max iter <input type="number" data-clf="spatial_mlp" data-param="max_iter" value="300" min="50" max="1000" step="50"></label></div></div>
+                    <div class="val-clf-block"><label class="val-clf-header"><input type="checkbox" value="spatial_mlp_5x5"><span>Spatial MLP (5×5)</span><button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button></label><div class="val-params"><label>Layers <select data-clf="spatial_mlp_5x5" data-param="hidden_layers"><option value="512,256" selected>512, 256</option><option value="512,256,128">512, 256, 128</option><option value="1024,512,256">1024, 512, 256</option></select></label><label>Max iter <input type="number" data-clf="spatial_mlp_5x5" data-param="max_iter" value="400" min="50" max="1000" step="50"></label></div></div>
+                    <div class="val-clf-block" id="unet-clf-block"><label class="val-clf-header"><input type="checkbox" value="unet" id="unet-checkbox"><span>U-Net (GPU)</span><button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button></label><div class="val-params"><label>Epochs <input type="number" data-clf="unet" data-param="epochs" value="50" min="5" max="500" step="5"></label><label>Learning rate <input type="number" data-clf="unet" data-param="lr" value="0.001" min="0.0001" max="0.1" step="0.0001"></label><label>Depth <select data-clf="unet" data-param="depth"><option value="3" selected>3</option><option value="4">4</option></select></label><label>Base filters <select data-clf="unet" data-param="base_filters"><option value="32">32</option><option value="64" selected>64</option><option value="128">128</option></select></label></div></div>
+                </div>
+
+                <div>
+                    <label>Year</label>
+                    <select id="val-year-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+                        <option value="2018">2018</option>
+                        <option value="2019">2019</option>
+                        <option value="2020">2020</option>
+                        <option value="2021">2021</option>
+                        <option value="2022">2022</option>
+                        <option value="2023">2023</option>
+                        <option value="2024" selected>2024</option>
+                        <option value="2025">2025</option>
+                    </select>
+
+                    <label>Max training samples</label>
+                    <input type="number" id="val-max-train-large" value="30000" min="100" max="500000" step="1000"
+                        style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+
+                    <div style="display:flex; gap:6px; margin-top:6px;">
+                        <button id="val-generate-config" onclick="generateConfig()" style="flex:1; padding:6px; border:1px solid #555; border-radius:4px; background:#333; color:#ccc; font-size:12px; cursor:pointer;" title="Download JSON config for CLI use">Generate Config</button>
+                        <button id="val-upload-config" onclick="document.getElementById('val-config-file').click()" style="flex:1; padding:6px; border:1px solid #555; border-radius:4px; background:#333; color:#ccc; font-size:12px; cursor:pointer;" title="Upload a config file to fill controls">Upload Config</button>
+                        <input type="file" id="val-config-file" accept=".json" style="display:none;">
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:6px;">
+                    <button id="val-run-btn" class="validation-run-btn" disabled style="flex:1;" title="Run evaluation on selected classifiers">Run Evaluation</button>
+                    <button id="val-cancel-btn" class="validation-run-btn" style="flex:0 0 auto; background:#dc3545; display:none;" title="Cancel running evaluation">Cancel</button>
+                </div>
+                <div id="val-status" class="validation-status"></div>
+            </div>
         </div>
         <div class="panel">
             <div class="panel-header" style="justify-content: space-between;">
@@ -994,161 +1049,6 @@
                         <tbody></tbody>
                     </table>
                 </div>
-            </div>
-            <!-- Validation controls (shown only in validation mode) -->
-            <div id="validation-controls" class="validation-panel">
-                <h3>Upload Ground Truth</h3>
-                <div id="val-drop-zone" class="validation-drop-zone">
-                    Drop ESRI format .zip here (.shp, .dbf, .shx, .prj)
-                    <input type="file" id="val-file-input" accept=".zip" style="display:none;">
-                </div>
-
-                <label for="val-field-select">Class field</label>
-                <select id="val-field-select" disabled>
-                    <option value="">-- upload shapefile first --</option>
-                </select>
-                <div id="val-class-summary" style="margin-top: 6px; color: #999; font-size: 12px;"></div>
-
-                <label>Classifiers</label>
-                <div class="val-classifiers">
-                    <!-- NN -->
-                    <div class="val-clf-block">
-                        <label class="val-clf-header">
-                            <input type="checkbox" value="nn">
-                            <span>k-NN</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
-                        </label>
-                        <div class="val-params">
-                            <label>k <input type="number" data-clf="nn" data-param="n_neighbors" value="5" min="1" max="50"></label>
-                            <label>Weights <select data-clf="nn" data-param="weights"><option value="uniform">uniform</option><option value="distance">distance</option></select></label>
-                        </div>
-                    </div>
-                    <!-- RF -->
-                    <div class="val-clf-block">
-                        <label class="val-clf-header">
-                            <input type="checkbox" value="rf">
-                            <span>Random Forest</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
-                        </label>
-                        <div class="val-params">
-                            <label>Trees <input type="number" data-clf="rf" data-param="n_estimators" value="100" min="10" max="500" step="10"></label>
-                            <label>Max depth <input type="number" data-clf="rf" data-param="max_depth" value="" min="1" max="50" placeholder="None"></label>
-                        </div>
-                    </div>
-                    <!-- XGBoost -->
-                    <div class="val-clf-block">
-                        <label class="val-clf-header">
-                            <input type="checkbox" value="xgboost">
-                            <span>XGBoost</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
-                        </label>
-                        <div class="val-params">
-                            <label>Rounds <input type="number" data-clf="xgboost" data-param="n_estimators" value="100" min="10" max="500" step="10"></label>
-                            <label>Max depth <input type="number" data-clf="xgboost" data-param="max_depth" value="6" min="1" max="15"></label>
-                            <label>Learn rate <input type="number" data-clf="xgboost" data-param="learning_rate" value="0.3" min="0.01" max="1" step="0.01"></label>
-                        </div>
-                    </div>
-                    <!-- MLP -->
-                    <div class="val-clf-block">
-                        <label class="val-clf-header">
-                            <input type="checkbox" value="mlp">
-                            <span>MLP</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
-                        </label>
-                        <div class="val-params">
-                            <label>Layers <select data-clf="mlp" data-param="hidden_layers">
-                                <option value="64,32" selected>64, 32</option>
-                                <option value="128,64">128, 64</option>
-                                <option value="256,128,64">256, 128, 64</option>
-                            </select></label>
-                            <label>Max iter <input type="number" data-clf="mlp" data-param="max_iter" value="200" min="50" max="1000" step="50"></label>
-                        </div>
-                    </div>
-                    <!-- Spatial MLP -->
-                    <div class="val-clf-block">
-                        <label class="val-clf-header">
-                            <input type="checkbox" value="spatial_mlp">
-                            <span>Spatial MLP (3×3)</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
-                        </label>
-                        <div class="val-params">
-                            <label>Layers <select data-clf="spatial_mlp" data-param="hidden_layers">
-                                <option value="256,128" selected>256, 128</option>
-                                <option value="512,256">512, 256</option>
-                                <option value="512,256,128">512, 256, 128</option>
-                            </select></label>
-                            <label>Max iter <input type="number" data-clf="spatial_mlp" data-param="max_iter" value="300" min="50" max="1000" step="50"></label>
-                        </div>
-                    </div>
-                    <!-- Spatial MLP 5×5 -->
-                    <div class="val-clf-block">
-                        <label class="val-clf-header">
-                            <input type="checkbox" value="spatial_mlp_5x5">
-                            <span>Spatial MLP (5×5)</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
-                        </label>
-                        <div class="val-params">
-                            <label>Layers <select data-clf="spatial_mlp_5x5" data-param="hidden_layers">
-                                <option value="512,256" selected>512, 256</option>
-                                <option value="512,256,128">512, 256, 128</option>
-                                <option value="1024,512,256">1024, 512, 256</option>
-                            </select></label>
-                            <label>Max iter <input type="number" data-clf="spatial_mlp_5x5" data-param="max_iter" value="400" min="50" max="1000" step="50"></label>
-                        </div>
-                    </div>
-                    <!-- U-Net (GPU) — disabled when deployed with separate tile server -->
-                    <div class="val-clf-block" id="unet-clf-block">
-                        <label class="val-clf-header">
-                            <input type="checkbox" value="unet" id="unet-checkbox">
-                            <span>U-Net (GPU)</span>
-                            <button type="button" class="val-toggle-params" onclick="this.parentElement.nextElementSibling.classList.toggle('open')" title="Show/hide parameters">...</button>
-                        </label>
-                        <div class="val-params">
-                            <label>Epochs <input type="number" data-clf="unet" data-param="epochs" value="50" min="5" max="500" step="5"></label>
-                            <label>Learning rate <input type="number" data-clf="unet" data-param="lr" value="0.001" min="0.0001" max="0.1" step="0.0001"></label>
-                            <label>Depth <select data-clf="unet" data-param="depth">
-                                <option value="3" selected>3</option>
-                                <option value="4">4</option>
-                            </select></label>
-                            <label>Base filters <select data-clf="unet" data-param="base_filters">
-                                <option value="32">32</option>
-                                <option value="64" selected>64</option>
-                                <option value="128">128</option>
-                            </select></label>
-                        </div>
-                    </div>
-                </div>
-
-                <div>
-                    <label>Year</label>
-                    <select id="val-year-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
-                        <option value="2018">2018</option>
-                        <option value="2019">2019</option>
-                        <option value="2020">2020</option>
-                        <option value="2021">2021</option>
-                        <option value="2022">2022</option>
-                        <option value="2023">2023</option>
-                        <option value="2024" selected>2024</option>
-                        <option value="2025">2025</option>
-                    </select>
-
-                    <label>Max training samples</label>
-                    <input type="number" id="val-max-train-large" value="30000" min="100" max="500000" step="1000"
-                        style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
-
-                    <div style="display:flex; gap:6px; margin-top:6px;">
-                        <button id="val-generate-config" onclick="generateConfig()" style="flex:1; padding:6px; border:1px solid #555; border-radius:4px; background:#333; color:#ccc; font-size:12px; cursor:pointer;" title="Download JSON config for CLI use">Generate Config</button>
-                        <button id="val-upload-config" onclick="document.getElementById('val-config-file').click()" style="flex:1; padding:6px; border:1px solid #555; border-radius:4px; background:#333; color:#ccc; font-size:12px; cursor:pointer;" title="Upload a config file to fill controls">Upload Config</button>
-                        <input type="file" id="val-config-file" accept=".json" style="display:none;">
-                    </div>
-                </div>
-
-
-                <div style="display:flex; gap:6px;">
-                    <button id="val-run-btn" class="validation-run-btn" disabled style="flex:1;" title="Run evaluation on selected classifiers">Run Evaluation</button>
-                    <button id="val-cancel-btn" class="validation-run-btn" style="flex:0 0 auto; background:#dc3545; display:none;" title="Cancel running evaluation">Cancel</button>
-                </div>
-                <div id="val-status" class="validation-status"></div>
             </div>
             <!-- Label management split view (labelling mode only) -->
             <div id="panel6-label-view" data-display-mode="flex" style="position: absolute; top: 45px; left: 0; right: 0; bottom: 0; flex-direction: column; background: #2a2a2a; font-size: 12px;">
