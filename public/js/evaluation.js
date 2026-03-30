@@ -1379,6 +1379,83 @@ function loadResultsFile() {
 // Wire up Load Results file input
 document.getElementById('val-results-file').addEventListener('change', loadResultsFile);
 
+// ── Upload Config ──
+
+function loadConfigFile() {
+    const fileInput = document.getElementById('val-config-file');
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const status = document.getElementById('val-status');
+    status.textContent = 'Loading config...';
+    status.style.color = '#888';
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const config = JSON.parse(e.target.result);
+            applyConfig(config);
+            status.textContent = `Config loaded from ${file.name}`;
+            status.style.color = '#28a745';
+        } catch (err) {
+            status.textContent = 'Invalid config file: ' + err.message;
+            status.style.color = '#dc3545';
+        }
+    };
+    reader.readAsText(file);
+    fileInput.value = '';
+}
+
+function applyConfig(config) {
+    // Set field
+    if (config.fields && config.fields.length > 0) {
+        const fieldName = config.fields[0].name;
+        const sel = document.getElementById('val-field-select');
+        if (sel) {
+            const opt = Array.from(sel.options).find(o => o.value === fieldName);
+            if (opt) {
+                sel.value = fieldName;
+                updateClassSummary();
+            }
+        }
+    }
+
+    // Set year
+    if (config.years && config.years.length > 0) {
+        const yearSel = document.getElementById('val-year-select');
+        if (yearSel) yearSel.value = String(config.years[0]);
+    }
+
+    // Set classifiers — uncheck all, then check the ones in config
+    document.querySelectorAll('.val-clf-header input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+    });
+    const clfNames = Object.keys(config.classifiers || {});
+    const regNames = Object.keys(config.regressors || {});
+    const allModels = [...clfNames, ...regNames];
+    for (const name of allModels) {
+        const cb = document.querySelector(`.val-clf-header input[value="${name}"]`);
+        if (cb) cb.checked = true;
+    }
+
+    // Set classifier params
+    const allParams = { ...(config.classifiers || {}), ...(config.regressors || {}) };
+    for (const [clf, params] of Object.entries(allParams)) {
+        for (const [param, value] of Object.entries(params)) {
+            const el = document.querySelector(`.val-params [data-clf="${clf}"][data-param="${param}"]`);
+            if (el) el.value = value;
+        }
+    }
+
+    // Set max training samples
+    if (config.max_training_samples) {
+        const input = document.getElementById('val-max-train-large');
+        if (input) input.value = config.max_training_samples;
+    }
+}
+
+document.getElementById('val-config-file').addEventListener('change', loadConfigFile);
+
 // ── Expose on window for onclick handlers and test assertions ──
 
 window.uploadShapefile = uploadShapefile;
@@ -1387,6 +1464,7 @@ window.renderConfusionMatrix = renderConfusionMatrix;
 window.exportEvalResults = exportEvalResults;
 window.openCMPopup = openCMPopup;
 window.generateConfig = generateConfig;
+window.loadConfigFile = loadConfigFile;
 window.loadResultsFile = loadResultsFile;
 Object.defineProperty(window, 'lastEvalData', {
     get: () => lastEvalData,
