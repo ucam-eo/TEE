@@ -1873,6 +1873,13 @@
             }
 
             try {
+                // Switch to this viewport first
+                await fetch('/api/viewports/switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name }),
+                });
+
                 const response = await fetch(`/api/viewports/${name}/is-ready`);
                 const result = await response.json();
 
@@ -2047,11 +2054,11 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
 
                 return `
                     <div class="viewport-item ${isActive}">
-                        <div class="viewport-item-name" onclick="switchViewport('${vp.name}')" style="cursor: pointer;">${vp.name}</div>
+                        <div class="viewport-item-name" onclick="goToViewer('${vp.name}')" style="cursor: pointer;">${vp.name}</div>
                         <div class="viewport-item-coords">${coordsText}</div>
                         <div class="viewport-item-coords" style="color: #0066cc; font-weight: 500; margin-top: 3px;">💾 ${sizeText}</div>
                         <div class="viewport-item-actions">
-                            <button class="viewport-item-btn" onclick="switchViewport('${vp.name}')">Select</button>
+                            <button class="viewport-item-btn" onclick="goToViewer('${vp.name}')">Open</button>
                             ${addYearBtn}
                             <button class="viewport-item-btn" onclick="exportViewportByName('${vp.name}')">Export</button>
                             ${deleteBtn}
