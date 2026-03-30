@@ -138,13 +138,13 @@ async function uploadShapefile(file) {
             sel.appendChild(opt);
         });
         sel.disabled = false;
-        updateClassSummary();
         document.getElementById('val-run-btn').disabled = false;
         status.textContent = `${data.fields.length} fields found`;
         status.style.color = '#28a745';
 
         valGeoJsonData = data.geojson;
         addValGeoJsonLayer();
+        updateClassSummary();
     } catch (e) {
         const msg = e.message || String(e);
         if (msg.includes('string did not match') || msg.includes('Failed to fetch')) {
