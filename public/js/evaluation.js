@@ -145,6 +145,7 @@ async function uploadShapefile(file) {
         valGeoJsonData = data.geojson;
         addValGeoJsonLayer();
         updateClassSummary();
+        updateYearCoverage(data.geojson);
     } catch (e) {
         const msg = e.message || String(e);
         if (msg.includes('string did not match') || msg.includes('Failed to fetch')) {
@@ -187,6 +188,55 @@ function updateClassSummary() {
         }
     }
     addValGeoJsonLayer();
+}
+
+async function updateYearCoverage(geojson) {
+    if (!geojson || !geojson.features || geojson.features.length === 0) return;
+
+    // Compute bbox from GeoJSON features
+    let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+    for (const f of geojson.features) {
+        if (!f.geometry || !f.geometry.coordinates) continue;
+        const coords = JSON.stringify(f.geometry.coordinates);
+        const nums = coords.match(/-?\d+\.?\d*/g);
+        if (!nums) continue;
+        for (let i = 0; i < nums.length - 1; i += 2) {
+            const lon = parseFloat(nums[i]), lat = parseFloat(nums[i + 1]);
+            if (Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+                minLon = Math.min(minLon, lon);
+                minLat = Math.min(minLat, lat);
+                maxLon = Math.max(maxLon, lon);
+                maxLat = Math.max(maxLat, lat);
+            }
+        }
+    }
+    if (!isFinite(minLon)) return;
+
+    try {
+        const resp = await fetch('/api/viewports/embedding-coverage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bbox: [minLon, minLat, maxLon, maxLat] }),
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const coverage = data.coverage || {};
+
+        const sel = document.getElementById('val-year-select');
+        const currentVal = sel.value;
+        Array.from(sel.options).forEach(opt => {
+            const tiles = coverage[opt.value] || 0;
+            opt.disabled = tiles === 0;
+            opt.textContent = tiles > 0 ? `${opt.value} (${tiles} tiles)` : `${opt.value} (no coverage)`;
+        });
+        // If current selection has no coverage, pick the first available
+        if (sel.selectedOptions[0] && sel.selectedOptions[0].disabled) {
+            const first = Array.from(sel.options).find(o => !o.disabled);
+            if (first) sel.value = first.value;
+        }
+    } catch (e) {
+        console.warn('Failed to check year coverage:', e);
+    }
 }
 
 async function fetchClassPixelCounts(fieldName) {
