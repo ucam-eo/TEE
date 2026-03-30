@@ -267,7 +267,15 @@ def run_large_area():
                 _tile_cache["key"] = None
 
         if _tile_cache["key"] != cache_key:
-            # Load embeddings tile by tile
+            # Emit early so the browser knows we're working
+            yield json.dumps({
+                "event": "field_start",
+                "field": field_name,
+                "type": task,
+                "status": "Loading GeoTessera tile index...",
+            }) + "\n"
+
+            # Load embeddings tile by tile (GeoTessera() may take time to init registry)
             gt = GeoTessera()
 
             try:

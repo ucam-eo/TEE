@@ -61,12 +61,13 @@ def _proxy_to_compute(request, path):
             proxy_headers[k] = v
 
     django_resp = StreamingHttpResponse(
-        resp.iter_content(chunk_size=8192),
+        resp.iter_content(chunk_size=18 * 1024),
         status=resp.status_code,
         content_type=resp.headers.get("Content-Type", "application/json"),
     )
     for k, v in proxy_headers.items():
         django_resp[k] = v
+    django_resp["Content-Encoding"] = "identity"
     return django_resp
 
 
