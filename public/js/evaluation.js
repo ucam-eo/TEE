@@ -113,6 +113,9 @@ async function uploadShapefile(file) {
     formData.append('file', file);
 
     try {
+        // Clear previous shapefiles before uploading
+        await fetch('/api/evaluation/clear-shapefiles', { method: 'POST' });
+
         const resp = await fetch('/api/evaluation/upload-shapefile', { method: 'POST', body: formData });
         const data = await resp.json();
         if (!resp.ok) {
