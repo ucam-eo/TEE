@@ -570,8 +570,8 @@ class TestLargeAreaValidation:
     def test_year_select_exists(self, html):
         assert 'val-year-select' in html
 
-    def test_load_results_button_exists(self, html):
-        assert 'val-load-results' in html
+    def test_upload_config_button_exists(self, html):
+        assert 'val-upload-config' in html
 
     def test_generate_config_button_exists(self, html):
         assert 'val-generate-config' in html
