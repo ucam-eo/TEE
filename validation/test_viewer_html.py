@@ -395,13 +395,13 @@ class TestModeClasses:
         for mode in self.MODES:
             assert f"'{mode}'" in block
 
-    def test_titles_dict_has_all_modes(self, script_text):
-        # setPanelLayout titles dict — find by its unique content (panel mode titles)
-        idx = script_text.find("'explore':          { p1:")
-        assert idx >= 0, "panel mode titles dict not found"
-        titles_block = script_text[idx:idx+700]
+    def test_panel_layout_has_all_modes(self, script_text):
+        # PANEL_LAYOUT declarative table must have all modes
+        idx = script_text.find("PANEL_LAYOUT")
+        assert idx >= 0, "PANEL_LAYOUT table not found in JS"
+        layout_block = script_text[idx:idx+2000]
         for mode in self.MODES:
-            assert f"'{mode}'" in titles_block
+            assert f"'{mode}'" in layout_block, f"PANEL_LAYOUT missing mode '{mode}'"
 
 
 # ────────────────────────────────────────────

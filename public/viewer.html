@@ -173,8 +173,6 @@
 
         /* Change Detection: Panel 4 shows change-stats table instead of PCA/UMAP */
         #map-container.mode-change-detection .panel:nth-child(4) { visibility: visible; }
-        #map-container.mode-change-detection #map-umap { display: none; }
-        #map-container.mode-change-detection #change-stats-panel { display: flex; }
         #map-container.mode-change-detection #dim-reduction-selector { display: none; }
 
         /* Change-stats panel styling */
@@ -242,8 +240,6 @@
 
         /* Labelling: repurpose panel 6 as label-management split view */
         #panel6-label-view { display: none; }
-        #map-container.mode-labelling #map-embedding2 { display: none; }
-        #map-container.mode-labelling #panel6-label-view { display: flex; }
 
         /* Validation: grey out similarity, repurpose label bar for validation buttons */
         body.mode-validation #similarity-controls { opacity: 0.4 !important; pointer-events: none; }
@@ -254,8 +250,6 @@
         #val-download-btn:disabled { background: #555 !important; color: #888 !important; cursor: default; }
         /* Panel 6 year selector visibility controlled by year-selector-2-visibility dependency */
 
-        /* Validation: Panel 3 shows class table instead of embeddings */
-        #map-container.mode-validation #val-class-table-panel { display: flex; }
 
         /* Validation class table styling */
         #val-class-table-panel {
@@ -303,27 +297,9 @@
             padding: 30px;
         }
 
-        /* Validation layout: reorder panels via CSS grid order
-           P6 (controls) → pos 1, P2 (satellite) → pos 2, P3 (classes) → pos 3,
-           P4 (progress) → pos 4, P5 (learning curves) → pos 5, P6 (CM) → pos 6 */
+        /* Validation: grid layout (panel visibility controlled by JS PANEL_LAYOUT table) */
         #map-container.mode-validation { grid-template-rows: 1fr 1fr; }
-        #map-container.mode-validation .panel:nth-child(1) { display: none; }  /* hide OSM panel */
-        #map-container.mode-validation .panel:nth-child(3) > .panel-header { display: none !important; }
-        #map-container.mode-validation .panel:nth-child(4) > .panel-header { display: none !important; }
-        #map-container.mode-validation .panel:nth-child(5) > .panel-header { display: none !important; }
-        #map-container.mode-validation .panel:nth-child(6) { overflow-y: auto; order: -1; }
-        #map-container.mode-validation .panel:nth-child(6) > .panel-header { display: none !important; }
-        #validation-controls { display: none; }
-        #validation-chart-panel { display: none; }
-        #val-results-panel { display: none; }
-        #map-container.mode-validation #map-umap { display: none; }
-        #map-container.mode-validation #map-panel5 { display: none; }
-        #map-container.mode-validation #map-embedding { display: none; }
-        #map-container.mode-validation #map-embedding2 { display: none; }
-        #map-container.mode-validation #validation-chart-panel { display: flex; }
-        #map-container.mode-validation #validation-controls { display: block; }
-        #map-container.mode-validation #val-results-panel { display: block; }
-        #map-container.mode-validation #val-cm-panel { display: flex; }
+        #map-container.mode-validation .panel:nth-child(6) { overflow-y: auto; }
 
         .validation-panel {
             padding: 16px;
@@ -430,7 +406,6 @@
 
         /* Confusion Matrix panel (panel 5 in validation mode) */
         #val-cm-panel { display: none; flex-direction: column; width: 100%; height: 100%; background: #1e1e2e; }
-        #map-container.mode-validation #val-cm-panel { display: flex; }
         .cm-header {
             display: flex; align-items: center; gap: 10px; padding: 10px 16px 6px;
             flex-shrink: 0;
@@ -901,7 +876,7 @@
                 <div id="coords-text">Lat: 0.000000 | Lon: 0.000000</div>
             </div>
             <!-- Validation class table (shown only in validation mode) -->
-            <div id="val-class-table-panel">
+            <div id="val-class-table-panel" data-display-mode="flex">
                 <h3>Ground Truth Classes</h3>
                 <div class="val-class-placeholder">Upload a shapefile to see classes</div>
                 <table id="val-class-table" style="display: none;">
@@ -924,7 +899,7 @@
             </div>
             <div id="map-umap" class="map"><div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:16px;color:#999;">Waiting for vectors...</div></div>
             <!-- Change distribution stats (shown only in change-detection mode) -->
-            <div id="change-stats-panel">
+            <div id="change-stats-panel" data-display-mode="flex">
                 <h3>Change Distribution</h3>
                 <div class="change-stats-placeholder">Waiting for heatmap computation...</div>
                 <table id="change-stats-table" style="display: none;">
@@ -965,7 +940,7 @@
                 Waiting for embedding extraction...
             </div>
             <!-- Validation chart (shown only in validation mode) -->
-            <div id="validation-chart-panel" style="align-items:center;justify-content:center;width:100%;height:100%;background:#1e1e2e;padding:20px;flex-direction:column;">
+            <div id="validation-chart-panel" data-display-mode="flex" style="align-items:center;justify-content:center;width:100%;height:100%;background:#1e1e2e;padding:20px;flex-direction:column;">
                 <div style="position:absolute;top:8px;right:12px;z-index:10;">
                     <select id="val-metric-select" style="padding:3px 8px;border:1px solid #555;border-radius:4px;background:#333;color:#fff;font-size:12px;cursor:pointer;">
                         <option value="macro" selected>Macro F1</option>
@@ -1171,7 +1146,7 @@
                 <div id="val-status" class="validation-status"></div>
             </div>
             <!-- Label management split view (labelling mode only) -->
-            <div id="panel6-label-view" style="position: absolute; top: 45px; left: 0; right: 0; bottom: 0; flex-direction: column; background: #2a2a2a; font-size: 12px;">
+            <div id="panel6-label-view" data-display-mode="flex" style="position: absolute; top: 45px; left: 0; right: 0; bottom: 0; flex-direction: column; background: #2a2a2a; font-size: 12px;">
                 <!-- Mode selector bar -->
                 <div style="display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: #1e1e1e; border-bottom: 1px solid #444; flex-shrink: 0;">
                     <select id="label-mode-select" onchange="setLabelMode(this.value)" style="padding: 3px 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 12px; cursor: pointer;">

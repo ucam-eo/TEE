@@ -815,19 +815,107 @@ function setPanelLayout(mode) {
     select.value = mode;
     window.currentPanelMode = mode;
 
-    // Static panel titles per mode
-    const titles = {
-        'explore':          { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'PCA (Embedding Space)', p5: '',  p6: '' },
-        'change-detection': { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'Change Distribution',    p5: 'Change Heatmap',  p6: 'Tessera Embeddings' },
-        'labelling':        { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'PCA (Embedding Space)', p5: 'Classification results',    p6: 'Auto-label' },
-        'validation':       { p1: 'OpenStreetMap',  p3: 'Ground Truth',       p4: 'Progress',              p5: 'Learning Curves',  p6: 'Controls' },
+    // ── Declarative panel layout table ──
+    // For each mode: [panel1, panel2, panel3, panel4, panel5, panel6]
+    // Each entry: { content: 'element-id' or null, title: 'Panel Title', header: true/false }
+    // content=null means show the panel's default map; content='hidden' hides the entire panel
+    const PANEL_LAYOUT = {
+        'explore': [
+            { content: null,                    title: 'OpenStreetMap' },
+            { content: null,                    title: 'Satellite' },
+            { content: null,                    title: 'Tessera Embeddings' },
+            { content: null,                    title: 'PCA (Embedding Space)' },
+            { content: null,                    title: '' },
+            { content: null,                    title: '' },
+        ],
+        'change-detection': [
+            { content: null,                    title: 'OpenStreetMap' },
+            { content: null,                    title: 'Satellite' },
+            { content: null,                    title: 'Tessera Embeddings' },
+            { content: 'change-stats-panel',    title: 'Change Distribution' },
+            { content: null,                    title: 'Change Heatmap' },
+            { content: null,                    title: 'Tessera Embeddings' },
+        ],
+        'labelling': [
+            { content: null,                    title: 'OpenStreetMap' },
+            { content: null,                    title: 'Satellite' },
+            { content: null,                    title: 'Tessera Embeddings' },
+            { content: null,                    title: 'PCA (Embedding Space)' },
+            { content: null,                    title: 'Classification results' },
+            { content: 'panel6-label-view',     title: 'Auto-label' },
+        ],
+        'validation': [
+            { content: 'hidden' },
+            { content: null,                    title: 'Satellite' },
+            { content: 'val-class-table-panel', title: 'Ground Truth',     header: false },
+            { content: 'val-results-panel',     title: 'Progress',         header: false },
+            { content: 'validation-chart-panel',title: 'Learning Curves',  header: false },
+            { content: 'validation-controls',   title: '',                 header: false, order: -1,
+              also: ['val-cm-panel'] },
+        ],
     };
-    const t = titles[mode] || titles['explore'];
-    document.getElementById('panel1-title').textContent = t.p1;
-    document.getElementById('panel3-title').textContent = t.p3;
-    document.getElementById('panel4-title').textContent = t.p4;
-    document.getElementById('panel5-title').textContent = t.p5;
-    document.getElementById('panel6-header-text').textContent = t.p6;
+
+    // Apply layout
+    const layout = PANEL_LAYOUT[mode] || PANEL_LAYOUT['explore'];
+    const panels = document.querySelectorAll('#map-container > .panel');
+    const titleIds = ['panel1-title', null, 'panel3-title', 'panel4-title', 'panel5-title', 'panel6-header-text'];
+
+    // IDs of all switchable content (non-map overlays shown per mode)
+    const SWITCHABLE = [
+        'change-stats-panel', 'panel6-label-view',
+        'val-class-table-panel', 'val-results-panel', 'validation-chart-panel',
+        'validation-controls', 'val-cm-panel',
+    ];
+
+    // Hide all switchable content
+    for (const id of SWITCHABLE) {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    }
+
+    // Apply per-panel
+    for (let i = 0; i < panels.length && i < layout.length; i++) {
+        const panel = panels[i];
+        const spec = layout[i];
+
+        // Panel visibility
+        if (spec.content === 'hidden') {
+            panel.style.display = 'none';
+            continue;
+        }
+        panel.style.display = '';
+        panel.style.order = spec.order !== undefined ? spec.order : '';
+
+        // Header visibility
+        const hdr = panel.querySelector('.panel-header');
+        if (hdr) {
+            if (spec.header === false) {
+                hdr.style.display = 'none';
+            } else {
+                hdr.style.display = '';
+            }
+        }
+
+        // Title
+        if (titleIds[i] && spec.title !== undefined) {
+            const titleEl = document.getElementById(titleIds[i]);
+            if (titleEl) titleEl.textContent = spec.title;
+        }
+
+        // Show specified content overlay
+        if (spec.content && spec.content !== 'hidden') {
+            const el = document.getElementById(spec.content);
+            if (el) el.style.display = el.dataset.displayMode || 'block';
+        }
+
+        // Show additional content in same panel
+        if (spec.also) {
+            for (const id of spec.also) {
+                const el = document.getElementById(id);
+                if (el) el.style.display = el.dataset.displayMode || 'flex';
+            }
+        }
+    }
 
     const rules = PANEL5_LAYER_RULES[mode] || PANEL5_LAYER_RULES['explore'];
     applyHeatmapLayerRule(window.panel5SatelliteLayer, rules.satellite);

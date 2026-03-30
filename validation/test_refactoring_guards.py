@@ -291,8 +291,8 @@ class TestCSSModeRules:
     def test_leaflet_draw_hidden(self, html):
         assert ".leaflet-draw-toolbar" in html
 
-    def test_panel6_label_view_css(self, html):
-        assert "#map-container.mode-labelling #panel6-label-view" in html
+    def test_panel_layout_table(self, all_script_text):
+        assert "PANEL_LAYOUT" in all_script_text, "Declarative PANEL_LAYOUT table must exist in JS"
 
 
 # ──────────────────────────────────────────────────
