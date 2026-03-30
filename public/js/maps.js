@@ -878,23 +878,25 @@ function setPanelLayout(mode) {
         const panel = panels[i];
         const spec = layout[i];
 
+        // Reset panel: show it, clear order, show header, show map
+        panel.style.display = '';
+        panel.style.order = '';
+        const hdr = panel.querySelector('.panel-header');
+        if (hdr) hdr.style.display = '';
+        const map = panel.querySelector('.map');
+        if (map) map.style.display = '';
+
         // Panel visibility
         if (spec.content === 'hidden') {
             panel.style.display = 'none';
             continue;
         }
-        panel.style.display = '';
-        panel.style.order = spec.order !== undefined ? spec.order : '';
+
+        // Order override
+        if (spec.order !== undefined) panel.style.order = spec.order;
 
         // Header visibility
-        const hdr = panel.querySelector('.panel-header');
-        if (hdr) {
-            if (spec.header === false) {
-                hdr.style.display = 'none';
-            } else {
-                hdr.style.display = '';
-            }
-        }
+        if (hdr && spec.header === false) hdr.style.display = 'none';
 
         // Title
         if (titleIds[i] && spec.title !== undefined) {
@@ -902,8 +904,9 @@ function setPanelLayout(mode) {
             if (titleEl) titleEl.textContent = spec.title;
         }
 
-        // Show specified content overlay
+        // Show specified content overlay (and hide the map underneath)
         if (spec.content && spec.content !== 'hidden') {
+            if (map) map.style.display = 'none';
             const el = document.getElementById(spec.content);
             if (el) el.style.display = el.dataset.displayMode || 'block';
         }
