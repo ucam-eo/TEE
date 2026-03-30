@@ -550,12 +550,16 @@ function handleStreamEvent(ev) {
     // ── Large-area events ──
 
     } else if (ev.event === 'download_progress') {
-        status.textContent = `Loading tiles: ${ev.tile} / ${ev.total}`;
-        showResultsPanel(`Loading embeddings: tile ${ev.tile} / ${ev.total}...`);
+        status.dataset.updated = '1';
+        const elapsed = status.dataset.t0 ? ((Date.now() - parseInt(status.dataset.t0)) / 1000).toFixed(0) : '';
+        const suffix = elapsed ? ` (${elapsed}s)` : '';
+        status.textContent = `Downloading tile ${ev.tile} / ${ev.total}${suffix}`;
+        showResultsPanel(`Downloading embeddings: tile ${ev.tile} / ${ev.total}...`);
 
     } else if (ev.event === 'field_start') {
         currentLargeAreaTask = ev.type;
-        status.textContent = `Loading embeddings for ${ev.field}...`;
+        status.dataset.updated = '1';
+        status.textContent = `Loading GeoTessera tile index...`;
         showResultsPanel(`Loading embeddings for ${ev.field} (${ev.type})...`);
 
     } else if (ev.event === 'fold_result') {
@@ -1052,6 +1056,8 @@ async function runLargeAreaEvaluation() {
     btn.textContent = 'Running...';
     cancelBtn.style.display = '';
     status.style.color = '#888';
+    status.dataset.updated = '';
+    status.dataset.t0 = String(Date.now());
 
     lastChartData = null;
     currentLargeAreaTask = null;
@@ -1069,7 +1075,10 @@ async function runLargeAreaEvaluation() {
     const timer = setInterval(() => {
         if (!lastChartData) {
             const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
-            status.textContent = `Starting... ${elapsed}s`;
+            // Only show generic message if no event has updated the status yet
+            if (!status.dataset.updated) {
+                status.textContent = `Connecting to GeoTessera... ${elapsed}s`;
+            }
         }
     }, 1000);
 
