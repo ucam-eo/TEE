@@ -183,7 +183,7 @@ function updateClassSummary() {
                 if (v != null) featureCounts[v] = (featureCounts[v] || 0) + 1;
             });
             const classData = classNames.map(n => ({ name: String(n), pixels: featureCounts[n] }));
-            populateValClassTable(classNames.map(String), classData);
+            populateValClassTable(classNames.map(String), classData, false);
         }
     }
     addValGeoJsonLayer();
@@ -223,7 +223,7 @@ async function fetchClassPixelCounts(fieldName) {
     }
 }
 
-function populateValClassTable(classNames, classData) {
+function populateValClassTable(classNames, classData, isPixelCounts) {
     const panel = document.getElementById('val-class-table-panel');
     const table = document.getElementById('val-class-table');
     const placeholder = panel.querySelector('.val-class-placeholder');
@@ -238,33 +238,31 @@ function populateValClassTable(classNames, classData) {
     const tbody = table.querySelector('tbody');
     tbody.innerHTML = '';
 
-    const pixelMap = {};
+    const countMap = {};
     if (classData) {
         for (const c of classData) {
-            pixelMap[c.name] = c.pixels;
+            countMap[c.name] = c.pixels;
         }
     }
 
-    // Update header: "Pixels" if we have pixel counts, "Features" otherwise
     const header = document.getElementById('val-class-count-header');
-    const hasPixels = classData && classData.some(c => c.pixels !== undefined);
-    if (header) header.textContent = hasPixels ? 'Pixels' : 'Features';
+    if (header) header.textContent = isPixelCounts ? 'Pixels' : 'Features';
 
-    classNames.sort((a, b) => (pixelMap[b] || 0) - (pixelMap[a] || 0));
+    classNames.sort((a, b) => (countMap[b] || 0) - (countMap[a] || 0));
 
     for (const name of classNames) {
         const tr = document.createElement('tr');
-        const pixels = pixelMap[name];
+        const count = countMap[name];
         const td1 = document.createElement('td');
         td1.textContent = name;
-        if (pixels !== undefined && pixels < 50) {
+        if (isPixelCounts && count !== undefined && count < 50) {
             const note = document.createElement('span');
             note.className = 'val-class-excluded';
             note.textContent = ' (<50 px, excluded)';
             td1.appendChild(note);
         }
         const td2 = document.createElement('td');
-        td2.textContent = pixels !== undefined ? pixels.toLocaleString() : '\u2014';
+        td2.textContent = count !== undefined ? count.toLocaleString() : '\u2014';
         tr.appendChild(td1);
         tr.appendChild(td2);
         tbody.appendChild(tr);
@@ -427,7 +425,7 @@ function handleStreamEvent(ev) {
 
         if (ev.classes) {
             const names = ev.classes.map(c => c.name);
-            populateValClassTable(names, ev.classes);
+            populateValClassTable(names, ev.classes, true);
         }
 
     } else if (ev.event === 'progress') {
