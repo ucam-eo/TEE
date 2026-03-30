@@ -1,8 +1,10 @@
 #!/bin/bash
 ##
-# Restart TEE Web Server
+# Restart TEE Services
 #
-# Uses Django + waitress.
+# Local mode:  Django on :8002 (data) + tee-compute on :8001 (eval + proxy)
+# Server mode: Django on :8001 (behind Apache, no eval — eval via user's tee-compute)
+#
 # Auto-detects: if 'tee' system user exists, runs as tee (server mode).
 # Otherwise runs as the current user (local development).
 ##
@@ -13,6 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 PYTHON="$SCRIPT_DIR/venv/bin/python3"
+TEE_COMPUTE="$SCRIPT_DIR/venv/bin/tee-compute"
 
 # Auto-detect run mode: server (tee user) vs local (current user)
 if id tee >/dev/null 2>&1; then
@@ -37,38 +40,65 @@ echo "Shutting down existing services..."
 
 # Kill any existing TEE processes
 pkill -f "python.*waitress.*tee_project" 2>/dev/null || true
+pkill -f "tee-compute" 2>/dev/null || true
 lsof -ti:8001 2>/dev/null | xargs kill -9 2>/dev/null || true
+lsof -ti:8002 2>/dev/null | xargs kill -9 2>/dev/null || true
 sleep 1
 
-# Set host: localhost for server (behind Apache), all interfaces for local dev
 if [ "$MODE" = "server" ]; then
+    # Server mode: Django on :8001 (behind Apache), no tee-compute
+    # Users run their own tee-compute pointing --hosted at this server
     HOST="127.0.0.1"
-else
-    HOST="0.0.0.0"
-fi
-
-# Start web server
-echo "  Web server on $HOST:8001"
-if [ "$MODE" = "local" ]; then
-    $PYTHON -m waitress --host="$HOST" --port=8001 --threads=16 tee_project.wsgi:application \
-        >> "$LOG_DIR/web_server.log" 2>&1 &
-else
+    echo "  Django on $HOST:8001"
     $RUN env TEE_MODE=production \
         $PYTHON -m waitress --host="$HOST" --port=8001 --threads=16 tee_project.wsgi:application \
         >> "$LOG_DIR/web_server.log" 2>&1 &
-fi
-WEB_PID=$!
+    WEB_PID=$!
 
-sleep 2
+    sleep 2
+    if ps -p $WEB_PID > /dev/null 2>&1; then
+        echo "  Django OK (PID: $WEB_PID)"
+    else
+        echo "  Django FAILED -- check $LOG_DIR/web_server.log"
+        exit 1
+    fi
 
-# Verify
-if ps -p $WEB_PID > /dev/null 2>&1; then
-    echo "  Web server OK (PID: $WEB_PID)"
+    echo ""
+    echo "TEE running at http://$HOST:8001"
 else
-    echo "  Web server FAILED -- check $LOG_DIR/web_server.log"
-    exit 1
+    # Local mode: Django on :8001, tee-compute on :8002
+    # Django forwards /api/evaluation/* to tee-compute
+    HOST="0.0.0.0"
+    COMPUTE_PORT=8002
+
+    echo "  Django on $HOST:8001"
+    $PYTHON -m waitress --host="$HOST" --port=8001 --threads=16 tee_project.wsgi:application \
+        >> "$LOG_DIR/web_server.log" 2>&1 &
+    DJANGO_PID=$!
+
+    sleep 2
+    if ps -p $DJANGO_PID > /dev/null 2>&1; then
+        echo "  Django OK (PID: $DJANGO_PID)"
+    else
+        echo "  Django FAILED -- check $LOG_DIR/web_server.log"
+        exit 1
+    fi
+
+    echo "  tee-compute on $HOST:$COMPUTE_PORT (eval)"
+    $TEE_COMPUTE --hosted "http://localhost:8001" --host "$HOST" --port $COMPUTE_PORT \
+        >> "$LOG_DIR/compute_server.log" 2>&1 &
+    COMPUTE_PID=$!
+
+    sleep 2
+    if ps -p $COMPUTE_PID > /dev/null 2>&1; then
+        echo "  tee-compute OK (PID: $COMPUTE_PID)"
+    else
+        echo "  tee-compute FAILED -- check $LOG_DIR/compute_server.log"
+        exit 1
+    fi
+
+    echo ""
+    echo "TEE running at http://localhost:8001"
 fi
 
-echo ""
-echo "TEE running at http://$HOST:8001"
 echo "Logs: $LOG_DIR/"
