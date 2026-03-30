@@ -166,7 +166,7 @@ function updateClassSummary() {
     if (!valFieldData || !fieldName) { summary.textContent = ''; return; }
     const field = valFieldData.find(f => f.name === fieldName);
     if (field) {
-        const nonNull = field.non_null !== undefined ? ` (${field.non_null}/${field.total} features)` : '';
+        const nonNull = field.non_null !== undefined ? ` (${field.non_null}/${field.total} polygons)` : '';
         summary.textContent = `${field.unique_count} classes${nonNull} \u2014 samples: ${field.samples.slice(0, 5).join(', ')}`;
 
         // Show class names in panel 1 table from GeoJSON (pixel counts come later from evaluation)
@@ -246,7 +246,7 @@ function populateValClassTable(classNames, classData, isPixelCounts) {
     }
 
     const header = document.getElementById('val-class-count-header');
-    if (header) header.textContent = isPixelCounts ? 'Pixels' : 'Features';
+    if (header) header.textContent = isPixelCounts ? 'Pixels' : 'Polygons';
 
     classNames.sort((a, b) => (countMap[b] || 0) - (countMap[a] || 0));
 
