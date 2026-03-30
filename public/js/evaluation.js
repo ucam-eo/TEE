@@ -166,7 +166,25 @@ function updateClassSummary() {
     if (!valFieldData || !fieldName) { summary.textContent = ''; return; }
     const field = valFieldData.find(f => f.name === fieldName);
     if (field) {
-        summary.textContent = `${field.unique_count} classes \u2014 samples: ${field.samples.slice(0, 5).join(', ')}`;
+        const nonNull = field.non_null !== undefined ? ` (${field.non_null}/${field.total} features)` : '';
+        summary.textContent = `${field.unique_count} classes${nonNull} \u2014 samples: ${field.samples.slice(0, 5).join(', ')}`;
+
+        // Show class names in panel 1 table from GeoJSON (pixel counts come later from evaluation)
+        if (valGeoJsonData && valGeoJsonData.features) {
+            const classNames = [...new Set(
+                valGeoJsonData.features
+                    .map(f => f.properties[fieldName])
+                    .filter(v => v != null)
+            )].sort();
+            // Count features per class
+            const featureCounts = {};
+            valGeoJsonData.features.forEach(f => {
+                const v = f.properties[fieldName];
+                if (v != null) featureCounts[v] = (featureCounts[v] || 0) + 1;
+            });
+            const classData = classNames.map(n => ({ name: String(n), pixels: featureCounts[n] }));
+            populateValClassTable(classNames.map(String), classData);
+        }
     }
     addValGeoJsonLayer();
 }
@@ -226,6 +244,11 @@ function populateValClassTable(classNames, classData) {
             pixelMap[c.name] = c.pixels;
         }
     }
+
+    // Update header: "Pixels" if we have pixel counts, "Features" otherwise
+    const header = document.getElementById('val-class-count-header');
+    const hasPixels = classData && classData.some(c => c.pixels !== undefined);
+    if (header) header.textContent = hasPixels ? 'Pixels' : 'Features';
 
     classNames.sort((a, b) => (pixelMap[b] || 0) - (pixelMap[a] || 0));
 
