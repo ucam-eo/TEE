@@ -255,6 +255,10 @@ def run_large_area():
             spatial_3x3 = _tile_cache.get("spatial_3x3")
             spatial_5x5 = _tile_cache.get("spatial_5x5")
             logger.info("Cache hit for %s/%s (%d pixels)", field_name, year, len(labels))
+            yield json.dumps({
+                "event": "download_progress", "tile": stats["tile_count"],
+                "total": stats["tile_count"], "cached": True,
+            }) + "\n"
 
             # Recompute spatial features if needed but not cached
             if needs_spatial_3x3 and spatial_3x3 is None:

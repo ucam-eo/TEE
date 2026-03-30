@@ -851,7 +851,7 @@ function setPanelLayout(mode) {
             { content: 'val-results-panel',     title: 'Progress',         header: false },
             { content: 'validation-chart-panel',title: 'Learning Curves',  header: false },
             { content: 'validation-controls',   title: '',                 header: false, order: -1,
-              also: ['val-cm-panel'] },
+              also: ['val-cm-panel'], flow: true },
         ],
     };
 
@@ -909,17 +909,20 @@ function setPanelLayout(mode) {
             if (titleEl) titleEl.textContent = spec.title;
         }
 
-        // Show specified content overlay (hide the map, cover the panel)
+        // Show specified content (hide the map)
         if (spec.content && spec.content !== 'hidden') {
             if (map) map.style.display = 'none';
             const el = document.getElementById(spec.content);
             if (el) {
                 el.style.display = el.dataset.displayMode || 'block';
-                el.style.position = 'absolute';
-                el.style.inset = '0';
-                el.style.zIndex = '400';
-                if (!el.style.background && !el.style.backgroundColor) {
-                    el.style.background = '#2a2a2a';
+                if (!spec.flow) {
+                    // Overlay mode: cover the panel absolutely
+                    el.style.position = 'absolute';
+                    el.style.inset = '0';
+                    el.style.zIndex = '400';
+                    if (!el.style.background && !el.style.backgroundColor) {
+                        el.style.background = '#2a2a2a';
+                    }
                 }
             }
         }
