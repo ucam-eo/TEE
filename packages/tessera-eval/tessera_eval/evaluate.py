@@ -65,7 +65,12 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
 
     MAX_TEST = 200_000  # subsample test set for speed (negligible accuracy loss)
 
-    for pct in training_pcts:
+    import time as _time
+    logger.info("Learning curve: %d pixels, %d classes, %d classifiers, pcts=%s",
+                n_samples, n_classes, len(classifier_names), training_pcts)
+
+    for pct_idx, pct in enumerate(training_pcts):
+        pct_t0 = _time.time()
         active = [n for n in classifier_names if n not in finish_classifiers]
         active_pixel = [n for n in active if n != 'unet']
         f1_scores = {name: [] for name in active}
@@ -201,6 +206,10 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                 "std_f1w": round(float(np.std(scoresw)), 4) if scoresw else 0.0,
             }
 
+        pct_elapsed = _time.time() - pct_t0
+        f1_summary = ", ".join(f"{n}={pct_results[n]['mean_f1']:.3f}" for n in active if n in pct_results)
+        logger.info("Pct %d/%d (%.0f%%) done in %.1fs — %s",
+                     pct_idx + 1, len(training_pcts), pct, pct_elapsed, f1_summary)
         yield {"type": "progress", "pct": pct, "classifiers": pct_results}
 
     confusion_matrices = {}
