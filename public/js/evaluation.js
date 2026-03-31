@@ -1436,6 +1436,55 @@ Object.defineProperty(window, 'valChart', {
     get: () => valChart,
     configurable: true,
 });
+
+// Restore validation panel state when returning from another mode
+function restoreValidationState() {
+    // Restore drop zone filename
+    if (valUploadedFilename) {
+        const dz = document.getElementById('val-drop-zone');
+        if (dz) {
+            dz.textContent = valUploadedFilename;
+            dz.classList.add('uploaded');
+        }
+    }
+
+    // Restore field selector
+    if (valFieldData && valFieldData.length > 0) {
+        const sel = document.getElementById('val-field-select');
+        if (sel && sel.options.length <= 1) {
+            sel.innerHTML = '';
+            valFieldData.forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f.name;
+                opt.textContent = `${f.name} (${f.unique_count} classes)`;
+                sel.appendChild(opt);
+            });
+            sel.disabled = false;
+            document.getElementById('val-run-btn').disabled = false;
+        }
+        updateClassSummary();
+    }
+
+    // Restore GeoJSON overlay + zoom
+    if (valGeoJsonData) {
+        addValGeoJsonLayer();
+    }
+
+    // Re-render chart
+    if (lastChartData && lastChartData.training_pcts && lastChartData.training_pcts.length > 0) {
+        renderChart(lastChartData);
+    }
+
+    // Re-render confusion matrix
+    if (lastEvalData && lastEvalData.confusion_matrices) {
+        renderConfusionMatrix(lastEvalData);
+    }
+
+    // Restore max train hint
+    updateMaxTrainPctHint();
+}
+window.restoreValidationState = restoreValidationState;
+
 window.uploadShapefile = uploadShapefile;
 window.runEvaluation = runEvaluation;
 window.renderConfusionMatrix = renderConfusionMatrix;

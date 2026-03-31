@@ -966,14 +966,9 @@ function setPanelLayout(mode) {
     } else if (mode === 'validation') {
         if (waitMsg) waitMsg.style.display = 'none';
         if (sameMsg) sameMsg.style.display = 'none';
-        // Re-render chart and CM if returning to validation with previous results
+        // Restore validation state if returning from another mode
         setTimeout(() => {
-            if (window.lastChartData && window.lastChartData.training_pcts && window.lastChartData.training_pcts.length > 0) {
-                if (window.renderChart) window.renderChart(window.lastChartData);
-            }
-            if (window.lastEvalData && window.lastEvalData.confusion_matrices) {
-                if (window.renderConfusionMatrix) window.renderConfusionMatrix(window.lastEvalData);
-            }
+            if (window.restoreValidationState) window.restoreValidationState();
         }, 200);
     }
 
