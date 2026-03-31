@@ -252,7 +252,7 @@ class TestDOMCompleteness:
         "status-btn", "status-close-btn",
         # Validation
         "val-run-btn", "val-cancel-btn", "val-export-btn",
-        "cm-export-btn", "cm-toggle-pct",
+        "cm-toggle-pct",
         "val-cm-panel", "validation-controls",
         # Auth
         "loginBtn",
@@ -471,7 +471,6 @@ class TestEventListenerWiring:
         ("label-save-cancel", "addEventListener"),
         ("timeline-close-btn", "addEventListener"),
         ("val-run-btn", "addEventListener"),
-        ("cm-export-btn", "addEventListener"),
         ("cm-toggle-pct", "addEventListener"),
     ]
 

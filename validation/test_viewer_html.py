@@ -395,11 +395,13 @@ class TestModeClasses:
         for mode in self.MODES:
             assert f"'{mode}'" in block
 
-    def test_panel_layout_has_all_modes(self, script_text):
-        # PANEL_LAYOUT declarative table must have all modes
-        idx = script_text.find("PANEL_LAYOUT")
-        assert idx >= 0, "PANEL_LAYOUT table not found in JS"
-        layout_block = script_text[idx:idx+2000]
+    def test_panel_layout_has_all_modes(self):
+        # PANEL_LAYOUT declarative table must have all modes (in maps.js)
+        from pathlib import Path
+        maps_js = (Path(__file__).parent.parent / "public" / "js" / "maps.js").read_text()
+        idx = maps_js.find("PANEL_LAYOUT")
+        assert idx >= 0, "PANEL_LAYOUT table not found in maps.js"
+        layout_block = maps_js[idx:idx+2000]
         for mode in self.MODES:
             assert f"'{mode}'" in layout_block, f"PANEL_LAYOUT missing mode '{mode}'"
 

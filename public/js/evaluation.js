@@ -386,16 +386,17 @@ function createStreamChart(classifierNames) {
                 },
                 title: {
                     display: true,
-                    text: `Learning Curves \u2014 ${metricLabel} vs Training Pixels`,
+                    text: `Learning Curves \u2014 ${metricLabel} vs % Labelled Area`,
                     color: '#eee',
                     font: { size: 15, weight: 'bold' },
                 },
             },
             scales: {
                 x: {
-                    type: 'logarithmic',
-                    title: { display: true, text: 'Training pixels', color: '#aaa' },
-                    ticks: { color: '#aaa' },
+                    type: 'linear',
+                    title: { display: true, text: '% of labelled area', color: '#aaa' },
+                    ticks: { color: '#aaa', callback: v => v + '%' },
+                    min: 0, max: 100,
                     grid: { color: 'rgba(255,255,255,0.08)' },
                 },
                 y: {
@@ -448,8 +449,8 @@ function handleStreamEvent(ev) {
 
     if (ev.event === 'start') {
         lastChartData = {
-            training_sizes: [],
-            _plannedSizes: ev.training_sizes || [],
+            training_pcts: [],
+            _plannedPcts: ev.training_pcts || [],
             classifiers: {},
             classes: ev.classes,
             total_labelled_pixels: ev.total_labelled_pixels,
@@ -479,10 +480,11 @@ function handleStreamEvent(ev) {
         }
 
     } else if (ev.event === 'progress') {
-        lastChartData.training_sizes.push(ev.size);
+        lastChartData.training_pcts.push(ev.pct);
 
         for (const [name, vals] of Object.entries(ev.classifiers)) {
             const acc = lastChartData.classifiers[name];
+            if (!acc) continue;
             acc.mean_f1.push(vals.mean_f1);
             acc.std_f1.push(vals.std_f1);
             acc.mean_f1w.push(vals.mean_f1w);
@@ -492,23 +494,23 @@ function handleStreamEvent(ev) {
             if (baseIdx !== undefined && valChart) {
                 const mean = vals[meanKey];
                 const std = vals[stdKey];
-                valChart.data.datasets[baseIdx].data.push({ x: ev.size, y: mean });
-                valChart.data.datasets[baseIdx + 1].data.push({ x: ev.size, y: Math.min(1, mean + std) });
-                valChart.data.datasets[baseIdx + 2].data.push({ x: ev.size, y: Math.max(0, mean - std) });
+                valChart.data.datasets[baseIdx].data.push({ x: ev.pct, y: mean });
+                valChart.data.datasets[baseIdx + 1].data.push({ x: ev.pct, y: Math.min(1, mean + std) });
+                valChart.data.datasets[baseIdx + 2].data.push({ x: ev.pct, y: Math.max(0, mean - std) });
             }
         }
         if (valChart) valChart.update();
-        // Show completed size and what's next
-        const planned = lastChartData._plannedSizes || [];
-        const doneIdx = planned.indexOf(ev.size);
+        // Show completed pct and what's next
+        const planned = lastChartData._plannedPcts || [];
+        const doneIdx = planned.indexOf(ev.pct);
         if (doneIdx >= 0 && doneIdx < planned.length - 1) {
-            status.textContent = `Done ${ev.size.toLocaleString()}, training ${planned[doneIdx + 1].toLocaleString()}...`;
+            status.textContent = `Done ${ev.pct}%, training ${planned[doneIdx + 1]}%...`;
         } else {
-            status.textContent = `Training size ${ev.size.toLocaleString()} complete`;
+            status.textContent = `${ev.pct}% complete`;
         }
-        appendResultsRow(ev.size, ev.classifiers);
+        appendResultsRow(ev.pct, ev.classifiers);
         const elapsed = status.dataset.t0 ? ((Date.now() - parseInt(status.dataset.t0)) / 1000).toFixed(0) : '';
-        setResultsStatus(`Training size ${ev.size.toLocaleString()} complete (${elapsed}s)`);
+        setResultsStatus(`${ev.pct}% of labelled area complete (${elapsed}s)`);
 
     } else if (ev.event === 'model_ready') {
         const btn = document.getElementById('finish-' + ev.classifier);
@@ -638,7 +640,7 @@ function renderChart(data, metric) {
 
         datasets.push({
             label: CLASSIFIER_LABELS[name] || name,
-            data: data.training_sizes.map((x, i) => ({ x, y: values[meanKey][i] })),
+            data: data.training_pcts.map((x, i) => ({ x, y: values[meanKey][i] })),
             borderColor: color.line,
             backgroundColor: 'transparent',
             borderWidth: 2.5,
@@ -649,7 +651,7 @@ function renderChart(data, metric) {
 
         datasets.push({
             label: name + '_upper',
-            data: data.training_sizes.map((x, i) => ({
+            data: data.training_pcts.map((x, i) => ({
                 x, y: Math.min(1, values[meanKey][i] + values[stdKey][i])
             })),
             borderColor: 'transparent',
@@ -660,7 +662,7 @@ function renderChart(data, metric) {
 
         datasets.push({
             label: name + '_lower',
-            data: data.training_sizes.map((x, i) => ({
+            data: data.training_pcts.map((x, i) => ({
                 x, y: Math.max(0, values[meanKey][i] - values[stdKey][i])
             })),
             borderColor: 'transparent',
@@ -687,16 +689,17 @@ function renderChart(data, metric) {
                 },
                 title: {
                     display: true,
-                    text: `Learning Curves \u2014 ${metricLabel} vs Training Pixels`,
+                    text: `Learning Curves \u2014 ${metricLabel} vs % Labelled Area`,
                     color: '#eee',
                     font: { size: 15, weight: 'bold' },
                 },
             },
             scales: {
                 x: {
-                    type: 'logarithmic',
-                    title: { display: true, text: 'Training pixels', color: '#aaa' },
-                    ticks: { color: '#aaa' },
+                    type: 'linear',
+                    title: { display: true, text: '% of labelled area', color: '#aaa' },
+                    ticks: { color: '#aaa', callback: v => v + '%' },
+                    min: 0, max: 100,
                     grid: { color: 'rgba(255,255,255,0.08)' },
                 },
                 y: {
@@ -1147,18 +1150,18 @@ function initResultsTable(modelNames, task) {
     const tbody = document.getElementById('val-results-tbody');
 
     const metric = task === 'regression' ? 'R²' : 'F1';
-    thead.innerHTML = '<th style="text-align:left; padding:6px;">Train size</th>'
+    thead.innerHTML = '<th style="text-align:left; padding:6px;">% Area</th>'
         + modelNames.map(n =>
             `<th style="text-align:right; padding:6px;">${CLASSIFIER_LABELS[n] || n} (${metric})</th>`
         ).join('');
     tbody.innerHTML = '';
 }
 
-function appendResultsRow(size, classifiers) {
+function appendResultsRow(pct, classifiers) {
     const tbody = document.getElementById('val-results-tbody');
     const tr = document.createElement('tr');
     tr.style.borderBottom = '1px solid #333';
-    let cells = `<td style="padding:6px;">${size.toLocaleString()}</td>`;
+    let cells = `<td style="padding:6px;">${pct}%</td>`;
     for (const name of _resultsTableModels) {
         const m = classifiers[name] || {};
         const val = m.mean_f1;

@@ -15,32 +15,32 @@ from sklearn.preprocessing import LabelEncoder
 from tessera_eval.classify import make_classifier, make_regressor, augment_spatial
 
 
-def run_learning_curve(vectors, labels, classifier_names, training_sizes,
+def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                        repeats=5, classifier_params=None, spatial_vectors=None,
                        spatial_vectors_5x5=None, finish_classifiers=None,
-                       **kwargs):
-    """Generator that yields progress events after each training size.
+                       unet_patches=None, **kwargs):
+    """Generator that yields progress events after each training percentage.
 
-    Runs stratified cross-validation at each training size, computing F1 scores
+    Runs stratified sampling at each training percentage, computing F1 scores
     (macro and weighted) with multiple random repeats. Yields confusion matrices
-    at the largest training size.
+    at the largest percentage. Supports U-Net via patch-based train/test splits.
 
     Args:
         vectors: float32 array, shape (N, dim) — labelled pixel embeddings
         labels: int array, shape (N,) — class labels (0-indexed)
-        classifier_names: list of classifier names (e.g., ['nn', 'rf', 'mlp'])
-        training_sizes: list of ints — training set sizes to evaluate
+        classifier_names: list of classifier names (e.g., ['nn', 'rf', 'unet'])
+        training_pcts: list of floats — training percentages (e.g., [1, 5, 10, 30, 50, 80])
         repeats: Number of random repeats per size (default 5)
         classifier_params: Optional dict of {classifier_name: {param: value}}
         spatial_vectors: Optional float32 array for spatial_mlp (3x3 features)
         spatial_vectors_5x5: Optional float32 array for spatial_mlp_5x5 (5x5 features)
         finish_classifiers: Optional set of classifier names to skip
-        **kwargs: Extra arguments (e.g. vector_grid, labelled_coords) accepted
-            for compatibility with the web view but not used here.
+        unet_patches: Optional list of (emb_patch, label_patch) tuples for U-Net
+        **kwargs: Extra arguments accepted for compatibility.
 
     Yields:
         dict events:
-        - {"type": "progress", "size": int, "classifiers": {name: {mean_f1, std_f1, mean_f1w, std_f1w}}}
+        - {"type": "progress", "pct": float, "classifiers": {name: {mean_f1, std_f1, mean_f1w, std_f1w}}}
         - {"type": "confusion_matrices", "confusion_matrices": {name: [[int]]}}
     """
     warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
@@ -53,17 +53,27 @@ def run_learning_curve(vectors, labels, classifier_names, training_sizes,
 
     n_samples = len(labels)
     n_classes = len(np.unique(labels))
+
+    # Separate pixel-based and U-Net classifiers
+    pixel_classifiers = [n for n in classifier_names if n != 'unet']
+    has_unet = 'unet' in classifier_names and unet_patches and len(unet_patches) > 0
+
     cm_accum = {name: np.zeros((n_classes, n_classes), dtype=np.int64) for name in classifier_names}
 
-    for size in training_sizes:
+    for pct in training_pcts:
         active = [n for n in classifier_names if n not in finish_classifiers]
+        active_pixel = [n for n in active if n != 'unet']
         f1_scores = {name: [] for name in active}
         f1w_scores = {name: [] for name in active}
-        is_largest = (size == training_sizes[-1])
+        is_largest = (pct == training_pcts[-1])
+
+        # Number of pixels for this percentage
+        size = max(1, int(n_samples * pct / 100.0))
 
         for seed in range(repeats):
             rng = np.random.RandomState(seed)
 
+            # Stratified pixel sampling
             per_class = max(1, size // n_classes)
             train_idx = []
             for cls in range(n_classes):
@@ -85,7 +95,8 @@ def run_learning_curve(vectors, labels, classifier_names, training_sizes,
             X_train, y_train = vectors[train_idx], labels[train_idx]
             X_test, y_test = vectors[test_idx], labels[test_idx]
 
-            for name in active:
+            # Pixel-based classifiers
+            for name in active_pixel:
                 if name == "spatial_mlp" and spatial_vectors is not None:
                     X_tr, X_te = spatial_vectors[train_idx], spatial_vectors[test_idx]
                     X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=3, dim=vectors.shape[1])
@@ -108,22 +119,70 @@ def run_learning_curve(vectors, labels, classifier_names, training_sizes,
                         cm = confusion_matrix(y_test, y_pred, labels=np.arange(n_classes))
                         cm_accum[name] += cm
                 except Exception as exc:
-                    logger.warning("Classifier %s failed at size %d seed %d: %s", name, size, seed, exc)
+                    logger.warning("Classifier %s failed at pct %.1f seed %d: %s", name, pct, seed, exc)
                     f1_scores[name].append(0.0)
                     f1w_scores[name].append(0.0)
 
-        size_results = {}
+            # U-Net: patch-based train/test split
+            if has_unet and 'unet' in active:
+                try:
+                    from tessera_eval.unet import train_unet_on_patches, predict_unet_tile, _HAS_TORCH
+                    if _HAS_TORCH:
+                        n_patches = len(unet_patches)
+                        n_train = max(1, int(n_patches * pct / 100.0))
+                        n_train = min(n_train, n_patches - 1)  # keep at least 1 for test
+                        patch_idx = rng.permutation(n_patches)
+                        train_patches = [unet_patches[i] for i in patch_idx[:n_train]]
+                        test_patches = [unet_patches[i] for i in patch_idx[n_train:]]
+
+                        if train_patches and test_patches:
+                            model = train_unet_on_patches(
+                                train_patches, n_classes,
+                                (classifier_params or {}).get('unet', {}))
+
+                            # Evaluate on test patches
+                            all_true, all_pred = [], []
+                            for emb_patch, lbl_patch in test_patches:
+                                pred = predict_unet_tile(model, emb_patch,
+                                                         patch_size=emb_patch.shape[0])
+                                mask = lbl_patch > 0
+                                if mask.any():
+                                    all_true.append(lbl_patch[mask] - 1)  # 1-based → 0-based
+                                    all_pred.append(pred[mask] - 1)
+
+                            if all_true:
+                                y_true = np.concatenate(all_true)
+                                y_pred = np.concatenate(all_pred)
+                                f1 = f1_score(y_true, y_pred, average="macro", zero_division=0)
+                                f1w = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+                                f1_scores['unet'].append(float(f1))
+                                f1w_scores['unet'].append(float(f1w))
+                                if is_largest:
+                                    cm = confusion_matrix(y_true, y_pred, labels=np.arange(n_classes))
+                                    cm_accum['unet'] += cm
+                            else:
+                                f1_scores['unet'].append(0.0)
+                                f1w_scores['unet'].append(0.0)
+                        else:
+                            f1_scores['unet'].append(0.0)
+                            f1w_scores['unet'].append(0.0)
+                except Exception as exc:
+                    logger.warning("U-Net failed at pct %.1f seed %d: %s", pct, seed, exc)
+                    f1_scores.setdefault('unet', []).append(0.0)
+                    f1w_scores.setdefault('unet', []).append(0.0)
+
+        pct_results = {}
         for name in active:
             scores = f1_scores[name]
             scoresw = f1w_scores[name]
-            size_results[name] = {
+            pct_results[name] = {
                 "mean_f1": round(float(np.mean(scores)), 4) if scores else 0.0,
                 "std_f1": round(float(np.std(scores)), 4) if scores else 0.0,
                 "mean_f1w": round(float(np.mean(scoresw)), 4) if scoresw else 0.0,
                 "std_f1w": round(float(np.std(scoresw)), 4) if scoresw else 0.0,
             }
 
-        yield {"type": "progress", "size": size, "classifiers": size_results}
+        yield {"type": "progress", "pct": pct, "classifiers": pct_results}
 
     confusion_matrices = {}
     for name in classifier_names:

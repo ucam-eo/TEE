@@ -373,12 +373,13 @@ def run_large_area():
 
         total_labelled = len(vectors)
 
-        # Training sizes
-        all_sizes = [10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000]
-        cap = max_train if max_train else total_labelled
-        training_sizes = [s for s in all_sizes if s <= cap]
-        if not training_sizes or training_sizes[-1] < cap:
-            training_sizes.append(cap)
+        # Training percentages (% of labelled area)
+        training_pcts = [1, 3, 5, 10, 20, 30, 50, 80]
+        if max_train:
+            max_pct = min(80, int(100 * max_train / total_labelled))
+            training_pcts = [p for p in training_pcts if p <= max_pct]
+            if not training_pcts:
+                training_pcts = [max_pct]
 
         # Class info
         unique_labels, counts = np.unique(labels, return_counts=True)
@@ -406,22 +407,22 @@ def run_large_area():
             "classes": class_info if is_classification else [],
             "total_labelled_pixels": total_labelled,
             "confusion_matrix_labels": class_names if is_classification else [],
-            "training_sizes": training_sizes,
+            "training_pcts": training_pcts,
             "stats": stats,
         }) + "\n"
 
-        # Run learning curve (unet is handled separately — not an sklearn classifier)
-        curve_models = [m for m in active_models if m != 'unet']
+        # Run learning curve (all classifiers including U-Net)
         for event in run_learning_curve(
-            vectors, labels, curve_models, training_sizes,
+            vectors, labels, active_models, training_pcts,
             repeats=5, classifier_params=model_params,
             spatial_vectors=spatial_3x3, spatial_vectors_5x5=spatial_5x5,
             finish_classifiers=_finish_classifiers,
+            unet_patches=unet_patches,
         ):
             if event["type"] == "progress":
                 yield json.dumps({
                     "event": "progress",
-                    "size": event["size"],
+                    "pct": event["pct"],
                     "classifiers": event["classifiers"],
                 }) + "\n"
             elif event["type"] == "confusion_matrices":
