@@ -446,6 +446,11 @@ def run_large_area():
                     # Free tile memory before loading next
                     del tile_emb, class_raster, labelled_mask
                     import gc; gc.collect()
+                    logger.info("Tile %d/%d processed — %d labelled pixels accumulated",
+                                tile_idx, total_tiles, sum(a.shape[0] for a in all_vectors))
+
+                logger.info("Tile loop complete: %d/%d tiles processed, %d with data",
+                            tile_idx, total_tiles, tiles_with_data)
 
                 if not all_vectors:
                     yield json.dumps({"event": "error", "message": "No labelled pixels found across any tiles"}) + "\n"
