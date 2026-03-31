@@ -831,20 +831,14 @@
                 </div><!-- end tab-content-viewports -->
 
                 <!-- Tab: Validation -->
-                <div id="tab-content-validation" style="display:none;">
-                    <div style="padding:8px 0;">
-                        <h3 style="margin:0 0 12px; font-size:16px; color:#333;">Large-Scale Validation</h3>
-                        <p style="font-size:13px; color:#666; margin-bottom:16px;">
-                            Evaluate classifiers on ground-truth shapefiles at any scale — from a single viewport to an entire country.
-                            Upload a .zip shapefile, select classifiers, and run. All computation runs on your compute server.
-                        </p>
-                        <button onclick="window.location.href='viewer.html?mode=validation'" style="padding:10px 24px; background:#667eea; color:white; border:none; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">
-                            Open Validation
-                        </button>
-                        <p style="font-size:12px; color:#888; margin-top:12px;">
-                            Opens the viewer in validation mode. Your ground-truth data stays private — it never leaves your machine.
-                        </p>
-                    </div>
+                <div id="tab-content-validation" style="display:none; padding-top:16px;">
+                    <button onclick="window.location.href='viewer.html?mode=validation'" style="padding:10px 24px; background:#667eea; color:white; border:none; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; width:100%;">
+                        Open Validation
+                    </button>
+                    <p style="font-size:12px; color:#888; margin-top:12px; line-height:1.5;">
+                        Evaluate classifiers on ground-truth shapefiles at any scale.
+                        Your data stays private — it never leaves your machine.
+                    </p>
                 </div>
 
                 <!-- Tab: Users (admin only) -->
