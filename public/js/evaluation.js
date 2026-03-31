@@ -1431,6 +1431,10 @@ document.getElementById('val-max-train-large').addEventListener('input', updateM
 
 // ── Expose on window for onclick handlers and test assertions ──
 
+Object.defineProperty(window, 'valChart', {
+    get: () => valChart,
+    configurable: true,
+});
 window.uploadShapefile = uploadShapefile;
 window.runEvaluation = runEvaluation;
 window.renderConfusionMatrix = renderConfusionMatrix;

@@ -966,6 +966,10 @@ function setPanelLayout(mode) {
     } else if (mode === 'validation') {
         if (waitMsg) waitMsg.style.display = 'none';
         if (sameMsg) sameMsg.style.display = 'none';
+        // Resize chart if returning to validation with an active evaluation
+        setTimeout(() => {
+            if (window.valChart) window.valChart.resize();
+        }, 100);
     }
 
     // Leaflet maps and Three.js scene need resize after CSS transition
