@@ -26,92 +26,94 @@ See also: [architecture.md](architecture.md) for system overview,
 
 ## 1. Adding a New Panel Mode
 
-Panel modes control which panels are visible, their titles, and which layers
-are active on Panel 5.  The existing modes are `explore`, `change-detection`,
-`labelling`, and `validation`.
+Panel modes control which panels are visible, their titles, and which content
+they display. All layout is controlled by a single `PANEL_LAYOUT` table in
+`maps.js`. **No CSS rules needed.**
 
-**Example:** Adding a `"comparison"` mode that shows two satellite views
-side-by-side.
+**Example:** Adding a `"comparison"` mode.
 
-### Step 1: Add CSS class
+### Step 1: Add to PANEL_LAYOUT table
 
-In `viewer.html`, add CSS rules for the new mode.  Each mode class is applied
-to `#map-container` and `body`:
-
-```css
-/* In viewer.html <style> section */
-.mode-comparison .panel1 { /* grid area rules */ }
-.mode-comparison .panel2 { /* grid area rules */ }
-/* Hide panels not needed */
-.mode-comparison .panel4,
-.mode-comparison .panel6 { display: none !important; }
-```
-
-### Step 2: Add to Panel 5 layer rules
-
-In `maps.js`, add the new mode to `PANEL5_LAYER_RULES`:
+In `maps.js`, add a 6-entry array to `PANEL_LAYOUT`. Each entry specifies
+what the panel shows:
 
 ```javascript
-// In maps.js, inside the PANEL5_LAYER_RULES object:
-const PANEL5_LAYER_RULES = {
-    'explore':          { satellite: false, heatmapCanvas: true,  segOverlay: true,  embedding2: false },
-    'change-detection': { satellite: false, heatmapCanvas: true,  segOverlay: false, embedding2: true  },
-    'labelling':        { satellite: true,  heatmapCanvas: false, segOverlay: true,  embedding2: false },
-    'validation':       { satellite: false, heatmapCanvas: false, segOverlay: false, embedding2: false },
-    'comparison':       { satellite: true,  heatmapCanvas: false, segOverlay: false, embedding2: true  },  // NEW
+const PANEL_LAYOUT = {
+    // ... existing modes ...
+    'comparison': [
+        { content: null,                    title: 'Satellite A' },        // Panel 1: default map
+        { content: null,                    title: 'Satellite B' },        // Panel 2: default map
+        { content: null,                    title: 'Tessera Embeddings' }, // Panel 3: default map
+        { content: 'comparison-stats',      title: 'Statistics',    header: false }, // Panel 4: custom overlay
+        { content: null,                    title: 'Difference' },         // Panel 5: default map
+        { content: 'hidden' },                                             // Panel 6: hidden
+    ],
 };
 ```
 
-### Step 3: Add panel titles
+Options per entry:
+- `content: null` = show the panel's default map
+- `content: 'element-id'` = hide map, show this overlay (positioned absolutely)
+- `content: 'hidden'` = hide entire panel
+- `header: false` = hide the panel header
+- `flow: true` = don't use absolute positioning (content flows, panel scrolls)
 
-In `maps.js`, inside `setPanelLayout()`, add titles for the new mode:
+### Step 2: Add overlay element to HTML
 
-```javascript
-const titles = {
-    'explore':          { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'PCA (Embedding Space)', p5: 'Change Heatmap',  p6: 'Tessera Embeddings' },
-    'change-detection': { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'Change Distribution',    p5: 'Change Heatmap',  p6: 'Tessera Embeddings' },
-    'labelling':        { p1: 'OpenStreetMap', p3: 'Tessera Embeddings', p4: 'PCA (Embedding Space)', p5: 'Classification results',    p6: 'Auto-label' },
-    'validation':       { p1: 'Classes',       p3: 'Evaluation year',    p4: 'Performance',           p5: 'Confusion Matrix', p6: 'Controls' },
-    'comparison':       { p1: 'Satellite A',   p3: 'Satellite B',        p4: 'Statistics',            p5: 'Difference',       p6: 'Controls' },  // NEW
-};
-```
-
-### Step 4: Add mode-specific setup
-
-In `setPanelLayout()`, add a branch for the new mode after the existing
-mode-specific setup:
-
-```javascript
-} else if (mode === 'comparison') {
-    // Custom setup for comparison mode
-    // e.g., load comparison data, configure panels
-}
-```
-
-### Step 5: Add to valid modes list
-
-In `restorePanelMode()` in `maps.js`:
-
-```javascript
-const validModes = ['explore', 'change-detection', 'labelling', 'validation', 'comparison'];
-```
-
-### Step 6: Update CSS class removal
-
-In `setPanelLayout()`, update the class removal list:
-
-```javascript
-container.classList.remove('mode-explore', 'mode-change-detection', 'mode-labelling', 'mode-validation', 'mode-comparison');
-document.body.classList.remove('mode-explore', 'mode-change-detection', 'mode-labelling', 'mode-validation', 'mode-comparison');
-```
-
-### Step 7: Add option to mode selector
-
-In `viewer.html`, add an option to the `#panel-layout-select` dropdown:
+If your mode uses custom overlay content (like `comparison-stats` above),
+add the element **inside the correct panel's div** in `viewer.html`:
 
 ```html
-<option value="comparison">Comparison</option>
+<!-- Inside Panel 4's <div class="panel"> -->
+<div id="comparison-stats">
+    <!-- your custom content -->
+</div>
 ```
+
+### Step 3: Add to SWITCHABLE array
+
+In `maps.js`, add the new element ID to the `SWITCHABLE` constant:
+
+```javascript
+const SWITCHABLE = [
+    'change-stats-panel', 'panel6-label-view',
+    'val-class-table-panel', 'val-results-panel', 'validation-chart-panel',
+    'validation-controls', 'val-cm-panel',
+    'comparison-stats',  // NEW
+];
+```
+
+### Step 4: Add CSS initial state
+
+In `viewer.html`, add initial `display: none`:
+
+```css
+#comparison-stats { display: none; }
+```
+
+### Step 5: Add to Panel 5 layer rules (if needed)
+
+```javascript
+const PANEL5_LAYER_RULES = {
+    // ... existing ...
+    'comparison': { satellite: true, heatmapCanvas: false, segOverlay: false, embedding2: true },
+};
+```
+
+### Step 6: Add to valid modes list and dropdown
+
+In `restorePanelMode()` in `maps.js`, add to `validModes`.
+In `viewer.html`, add `<option value="comparison">Comparison</option>` to `#panel-layout-select`.
+
+### Step 7: Update class removal list
+
+In `setPanelLayout()`:
+```javascript
+container.classList.remove(..., 'mode-comparison');
+document.body.classList.remove(..., 'mode-comparison');
+```
+
+**That's it.** No CSS display rules. No JS show/hide logic. The table handles everything.
 
 ---
 

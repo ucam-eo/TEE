@@ -6,110 +6,232 @@ System architecture for the Tessera Embeddings Explorer.
 
 ## 1. High-Level Architecture
 
+TEE runs as two services locally, or as a hosted server with user-run compute:
+
 ```
  +-----------------------------+       +-------------------------------+
  |        Browser (JS)         |       |     Django Backend (Python)   |
- |                             |       |                               |
+ |                             |       |     (port 8001)               |
  |  viewer.html                |       |  api/views/                   |
  |    +-- app.js               | HTTP  |    viewports.py  config.py    |
  |    +-- maps.js              |<----->|    tiles.py      pipeline.py  |
  |    +-- vectors.js           |       |    vector_data.py             |
- |    +-- labels.js            |       |    evaluation.py              |
- |    +-- segmentation.js      |       |                               |
- |    +-- dimreduction.js      |       |  lib/                         |
- |    +-- evaluation.js        |       |    config.py                  |
- |    +-- schema.js            |       |    viewport_utils.py          |
- |                             |       |    viewport_writer.py         |
- |  Leaflet maps (5 panels)   |       |    viewport_ops.py            |
- |  Three.js scene (panel 4)  |       |    pipeline.py                |
- |  Chart.js (validation)     |       |    tile_renderer.py           |
- |  IndexedDB (vector cache)  |       |    evaluation_engine.py       |
- +-----------------------------+       |    progress_tracker.py        |
-                                       +-------------------------------+
-                                              |           |
-                                    +---------+           +----------+
-                                    |                                |
-                              +-----v-----+              +-----------v---------+
-                              | Filesystem |              | GeoTessera API      |
-                              |            |              | (embedding tiles)   |
-                              | viewports/ |              | dl2.geotessera.org  |
-                              | pyramids/  |              +---------------------+
-                              | vectors/   |
-                              | mosaics/   |
-                              | progress/  |
-                              | share/     |
-                              +------------+
+ |    +-- labels.js            |       |    evaluation.py (proxy)      |
+ |    +-- segmentation.js      |       |    share.py     enrolment.py  |
+ |    +-- dimreduction.js      |       |                               |
+ |    +-- evaluation.js        |       |  Proxies /api/evaluation/*    |
+ |    +-- schema.js            |       |  to tee-compute (port 8002)   |
+ |                             |       +-------------------------------+
+ |  Leaflet maps (5 panels)   |              |           |
+ |  Three.js scene (panel 4)  |    +---------+           +----------+
+ |  Chart.js (validation)     |    |                                |
+ |  IndexedDB (vector cache)  | +--v----------+          +-----------v---------+
+ +-----------------------------+ | Filesystem  |          | tee-compute         |
+                                 |             |          | (port 8002)         |
+                                 | viewports/  |          |                     |
+                                 | pyramids/   |          | Flask + waitress    |
+                                 | vectors/    |          | tessera_eval lib    |
+                                 | mosaics/    |          | GeoTessera tiles    |
+                                 | share/      |          +----------+----------+
+                                 +-------------+                     |
+                                                          +---------v-----------+
+                                                          | GeoTessera API      |
+                                                          | dl2.geotessera.org  |
+                                                          +---------------------+
 ```
+
+### Deployment Modes
+
+| Mode | Django (8001) | tee-compute (8002) | User opens |
+|------|:------------:|:------------------:|:----------:|
+| **Local dev** | localhost | localhost | localhost:8001 |
+| **Hosted + local compute** | tee.cl.cam.ac.uk | user's laptop | localhost:8001 (tee-compute proxies to hosted) |
+| **Hosted + remote compute** | tee.cl.cam.ac.uk | GPU box via SSH tunnel | localhost:8001 |
+
+In all modes, the browser talks only to port 8001. Django proxies
+`/api/evaluation/*` requests to tee-compute. All ML runs on tee-compute,
+never on the hosted Django server.
+
+### Data Privacy
+
+Ground-truth shapefiles and evaluation results never leave the compute node.
+The hosted server only sees map tile requests and explicit label sharing (opt-in).
+Similarity searches run entirely in the browser.
 
 ---
 
-## 2. Panel Layout
+## 2. Panel Layout (Declarative)
 
-The viewer uses a 6-panel CSS grid.  Which panels are visible and what they
-display depends on the current **mode**.
-
-```
-  +------------------+------------------+------------------+
-  |    Panel 1       |    Panel 2       |    Panel 3       |
-  |   (map-osm)      |   (map-rgb)      |  (map-embedding) |
-  |   Leaflet OSM    |   Leaflet Sat    |  Leaflet Emb     |
-  +------------------+------------------+------------------+
-  |    Panel 4       |    Panel 5       |    Panel 6       |
-  |   (map-umap)     |   (map-panel5)  | (map-embedding2) |
-  |   Three.js PCA/  |   Leaflet        |  Leaflet / HTML  |
-  |   UMAP scatter   |   Heatmap/Seg    |  Labels/Controls |
-  +------------------+------------------+------------------+
-```
-
-### 2.1 Panel Modes
-
-There are four modes, set via `window.setPanelLayout(mode)`:
-
-| Mode | Panel 1 | Panel 2 | Panel 3 | Panel 4 | Panel 5 | Panel 6 |
-|---|---|---|---|---|---|---|
-| `explore` | OSM | Satellite | Embeddings | PCA/UMAP | (blank) | (blank) |
-| `change-detection` | OSM | Satellite | Embeddings | Change Distribution | Change Heatmap | Embeddings (year 2) |
-| `labelling` | OSM | Satellite | Embeddings | PCA/UMAP | Classification results | Auto-label / Manual Label |
-| `validation` | Classes | Evaluation year | Embeddings | Performance chart | Confusion Matrix | Controls |
-
-Mode is stored in `localStorage` and restored on reload via `restorePanelMode()`.
-
-### 2.2 Panel 5 Layer Rules
-
-Panels 5 and 6 have optional layers whose visibility is governed by a
-declarative rules table in `maps.js`:
+The viewer uses a 6-panel CSS grid. Which content each panel shows is controlled
+by a **single declarative table** in `maps.js`:
 
 ```javascript
-const PANEL5_LAYER_RULES = {
-    'explore':          { satellite: false, heatmapCanvas: true,  segOverlay: true,  embedding2: false },
-    'change-detection': { satellite: false, heatmapCanvas: true,  segOverlay: false, embedding2: true  },
-    'labelling':        { satellite: true,  heatmapCanvas: false, segOverlay: true,  embedding2: false },
-    'validation':       { satellite: false, heatmapCanvas: false, segOverlay: false, embedding2: false },
+const PANEL_LAYOUT = {
+    'explore': [
+        { content: null,                    title: 'OpenStreetMap' },
+        { content: null,                    title: 'Satellite' },
+        { content: null,                    title: 'Tessera Embeddings' },
+        { content: null,                    title: 'PCA (Embedding Space)' },
+        { content: null,                    title: '' },
+        { content: null,                    title: '' },
+    ],
+    'change-detection': [
+        { content: null,                    title: 'OpenStreetMap' },
+        { content: null,                    title: 'Satellite' },
+        { content: null,                    title: 'Tessera Embeddings' },
+        { content: 'change-stats-panel',    title: 'Change Distribution' },
+        { content: null,                    title: 'Change Heatmap' },
+        { content: null,                    title: 'Tessera Embeddings' },
+    ],
+    'labelling': [
+        { content: null,                    title: 'OpenStreetMap' },
+        { content: null,                    title: 'Satellite' },
+        { content: null,                    title: 'Tessera Embeddings' },
+        { content: null,                    title: 'PCA (Embedding Space)' },
+        { content: null,                    title: 'Classification results' },
+        { content: 'panel6-label-view',     title: 'Auto-label' },
+    ],
+    'validation': [
+        { content: 'validation-controls',   title: 'Controls',         header: false, flow: true },
+        { content: null,                    title: 'Satellite' },
+        { content: 'val-class-table-panel', title: 'Ground Truth',     header: false },
+        { content: 'val-results-panel',     title: 'Progress',         header: false },
+        { content: 'validation-chart-panel',title: 'Learning Curves',  header: false },
+        { content: 'val-cm-panel',          title: 'Confusion Matrix', header: false },
+    ],
 };
 ```
 
-The function `applyLayerRule(layer, shouldShow, map)` adds or removes a
-Leaflet layer from any map based on these rules.  The convenience wrapper
-`applyHeatmapLayerRule(layer, shouldShow)` targets `maps.panel5`.
+### How the table works
+
+- `content: null` = show the panel's default map
+- `content: 'element-id'` = hide the map, show the named overlay element (positioned absolutely to fill the panel)
+- `content: 'hidden'` = hide the entire panel
+- `header: false` = hide the panel header bar
+- `flow: true` = don't position absolutely (element flows normally, panel scrolls)
+- `also: ['id']` = show additional elements in the same panel
+
+### Architecture rules
+
+1. **PANEL_LAYOUT is the single source of truth** for what each panel shows in each mode
+2. **maps.js** owns panel visibility (show/hide panels, position overlays, set headers)
+3. **evaluation.js** owns content within panels (text, table rows, chart data, sub-element toggles)
+4. evaluation.js must **never** set `style.display` on PANEL_LAYOUT-controlled elements
+5. All switchable overlay elements start with `display: none` in CSS
+6. Elements use `data-display-mode="flex"` when they need flex instead of block
+
+### Switchable content elements
+
+Each content element must live in the same physical panel it's displayed in:
+
+| Panel | Default map | Switchable overlays |
+|-------|-------------|--------------------|
+| 1 | `#map-osm` | `#validation-controls` |
+| 2 | `#map-rgb` | (none) |
+| 3 | `#map-embedding` | `#val-class-table-panel` |
+| 4 | `#map-umap` | `#val-results-panel`, `#change-stats-panel` |
+| 5 | `#map-panel5` | `#validation-chart-panel` |
+| 6 | `#map-embedding2` | `#val-cm-panel`, `#panel6-label-view` |
+
+### Adding a new mode
+
+To add a new mode (e.g., `'comparison'`):
+1. Add a 6-entry array to `PANEL_LAYOUT` in `maps.js`
+2. Add any new overlay element IDs to the `SWITCHABLE` array
+3. Add the element to the correct panel's HTML in `viewer.html`
+4. Set `display: none` in CSS for the new element
+5. Add `data-display-mode` attribute if it needs flex
+
+No other changes needed. No CSS rules. No JS logic.
 
 ---
 
-## 3. Module Dependency Graph
+## 3. Evaluation Architecture
 
-ES modules (ECMAScript modules) are the browser's native module system, loaded
-with `<script type="module">` instead of plain `<script>`.  Each module has its
-own scope — variables declared in one file are not visible in another unless
-explicitly exported or attached to `window`.
+### Compute server (tee-compute)
 
-All 8 modules are loaded as ES modules in `viewer.html`.  They communicate
-through `window.*` properties bridged via `Object.defineProperty`.  There is no
-import/export between modules; `dimreduction.js` is the only module that uses
-`import` (for Three.js and OrbitControls).
+All ML evaluation runs on `tee-compute` (a Flask app in `tessera_eval/server.py`).
+Django proxies `/api/evaluation/*` requests to it.
+
+```
+Browser → Django :8001 → proxy → tee-compute :8002
+                                    ├── /api/evaluation/upload-shapefile
+                                    ├── /api/evaluation/clear-shapefiles
+                                    ├── /api/evaluation/run-large-area
+                                    ├── /api/evaluation/finish-classifier
+                                    ├── /api/evaluation/download-model/<name>
+                                    └── /health
+
+                                  Everything else proxied back to Django
+```
+
+### Evaluation flow
+
+```
+Upload shapefile(s) → select field + year + classifiers → Run
+    ↓
+tee-compute:
+    1. field_start event (emitted immediately)
+    2. GeoTessera() init (downloads/verifies tile registry)
+    3. load_blocks_for_region(bbox, year)
+    4. For each tile:
+        a. download_progress event
+        b. Reproject GDF to tile CRS
+        c. Filter GDF to tile bbox
+        d. Rasterize shapefile onto tile grid
+        e. Extract labelled pixel embeddings
+        f. Compute per-tile spatial features (if spatial_mlp selected)
+        g. Extract U-Net patches (if unet selected)
+    5. start event (with pixel counts, class info, training sizes)
+    6. run_learning_curve (train=N, test=remainder, 5 repeats)
+        → progress events per training size
+    7. confusion_matrices event
+    8. Retrain all models on full data
+        → model_ready events
+    9. done event
+```
+
+### NDJSON streaming
+
+Events are streamed as newline-delimited JSON. Each line is padded to 18KB
+to force Waitress to flush immediately. The Django proxy uses matching chunk
+size and `Content-Encoding: identity` to prevent GZip buffering.
+
+### Tile cache
+
+Loaded vectors/labels are cached by `(field, year)` in `_tile_cache`.
+Re-running with different classifiers skips tile loading.
+
+### tessera_eval library
+
+The ML library (`packages/tessera-eval/tessera_eval/`) is framework-independent:
+
+| Module | Purpose |
+|--------|---------|
+| `evaluate.py` | `run_learning_curve`, `run_kfold_cv`, `detect_field_type` |
+| `classify.py` | `make_classifier`, `make_regressor`, `gather_spatial_features_2d` |
+| `rasterize.py` | `rasterize_shapefile` (with optional pre-fitted LabelEncoder) |
+| `data.py` | `load_embeddings_for_shapefile` (tile-by-tile with CRS reprojection) |
+| `unet.py` | `extract_labelled_patches`, `TinyUNet`, `train_unet_on_patches` |
+| `server.py` | Flask compute server (`tee-compute` CLI) |
+
+The library has **no Django imports**. It can be installed standalone:
+```bash
+pip install tessera-eval[server]
+tee-compute --hosted https://tee.cl.cam.ac.uk
+```
+
+---
+
+## 4. Module Dependency Graph
+
+All 8 modules are loaded as ES modules in `viewer.html`. They communicate
+through `window.*` properties. No import/export between modules.
 
 ```
   app.js
     |
-    +--- maps.js        (map creation, sync, click routing, panel layout)
+    +--- maps.js        (map creation, sync, PANEL_LAYOUT, mode switching)
     |       |
     |       +--- vectors.js    (download, cache, search, DirectCanvasLayer)
     |       |       |
@@ -124,603 +246,155 @@ import/export between modules; `dimreduction.js` is the only module that uses
     +--- evaluation.js   (validation: shapefile upload, learning curves, CM)
 ```
 
-**Load order in viewer.html:**
-
-1. `app.js` -- init, dependency system, progress tracking
-2. `maps.js` -- map creation, sync, click handlers
-3. `vectors.js` -- vector download, search, explorer viz
-4. `labels.js` -- manual labels, saved labels, polygon drawing
-5. `segmentation.js` -- k-means clustering
-6. `dimreduction.js` -- PCA/UMAP, heatmap, Three.js (ES module import)
-7. `evaluation.js` -- validation panel
-8. `schema.js` -- schema dropdown, tree browser
-
----
-
-## 4. Data Flow
-
-```
-  Viewport creation                    Viewer usage
-  ─────────────────                    ────────────
-
-  User draws bounds on map
-        │
-        ▼
-  POST /api/viewports/create
-  (api/views/viewports.py)
-        │
-        ▼
-  Pipeline (background thread)         User opens viewer.html?viewport=X
-  (lib/pipeline.py)                        │
-    ├─ download embedding tiles            ▼
-    │   via GeoTessera library         Tile server serves /tiles/{vp}/{year}/{z}/{x}/{y}.png
-    ├─ create PNG pyramids ──────────► (api/views/tiles.py → lib/tile_renderer.py)
-    │   (process_viewport.py)
-    ├─ extract uint8 vectors ────────► /api/vector-data/{vp}/{year}/*.npy.gz
-    │   (lib/viewport_ops.py)              │
-    └─ write metadata                      ▼
-        (lib/viewport_writer.py)      vectors.js downloads to IndexedDB
-                                           │
-                                      ┌────┴────┐
-                                      │         │
-                                      ▼         ▼
-                              Similarity   PCA/UMAP in
-                              search       dimreduction.js
-                              (client-     (client-side)
-                               side L2)
-                                      │
-                                      ▼
-                              Label creation (explore/labelling mode)
-                              (labels.js)
-                                      │
-                                      ▼
-                              Export as JSON/GeoJSON/Shapefile
-                              (labels.js → exportManualLabelsShapefile)
-                                      │
-                                      ├──► Share labels (public/private)
-                                      │    POST /api/share/submit
-                                      │    (api/views/share.py → /data/share/)
-                                      │
-                                      ▼
-                              Upload ground-truth shapefile
-                              for evaluation (validation mode)
-                              (api/views/evaluation.py → upload_shapefile)
-                                      │
-                                      ▼
-                              POST /api/evaluation/run
-                              (api/views/evaluation.py → lib/evaluation_engine.py)
-                              (streaming NDJSON results)
-```
-
 ---
 
 ## 5. State Management
 
-### 5.1 Window Property Bridges
+### 5.1 Responsibility Split
 
-Each module declares private state variables and exposes them on `window` via
-`Object.defineProperty` with getter/setter pairs.  This allows cross-module
-communication without ES imports:
+| System | Owns | Example |
+|--------|------|---------|
+| `PANEL_LAYOUT` (maps.js) | Panel visibility, overlay positioning, headers | Which panel shows what in each mode |
+| `PANEL5_LAYER_RULES` (maps.js) | Leaflet layer visibility per mode | Heatmap shown in change-detection, hidden in validation |
+| `evaluation.js` | Content within panels | Text updates, table rows, chart data |
+| `app.js` | Dependency cascade, polling | When to download vectors, compute PCA |
+| CSS | Initial hidden state, styling | `#validation-controls { display: none; }` |
 
-```javascript
-// In vectors.js
-let localVectors = null;
-Object.defineProperty(window, 'localVectors', {
-    get: () => localVectors,
-    set: (v) => { localVectors = v; },
-    configurable: true,
-});
-```
+### 5.2 Window Property Bridges
 
-Other modules read/write `window.localVectors` as if it were a global, but the
-actual storage is module-private.
-
-**Key bridged properties by module:**
+Each module declares private state and exposes it on `window`:
 
 | Module | Properties on `window` |
 |---|---|
-| `app.js` | `currentViewportName`, `currentEmbeddingYear`, `viewportStatus`, `currentPanelMode`, `TILE_SERVER`, `panel5SatelliteLayer`, `isLoggedIn` |
-| `maps.js` | `viewportBounds`, `satelliteSources`, `currentSatelliteSource`, `TRIANGLE_ICON`, `PANEL5_LAYER_RULES`, `persistentLabelMarkers` |
+| `app.js` | `currentViewportName`, `currentEmbeddingYear`, `viewportStatus`, `currentPanelMode` |
+| `maps.js` | `viewportBounds`, `PANEL5_LAYER_RULES`, `persistentLabelMarkers` |
 | `vectors.js` | `localVectors`, `explorerResults` |
-| `labels.js` | `manualLabels`, `currentManualLabel`, `savedLabels`, `currentSearchCache`, `manualClassOverlays`, `_classMatchCache`, `isPolygonDrawing`, `labelMode` |
-| `segmentation.js` | `segAssignments`, `segOverlay`, `segLabels`, `segRunning`, `segVectors`, `segK`, `SEG_PALETTE` |
-| `dimreduction.js` | `currentEmbeddingYear2`, `umapCanvasLayer`, `currentDimReduction`, `heatmapCanvasLayer`, `_dimReductionCache` |
+| `labels.js` | `manualLabels`, `currentManualLabel`, `savedLabels` |
 | `evaluation.js` | `lastEvalData` |
-| `schema.js` | `activeSchema`, `activeSchemaMode` |
-
-### 5.2 Dependency System
-
-`app.js` contains a declarative dependency system that manages the viewer's
-initialisation sequence.  It consists of:
-
-1. **`viewportStatus`** -- an object tracking server readiness flags
-   (`has_pyramids`, `has_vectors`, `has_umap`, `years_available`) and client-side
-   flags (`vectors_downloaded`, `pca_loaded`, `umap_loaded`).
-
-2. **`dependencyRegistry`** -- an array of dependency entries, each with:
-   - `id`: string identifier
-   - `test(status)`: predicate function
-   - `onReady(status)`: callback when test transitions false-to-true
-   - `onNotReady()`: callback when test transitions true-to-false (optional)
-   - `satisfied`: boolean tracking current state
-
-3. **`evaluateDependencies()`** -- iterates the registry and fires callbacks on
-   state transitions.  Called after each poll response and after manual state
-   changes.
-
-4. **`pollViewportStatus()`** -- polls `GET /api/viewports/{name}/is-ready`
-   every 2s (server busy) or 30s (server idle), updates `viewportStatus`, and
-   calls `evaluateDependencies()`.
-
-**Registered dependencies:**
-
-| ID | Triggers when | Action |
-|---|---|---|
-| `panel3-tiles` | pyramids ready | Create/refresh embedding tile layer |
-| `panel6-tiles` | pyramids ready | Create/refresh panel 6 tile layer |
-| `year-selectors` | >1 year available | Populate year dropdowns |
-| `year-selector-2-visibility` | change-detection mode + >1 year | Show panel 6 year selector |
-| `vectors-download` | vectors ready on server, not yet downloaded | Download vectors to IndexedDB |
-| `label-controls` | vectors downloaded | Enable similarity slider, seg controls |
-| `panel4-pca` | vectors downloaded, PCA not loaded | Compute PCA, render Three.js |
-| `panel4-umap` | vectors downloaded, UMAP not loaded | Compute UMAP in Web Worker |
-| `panel5-heatmap` | vectors ready + 2+ years | Compute change heatmap |
-
-### 5.3 Persistence
-
-| What | Where | Key pattern |
-|---|---|---|
-| Panel mode | `localStorage` | `panelMode` |
-| Label sub-mode | `localStorage` | `labelMode` |
-| Schema mode | `localStorage` | `schemaMode` |
-| Current manual label | `localStorage` | `currentManualLabel_{viewport}` |
-| Manual labels | `localStorage` | `manualLabels_{viewport}` |
-| Saved (auto) labels | `localStorage` | `tee_labels_{viewport}` |
-| Vector data | `IndexedDB` | `tee_vector_cache` store, key `{viewport}/{year}` |
-| Dim reduction cache | In-memory object | `_dimReductionCache[viewport/year/method]` |
 
 ---
 
-## 6. File/Directory Structure
-
-```
-TEE/
-├── public/
-│   ├── js/
-│   │   ├── app.js              Application init, dependency system (25K)
-│   │   ├── maps.js             Map creation, sync, click handlers (37K)
-│   │   ├── vectors.js          Vector download, search, canvas layers (35K)
-│   │   ├── labels.js           Labels, polygon, sharing, export (118K)
-│   │   ├── segmentation.js     K-means clustering, seg overlay (22K)
-│   │   ├── dimreduction.js     PCA, UMAP, heatmap, Three.js (50K)
-│   │   ├── evaluation.js       Validation pipeline UI (36K)
-│   │   └── schema.js           Schema browser, label selection (13K)
-│   ├── viewer.html             6-panel viewer layout
-│   ├── viewport_selector.html  Viewport list / creation page
-│   └── login.html              Authentication page
-│
-├── api/
-│   ├── urls.py                 URL routing (all /api/* endpoints)
-│   ├── auth_views.py           Login/logout/status
-│   ├── helpers.py              Shared utilities (quota, ownership)
-│   ├── tasks.py                Background task management
-│   ├── middleware.py            Tile shortcircuit, demo mode
-│   └── views/
-│       ├── viewports.py        Viewport CRUD
-│       ├── pipeline.py         Pipeline progress/cancel
-│       ├── tiles.py            Tile server
-│       ├── vector_data.py      Vector file serving
-│       ├── evaluation.py       ML evaluation endpoints
-│       ├── share.py            Label sharing (submit/list/download)
-│       └── config.py           Static files, health, config
-│
-├── lib/
-│   ├── config.py               Filesystem path constants
-│   ├── viewport_utils.py       Viewport reading/validation
-│   ├── viewport_writer.py      Viewport creation/symlink
-│   ├── viewport_ops.py         Readiness checks, data deletion
-│   ├── pipeline.py             Pipeline runner (subprocess launcher)
-│   ├── progress_tracker.py     JSON progress file writer
-│   ├── tile_renderer.py        PNG tile rendering
-│   └── evaluation_engine.py    ML classifiers, learning curves
-│
-├── tee_project/
-│   └── settings/
-│       └── base.py             Django settings
-│
-├── process_viewport.py         Pipeline subprocess (fetch + pyramids + vectors)
-├── create_pyramids.py          Legacy satellite pyramid builder (unused)
-├── Dockerfile                  Multi-stage Docker build
-└── docs/
-    ├── index.md                This documentation home
-    ├── architecture.md         This file
-    ├── frontend_api.md         JavaScript API reference
-    ├── backend_api.md          Python API reference
-    └── extension_guide.md      How to extend TEE
-```
-
----
-
-## 7. Map Synchronization
-
-All five geographic Leaflet maps (`osm`, `embedding`, `rgb`, `panel5`,
-`embedding2`) are synchronized via `syncMaps()` in `maps.js`.  When any panel
-fires a `move` or `zoom` event, all other panels are updated to the same center
-and zoom level:
-
-```javascript
-function syncMaps() {
-    let syncing = false;
-    const geoPanels = ['osm', 'embedding', 'rgb', 'panel5', 'embedding2'];
-
-    function doSync(sourcePanel) {
-        if (syncing) return;
-        syncing = true;
-        const center = window.maps[sourcePanel].getCenter();
-        const zoom = window.maps[sourcePanel].getZoom();
-        geoPanels.forEach(panel => {
-            if (panel !== sourcePanel) {
-                window.maps[panel].setView(center, zoom, {animate: false});
-            }
-        });
-        syncing = false;
-    }
-
-    geoPanels.forEach(panel => {
-        window.maps[panel].on('move zoom', () => doSync(panel));
-    });
-}
-```
-
-Panel 4 (Three.js) is not synchronized with geographic maps but supports
-bidirectional click interaction: clicking a point in the 3D scatter plot triggers
-`handleUnifiedClick()` on all map panels, and clicking a map panel highlights
-the nearest point in the scatter plot.
-
----
-
-## 8. Click Routing
-
-All map panels share unified click and double-click handlers installed in
-`createMaps()`:
-
-- **Single click** (250ms delay to distinguish from double-click):
-  - Default: `handleUnifiedClick(lat, lon)` -- places triangle markers on all panels, highlights nearest UMAP point
-  - Ctrl/Cmd+click in manual label mode: `handleManualPinDrop(lat, lon)` -- drops a colored pin
-
-- **Double click**:
-  - Default: `handleSimilaritySearch(lat, lon)` -- runs client-side similarity search, shows results on Panel 2 + Panel 4
-  - Ctrl/Cmd+double-click in manual label mode: `startPolygonDrawing(latlng)` -- begins Leaflet.Draw polygon
-
-The 250ms delay is necessary because Leaflet fires `click` before `dblclick`.
-The timeout is cancelled if a second click arrives within the window.
-
----
-
-## 9. Third-Party Dependencies
-
-All frontend dependencies are loaded from CDNs — there is no build step, no
-`node_modules`, no bundler.
-
-| Library | Version | Source | Used for |
-|---|---|---|---|
-| Leaflet | 1.9.4 | unpkg CDN (`<script>`) | All geographic map panels (1-3, 5-6) |
-| Leaflet.Draw | 1.0.4 | unpkg CDN (`<script>`) | Polygon drawing on Panel 2 |
-| Three.js | 0.163.0 | jsdelivr CDN (ES module via `importmap`) | 3D scatter plot on Panel 4 |
-| OrbitControls | 0.163.0 | jsdelivr CDN (ES module via `importmap`) | Pan/rotate/zoom on Panel 4 |
-| Chart.js | latest | jsdelivr CDN (`<script>`) | Learning curve charts in validation |
-| shp-write | 0.3.2 | unpkg CDN (loaded dynamically on export) | ESRI Shapefile export |
-
-The Three.js imports use an `importmap` in `viewer.html`:
-
-```html
-<script type="importmap">
-{
-    "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
-        "three/addons/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/controls/OrbitControls.js"
-    }
-}
-</script>
-```
-
-This allows `dimreduction.js` to use bare `import * as THREE from 'three'`.
-
----
-
-## 10. HTML Panel Structure
-
-The 6-panel grid lives inside `#map-container` in `viewer.html`.  Each panel
-is a `<div class="panel">` containing a header and a content area.  Key element
-IDs an agent needs to know:
-
-```
-#map-container (CSS grid, 3x2)
-  ├── Panel 1: .panel
-  │     ├── #panel1-title (span)
-  │     ├── #map-osm (Leaflet map div)
-  │     └── #val-class-table-panel (validation mode only)
-  │
-  ├── Panel 2: .panel
-  │     ├── #panel2-title (span)
-  │     ├── #satellite-source-selector (dropdown: esri/google)
-  │     └── #map-rgb (Leaflet map div)
-  │
-  ├── Panel 3: .panel
-  │     ├── #panel3-title (span)
-  │     ├── #embedding-year-selector (year dropdown)
-  │     └── #map-embedding (Leaflet map div)
-  │
-  ├── Panel 4: .panel
-  │     ├── #panel4-title (span)
-  │     ├── #dim-reduction-selector (PCA/UMAP dropdown)
-  │     ├── #map-umap (Three.js container div)
-  │     └── #change-stats-panel (change-detection mode only)
-  │
-  ├── Panel 5: .panel
-  │     ├── #panel5-title (span)
-  │     ├── #map-panel5 (Leaflet map div)
-  │     ├── #heatmap-waiting-message (shown when vectors not ready)
-  │     ├── #heatmap-same-year-message (shown when years match)
-  │     └── #val-cm-panel (confusion matrix, validation mode only)
-  │
-  └── Panel 6: .panel
-        ├── #panel6-header-text (span, note: not #panel6-title)
-        ├── #embedding-year-selector-2 (year dropdown, change-detection)
-        ├── #map-embedding2 (Leaflet map div)
-        ├── #panel6-autolabel-view (auto-label sub-view)
-        │     ├── #seg-controls (k-means k=, -/+, Go, Clear)
-        │     ├── #panel6-seg-list (cluster list)
-        │     └── #panel6-promote-all-btn
-        ├── #panel6-manual-view (manual label sub-view)
-        │     ├── #manual-label-name (input)
-        │     ├── #manual-label-color (color picker)
-        │     └── #manual-labels-list (label list)
-        └── #val-controls-panel (validation mode only)
-              ├── #val-dropzone (shapefile upload)
-              ├── #val-field-select (field selector)
-              ├── classifier checkboxes (.val-clf-header)
-              └── #val-run-btn / #val-cancel-btn
-```
-
-**Important:** Panel 6 header uses `#panel6-header-text`, not `#panel6-title`.
-All other panels use `#panelN-title`.
-
----
-
-## 11. Geotransform (Lat/Lon ↔ Pixel Conversion)
-
-The geotransform is a 6-parameter affine transformation stored in
-`localVectors.metadata.geotransform`:
-
-```
-{ a: pixelWidth,   b: 0,   c: originLon,
-  d: 0,            e: pixelHeight (negative),  f: originLat }
-```
-
-**Pixel → Geographic:**
-```javascript
-lon = c + px * a     // px = pixel column (x)
-lat = f + py * e     // py = pixel row (y), e is negative so lat decreases
-```
-
-**Geographic → Pixel:**
-```javascript
-px = Math.round((lon - c) / a)
-py = Math.round((lat - f) / e)
-```
-
-**Embedding extraction** (in `vectors.js` `localExtract`):
-```javascript
-const gt = localVectors.metadata.geotransform;
-const px = Math.round((lon - gt.c) / gt.a);
-const py = Math.round((lat - gt.f) / gt.e);
-const idx = gridLookupIndex(localVectors.gridLookup, px, py);
-if (idx >= 0) {
-    return localVectors.values.subarray(idx * 128, (idx + 1) * 128);
-}
-```
-
-Note: `a` is typically ~0.00009 (about 10m in degrees at UK latitudes).
-`e` is negative (latitude decreases going down the raster).
-
----
-
-## 12. Terminology: Embeddings vs Vectors
-
-The codebase enforces a consistent naming convention:
-
-| Term | Format | Meaning |
-|---|---|---|
-| **Embeddings** | uint8 quantized | Raw storage/transfer format from the Tessera model |
-| **Vectors** | float32 dequantized | What all computation uses (similarity search, PCA, k-means, etc.) |
-
-**Dequantization** converts embeddings to vectors:
-```
-vector[i] = embedding[i] / 255.0 * (dim_max[i] - dim_min[i]) + dim_min[i]
-```
-
-In code: `localVectors.values` is the Float32Array of dequantized vectors.
-The file on disk `all_embeddings_uint8.npy.gz` contains the uint8 embeddings.
-
-### Legacy naming exceptions
-
-The rename from `.embeddings` to `.values` could not be applied everywhere due
-to backwards compatibility.  The following places still use "embedding(s)" for
-float32 data.  **Do not rename these** — they are serialized to localStorage,
-JSON exports, or IndexedDB and renaming would break existing user data.
-
-| Location | Property | Why it stays |
-|---|---|---|
-| `manualLabel` entries | `label.embedding` (singular, `number[]`) | Stored in `localStorage` key `manualLabels_{viewport}` and exported as JSON/GeoJSON/Shapefile. Renaming breaks import of existing exports. |
-| `manualLabel` entries | `label.embeddings` (plural, `number[][]`) | Same — union-mode polygon labels store per-pixel vectors here. Serialized to localStorage and JSON exports. |
-| `savedLabel` entries | `label.embedding` | Stored in `localStorage` key `tee_labels_{viewport}`. Renaming breaks reload of existing saved labels. |
-| `segLabel` entries | `segLabel.embedding` | Transient (not persisted), but the field feeds into `addManualLabel()` which serializes it. |
-| `app.js` | `window.currentEmbeddingYear` | Refers to the year of the Tessera model output, not the data format. "Embedding year" is correct domain terminology here. |
-| `IndexedDB` cache | Old entries have `.embeddings` | `vectors.js` auto-migrates on read: if `.values` is missing but `.embeddings` exists, it renames the property in memory. No cache clear needed. |
-| Files on disk | `all_embeddings_uint8.npy.gz` | Correct — these ARE uint8 embeddings (pre-dequantization). |
-| URL paths | `/api/vector-data/{vp}/{year}/all_embeddings_uint8.npy.gz` | Matches the filename on disk. |
-
-**Rule for future changes:** If you add a new property that holds float32
-dequantized data, name it with "vector" (e.g., `entry.vector`, `data.values`).
-If it holds uint8 quantized data, name it with "embedding".  Never rename
-serialized fields without a migration path.
-
----
-
-## 13. Vector Data Pipeline
-
-### Server-side: viewport processing (`process_viewport.py`)
-
-When a viewport is created, the pipeline fetches embedding tiles from
-GeoTessera and produces vector files for the browser:
-
-```
-GeoTessera remote storage        process_viewport.py           Stored on disk
-─────────────────────────        ───────────────────           ──────────────
-int8 + float32 scales     ──►  dequantize to float32    ──►  uint8 + per-dim min/max
-(per-tile, native UTM,         reproject to EPSG:4326        (per-viewport, EPSG:4326,
- per-pixel scales)             merge into mosaic               per-dimension min/max)
-                               crop to viewport bounds
-                               re-quantize to uint8
-```
-
-**Known inefficiency (temporary):** The pipeline dequantizes int8×scales→float32,
-reprojects all 128 bands with bilinear interpolation, then re-quantizes
-float32→uint8 with a different scheme (per-dimension min/max instead of
-per-pixel scales).  This is wasteful:
-
-- **Double quantization** — original int8 values are dequantized then
-  re-quantized with a different method, introducing rounding error
-- **Bilinear interpolation on embeddings** — interpolating between two
-  learned embedding vectors produces semantically meaningless values;
-  nearest-neighbor would be more appropriate
-- **CPU cost** — reprojecting 128 bands per pixel is the main bottleneck
-  (~12 MB/s throughput on LAN despite fast network)
-
-This will be resolved by the **Zarr migration**, which serves pre-computed
-EPSG:4326 tiles directly — no dequantization, no reprojection, no
-re-quantization.  See `memory/zarr-plan.md` for details.
-
-### Client-side: browser vector loading
-
-Once stored on disk, vectors are downloaded to the browser:
-
-1. **Server stores** uint8 quantized embeddings + quantization params + pixel
-   coordinates in `viewports/{name}/vectors/{year}/`:
-   - `all_embeddings_uint8.npy.gz` — shape (N, 128), dtype uint8
-   - `quantization.json` — `{dim_min: float32[128], dim_max: float32[128]}`
-   - `pixel_coords.npy.gz` — shape (N, 2), dtype int32 (px, py pairs)
-   - `metadata.json` — geotransform, mosaic dimensions
-
-2. **`vectors.js` downloads** all four files via `/api/vector-data/{viewport}/{year}/`
-
-3. **Client-side dequantization:**
-   ```
-   float32_value = uint8_value / 255.0 * (dim_max - dim_min) + dim_min
-   ```
-
-4. **Stored in IndexedDB** cache (`tee_vector_cache` store) to avoid re-downloading
-
-5. **Set as `window.localVectors`** — triggers dependency cascade
-   (PCA computation, label controls enable, etc.)
-
----
-
-## 14. Testing
-
-TEE has static analysis tests in `validation/` that verify the frontend HTML and
-JS haven't regressed during refactoring.  **Run after any frontend change:**
+## 6. Testing
 
 ```bash
-cd /path/to/TEE && venv/bin/pytest validation/ -v
+venv/bin/pytest validation/ tests/ -v
 ```
 
-### Test files
-
 | File | What it checks |
-|---|---|
-| `test_viewer_html.py` | HTML structure (panel IDs, no duplicate IDs), JS syntax (all script blocks parse), feature presence (polygon drawing, schema system, keyboard shortcuts) |
-| `test_refactoring_guards.py` | Backend: all view functions exist, URL routing complete, lib modules export expected functions, `window.*` exports present in JS files |
-
-### Key test classes in `test_viewer_html.py`
-
-- `TestExploreRename` — no residual "simple" mode references
-- `TestManualLabelMode` — manual label UI elements exist
-- `TestClassificationOverlay` — classify button and overlay elements
-- `TestSchemaSystem` — schema functions present in JS
-- `TestPolygonDrawing` — Leaflet.Draw CDN, polygon state vars, click handlers
-- `TestJSSyntax` — all `<script>` blocks parse without syntax errors
-- `TestHTMLStructure` — starts with DOCTYPE, no duplicate IDs, panel structure
-
-### When tests fail
-
-If a test fails after a code change, it usually means:
-- A `window.*` function was renamed/removed without updating the test
-- An HTML element ID was changed
-- A JS syntax error was introduced
-
-Fix the code or update the test assertion — never skip tests.
+|------|---------------|
+| `validation/test_refactoring_guards.py` | API endpoints in JS, critical functions exist, state variables, DOM elements, CSS mode rules, PANEL_LAYOUT table, backend libraries, NDJSON event schema, tessera_eval self-containment |
+| `validation/test_viewer_html.py` | HTML structure, JS syntax, mode classes, panel layout has all modes, large-area validation elements |
+| `tests/test_kfold.py` | K-fold CV, regression metrics, regressor factory |
+| `tests/test_cli.py` | CLI config validation, auto-type detection, dry-run |
+| `tests/test_rasterize_encoder.py` | Rasterize with pre-fitted LabelEncoder |
+| `tests/test_dry_run_field_validation.py` | Dry-run with bad field name |
+| `tests/test_upload_proxy.py` | End-to-end upload through Django proxy (requires servers running) |
 
 ---
 
-## 15. Deployment
+## 7. Deployment
 
 ### Local development
 
 ```bash
-python3 manage.py runserver 8001   # Django dev server
+./restart.sh
+# Starts Django on :8001 + tee-compute on :8002
+# Open http://localhost:8001
 ```
 
-### Docker build and push (for production)
+### Production (tee.cl.cam.ac.uk)
 
 ```bash
 docker buildx build --platform linux/amd64 \
     --build-arg GIT_VERSION="$(git describe --tags --always)" \
     -t sk818/tee:stable --push .
+
+ssh tee.cl.cam.ac.uk
+sudo ./manage.sh   # option 5: pull, restart, health-check
 ```
 
-### Production server (michael)
+Production runs Django only (no tee-compute). Users run their own `tee-compute`
+pointing `--hosted` at `https://tee.cl.cam.ac.uk`.
 
+### Version tags
+
+Always create an annotated git tag on version bumps:
 ```bash
-ssh michael
-sudo ./manage.sh   # option 5: pull sk818/tee:stable, restart, health-check
+git tag -a alpha-3.10 -m "description"
+git push origin alpha-3.10
 ```
-
-Docker volumes on production: `-v /data:/data -v /data/viewports:/app/viewports`
-
-The Dockerfile runs: migrate → collectstatic → waitress on port 8001.
-NDJSON streaming responses are padded to 18KB per line to flush waitress's
-default output buffer without needing `--send-bytes=1`.
+The viewport selector header shows the version from `git describe --tags --always`.
 
 ---
 
-## 16. Known Technical Debt
+## 8. File Structure
 
-### Dual label systems
+```
+TEE/
+├── public/
+│   ├── js/
+│   │   ├── app.js              Application init, dependency system
+│   │   ├── maps.js             Maps, sync, PANEL_LAYOUT, mode switching
+│   │   ├── vectors.js          Vector download, search, canvas layers
+│   │   ├── labels.js           Manual labels, polygon, sharing, export
+│   │   ├── segmentation.js     K-means clustering, seg overlay
+│   │   ├── dimreduction.js     PCA, UMAP, heatmap, Three.js
+│   │   ├── evaluation.js       Validation panel content (NOT layout)
+│   │   └── schema.js           Schema browser, label selection
+│   ├── viewer.html             6-panel viewer
+│   ├── viewport_selector.html  Viewport list / creation
+│   └── user_guide.md           User documentation
+│
+├── api/views/
+│   ├── viewports.py            Viewport CRUD + embedding coverage
+│   ├── evaluation.py           Proxy to tee-compute (no ML here)
+│   ├── tiles.py                Tile server
+│   ├── share.py                Label sharing
+│   └── config.py               Health, config, static files
+│
+├── packages/tessera-eval/tessera_eval/
+│   ├── evaluate.py             Learning curves, k-fold CV
+│   ├── classify.py             Classifiers, regressors, spatial features
+│   ├── rasterize.py            Shapefile rasterization
+│   ├── data.py                 Tile-by-tile embedding loading
+│   ├── unet.py                 U-Net patches, training, prediction
+│   └── server.py               tee-compute Flask server
+│
+├── scripts/tee_evaluate.py     Standalone CLI for batch evaluation
+├── restart.sh                  Start Django + tee-compute locally
+├── Dockerfile                  Production Docker build
+└── docs/                       This documentation
+```
 
-`labels.js` contains two independent label systems that should be unified:
+---
 
-| | Manual Labels | Saved Labels (Auto-label) |
-|---|---|---|
-| **Created by** | User clicks (pins, polygons) or promoted k-means clusters | Saving an explorer similarity search |
-| **Storage key** | `manualLabels_{viewport}` | `tee_labels_{viewport}` |
-| **Overlay** | `DirectCanvasLayer` per class on `maps.rgb` | `PersistentLabelOverlay` on `maps.rgb` |
-| **Label types** | point, polygon, similarity | similarity only |
-| **Panel 4 coloring** | `updatePanel4ManualLabels()` | `updateUMAPColorsFromLabels()` |
-| **Export formats** | JSON, GeoJSON, Shapefile, JPG | JSON, GeoJSON |
+## 9. Extending TEE
 
-The manual label system is newer and more capable.  The saved label system is
-older and more limited.  They duplicate overlay rendering, Panel 4 coloring,
-export, and persistence logic.  A future refactoring should unify them under
-the manual label system.
+### Adding a new classifier
 
-**Warning:** A previous refactoring attempt (extracting viewer.html into ES
-modules) introduced many subtle cross-module bugs.  Any unification should be
-done incrementally with thorough testing, not as a big-bang rewrite.
+1. Add factory function in `tessera_eval/classify.py`
+2. Add to `available_classifiers()` or `available_regressors()`
+3. Add checkbox HTML in panel 1's `#validation-controls` in `viewer.html`
+4. No server.py changes needed (it reads classifier names from the request)
 
-### Double quantization in vector pipeline
+### Adding a new panel mode
 
-See [§13 Vector Data Pipeline](#13-vector-data-pipeline) — the pipeline
-dequantizes int8→float32 then re-quantizes float32→uint8.  Will be resolved
-by the Zarr migration.
+1. Add entry to `PANEL_LAYOUT` in `maps.js` (6 panel specs)
+2. Add entry to `PANEL5_LAYER_RULES` if needed
+3. Add any new overlay elements to HTML (in the correct panel)
+4. Add element IDs to `SWITCHABLE` array in `maps.js`
+5. Add `display: none` CSS rule for new elements
+6. Add option to the layout dropdown in `viewer.html`
+
+### Adding a new evaluation endpoint
+
+1. Add the endpoint in `tessera_eval/server.py`
+2. Add a proxy function in `api/views/evaluation.py`
+3. Add the URL pattern in `api/urls.py`
+4. Call it from `evaluation.js`
+
+### Adding a new NDJSON event type
+
+1. Yield the event in `server.py`'s stream generator
+2. Add handler in `evaluation.js`'s `handleStreamEvent()`
+3. Add to `TestNDJSONEventSchema.BACKEND_EVENTS` in `test_refactoring_guards.py`
