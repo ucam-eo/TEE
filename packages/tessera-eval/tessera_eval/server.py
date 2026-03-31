@@ -495,9 +495,57 @@ def run_large_area():
                     from tessera_eval.unet import _HAS_TORCH
                     if not _HAS_TORCH:
                         logger.warning("Skipping U-Net: PyTorch not installed")
+                        yield json.dumps({"event": "status", "message": "U-Net skipped — PyTorch not installed"}) + "\n"
                         continue
                 except ImportError:
                     continue
+                # Fetch U-Net patches from a random sample of tiles (if not already loaded)
+                if not unet_patches:
+                    yield json.dumps({"event": "status", "message": "Loading tiles for U-Net patches..."}) + "\n"
+                    try:
+                        from rasterio.transform import array_bounds as _array_bounds
+                        from shapely.geometry import box as _box
+                        from tessera_eval.rasterize import rasterize_shapefile
+                        from tessera_eval.unet import extract_labelled_patches
+
+                        bounds = gdf.total_bounds
+                        bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
+                        all_tiles = gt.registry.load_blocks_for_region(bbox, year)
+                        # Sample up to 10 random tiles for U-Net
+                        MAX_UNET_TILES = 10
+                        rng = np.random.RandomState(42)
+                        if len(all_tiles) > MAX_UNET_TILES:
+                            tile_indices = rng.choice(len(all_tiles), size=MAX_UNET_TILES, replace=False)
+                            sampled_tiles = [all_tiles[i] for i in tile_indices]
+                        else:
+                            sampled_tiles = list(all_tiles)
+
+                        unet_patches = []
+                        for t_idx, (yr_t, lon_t, lat_t, emb_t, crs_t, tf_t) in enumerate(gt.fetch_embeddings(sampled_tiles)):
+                            yield json.dumps({"event": "status", "message": f"U-Net: loading tile {t_idx+1}/{len(sampled_tiles)}..."}) + "\n"
+                            gdf_proj = gdf.to_crs(crs_t)
+                            tb = _array_bounds(emb_t.shape[0], emb_t.shape[1], tf_t)
+                            tile_gdf = gdf_proj[gdf_proj.intersects(_box(*tb))]
+                            if tile_gdf.empty:
+                                continue
+                            cr = rasterize_shapefile(tile_gdf, field_name, tf_t, emb_t.shape[1], emb_t.shape[0], label_encoder=le)
+                            patches = extract_labelled_patches(emb_t, cr)
+                            unet_patches.extend(patches)
+                            del emb_t, cr
+                            import gc; gc.collect()
+                        logger.info("Loaded %d U-Net patches from %d tiles", len(unet_patches), len(sampled_tiles))
+                        yield json.dumps({"event": "status", "message": f"Loaded {len(unet_patches)} U-Net patches from {len(sampled_tiles)} tiles"}) + "\n"
+                    except Exception as e:
+                        logger.warning("Failed to load U-Net patches: %s", e)
+                        yield json.dumps({"event": "status", "message": f"U-Net patch loading failed: {e}"}) + "\n"
+                        continue
+                if not unet_patches:
+                    yield json.dumps({"event": "status", "message": "U-Net skipped — no labelled patches found"}) + "\n"
+                    continue
+            if name in ("spatial_mlp", "spatial_mlp_5x5") and spatial_3x3 is None and spatial_5x5 is None:
+                logger.warning("Skipping %s: not supported with point sampling", name)
+                yield json.dumps({"event": "status", "message": f"{name} skipped — not supported with point sampling"}) + "\n"
+                continue
             active_models.append(name)
 
         yield json.dumps({

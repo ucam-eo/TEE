@@ -148,21 +148,25 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                     f1w_scores[name].append(0.0)
 
             # U-Net: patch-based train/test split
-            if has_unet and 'unet' in active:
+            # Only run 1 repeat for U-Net (training is expensive, variance is dominated by SGD noise)
+            if has_unet and 'unet' in active and seed == 0:
                 try:
                     from tessera_eval.unet import train_unet_on_patches, predict_unet_tile, _HAS_TORCH
                     if _HAS_TORCH:
                         n_patches = len(unet_patches)
                         n_train = max(1, int(n_patches * pct / 100.0))
                         n_train = min(n_train, n_patches - 1)  # keep at least 1 for test
+                        n_train = min(n_train, 20)  # cap training patches for speed
                         patch_idx = rng.permutation(n_patches)
                         train_patches = [unet_patches[i] for i in patch_idx[:n_train]]
-                        test_patches = [unet_patches[i] for i in patch_idx[n_train:]]
+                        test_patches = [unet_patches[i] for i in patch_idx[n_train:n_train + 10]]  # cap test too
 
                         if train_patches and test_patches:
+                            # Use fewer epochs for learning curve (full epochs only for final model)
+                            unet_params = dict((classifier_params or {}).get('unet', {}))
+                            unet_params.setdefault('epochs', 15)
                             model = train_unet_on_patches(
-                                train_patches, n_classes,
-                                (classifier_params or {}).get('unet', {}))
+                                train_patches, n_classes, unet_params)
 
                             # Evaluate on test patches
                             all_true, all_pred = [], []
