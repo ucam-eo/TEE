@@ -171,36 +171,78 @@ Browser → Django :8001 → proxy → tee-compute :8002
 Upload shapefile(s) → select field + year + classifiers → Run
     ↓
 tee-compute:
-    1. field_start event (emitted immediately)
-    2. GeoTessera() init (downloads/verifies tile registry)
+    1. field_start event (emitted immediately, before GeoTessera init)
+    2. GeoTessera init (cached instance reused across runs)
     3. load_blocks_for_region(bbox, year)
-    4. For each tile:
-        a. download_progress event
-        b. Reproject GDF to tile CRS
-        c. Filter GDF to tile bbox
+    4. Reproject GDF to tile CRS once (cached per CRS)
+    5. For each tile (lazy loading — one at a time):
+        a. download_progress event (shows "cached" or "downloading")
+        b. Load from disk cache or download from GeoTessera
+        c. Filter GDF to tile bbox using spatial index (R-tree)
         d. Rasterize shapefile onto tile grid
         e. Extract labelled pixel embeddings
-        f. Compute per-tile spatial features (if spatial_mlp selected)
+        f. Compute spatial features for labelled pixels only (if spatial_mlp)
         g. Extract U-Net patches (if unet selected)
-    5. start event (with pixel counts, class info, training sizes)
-    6. run_learning_curve (train=N, test=remainder, 5 repeats)
-        → progress events per training size
-    7. confusion_matrices event
-    8. Retrain all models on full data
-        → model_ready events
-    9. done event
+    6. Memory check (abort with message if > 80% of available RAM)
+    7. start event (with pixel counts, class info, training percentages)
+    8. run_learning_curve (% of labels, adaptive repeats, capped test set)
+        → progress events per percentage
+    9. confusion_matrices event
+   10. Retrain all models on full data → model_ready events
+   11. done event
 ```
 
 ### NDJSON streaming
 
 Events are streamed as newline-delimited JSON. Each line is padded to 18KB
 to force Waitress to flush immediately. The Django proxy uses matching chunk
-size and `Content-Encoding: identity` to prevent GZip buffering.
+size and `Content-Encoding: identity` to prevent GZip buffering. Timeouts
+are set to 7200s (2 hours) on both Waitress and the proxy.
 
-### Tile cache
+### Caching (three layers)
 
-Loaded vectors/labels are cached by `(field, year)` in `_tile_cache`.
-Re-running with different classifiers skips tile loading.
+| Layer | Key | Scope | Contents |
+|-------|-----|-------|----------|
+| **Disk tile cache** | `(year, lon, lat)` | `~/.cache/tessera-eval/tiles/` | Uncompressed `.npz` per tile (~488MB each). Survives restarts. |
+| **In-memory tile cache** | `(field, year)` | `_tile_cache` global | Concatenated vectors, labels, spatial features, U-Net patches. Lost on restart. |
+| **GeoTessera instance** | singleton | `_geotessera_instance` | Loaded registry parquet. Avoids 10-30s HTTP check per run. |
+
+Re-running with different classifiers: uses in-memory cache (instant).
+Re-running after restart: uses disk cache (tiles load in ~0.15s each vs ~100s download).
+Changing field or year: in-memory cache misses, disk cache still valid.
+Uploading a new shapefile: caches are NOT invalidated (tiles don't depend on shapefile).
+
+### Performance optimizations (country-scale)
+
+The pipeline is optimized for large evaluations (e.g., Austria: 40 tiles,
+42K features, 1M labelled pixels, 37 classes):
+
+**Tile loading phase:**
+
+| Optimization | What it avoids | Savings |
+|---|---|---|
+| Lazy tile loading (one at a time) | Loading all 40 tiles into memory at once (~10GB) | Prevents OOM |
+| Uncompressed disk cache | zlib decompression (2-3s/tile) | 60-80s per cached run |
+| GeoTessera instance caching | Registry HTTP check + parquet read per run | 10-30s per run |
+| GDF reproject once per CRS | Reprojecting 42K features per tile (40x) | 4-20s |
+| Spatial index (R-tree) for bbox | Testing all 42K features per tile | 2-9s |
+| Masked spatial features | Computing features for full tile then indexing | 96% memory reduction |
+| Memory check before concatenation | Silent OOM kill | Clear error with advice |
+
+**Learning curve phase:**
+
+| Optimization | What it avoids | Savings |
+|---|---|---|
+| Test set capped at 200K | KNN predict on 990K pixels (30-60s per call) | 10-20 min |
+| Pre-computed per-class indices | Scanning 1M labels × 37 classes × 40 iterations | ~5s |
+| Boolean mask for test indices | `np.setdiff1d` O(N log N) per repeat | ~1.5s |
+| Adaptive repeats (fewer at high %) | 5 repeats at 80% where variance is negligible | ~25% of high-% time |
+
+**When extending the pipeline**, keep these principles:
+- Never allocate H×W×dim arrays for the full tile — always mask to labelled pixels first
+- Never reproject or filter the full GDF per tile — cache reprojections, use spatial index
+- Never load all tiles into memory — process one at a time, accumulate only labelled pixels
+- Free intermediate lists (`del all_vectors`) after concatenation
 
 ### tessera_eval library
 
