@@ -83,9 +83,16 @@ function addValGeoJsonLayer() {
         },
     }).addTo(maps.rgb);
 
-    // Zoom to shapefile extent
+    // Remove viewport bounds constraint and zoom to shapefile extent
     const bounds = valGeoJsonLayer.getBounds();
     if (bounds.isValid()) {
+        // Unlock maps from viewport bounds so we can pan to the shapefile
+        Object.values(maps).forEach(m => {
+            if (m && m.setMaxBounds) {
+                m.setMaxBounds(null);
+                m.setMinZoom(2);
+            }
+        });
         maps.rgb.fitBounds(bounds, { padding: [20, 20] });
     }
 }
