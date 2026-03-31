@@ -370,7 +370,21 @@ def run_large_area():
                 # Stream tiles from GeoTessera one at a time.
                 # No raw tile disk caching — the result cache (vectors+labels) is 100x smaller.
                 tile_idx = 0
-                for yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform in gt.fetch_embeddings(tiles):
+                tile_iter = gt.fetch_embeddings(tiles)
+                while True:
+                    try:
+                        yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform = next(tile_iter)
+                    except StopIteration:
+                        break
+                    except Exception as tile_err:
+                        tile_idx += 1
+                        logger.warning("Tile %d/%d failed: %s — skipping", tile_idx, total_tiles, tile_err)
+                        yield json.dumps({
+                            "event": "download_progress", "tile": tile_idx, "total": total_tiles,
+                            "error": str(tile_err),
+                        }) + "\n"
+                        continue
+
                     tile_idx += 1
                     import psutil
                     rss_gb = psutil.Process().memory_info().rss / (1024**3)
