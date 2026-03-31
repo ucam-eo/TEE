@@ -297,10 +297,14 @@ def run_large_area():
                 "total": stats["tile_count"], "cached": True,
             }) + "\n"
 
-            # Recompute spatial features if needed but not cached
+            # If spatial features needed but not cached, must reload tiles
+            needs_reload = False
             if needs_spatial_3x3 and spatial_3x3 is None:
-                _tile_cache["key"] = None  # force reload
+                needs_reload = True
             if needs_spatial_5x5 and spatial_5x5 is None:
+                needs_reload = True
+            if needs_reload:
+                logger.info("Spatial features needed but not cached — reloading tiles")
                 _tile_cache["key"] = None
 
         if _tile_cache["key"] != cache_key:
@@ -335,7 +339,9 @@ def run_large_area():
                 all_unet_patches = [] if needs_unet else None
                 tiles_with_data = 0
 
-                # Check which tiles are cached on disk vs need downloading
+                # Pre-reproject GDF to first tile's CRS (avoid per-tile reprojection)
+                _gdf_proj_cache = {}  # crs → reprojected gdf with spatial index
+
                 from affine import Affine as _Affine
                 cached_keys = set()
                 uncached_tiles = []
@@ -377,8 +383,26 @@ def run_large_area():
 
                     h, w, dim = tile_emb.shape
                     tile_bounds = _array_bounds(h, w, tile_transform)
-                    gdf_proj = gdf.to_crs(tile_crs) if gdf.crs != tile_crs else gdf
-                    tile_gdf = gdf_proj[gdf_proj.intersects(_box(*tile_bounds))]
+
+                    # Reproject GDF once per CRS (cached), use spatial index
+                    crs_key = str(tile_crs)
+                    if crs_key not in _gdf_proj_cache:
+                        gdf_proj = gdf.to_crs(tile_crs) if str(gdf.crs) != crs_key else gdf
+                        if not hasattr(gdf_proj, 'sindex'):
+                            gdf_proj = gdf_proj.copy()  # ensure sindex is built
+                        _gdf_proj_cache[crs_key] = gdf_proj
+                    gdf_proj = _gdf_proj_cache[crs_key]
+
+                    # Use spatial index for fast bbox filtering
+                    tile_box = _box(*tile_bounds)
+                    if hasattr(gdf_proj, 'sindex') and gdf_proj.sindex is not None:
+                        candidates_idx = list(gdf_proj.sindex.intersection(tile_bounds))
+                        if not candidates_idx:
+                            continue
+                        tile_gdf = gdf_proj.iloc[candidates_idx]
+                        tile_gdf = tile_gdf[tile_gdf.intersects(tile_box)]
+                    else:
+                        tile_gdf = gdf_proj[gdf_proj.intersects(tile_box)]
                     if tile_gdf.empty:
                         continue
 
