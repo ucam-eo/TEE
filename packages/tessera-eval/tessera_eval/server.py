@@ -372,7 +372,10 @@ def run_large_area():
                     if cls_gdf.empty:
                         continue
                     try:
-                        pts = cls_gdf.sample_points(size=per_class)
+                        import warnings
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore", UserWarning)
+                            pts = cls_gdf.sample_points(size=per_class)
                         # sample_points returns a GeoSeries of MultiPoints
                         for mp in pts:
                             if mp is not None and not mp.is_empty:
