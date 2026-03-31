@@ -676,11 +676,21 @@
                 <button class="login-btn" id="loginBtn" style="display:none;" onclick="window.location.href='/login.html'">Login</button>
             </div>
 
+            <!-- Tab bar -->
+            <div id="tab-bar" style="display:flex; gap:0; border-bottom:2px solid #e0e0e0; margin:0 -16px; padding:0 16px;">
+                <button class="tab-btn active" onclick="switchTab('viewports')" id="tab-viewports" style="padding:8px 16px; border:none; background:transparent; color:#667eea; font-weight:600; font-size:13px; cursor:pointer; border-bottom:2px solid #667eea; margin-bottom:-2px;">Viewports</button>
+                <button class="tab-btn" onclick="switchTab('validation')" id="tab-validation" style="padding:8px 16px; border:none; background:transparent; color:#666; font-weight:600; font-size:13px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px;">Validation</button>
+                <button class="tab-btn" onclick="switchTab('users')" id="tab-users" style="padding:8px 16px; border:none; background:transparent; color:#666; font-weight:600; font-size:13px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; display:none;">Users</button>
+            </div>
+
             <div class="sidebar-content">
                 <!-- Demo mode banner -->
                 <div id="demoBanner" style="display: none; padding: 10px 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; margin-bottom: 16px; font-size: 12px; color: #856404;">
                     Browsing in demo mode. <a href="/login.html" style="color: #667eea; font-weight: 600;">Log in</a> for full access.
                 </div>
+
+                <!-- Tab: Viewports (default) -->
+                <div id="tab-content-viewports">
 
                 <!-- Search -->
                 <div class="section">
@@ -831,6 +841,27 @@
                     </div>
 
                 </div>
+                </div><!-- end tab-content-viewports -->
+
+                <!-- Tab: Validation -->
+                <div id="tab-content-validation" style="display:none;">
+                    <div style="padding:8px 0;">
+                        <h3 style="margin:0 0 12px; font-size:16px; color:#333;">Large-Scale Validation</h3>
+                        <p style="font-size:13px; color:#666; margin-bottom:16px;">
+                            Upload a ground-truth shapefile and evaluate classifiers directly — no viewport needed.
+                            All computation runs on your local compute server.
+                        </p>
+                        <div id="standalone-val-controls">
+                            <!-- Validation controls will be populated here -->
+                            <p style="color:#999; font-size:13px;">Coming soon — use the viewer's Validation mode for now.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: Users (admin only) -->
+                <div id="tab-content-users" style="display:none;">
+                </div>
+
             </div>
         </div>
 
@@ -859,6 +890,27 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
     <script>
+        // Tab switching
+        function switchTab(tab) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.style.color = '#666';
+                btn.style.borderBottomColor = 'transparent';
+            });
+            const activeBtn = document.getElementById('tab-' + tab);
+            if (activeBtn) {
+                activeBtn.style.color = '#667eea';
+                activeBtn.style.borderBottomColor = '#667eea';
+            }
+            // Show/hide tab content
+            document.querySelectorAll('[id^="tab-content-"]').forEach(div => div.style.display = 'none');
+            const content = document.getElementById('tab-content-' + tab);
+            if (content) content.style.display = '';
+            // Show map only for viewports tab
+            const mapContainer = document.querySelector('.map-container');
+            if (mapContainer) mapContainer.style.display = tab === 'viewports' ? '' : 'none';
+        }
+
         // Auth check: set demo mode for unauthenticated users
         let isLoggedIn = false;
         let authEnabled = false;
@@ -881,6 +933,7 @@
             // Show enrolment panel for enrollers and admins
             if (data.is_enroller) {
                 document.getElementById('enrolSection').style.display = '';
+                document.getElementById('tab-users').style.display = '';
             }
         }).catch(() => {});
 

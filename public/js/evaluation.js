@@ -560,8 +560,7 @@ function handleStreamEvent(ev) {
         status.textContent = `Done in ${ev.elapsed_seconds}s${suffix}`;
         status.style.color = '#28a745';
         const dlBtnH = document.getElementById('val-download-btn');
-        const modelsReady = !!(ev.models_available && ev.models_available.length);
-        if (dlBtnH) dlBtnH.disabled = !modelsReady;
+        if (dlBtnH) dlBtnH.disabled = false;  // always enable — trains on click
         hideFinishButtons();
 
 
