@@ -507,6 +507,8 @@ function handleStreamEvent(ev) {
             status.textContent = `Training size ${ev.size.toLocaleString()} complete`;
         }
         appendResultsRow(ev.size, ev.classifiers);
+        const elapsed = status.dataset.t0 ? ((Date.now() - parseInt(status.dataset.t0)) / 1000).toFixed(0) : '';
+        setResultsStatus(`Training size ${ev.size.toLocaleString()} complete (${elapsed}s)`);
 
     } else if (ev.event === 'model_ready') {
         const btn = document.getElementById('finish-' + ev.classifier);
@@ -1072,12 +1074,14 @@ async function runLargeAreaEvaluation() {
     let userCancelled = false;
 
     const t0 = Date.now();
+    setResultsStatus('Waiting for compute server...');
     const timer = setInterval(() => {
         if (!lastChartData) {
             const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
             // Only show generic message if no event has updated the status yet
             if (!status.dataset.updated) {
                 status.textContent = `Connecting to GeoTessera... ${elapsed}s`;
+                setResultsStatus(`Connecting to GeoTessera... ${elapsed}s`);
             }
         }
     }, 1000);
