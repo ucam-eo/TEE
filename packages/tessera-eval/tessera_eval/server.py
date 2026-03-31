@@ -428,14 +428,49 @@ def run_large_area():
                         continue
 
                     tiles_with_data += 1
-                    all_labels.append(class_raster[labelled_mask] - 1)
-                    all_vectors.append(tile_emb[labelled_mask])
+
+                    # Subsample labelled pixels if we've already accumulated enough.
+                    # Beyond 1M pixels, more data doesn't improve accuracy meaningfully
+                    # but explodes memory (1M × 128 × 4 = 512MB) and runtime.
+                    MAX_TOTAL_PIXELS = 1_000_000
+                    current_total = sum(a.shape[0] for a in all_vectors) if all_vectors else 0
+                    tile_labels = class_raster[labelled_mask] - 1
+                    tile_vectors = tile_emb[labelled_mask]
+                    remaining = MAX_TOTAL_PIXELS - current_total
+                    if remaining <= 0:
+                        logger.info("Pixel cap reached (%d) — skipping remaining tiles", MAX_TOTAL_PIXELS)
+                        # Free tile and break
+                        del tile_emb, class_raster, labelled_mask, tile_labels, tile_vectors
+                        import gc; gc.collect()
+                        break
+                    if len(tile_labels) > remaining:
+                        # Subsample this tile to fit under the cap
+                        rng = np.random.RandomState(42)
+                        idx = rng.choice(len(tile_labels), size=remaining, replace=False)
+                        tile_labels = tile_labels[idx]
+                        tile_vectors = tile_vectors[idx]
+                        labelled_mask_sub = np.zeros_like(labelled_mask)
+                        # For spatial features, we need the original mask positions
+                        # Just use the subsampled vectors directly
+                        logger.info("Subsampled tile from %d to %d pixels (cap=%d)",
+                                    labelled_mask.sum(), remaining, MAX_TOTAL_PIXELS)
+
+                    all_labels.append(tile_labels)
+                    all_vectors.append(tile_vectors)
 
                     # Per-tile spatial features (only for labelled pixels — avoids full-tile allocation)
+                    # Note: spatial features need the 2D grid, so we use the original mask
+                    n_tile_pixels = len(tile_labels)
                     if needs_spatial_3x3:
-                        all_spatial_3x3.append(gather_spatial_features_2d(tile_emb, radius=1, mask=labelled_mask))
+                        sf = gather_spatial_features_2d(tile_emb, radius=1, mask=labelled_mask)
+                        if len(sf) > n_tile_pixels:
+                            sf = sf[:n_tile_pixels]  # align with subsampled pixels
+                        all_spatial_3x3.append(sf)
                     if needs_spatial_5x5:
-                        all_spatial_5x5.append(gather_spatial_features_2d(tile_emb, radius=2, mask=labelled_mask))
+                        sf = gather_spatial_features_2d(tile_emb, radius=2, mask=labelled_mask)
+                        if len(sf) > n_tile_pixels:
+                            sf = sf[:n_tile_pixels]
+                        all_spatial_5x5.append(sf)
 
                     # Per-tile U-Net patches
                     if needs_unet:
