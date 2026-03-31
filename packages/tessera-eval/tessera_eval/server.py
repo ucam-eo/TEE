@@ -578,21 +578,67 @@ def run_large_area():
                     "confusion_matrices": event["confusion_matrices"],
                 }) + "\n"
 
-        # Retrain on full data for model download
-        valid_class_names = [class_names[lbl] if lbl < len(class_names) else f"Class {lbl}"
-                             for lbl in sorted(np.unique(labels))]
+        # Store active_models for deferred training
+        _tile_cache["_active_models"] = active_models
+        _tile_cache["_model_params"] = model_params
+        _tile_cache["_unet_patches"] = unet_patches
 
-        logger.info("Training final models for download...")
+        elapsed = time.time() - t0
+        yield json.dumps({
+            "event": "done",
+            "elapsed_seconds": round(elapsed, 1),
+            "field": field_name,
+            "year": year,
+            "models_available": list(_trained_models.keys()),
+        }) + "\n"
+
+    return Response(_padded(stream()), mimetype="application/x-ndjson",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.route("/api/evaluation/train-models", methods=["POST"])
+def train_models():
+    """Train final models on full data for download. Deferred from evaluation."""
+    cache = _tile_cache
+    if cache.get("vectors") is None:
+        return jsonify({"error": "No evaluation data. Run evaluation first."}), 400
+
+    vectors = cache["vectors"]
+    labels = cache["labels"]
+    class_names = cache.get("class_names", [])
+    active_models = cache.get("_active_models", [])
+    model_params = cache.get("_model_params", {})
+    unet_patches = cache.get("_unet_patches", [])
+    spatial_3x3 = cache.get("spatial_3x3")
+    spatial_5x5 = cache.get("spatial_5x5")
+
+    if not active_models:
+        return jsonify({"error": "No classifiers configured."}), 400
+
+    valid_class_names = [class_names[lbl] if lbl < len(class_names) else f"Class {lbl}"
+                         for lbl in sorted(np.unique(labels))]
+
+    def stream():
+        from tessera_eval.classify import make_classifier
+
+        # Clean up old models
+        for old_path in _trained_models.values():
+            try:
+                Path(old_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+        _trained_models.clear()
+
         yield json.dumps({"event": "status", "message": "Training final models for download..."}) + "\n"
 
         for name in active_models:
             logger.info("Training %s...", name)
             yield json.dumps({"event": "status", "message": f"Training {name}..."}) + "\n"
             try:
-                if name == "unet" and needs_unet:
-                    from tessera_eval.unet import train_unet_on_patches
+                if name == "unet":
+                    from tessera_eval.unet import train_unet_on_patches, _HAS_TORCH
                     import torch as _torch
-                    if unet_patches:
+                    if _HAS_TORCH and unet_patches:
                         n_cls = len(np.unique(labels))
                         _unet_progress = []
                         def _unet_cb(epoch, total, loss):
@@ -600,16 +646,17 @@ def run_large_area():
                         model = train_unet_on_patches(
                             unet_patches, n_cls, model_params.get("unet", {}),
                             progress_callback=_unet_cb)
-                        # Yield collected U-Net progress
                         for ep, tot, loss in _unet_progress:
                             yield json.dumps({"event": "status", "message": f"U-Net epoch {ep}/{tot} loss={loss:.4f}"}) + "\n"
                         tmp = tempfile.NamedTemporaryFile(suffix=".pt", prefix=f"{name}_model_", delete=False)
                         _torch.save({"model_state": model.state_dict(), "class_names": valid_class_names}, tmp.name)
                         _trained_models[name] = tmp.name
+                    else:
+                        yield json.dumps({"event": "status", "message": "U-Net skipped — no patches or PyTorch"}) + "\n"
+                        continue
                 elif name == "spatial_mlp" and spatial_3x3 is not None:
                     from tessera_eval.classify import augment_spatial
-                    X_full = spatial_3x3
-                    X_aug, y_aug = augment_spatial(X_full, labels, window=3, dim=vectors.shape[1])
+                    X_aug, y_aug = augment_spatial(spatial_3x3, labels, window=3, dim=vectors.shape[1])
                     clf = make_classifier(name, model_params.get(name, {}))
                     clf.fit(X_aug, y_aug)
                     tmp = tempfile.NamedTemporaryFile(suffix=".joblib", prefix=f"{name}_model_", delete=False)
@@ -617,8 +664,7 @@ def run_large_area():
                     _trained_models[name] = tmp.name
                 elif name == "spatial_mlp_5x5" and spatial_5x5 is not None:
                     from tessera_eval.classify import augment_spatial
-                    X_full = spatial_5x5
-                    X_aug, y_aug = augment_spatial(X_full, labels, window=5, dim=vectors.shape[1])
+                    X_aug, y_aug = augment_spatial(spatial_5x5, labels, window=5, dim=vectors.shape[1])
                     clf = make_classifier(name, model_params.get(name, {}))
                     clf.fit(X_aug, y_aug)
                     tmp = tempfile.NamedTemporaryFile(suffix=".joblib", prefix=f"{name}_model_", delete=False)
@@ -636,14 +682,7 @@ def run_large_area():
                 logger.warning("Failed to train model '%s': %s", name, e)
                 yield json.dumps({"event": "status", "message": f"Failed to train {name}: {e}"}) + "\n"
 
-        elapsed = time.time() - t0
-        yield json.dumps({
-            "event": "done",
-            "elapsed_seconds": round(elapsed, 1),
-            "field": field_name,
-            "year": year,
-            "models_available": list(_trained_models.keys()),
-        }) + "\n"
+        yield json.dumps({"event": "done", "models_available": list(_trained_models.keys())}) + "\n"
 
     return Response(_padded(stream()), mimetype="application/x-ndjson",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

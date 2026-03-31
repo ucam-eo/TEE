@@ -87,5 +87,9 @@ def finish_classifier(request):
     return _proxy_to_compute(request, "api/evaluation/finish-classifier")
 
 
+def train_models(request):
+    return _proxy_to_compute(request, "api/evaluation/train-models")
+
+
 def download_model(request, classifier):
     return _proxy_to_compute(request, f"api/evaluation/download-model/{classifier}")

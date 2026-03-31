@@ -917,15 +917,70 @@ function exportEvalResults() {
 }
 
 
-function downloadModels() {
-    if (!lastEvalData || !lastEvalData.models_available) return;
-    lastEvalData.models_available.forEach(name => {
-        const a = document.createElement('a');
-        a.href = `/api/evaluation/download-model/${encodeURIComponent(name)}`;
-        const ext = name === 'unet' ? '.pt' : '.joblib';
-        a.download = `${name}_model${ext}`;
-        a.click();
-    });
+async function downloadModels() {
+    const dlBtn = document.getElementById('val-download-btn');
+    const status = document.getElementById('val-status');
+
+    // First train the models (deferred from evaluation)
+    dlBtn.disabled = true;
+    dlBtn.textContent = 'Training...';
+    status.textContent = 'Training final models for download...';
+    status.style.color = '#888';
+
+    try {
+        const resp = await fetch('/api/evaluation/train-models', { method: 'POST' });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            status.textContent = err.error || 'Training failed';
+            status.style.color = '#dc3545';
+            dlBtn.disabled = false;
+            dlBtn.textContent = 'Download Models';
+            return;
+        }
+
+        // Stream training progress
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        const readyModels = [];
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    const ev = JSON.parse(line);
+                    if (ev.event === 'status') {
+                        status.textContent = ev.message;
+                        showResultsPanel(ev.message);
+                    } else if (ev.event === 'model_ready') {
+                        readyModels.push(ev.classifier);
+                    } else if (ev.event === 'done') {
+                        // Download all ready models
+                        for (const name of readyModels) {
+                            const a = document.createElement('a');
+                            a.href = `/api/evaluation/download-model/${encodeURIComponent(name)}`;
+                            const ext = name === 'unet' ? '.pt' : '.joblib';
+                            a.download = `${name}_model${ext}`;
+                            a.click();
+                        }
+                        status.textContent = `${readyModels.length} model(s) trained and downloading`;
+                        status.style.color = '#28a745';
+                    }
+                } catch (e) { }
+            }
+        }
+    } catch (e) {
+        status.textContent = 'Training error: ' + e.message;
+        status.style.color = '#dc3545';
+    }
+
+    dlBtn.disabled = false;
+    dlBtn.textContent = 'Download Models';
 }
 document.getElementById('val-export-btn').addEventListener('click', exportEvalResults);
 document.getElementById('val-download-btn').addEventListener('click', downloadModels);
