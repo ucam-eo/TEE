@@ -969,7 +969,7 @@ function setPanelLayout(mode) {
         // Restore validation state if returning from another mode
         setTimeout(() => {
             if (window.restoreValidationState) window.restoreValidationState();
-        }, 200);
+        }, 500);
     }
 
     // Leaflet maps and Three.js scene need resize after CSS transition

@@ -105,6 +105,31 @@ const fileInput = document.getElementById('val-file-input');
 dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+
+// Restore upload state from sessionStorage (survives Back button navigation)
+try {
+    const saved = sessionStorage.getItem('tee_val_upload');
+    if (saved) {
+        const s = JSON.parse(saved);
+        if (s.filename && s.fields && s.fields.length > 0) {
+            valUploadedFilename = s.filename;
+            valFieldData = s.fields;
+            valGeoJsonData = s.geojson;
+            dropZone.textContent = s.filename;
+            dropZone.classList.add('uploaded');
+            const sel = document.getElementById('val-field-select');
+            sel.innerHTML = '';
+            s.fields.forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f.name;
+                opt.textContent = `${f.name} (${f.unique_count} classes)`;
+                sel.appendChild(opt);
+            });
+            sel.disabled = false;
+            document.getElementById('val-run-btn').disabled = false;
+        }
+    }
+} catch (e) { /* sessionStorage may not be available */ }
 dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('dragover');
@@ -160,6 +185,15 @@ async function uploadShapefile(file) {
         addValGeoJsonLayer();
         updateClassSummary();
         updateYearCoverage(data.geojson);
+
+        // Persist upload state for page navigation (Back button)
+        try {
+            sessionStorage.setItem('tee_val_upload', JSON.stringify({
+                filename: valUploadedFilename,
+                fields: valFieldData,
+                geojson: valGeoJsonData,
+            }));
+        } catch (e) { /* geojson may be too large for sessionStorage */ }
     } catch (e) {
         const msg = e.message || String(e);
         if (msg.includes('string did not match') || msg.includes('Failed to fetch')) {
@@ -1439,7 +1473,6 @@ Object.defineProperty(window, 'valChart', {
 
 // Restore validation panel state when returning from another mode
 function restoreValidationState() {
-    console.log('[EVAL] restoreValidationState called', {valUploadedFilename, valFieldData: !!valFieldData, lastChartData: !!lastChartData, lastEvalData: !!lastEvalData});
     // Restore drop zone filename
     if (valUploadedFilename) {
         const dz = document.getElementById('val-drop-zone');
