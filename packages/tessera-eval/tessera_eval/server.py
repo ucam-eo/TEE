@@ -417,13 +417,11 @@ def run_large_area():
                     all_labels.append(class_raster[labelled_mask] - 1)
                     all_vectors.append(tile_emb[labelled_mask])
 
-                    # Per-tile spatial features
+                    # Per-tile spatial features (only for labelled pixels — avoids full-tile allocation)
                     if needs_spatial_3x3:
-                        sf = gather_spatial_features_2d(tile_emb, radius=1)
-                        all_spatial_3x3.append(sf[labelled_mask])
+                        all_spatial_3x3.append(gather_spatial_features_2d(tile_emb, radius=1, mask=labelled_mask))
                     if needs_spatial_5x5:
-                        sf = gather_spatial_features_2d(tile_emb, radius=2)
-                        all_spatial_5x5.append(sf[labelled_mask])
+                        all_spatial_5x5.append(gather_spatial_features_2d(tile_emb, radius=2, mask=labelled_mask))
 
                     # Per-tile U-Net patches
                     if needs_unet:
@@ -435,10 +433,37 @@ def run_large_area():
                     yield json.dumps({"event": "error", "message": "No labelled pixels found across any tiles"}) + "\n"
                     return
 
+                # Estimate memory before concatenating
+                import psutil
+                n_pixels = sum(a.shape[0] for a in all_vectors)
+                dim = all_vectors[0].shape[1] if all_vectors else 128
+                mem_vectors = n_pixels * dim * 4  # float32
+                mem_spatial_3x3 = n_pixels * 9 * dim * 4 if all_spatial_3x3 else 0
+                mem_spatial_5x5 = n_pixels * 25 * dim * 4 if all_spatial_5x5 else 0
+                mem_total_gb = (mem_vectors + mem_spatial_3x3 + mem_spatial_5x5) / (1024**3)
+                avail_gb = psutil.virtual_memory().available / (1024**3)
+
+                logger.info("Memory estimate: %.1fGB needed (vectors=%.1fGB, spatial_3x3=%.1fGB, spatial_5x5=%.1fGB), %.1fGB available",
+                            mem_total_gb, mem_vectors/(1024**3), mem_spatial_3x3/(1024**3), mem_spatial_5x5/(1024**3), avail_gb)
+
+                if mem_total_gb > avail_gb * 0.8:
+                    msg = (f"Not enough memory: evaluation needs ~{mem_total_gb:.1f}GB but only "
+                           f"{avail_gb:.1f}GB available. ")
+                    if mem_spatial_3x3 or mem_spatial_5x5:
+                        msg += "Try disabling Spatial MLP classifiers, or reduce the area."
+                    else:
+                        msg += "Try reducing the area or max training samples."
+                    yield json.dumps({"event": "error", "message": msg}) + "\n"
+                    return
+
                 vectors = np.concatenate(all_vectors, axis=0).astype(np.float32)
+                del all_vectors  # free intermediate lists
                 labels = np.concatenate(all_labels, axis=0).astype(np.int32)
+                del all_labels
                 spatial_3x3 = np.concatenate(all_spatial_3x3, axis=0).astype(np.float32) if all_spatial_3x3 else None
+                del all_spatial_3x3
                 spatial_5x5 = np.concatenate(all_spatial_5x5, axis=0).astype(np.float32) if all_spatial_5x5 else None
+                del all_spatial_5x5
 
                 stats = {
                     "tile_count": total_tiles,

@@ -130,7 +130,7 @@ def gather_spatial_features(vectors, coords, width, height, radius=1,
     return spatial
 
 
-def gather_spatial_features_2d(tile_emb, radius=1):
+def gather_spatial_features_2d(tile_emb, radius=1, mask=None):
     """Extract spatial neighbourhood features from a contiguous 2D tile.
 
     For each pixel, concatenates the embeddings of all pixels in a
@@ -140,15 +140,24 @@ def gather_spatial_features_2d(tile_emb, radius=1):
     Args:
         tile_emb: float32 array, shape (H, W, dim) — contiguous tile embeddings
         radius: neighbourhood radius (1 for 3x3, 2 for 5x5)
+        mask: optional bool array, shape (H, W) — if provided, only extract
+            features for True pixels (much faster for sparse labels)
 
     Returns:
-        float32 array, shape (H, W, window*window*dim) — flattened spatial features
+        If mask is None: float32 array, shape (H, W, window*window*dim)
+        If mask is provided: float32 array, shape (N, window*window*dim)
+            where N = mask.sum()
     """
     H, W, dim = tile_emb.shape
     window = 2 * radius + 1
     padded = np.pad(tile_emb, ((radius, radius), (radius, radius), (0, 0)))
     windows = np.lib.stride_tricks.sliding_window_view(padded, (window, window, dim))
     # windows shape: (H, W, 1, window, window, dim)
+    if mask is not None:
+        # Only materialize features for masked pixels (avoids H*W*window²*dim allocation)
+        # windows is a view — indexing with mask only copies selected pixels
+        masked = windows[mask]  # shape: (N, 1, window, window, dim)
+        return masked.reshape(masked.shape[0], window * window * dim).astype(np.float32)
     return windows.reshape(H, W, window * window * dim).astype(np.float32)
 
 
