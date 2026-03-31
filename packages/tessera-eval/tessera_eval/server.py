@@ -676,7 +676,7 @@ def main():
         app.run(host=args.host, port=args.port, debug=True)
     else:
         from waitress import serve
-        serve(app, host=args.host, port=args.port, threads=4)
+        serve(app, host=args.host, port=args.port, threads=4, channel_timeout=7200)
 
 
 if __name__ == "__main__":

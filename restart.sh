@@ -51,7 +51,7 @@ if [ "$MODE" = "server" ]; then
     HOST="127.0.0.1"
     echo "  Django on $HOST:8001"
     $RUN env TEE_MODE=production \
-        $PYTHON -m waitress --host="$HOST" --port=8001 --threads=16 tee_project.wsgi:application \
+        $PYTHON -m waitress --host="$HOST" --port=8001 --threads=16 --channel-timeout=7200 tee_project.wsgi:application \
         >> "$LOG_DIR/web_server.log" 2>&1 &
     WEB_PID=$!
 
@@ -72,7 +72,7 @@ else
     COMPUTE_PORT=8002
 
     echo "  Django on $HOST:8001"
-    $PYTHON -m waitress --host="$HOST" --port=8001 --threads=16 tee_project.wsgi:application \
+    $PYTHON -m waitress --host="$HOST" --port=8001 --threads=16 --channel-timeout=7200 tee_project.wsgi:application \
         >> "$LOG_DIR/web_server.log" 2>&1 &
     DJANGO_PID=$!
 

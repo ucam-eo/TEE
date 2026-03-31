@@ -30,7 +30,7 @@ def _proxy_to_compute(request, path):
             files = {k: (f.name, f, f.content_type) for k, f in request.FILES.items()}
             resp = _requests.request(
                 method=request.method, url=target,
-                files=files, stream=True, timeout=600,
+                files=files, stream=True, timeout=7200,
             )
         else:
             # JSON or other request — forward body and Content-Type
@@ -41,7 +41,7 @@ def _proxy_to_compute(request, path):
                 method=request.method, url=target,
                 headers=headers,
                 data=request.body if request.method != "GET" else None,
-                stream=True, timeout=600,
+                stream=True, timeout=7200,
             )
     except _requests.ConnectionError:
         return JsonResponse(
