@@ -36,6 +36,7 @@ let cmPopupWindow = null;
 let valUploadedFilename = null;
 let currentLargeAreaTask = null; // 'classification' or 'regression'
 let valUploadedFiles = []; // list of uploaded filenames
+let valTotalLabelledPixels = 0; // set by start event, used for % hint
 
 // Regressor labels/colors (extend the classifier palette)
 const REGRESSOR_COLORS = {
@@ -386,7 +387,7 @@ function createStreamChart(classifierNames) {
                 },
                 title: {
                     display: true,
-                    text: `Learning Curves \u2014 ${metricLabel} vs % Labelled Area`,
+                    text: `Learning Curves \u2014 ${metricLabel} vs % Labels`,
                     color: '#eee',
                     font: { size: 15, weight: 'bold' },
                 },
@@ -394,7 +395,7 @@ function createStreamChart(classifierNames) {
             scales: {
                 x: {
                     type: 'linear',
-                    title: { display: true, text: '% of labelled area', color: '#aaa' },
+                    title: { display: true, text: '% of labels', color: '#aaa' },
                     ticks: { color: '#aaa', callback: v => v + '%' },
                     min: 0, max: 100,
                     grid: { color: 'rgba(255,255,255,0.08)' },
@@ -467,6 +468,8 @@ function handleStreamEvent(ev) {
         // Show results table in panel 3 with progress
         {
             const pixels = ev.total_labelled_pixels || 0;
+            valTotalLabelledPixels = pixels;
+            updateMaxTrainPctHint();
             const stats = ev.stats || {};
             initResultsTable(ev.classifiers, currentLargeAreaTask || 'classification');
             setResultsStatus(
@@ -510,7 +513,7 @@ function handleStreamEvent(ev) {
         }
         appendResultsRow(ev.pct, ev.classifiers);
         const elapsed = status.dataset.t0 ? ((Date.now() - parseInt(status.dataset.t0)) / 1000).toFixed(0) : '';
-        setResultsStatus(`${ev.pct}% of labelled area complete (${elapsed}s)`);
+        setResultsStatus(`${ev.pct}% of labels complete (${elapsed}s)`);
 
     } else if (ev.event === 'model_ready') {
         const btn = document.getElementById('finish-' + ev.classifier);
@@ -689,7 +692,7 @@ function renderChart(data, metric) {
                 },
                 title: {
                     display: true,
-                    text: `Learning Curves \u2014 ${metricLabel} vs % Labelled Area`,
+                    text: `Learning Curves \u2014 ${metricLabel} vs % Labels`,
                     color: '#eee',
                     font: { size: 15, weight: 'bold' },
                 },
@@ -697,7 +700,7 @@ function renderChart(data, metric) {
             scales: {
                 x: {
                     type: 'linear',
-                    title: { display: true, text: '% of labelled area', color: '#aaa' },
+                    title: { display: true, text: '% of labels', color: '#aaa' },
                     ticks: { color: '#aaa', callback: v => v + '%' },
                     min: 0, max: 100,
                     grid: { color: 'rgba(255,255,255,0.08)' },
@@ -1150,7 +1153,7 @@ function initResultsTable(modelNames, task) {
     const tbody = document.getElementById('val-results-tbody');
 
     const metric = task === 'regression' ? 'R²' : 'F1';
-    thead.innerHTML = '<th style="text-align:left; padding:6px;">% Area</th>'
+    thead.innerHTML = '<th style="text-align:left; padding:6px;">% Labels</th>'
         + modelNames.map(n =>
             `<th style="text-align:right; padding:6px;">${CLASSIFIER_LABELS[n] || n} (${metric})</th>`
         ).join('');
@@ -1448,6 +1451,21 @@ function applyConfig(config) {
 }
 
 document.getElementById('val-config-file').addEventListener('change', loadConfigFile);
+
+// Max training samples → % hint
+function updateMaxTrainPctHint() {
+    const input = document.getElementById('val-max-train-large');
+    const hint = document.getElementById('val-max-train-pct');
+    if (!input || !hint) return;
+    const maxSamples = parseInt(input.value) || 0;
+    if (valTotalLabelledPixels > 0 && maxSamples > 0) {
+        const pct = Math.min(100, (100 * maxSamples / valTotalLabelledPixels)).toFixed(1);
+        hint.textContent = `${maxSamples.toLocaleString()} samples = ${pct}% of ${valTotalLabelledPixels.toLocaleString()} labelled pixels`;
+    } else {
+        hint.textContent = '';
+    }
+}
+document.getElementById('val-max-train-large').addEventListener('input', updateMaxTrainPctHint);
 
 // ── Expose on window for onclick handlers and test assertions ──
 
