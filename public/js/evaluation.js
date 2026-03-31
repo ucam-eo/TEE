@@ -106,43 +106,6 @@ dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
 
-// Restore upload state from sessionStorage (survives Back button navigation)
-try {
-    const saved = sessionStorage.getItem('tee_val_upload');
-    if (saved) {
-        const s = JSON.parse(saved);
-        if (s.filename && s.fields && s.fields.length > 0) {
-            valUploadedFilename = s.filename;
-            valFieldData = s.fields;
-            valGeoJsonData = s.geojson;
-            dropZone.textContent = s.filename;
-            dropZone.classList.add('uploaded');
-            const sel = document.getElementById('val-field-select');
-            sel.innerHTML = '';
-            s.fields.forEach(f => {
-                const opt = document.createElement('option');
-                opt.value = f.name;
-                opt.textContent = `${f.name} (${f.unique_count} classes)`;
-                sel.appendChild(opt);
-            });
-            sel.disabled = false;
-            document.getElementById('val-run-btn').disabled = false;
-        }
-    }
-} catch (e) { /* sessionStorage may not be available */ }
-
-// Restore evaluation results from sessionStorage
-try {
-    const savedResults = sessionStorage.getItem('tee_val_results');
-    if (savedResults) {
-        const r = JSON.parse(savedResults);
-        if (r.chartData) {
-            lastChartData = r.chartData;
-            valTotalLabelledPixels = r.chartData.total_labelled_pixels || 0;
-        }
-        if (r.evalData) lastEvalData = r.evalData;
-    }
-} catch (e) { }
 dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('dragover');
@@ -199,14 +162,6 @@ async function uploadShapefile(file) {
         updateClassSummary();
         updateYearCoverage(data.geojson);
 
-        // Persist upload state for page navigation (Back button)
-        try {
-            sessionStorage.setItem('tee_val_upload', JSON.stringify({
-                filename: valUploadedFilename,
-                fields: valFieldData,
-                geojson: valGeoJsonData,
-            }));
-        } catch (e) { /* geojson may be too large for sessionStorage */ }
     } catch (e) {
         const msg = e.message || String(e);
         if (msg.includes('string did not match') || msg.includes('Failed to fetch')) {
@@ -592,13 +547,6 @@ function handleStreamEvent(ev) {
         lastChartData.confusion_matrices = ev.confusion_matrices;
         renderConfusionMatrix(lastChartData);
 
-        // Persist partial results
-        try {
-            sessionStorage.setItem('tee_val_results', JSON.stringify({
-                chartData: lastChartData,
-                evalData: lastEvalData,
-            }));
-        } catch (e) { }
 
     } else if (ev.event === 'done') {
         if (!lastChartData) return;
@@ -616,13 +564,6 @@ function handleStreamEvent(ev) {
         if (dlBtnH) dlBtnH.disabled = !modelsReady;
         hideFinishButtons();
 
-        // Persist results for page navigation (Back button)
-        try {
-            sessionStorage.setItem('tee_val_results', JSON.stringify({
-                chartData: lastChartData,
-                evalData: lastEvalData,
-            }));
-        } catch (e) { /* may exceed sessionStorage quota */ }
 
     } else if (ev.event === 'status') {
         status.dataset.updated = '1';
@@ -1083,6 +1024,8 @@ async function runLargeAreaEvaluation() {
     status.style.color = '#888';
     status.dataset.updated = '';
     status.dataset.t0 = String(Date.now());
+    const backBtn = document.getElementById('back-btn');
+    if (backBtn) { backBtn.disabled = true; backBtn.style.opacity = '0.4'; }
 
     lastChartData = null;
     currentLargeAreaTask = null;
@@ -1114,6 +1057,8 @@ async function runLargeAreaEvaluation() {
         btn.textContent = 'Run Evaluation';
         cancelBtn.style.display = 'none';
         evalAbortController = null;
+        const backBtn = document.getElementById('back-btn');
+        if (backBtn) { backBtn.disabled = false; backBtn.style.opacity = ''; }
     }
 
     cancelBtn.onclick = () => { userCancelled = true; evalAbortController.abort(); };
