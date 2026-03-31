@@ -340,6 +340,7 @@ def run_large_area():
 
             # Reuse cached GeoTessera instance (avoids 10-30s registry init per run)
             global _geotessera_instance
+            logger.info("Initializing GeoTessera...")
             yield json.dumps({"event": "status", "message": "Initializing GeoTessera..."}) + "\n"
             if _geotessera_instance is None:
                 _geotessera_instance = GeoTessera()
@@ -354,6 +355,7 @@ def run_large_area():
                 n_classes = len(class_names)
 
                 # Generate random sample points within shapefile polygons
+                logger.info("Generating sample points across %d classes...", n_classes)
                 yield json.dumps({"event": "status", "message": f"Generating sample points across {n_classes} classes..."}) + "\n"
 
                 valid_gdf = gdf.dropna(subset=[field_name]).copy()
@@ -393,6 +395,7 @@ def run_large_area():
                     return
 
                 logger.info("Generated %d sample points across %d classes", n_points, n_classes)
+                logger.info("Fetching embeddings for %d points...", n_points)
                 yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_points:,} points..."}) + "\n"
 
                 # Fetch embeddings at sample points (GeoTessera handles tile loading)
@@ -403,6 +406,7 @@ def run_large_area():
                     yield json.dumps({"event": "error", "message": f"GeoTessera sampling failed: {e}"}) + "\n"
                     return
 
+                logger.info("Processing embeddings...")
                 yield json.dumps({"event": "status", "message": "Processing embeddings..."}) + "\n"
 
                 labels = np.array(sample_labels, dtype=np.int32)
@@ -527,9 +531,11 @@ def run_large_area():
         valid_class_names = [class_names[lbl] if lbl < len(class_names) else f"Class {lbl}"
                              for lbl in sorted(np.unique(labels))]
 
+        logger.info("Training final models for download...")
         yield json.dumps({"event": "status", "message": "Training final models for download..."}) + "\n"
 
         for name in active_models:
+            logger.info("Training %s...", name)
             yield json.dumps({"event": "status", "message": f"Training {name}..."}) + "\n"
             try:
                 if name == "unet" and needs_unet:
