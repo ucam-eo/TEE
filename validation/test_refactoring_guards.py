@@ -591,7 +591,7 @@ class TestNDJSONEventSchema:
     # Events the backend can emit (from evaluation.py and evaluate.py)
     BACKEND_EVENTS = [
         "start", "progress", "confusion_matrices", "done",
-        "error", "model_ready",
+        "error", "model_ready", "status",
         "download_progress", "field_start",
         "fold_result", "aggregate",
     ]

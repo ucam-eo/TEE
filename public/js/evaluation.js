@@ -561,6 +561,11 @@ function handleStreamEvent(ev) {
         if (dlBtnH) dlBtnH.disabled = !modelsReady;
         hideFinishButtons();
 
+    } else if (ev.event === 'status') {
+        status.dataset.updated = '1';
+        status.textContent = ev.message;
+        showResultsPanel(ev.message);
+
     } else if (ev.event === 'error') {
         status.textContent = ev.message || 'Evaluation error';
         status.style.color = '#dc3545';

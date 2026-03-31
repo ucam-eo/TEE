@@ -340,6 +340,7 @@ def run_large_area():
 
             # Reuse cached GeoTessera instance (avoids 10-30s registry init per run)
             global _geotessera_instance
+            yield json.dumps({"event": "status", "message": "Initializing GeoTessera..."}) + "\n"
             if _geotessera_instance is None:
                 _geotessera_instance = GeoTessera()
             gt = _geotessera_instance
@@ -353,10 +354,7 @@ def run_large_area():
                 n_classes = len(class_names)
 
                 # Generate random sample points within shapefile polygons
-                yield json.dumps({
-                    "event": "download_progress", "tile": 0, "total": 1,
-                    "status": "Generating sample points within polygons...",
-                }) + "\n"
+                yield json.dumps({"event": "status", "message": f"Generating sample points across {n_classes} classes..."}) + "\n"
 
                 valid_gdf = gdf.dropna(subset=[field_name]).copy()
                 label_ids = le.transform(valid_gdf[field_name])
@@ -395,26 +393,17 @@ def run_large_area():
                     return
 
                 logger.info("Generated %d sample points across %d classes", n_points, n_classes)
-
-                yield json.dumps({
-                    "event": "download_progress", "tile": 0, "total": 1,
-                    "status": f"Sampling {n_points:,} points from GeoTessera...",
-                }) + "\n"
+                yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_points:,} points..."}) + "\n"
 
                 # Fetch embeddings at sample points (GeoTessera handles tile loading)
-                def _progress(current, total, status=None):
-                    pass  # GeoTessera progress — we report our own events
-
                 try:
                     vectors = gt.sample_embeddings_at_points(
-                        sample_points, year=year, progress_callback=_progress)
+                        sample_points, year=year)
                 except Exception as e:
                     yield json.dumps({"event": "error", "message": f"GeoTessera sampling failed: {e}"}) + "\n"
                     return
 
-                yield json.dumps({
-                    "event": "download_progress", "tile": 1, "total": 1,
-                }) + "\n"
+                yield json.dumps({"event": "status", "message": "Processing embeddings..."}) + "\n"
 
                 labels = np.array(sample_labels, dtype=np.int32)
 
@@ -538,7 +527,10 @@ def run_large_area():
         valid_class_names = [class_names[lbl] if lbl < len(class_names) else f"Class {lbl}"
                              for lbl in sorted(np.unique(labels))]
 
+        yield json.dumps({"event": "status", "message": "Training final models for download..."}) + "\n"
+
         for name in active_models:
+            yield json.dumps({"event": "status", "message": f"Training {name}..."}) + "\n"
             try:
                 if name == "unet" and needs_unet:
                     from tessera_eval.unet import train_unet_on_patches
