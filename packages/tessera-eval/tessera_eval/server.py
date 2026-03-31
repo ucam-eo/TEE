@@ -41,40 +41,53 @@ _geotessera_instance = None  # cached to avoid 10-30s registry init per run
 FLUSH_PAD = 18 * 1024  # pad NDJSON lines to force Waitress flush
 
 
-def _get_tile_cache_dir():
-    """Return the tile disk cache directory, creating it if needed."""
+def _get_cache_dir():
+    """Return the cache directory, creating it if needed."""
     global _tile_disk_cache_dir
     if _tile_disk_cache_dir is None:
-        _tile_disk_cache_dir = Path.home() / ".cache" / "tessera-eval" / "tiles"
+        _tile_disk_cache_dir = Path.home() / ".cache" / "tessera-eval"
     _tile_disk_cache_dir.mkdir(parents=True, exist_ok=True)
     return _tile_disk_cache_dir
 
 
-def _tile_cache_path(year, lon, lat):
-    """Return the disk path for a cached tile."""
-    return _get_tile_cache_dir() / f"{year}_{lon:.2f}_{lat:.2f}.npz"
+def _result_cache_path(field, year, gdf_hash):
+    """Return the disk path for cached evaluation results (vectors + labels)."""
+    return _get_cache_dir() / f"result_{field}_{year}_{gdf_hash}.npz"
 
 
-def _load_cached_tile(year, lon, lat):
-    """Load a tile from disk cache. Returns (emb, crs, transform) or None."""
-    path = _tile_cache_path(year, lon, lat)
+def _gdf_hash(gdf):
+    """Quick hash of a GeoDataFrame for cache keying."""
+    import hashlib
+    h = hashlib.md5()
+    h.update(str(len(gdf)).encode())
+    h.update(str(sorted(gdf.columns.tolist())).encode())
+    bounds = gdf.total_bounds
+    h.update(f"{bounds[0]:.4f},{bounds[1]:.4f},{bounds[2]:.4f},{bounds[3]:.4f}".encode())
+    return h.hexdigest()[:12]
+
+
+def _load_cached_result(field, year, gdf):
+    """Load cached evaluation result. Returns (vectors, labels, class_names, stats) or None."""
+    path = _result_cache_path(field, year, _gdf_hash(gdf))
     if path.exists():
         try:
             data = np.load(path, allow_pickle=True)
-            return data["emb"], str(data["crs"]), data["transform"]
+            return (data["vectors"], data["labels"],
+                    data["class_names"].tolist(), dict(data["stats"].item()))
         except Exception:
             path.unlink(missing_ok=True)
     return None
 
 
-def _save_tile_to_cache(year, lon, lat, emb, crs, transform):
-    """Save a tile to disk cache (uncompressed for fast loading)."""
+def _save_cached_result(field, year, gdf, vectors, labels, class_names, stats):
+    """Save evaluation result to disk cache."""
     try:
-        path = _tile_cache_path(year, lon, lat)
-        np.savez(path, emb=emb, crs=np.array(str(crs)),
-                 transform=np.array(list(transform)[:6]))
+        path = _result_cache_path(field, year, _gdf_hash(gdf))
+        np.savez_compressed(path, vectors=vectors, labels=labels,
+                            class_names=np.array(class_names),
+                            stats=np.array(stats))
     except Exception as e:
-        logger.debug("Failed to cache tile %s/%s/%s: %s", year, lon, lat, e)
+        logger.debug("Failed to save result cache: %s", e)
 
 
 def _padded(gen):
@@ -283,8 +296,11 @@ def run_large_area():
 
         t0 = time.time()
 
-        # Check tile cache
+        # Check in-memory cache first, then disk cache
         cache_key = (field_name, year)
+        vectors = labels = class_names = stats = None
+        spatial_3x3 = spatial_5x5 = unet_patches = None
+
         if _tile_cache["key"] == cache_key and _tile_cache["vectors"] is not None:
             vectors = _tile_cache["vectors"]
             labels = _tile_cache["labels"]
@@ -292,21 +308,26 @@ def run_large_area():
             stats = _tile_cache["stats"]
             spatial_3x3 = _tile_cache.get("spatial_3x3")
             spatial_5x5 = _tile_cache.get("spatial_5x5")
-            logger.info("Cache hit for %s/%s (%d pixels)", field_name, year, len(labels))
-            yield json.dumps({
-                "event": "download_progress", "tile": stats["tile_count"],
-                "total": stats["tile_count"], "cached": True,
-            }) + "\n"
+            unet_patches = _tile_cache.get("unet_patches", [])
+            logger.info("In-memory cache hit for %s/%s (%d pixels)", field_name, year, len(labels))
 
-            # If spatial features needed but not cached, must reload tiles
-            needs_reload = False
-            if needs_spatial_3x3 and spatial_3x3 is None:
-                needs_reload = True
-            if needs_spatial_5x5 and spatial_5x5 is None:
-                needs_reload = True
-            if needs_reload:
+            # If spatial features needed but not cached, must reload
+            if (needs_spatial_3x3 and spatial_3x3 is None) or (needs_spatial_5x5 and spatial_5x5 is None):
                 logger.info("Spatial features needed but not cached — reloading tiles")
-                _tile_cache["key"] = None
+                vectors = None  # force reload
+
+        if vectors is None:
+            # Check disk result cache (much smaller than raw tiles)
+            cached_result = _load_cached_result(field_name, year, gdf)
+            if cached_result and not needs_spatial_3x3 and not needs_spatial_5x5 and not needs_unet:
+                vectors, labels, class_names, stats = cached_result
+                logger.info("Disk result cache hit for %s/%s (%d pixels)", field_name, year, len(labels))
+
+        if vectors is not None:
+            yield json.dumps({
+                "event": "download_progress", "tile": stats.get("tile_count", 0),
+                "total": stats.get("tile_count", 0), "cached": True,
+            }) + "\n"
 
         if _tile_cache["key"] != cache_key:
             # Emit early so the browser knows we're working
@@ -346,51 +367,18 @@ def run_large_area():
                 # Pre-reproject GDF to first tile's CRS (avoid per-tile reprojection)
                 _gdf_proj_cache = {}  # crs → reprojected gdf with spatial index
 
-                from affine import Affine as _Affine
-                cached_keys = set()
-                uncached_tiles = []
-                for t in tiles:
-                    t_year, t_lon, t_lat = t[0], t[1], t[2]
-                    if _tile_cache_path(t_year, t_lon, t_lat).exists():
-                        cached_keys.add((t_year, t_lon, t_lat))
-                    else:
-                        uncached_tiles.append(t)
-
+                # Stream tiles from GeoTessera one at a time.
+                # No raw tile disk caching — the result cache (vectors+labels) is 100x smaller.
                 tile_idx = 0
-                def _iter_all_tiles():
-                    """Load tiles one at a time: cached from disk, uncached from GeoTessera."""
-                    nonlocal tile_idx
-                    # Cached tiles: load from disk one at a time (not all at once)
-                    for t in tiles:
-                        t_year, t_lon, t_lat = t[0], t[1], t[2]
-                        if (t_year, t_lon, t_lat) in cached_keys:
-                            result = _load_cached_tile(t_year, t_lon, t_lat)
-                            if result:
-                                emb, crs, transform_arr = result
-                                transform = _Affine(*[float(x) for x in transform_arr])
-                                tile_idx += 1
-                                yield t_year, t_lon, t_lat, emb, crs, transform, True
-                                continue
-                            # Cache miss (corrupted file) — fall through to download
-                            uncached_tiles.append(t)
-                    # Uncached tiles: download from GeoTessera
-                    for yr, lon, lat, emb, crs, transform in gt.fetch_embeddings(uncached_tiles):
-                        _save_tile_to_cache(yr, lon, lat, emb, crs, transform)
-                        tile_idx += 1
-                        yield yr, lon, lat, emb, crs, transform, False
-
-                for yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform, was_cached in _iter_all_tiles():
+                for yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform in gt.fetch_embeddings(tiles):
+                    tile_idx += 1
                     import psutil
-                    proc = psutil.Process()
-                    rss_gb = proc.memory_info().rss / (1024**3)
-                    logger.info("Tile %d/%d (%s) — RSS=%.1fGB, emb=%s",
-                                tile_idx, total_tiles,
-                                "cached" if was_cached else "download",
-                                rss_gb, tile_emb.shape)
+                    rss_gb = psutil.Process().memory_info().rss / (1024**3)
+                    logger.info("Tile %d/%d — RSS=%.1fGB, emb=%s",
+                                tile_idx, total_tiles, rss_gb, tile_emb.shape)
 
                     yield json.dumps({
                         "event": "download_progress", "tile": tile_idx, "total": total_tiles,
-                        "cached": was_cached,
                     }) + "\n"
 
                     h, w, dim = tile_emb.shape
@@ -490,13 +478,16 @@ def run_large_area():
 
                 unet_patches = all_unet_patches if all_unet_patches else []
 
-                # Cache
+                # Cache in memory (for immediate reuse with different classifiers)
                 _tile_cache.update({
                     "key": cache_key, "vectors": vectors, "labels": labels,
                     "class_names": class_names, "stats": stats,
                     "spatial_3x3": spatial_3x3, "spatial_5x5": spatial_5x5,
                     "unet_patches": unet_patches,
                 })
+
+                # Cache to disk (for reuse across restarts — vectors + labels only, ~500MB)
+                _save_cached_result(field_name, year, gdf, vectors, labels, class_names, stats)
 
             except Exception as e:
                 yield json.dumps({"event": "error", "message": str(e)}) + "\n"
