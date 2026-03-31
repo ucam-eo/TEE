@@ -68,6 +68,8 @@ class TestAPIEndpointCoverage:
         # Evaluation (served by tee-compute, referenced in JS)
         "/api/evaluation/upload-shapefile",
         "/api/evaluation/run-large-area",
+        "/api/evaluation/train-models",
+        "/api/evaluation/download-model",
         # Tiles
         "/tiles/health",
         # Static
@@ -412,7 +414,10 @@ class TestBackendViewsIntact:
             "list_viewports", "current_viewport", "switch_viewport",
             "create_viewport", "delete_viewport", "is_ready",
         ],
-        # evaluation.py gutted — ML moved to tee-compute (server.py)
+        "api/views/evaluation.py": [
+            "upload_shapefile", "clear_shapefiles", "run_evaluation",
+            "train_models", "download_model",
+        ],
         "api/views/tiles.py": [
             "get_tile", "get_bounds", "tile_health",
         ],
@@ -578,6 +583,31 @@ class TestTesseraEvalSelfContained:
         source = server.read_text()
         assert "def main(" in source, "server.py must have a main() entry point"
 
+    def test_server_has_train_models_endpoint(self):
+        source = (TESSERA_EVAL / "server.py").read_text()
+        assert "train-models" in source, "server.py must have /train-models endpoint"
+        assert "train_models" in source, "server.py must have train_models function"
+
+    def test_server_uses_point_sampling(self):
+        source = (TESSERA_EVAL / "server.py").read_text()
+        assert "sample_embeddings_at_points" in source, (
+            "server.py must use GeoTessera's sample_embeddings_at_points API"
+        )
+        assert "sample_points" in source, (
+            "server.py must generate sample points within shapefile polygons"
+        )
+
+    def test_server_defers_model_training(self):
+        """Model training must NOT happen in run-large-area, only in train-models."""
+        source = (TESSERA_EVAL / "server.py").read_text()
+        # Find the run_large_area function body
+        idx = source.find("def run_large_area(")
+        end = source.find("\ndef ", idx + 1)
+        run_body = source[idx:end] if end > idx else source[idx:]
+        assert "joblib.dump" not in run_body, (
+            "run_large_area must NOT train models — training is deferred to train-models endpoint"
+        )
+
 
 # ──────────────────────────────────────────────────
 # 11. NDJSON event schema conformance
@@ -646,4 +676,14 @@ class TestLargeAreaEvaluation:
     def test_results_panel_in_panel3(self, html):
         assert 'id="val-results-panel"' in html, (
             "Results panel must exist in panel 3 for large-area progress table"
+        )
+
+    def test_download_triggers_training(self, all_script_text):
+        assert "train-models" in all_script_text, (
+            "Download Models button must call /api/evaluation/train-models"
+        )
+
+    def test_back_button_disabled_during_eval(self, all_script_text):
+        assert "back-btn" in all_script_text, (
+            "Back button must be disabled during evaluation"
         )
