@@ -538,11 +538,9 @@ function handleStreamEvent(ev) {
             : ` \u2014 ${pixels.toLocaleString()} pixels`;
         status.textContent = `Done in ${ev.elapsed_seconds}s${suffix}`;
         status.style.color = '#28a745';
-        const dlBtn = document.getElementById('cm-download-btn');
         const dlBtnH = document.getElementById('val-download-btn');
         const modelsReady = !!(ev.models_available && ev.models_available.length);
-        dlBtn.disabled = !modelsReady;
-        dlBtnH.disabled = !modelsReady;
+        if (dlBtnH) dlBtnH.disabled = !modelsReady;
         hideFinishButtons();
 
     } else if (ev.event === 'error') {
@@ -720,11 +718,9 @@ document.getElementById('val-metric-select').addEventListener('change', function
 
 function renderConfusionMatrix(data) {
     lastEvalData = data;
-    const dlBtn = document.getElementById('cm-download-btn');
     const dlBtnH = document.getElementById('val-download-btn');
     const modelsReady = !!(data.models_available && data.models_available.length);
-    dlBtn.disabled = !modelsReady;
-    dlBtnH.disabled = !modelsReady;
+    if (dlBtnH) dlBtnH.disabled = !modelsReady;
     const panel = document.getElementById('val-cm-panel');
     const sel = document.getElementById('cm-classifier-select');
     const scroll = panel.querySelector('.cm-scroll');
@@ -950,7 +946,6 @@ function exportEvalResults() {
     URL.revokeObjectURL(url);
 }
 
-document.getElementById('cm-export-btn').addEventListener('click', exportEvalResults);
 
 function downloadModels() {
     if (!lastEvalData || !lastEvalData.models_available) return;
@@ -962,7 +957,6 @@ function downloadModels() {
         a.click();
     });
 }
-document.getElementById('cm-download-btn').addEventListener('click', downloadModels);
 document.getElementById('val-export-btn').addEventListener('click', exportEvalResults);
 document.getElementById('val-download-btn').addEventListener('click', downloadModels);
 
@@ -1067,14 +1061,13 @@ async function runLargeAreaEvaluation() {
     hideFinishButtons();
     // Reset regression panel and results panel
     document.getElementById('val-regression-panel').style.display = 'none';
-    document.getElementById('val-results-panel').style.display = 'none';
     document.getElementById('val-results-tbody').innerHTML = '';
 
     evalAbortController = new AbortController();
     let userCancelled = false;
 
     const t0 = Date.now();
-    setResultsStatus('Waiting for compute server...');
+    showResultsPanel('Waiting for compute server...');
     const timer = setInterval(() => {
         if (!lastChartData) {
             const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
