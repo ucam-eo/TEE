@@ -79,6 +79,113 @@ def _load_cached_result(field, year, gdf):
     return None
 
 
+def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
+                       patch_size=256, n_patches=20,
+                       needs_spatial_3x3=False, needs_spatial_5x5=False,
+                       logger=None):
+    """Sample 2D embedding patches by generating point grids via GeoTessera.
+
+    Instead of loading full tiles (~450MB each), generates a patch_size x patch_size
+    grid of (lon, lat) points at ~10m spacing centered on random labelled locations,
+    fetches embeddings via sample_embeddings_at_points, and reshapes to 2D.
+
+    Returns:
+        (unet_patches, spatial_3x3, spatial_5x5) where:
+        - unet_patches: list of (emb_patch, label_patch) tuples
+        - spatial_3x3: float32 array (N, 1152) or None
+        - spatial_5x5: float32 array (N, 3200) or None
+    """
+    from tessera_eval.classify import gather_spatial_features_2d
+
+    rng = np.random.RandomState(42)
+
+    # Pick random points inside labelled polygons as patch centers
+    valid_gdf = gdf.dropna(subset=[field_name])
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        center_pts = valid_gdf.sample_points(size=max(1, n_patches // max(1, len(valid_gdf))))
+    centers = []
+    for mp in center_pts:
+        if mp is not None and not mp.is_empty:
+            for pt in mp.geoms:
+                centers.append((pt.x, pt.y))
+    if len(centers) > n_patches:
+        idx = rng.choice(len(centers), size=n_patches, replace=False)
+        centers = [centers[i] for i in idx]
+
+    if not centers:
+        return [], None, None
+
+    # 10m spacing in degrees (approximate)
+    deg_per_pixel = 0.0001  # ~10m at mid-latitudes
+
+    unet_patches = []
+    all_spatial_3x3 = [] if needs_spatial_3x3 else None
+    all_spatial_5x5 = [] if needs_spatial_5x5 else None
+    spatial_labels_3x3 = []
+    spatial_labels_5x5 = []
+
+    for c_idx, (clon, clat) in enumerate(centers):
+        # Generate a grid of points for this patch
+        half = patch_size // 2
+        lons = np.array([clon + (j - half) * deg_per_pixel for j in range(patch_size)])
+        lats = np.array([clat + (half - i) * deg_per_pixel for i in range(patch_size)])  # lat decreases downward
+        grid_lons, grid_lats = np.meshgrid(lons, lats)
+        grid_points = list(zip(grid_lons.ravel(), grid_lats.ravel()))
+
+        # Fetch embeddings for the grid
+        try:
+            emb_flat = gt.sample_embeddings_at_points(grid_points, year=year)
+        except Exception as e:
+            if logger:
+                logger.warning("Patch %d/%d failed: %s", c_idx + 1, len(centers), e)
+            continue
+
+        # Reshape to 2D
+        emb_patch = emb_flat.reshape(patch_size, patch_size, -1).astype(np.float32)
+
+        # Replace NaN with 0 (points outside coverage)
+        nan_mask = np.isnan(emb_patch)
+        if nan_mask.any():
+            emb_patch[nan_mask] = 0.0
+
+        # Rasterize labels onto the same grid
+        from affine import Affine
+        transform = Affine(deg_per_pixel, 0, lons[0], 0, -deg_per_pixel, lats[0])
+        from shapely.geometry import box as _box
+        patch_bounds = (lons[0], lats[-1], lons[-1], lats[0])
+        patch_gdf = gdf[gdf.intersects(_box(*patch_bounds))]
+        if patch_gdf.empty:
+            continue
+
+        from tessera_eval.rasterize import rasterize_shapefile
+        label_patch = rasterize_shapefile(patch_gdf, field_name, transform,
+                                          patch_size, patch_size, label_encoder=le)
+
+        if (label_patch > 0).sum() < 10:
+            continue
+
+        unet_patches.append((emb_patch, label_patch.astype(np.int32)))
+
+        # Extract spatial features from the 2D patch
+        labelled_mask = label_patch > 0
+        if needs_spatial_3x3:
+            sf = gather_spatial_features_2d(emb_patch, radius=1, mask=labelled_mask)
+            all_spatial_3x3.append(sf)
+            spatial_labels_3x3.append(label_patch[labelled_mask] - 1)
+        if needs_spatial_5x5:
+            sf = gather_spatial_features_2d(emb_patch, radius=2, mask=labelled_mask)
+            all_spatial_5x5.append(sf)
+            spatial_labels_5x5.append(label_patch[labelled_mask] - 1)
+
+    # Concatenate spatial features
+    spatial_3x3 = np.concatenate(all_spatial_3x3, axis=0).astype(np.float32) if all_spatial_3x3 else None
+    spatial_5x5 = np.concatenate(all_spatial_5x5, axis=0).astype(np.float32) if all_spatial_5x5 else None
+
+    return unet_patches, spatial_3x3, spatial_5x5
+
+
 def _save_cached_result(field, year, gdf, vectors, labels, class_names, stats):
     """Save evaluation result to disk cache."""
     try:
@@ -499,53 +606,34 @@ def run_large_area():
                         continue
                 except ImportError:
                     continue
-                # Fetch U-Net patches from a random sample of tiles (if not already loaded)
+                # Sample 2D patches via point grids (no full tile loading needed)
                 if not unet_patches:
-                    yield json.dumps({"event": "status", "message": "Loading tiles for U-Net patches..."}) + "\n"
-                    try:
-                        from rasterio.transform import array_bounds as _array_bounds
-                        from shapely.geometry import box as _box
-                        from tessera_eval.rasterize import rasterize_shapefile
-                        from tessera_eval.unet import extract_labelled_patches
-
-                        bounds = gdf.total_bounds
-                        bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
-                        all_tiles = gt.registry.load_blocks_for_region(bbox, year)
-                        # Sample up to 10 random tiles for U-Net
-                        MAX_UNET_TILES = 10
-                        rng = np.random.RandomState(42)
-                        if len(all_tiles) > MAX_UNET_TILES:
-                            tile_indices = rng.choice(len(all_tiles), size=MAX_UNET_TILES, replace=False)
-                            sampled_tiles = [all_tiles[i] for i in tile_indices]
-                        else:
-                            sampled_tiles = list(all_tiles)
-
-                        unet_patches = []
-                        for t_idx, (yr_t, lon_t, lat_t, emb_t, crs_t, tf_t) in enumerate(gt.fetch_embeddings(sampled_tiles)):
-                            yield json.dumps({"event": "status", "message": f"U-Net: loading tile {t_idx+1}/{len(sampled_tiles)}..."}) + "\n"
-                            gdf_proj = gdf.to_crs(crs_t)
-                            tb = _array_bounds(emb_t.shape[0], emb_t.shape[1], tf_t)
-                            tile_gdf = gdf_proj[gdf_proj.intersects(_box(*tb))]
-                            if tile_gdf.empty:
-                                continue
-                            cr = rasterize_shapefile(tile_gdf, field_name, tf_t, emb_t.shape[1], emb_t.shape[0], label_encoder=le)
-                            patches = extract_labelled_patches(emb_t, cr)
-                            unet_patches.extend(patches)
-                            del emb_t, cr
-                            import gc; gc.collect()
-                        logger.info("Loaded %d U-Net patches from %d tiles", len(unet_patches), len(sampled_tiles))
-                        yield json.dumps({"event": "status", "message": f"Loaded {len(unet_patches)} U-Net patches from {len(sampled_tiles)} tiles"}) + "\n"
-                    except Exception as e:
-                        logger.warning("Failed to load U-Net patches: %s", e)
-                        yield json.dumps({"event": "status", "message": f"U-Net patch loading failed: {e}"}) + "\n"
-                        continue
+                    yield json.dumps({"event": "status", "message": "Sampling 2D patches for U-Net..."}) + "\n"
+                    unet_patches, spatial_3x3, spatial_5x5 = _sample_2d_patches(
+                        gt, gdf, field_name, year, le, n_classes,
+                        needs_spatial_3x3=needs_spatial_3x3,
+                        needs_spatial_5x5=needs_spatial_5x5,
+                        logger=logger,
+                    )
+                    logger.info("Sampled %d patches", len(unet_patches))
+                    yield json.dumps({"event": "status", "message": f"Sampled {len(unet_patches)} 2D patches"}) + "\n"
                 if not unet_patches:
                     yield json.dumps({"event": "status", "message": "U-Net skipped — no labelled patches found"}) + "\n"
                     continue
-            if name in ("spatial_mlp", "spatial_mlp_5x5") and spatial_3x3 is None and spatial_5x5 is None:
-                logger.warning("Skipping %s: not supported with point sampling", name)
-                yield json.dumps({"event": "status", "message": f"{name} skipped — not supported with point sampling"}) + "\n"
-                continue
+            if name in ("spatial_mlp", "spatial_mlp_5x5"):
+                # Spatial features extracted alongside U-Net patches if available
+                if (name == "spatial_mlp" and spatial_3x3 is None) or (name == "spatial_mlp_5x5" and spatial_5x5 is None):
+                    yield json.dumps({"event": "status", "message": "Sampling 2D patches for spatial features..."}) + "\n"
+                    _, spatial_3x3, spatial_5x5 = _sample_2d_patches(
+                        gt, gdf, field_name, year, le, n_classes,
+                        needs_spatial_3x3=needs_spatial_3x3,
+                        needs_spatial_5x5=needs_spatial_5x5,
+                        logger=logger,
+                    )
+                    yield json.dumps({"event": "status", "message": "Spatial features sampled"}) + "\n"
+                if (name == "spatial_mlp" and spatial_3x3 is None) or (name == "spatial_mlp_5x5" and spatial_5x5 is None):
+                    yield json.dumps({"event": "status", "message": f"{name} skipped — no spatial features"}) + "\n"
+                    continue
             active_models.append(name)
 
         yield json.dumps({
