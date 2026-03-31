@@ -395,6 +395,7 @@ def run_large_area():
                     return
 
                 logger.info("Generated %d sample points across %d classes", n_points, n_classes)
+                yield json.dumps({"event": "status", "message": f"Generated {n_points:,} sample points across {n_classes} classes"}) + "\n"
                 logger.info("Fetching embeddings for %d points...", n_points)
                 yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_points:,} points..."}) + "\n"
 
@@ -414,8 +415,10 @@ def run_large_area():
                 # Remove NaN rows (points outside tile coverage)
                 valid_mask = ~np.isnan(vectors).any(axis=1)
                 if valid_mask.sum() < len(vectors):
-                    logger.info("Removed %d points outside coverage (%d remaining)",
-                                len(vectors) - valid_mask.sum(), valid_mask.sum())
+                    n_removed = len(vectors) - valid_mask.sum()
+                    n_remaining = valid_mask.sum()
+                    logger.info("Removed %d points outside coverage (%d remaining)", n_removed, n_remaining)
+                    yield json.dumps({"event": "status", "message": f"Removed {n_removed:,} points outside coverage ({n_remaining:,} remaining)"}) + "\n"
                     vectors = vectors[valid_mask].astype(np.float32)
                     labels = labels[valid_mask]
                 else:
@@ -543,7 +546,15 @@ def run_large_area():
                     import torch as _torch
                     if unet_patches:
                         n_cls = len(np.unique(labels))
-                        model = train_unet_on_patches(unet_patches, n_cls, model_params.get("unet", {}))
+                        _unet_progress = []
+                        def _unet_cb(epoch, total, loss):
+                            _unet_progress.append((epoch, total, loss))
+                        model = train_unet_on_patches(
+                            unet_patches, n_cls, model_params.get("unet", {}),
+                            progress_callback=_unet_cb)
+                        # Yield collected U-Net progress
+                        for ep, tot, loss in _unet_progress:
+                            yield json.dumps({"event": "status", "message": f"U-Net epoch {ep}/{tot} loss={loss:.4f}"}) + "\n"
                         tmp = tempfile.NamedTemporaryFile(suffix=".pt", prefix=f"{name}_model_", delete=False)
                         _torch.save({"model_state": model.state_dict(), "class_names": valid_class_names}, tmp.name)
                         _trained_models[name] = tmp.name
@@ -575,6 +586,7 @@ def run_large_area():
                 yield json.dumps({"event": "model_ready", "classifier": name}) + "\n"
             except Exception as e:
                 logger.warning("Failed to train model '%s': %s", name, e)
+                yield json.dumps({"event": "status", "message": f"Failed to train {name}: {e}"}) + "\n"
 
         elapsed = time.time() - t0
         yield json.dumps({

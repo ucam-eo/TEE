@@ -220,7 +220,7 @@ if _HAS_TORCH:
 # Training
 # ---------------------------------------------------------------------------
 
-def train_unet_on_patches(patches, n_classes, params=None):
+def train_unet_on_patches(patches, n_classes, params=None, progress_callback=None):
     """Train a TinyUNet on extracted embedding/label patches.
 
     Args:
@@ -230,6 +230,7 @@ def train_unet_on_patches(patches, n_classes, params=None):
         params: Optional dict with keys:
             - epochs (int, default 50)
             - lr (float, default 0.001)
+        progress_callback: Optional function(epoch, epochs, loss) called every 10 epochs.
             - depth (int, default 3)
             - base_filters (int, default 64)
             - batch_size (int, default 4)
@@ -286,6 +287,8 @@ def train_unet_on_patches(patches, n_classes, params=None):
         if (epoch + 1) % 10 == 0 or epoch == 0:
             avg = total_loss / len(dataset)
             logger.info("Epoch %d/%d  loss=%.4f", epoch + 1, epochs, avg)
+            if progress_callback:
+                progress_callback(epoch + 1, epochs, avg)
 
     model.cpu()
     return model
