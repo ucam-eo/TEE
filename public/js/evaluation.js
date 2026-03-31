@@ -1059,9 +1059,9 @@ async function runLargeAreaEvaluation() {
     currentLargeAreaTask = null;
     if (valChart) { valChart.destroy(); valChart = null; }
     hideFinishButtons();
-    // Reset regression panel and results panel
-    document.getElementById('val-regression-panel').style.display = 'none';
+    // Reset panel content (visibility controlled by PANEL_LAYOUT, not here)
     document.getElementById('val-results-tbody').innerHTML = '';
+    document.getElementById('val-results-status').textContent = '';
 
     evalAbortController = new AbortController();
     let userCancelled = false;
@@ -1132,9 +1132,8 @@ async function runLargeAreaEvaluation() {
 
 let _resultsTableModels = [];
 
+// Update panel 4 status text. Visibility is controlled by PANEL_LAYOUT, not here.
 function showResultsPanel(message) {
-    const panel = document.getElementById('val-results-panel');
-    panel.style.display = '';
     document.getElementById('val-results-status').textContent = message;
 }
 
@@ -1142,16 +1141,10 @@ function setResultsStatus(message) {
     document.getElementById('val-results-status').textContent = message;
 }
 
-function hideResultsPanel() {
-    document.getElementById('val-results-panel').style.display = 'none';
-}
-
 function initResultsTable(modelNames, task) {
     _resultsTableModels = modelNames;
-    const panel = document.getElementById('val-results-panel');
     const thead = document.getElementById('val-results-thead');
     const tbody = document.getElementById('val-results-tbody');
-    panel.style.display = '';
 
     const metric = task === 'regression' ? 'R²' : 'F1';
     thead.innerHTML = '<th style="text-align:left; padding:6px;">Train size</th>'
