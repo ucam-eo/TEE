@@ -36,6 +36,7 @@ _tile_cache = {"key": None, "vectors": None, "labels": None, "class_names": None
                "stats": None, "spatial_3x3": None, "spatial_5x5": None}
 _hosted_url = None
 _tile_disk_cache_dir = None  # set in main()
+_geotessera_instance = None  # cached to avoid 10-30s registry init per run
 
 FLUSH_PAD = 18 * 1024  # pad NDJSON lines to force Waitress flush
 
@@ -67,11 +68,11 @@ def _load_cached_tile(year, lon, lat):
 
 
 def _save_tile_to_cache(year, lon, lat, emb, crs, transform):
-    """Save a tile to disk cache."""
+    """Save a tile to disk cache (uncompressed for fast loading)."""
     try:
         path = _tile_cache_path(year, lon, lat)
-        np.savez_compressed(path, emb=emb, crs=np.array(str(crs)),
-                            transform=np.array(list(transform)[:6]))
+        np.savez(path, emb=emb, crs=np.array(str(crs)),
+                 transform=np.array(list(transform)[:6]))
     except Exception as e:
         logger.debug("Failed to cache tile %s/%s/%s: %s", year, lon, lat, e)
 
@@ -316,8 +317,11 @@ def run_large_area():
                 "status": "Loading GeoTessera tile index...",
             }) + "\n"
 
-            # Load embeddings tile by tile (GeoTessera() may take time to init registry)
-            gt = GeoTessera()
+            # Reuse cached GeoTessera instance (avoids 10-30s registry init per run)
+            global _geotessera_instance
+            if _geotessera_instance is None:
+                _geotessera_instance = GeoTessera()
+            gt = _geotessera_instance
 
             try:
                 bounds = gdf.total_bounds

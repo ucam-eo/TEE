@@ -60,6 +60,11 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
 
     cm_accum = {name: np.zeros((n_classes, n_classes), dtype=np.int64) for name in classifier_names}
 
+    # Pre-compute per-class indices once (avoid N*n_classes scans in the loop)
+    precomputed_cls_indices = [np.where(labels == cls)[0] for cls in range(n_classes)]
+
+    MAX_TEST = 200_000  # subsample test set for speed (negligible accuracy loss)
+
     for pct in training_pcts:
         active = [n for n in classifier_names if n not in finish_classifiers]
         active_pixel = [n for n in active if n != 'unet']
@@ -70,14 +75,22 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
         # Number of pixels for this percentage
         size = max(1, int(n_samples * pct / 100.0))
 
-        for seed in range(repeats):
+        # Adaptive repeats: fewer at high percentages where variance is low
+        if pct >= 50:
+            n_repeats = max(1, repeats - 3)
+        elif pct >= 20:
+            n_repeats = max(2, repeats - 2)
+        else:
+            n_repeats = repeats
+
+        for seed in range(n_repeats):
             rng = np.random.RandomState(seed)
 
-            # Stratified pixel sampling
+            # Stratified pixel sampling (using pre-computed indices)
             per_class = max(1, size // n_classes)
             train_idx = []
             for cls in range(n_classes):
-                cls_indices = np.where(labels == cls)[0]
+                cls_indices = precomputed_cls_indices[cls]
                 if len(cls_indices) == 0:
                     continue
                 n_take = min(per_class, int(0.8 * len(cls_indices)))
@@ -86,11 +99,17 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                 train_idx.extend(chosen)
             train_idx = np.array(train_idx)
 
-            all_idx = np.arange(n_samples)
-            test_idx = np.setdiff1d(all_idx, train_idx)
+            # Boolean mask for test set (O(N) instead of O(N log N) setdiff1d)
+            test_mask = np.ones(n_samples, dtype=bool)
+            test_mask[train_idx] = False
+            test_idx = np.where(test_mask)[0]
 
             if len(test_idx) == 0:
                 continue
+
+            # Subsample test set if too large (saves huge time on KNN/predict)
+            if len(test_idx) > MAX_TEST:
+                test_idx = rng.choice(test_idx, size=MAX_TEST, replace=False)
 
             X_train, y_train = vectors[train_idx], labels[train_idx]
             X_test, y_test = vectors[test_idx], labels[test_idx]

@@ -25,14 +25,14 @@ def rasterize_shapefile(gdf, field, transform, width, height, label_encoder=None
     Returns:
         int32 array, shape (height, width) — 0=nodata, 1..N=class IDs
     """
-    gdf = gdf.dropna(subset=[field]).copy()
+    valid = gdf.dropna(subset=[field])
     if label_encoder is not None:
-        gdf["_class_id"] = label_encoder.transform(gdf[field]) + 1  # 1-based (0 = nodata)
+        class_ids = label_encoder.transform(valid[field]) + 1  # 1-based (0 = nodata)
     else:
         le = LabelEncoder()
-        gdf["_class_id"] = le.fit_transform(gdf[field]) + 1  # 1-based (0 = nodata)
+        class_ids = le.fit_transform(valid[field]) + 1  # 1-based (0 = nodata)
 
-    shapes = list(zip(gdf.geometry, gdf["_class_id"]))
+    shapes = list(zip(valid.geometry, class_ids))
 
     class_raster = rasterio.features.rasterize(
         shapes,
