@@ -82,6 +82,12 @@ function addValGeoJsonLayer() {
             }
         },
     }).addTo(maps.rgb);
+
+    // Zoom to shapefile extent
+    const bounds = valGeoJsonLayer.getBounds();
+    if (bounds.isValid()) {
+        maps.rgb.fitBounds(bounds, { padding: [20, 20] });
+    }
 }
 
 // ── Drop zone ──
