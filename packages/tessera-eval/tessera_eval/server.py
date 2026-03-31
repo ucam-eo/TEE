@@ -35,8 +35,45 @@ _finish_classifiers = set()
 _tile_cache = {"key": None, "vectors": None, "labels": None, "class_names": None,
                "stats": None, "spatial_3x3": None, "spatial_5x5": None}
 _hosted_url = None
+_tile_disk_cache_dir = None  # set in main()
 
 FLUSH_PAD = 18 * 1024  # pad NDJSON lines to force Waitress flush
+
+
+def _get_tile_cache_dir():
+    """Return the tile disk cache directory, creating it if needed."""
+    global _tile_disk_cache_dir
+    if _tile_disk_cache_dir is None:
+        _tile_disk_cache_dir = Path.home() / ".cache" / "tessera-eval" / "tiles"
+    _tile_disk_cache_dir.mkdir(parents=True, exist_ok=True)
+    return _tile_disk_cache_dir
+
+
+def _tile_cache_path(year, lon, lat):
+    """Return the disk path for a cached tile."""
+    return _get_tile_cache_dir() / f"{year}_{lon:.2f}_{lat:.2f}.npz"
+
+
+def _load_cached_tile(year, lon, lat):
+    """Load a tile from disk cache. Returns (emb, crs, transform) or None."""
+    path = _tile_cache_path(year, lon, lat)
+    if path.exists():
+        try:
+            data = np.load(path, allow_pickle=True)
+            return data["emb"], str(data["crs"]), data["transform"]
+        except Exception:
+            path.unlink(missing_ok=True)
+    return None
+
+
+def _save_tile_to_cache(year, lon, lat, emb, crs, transform):
+    """Save a tile to disk cache."""
+    try:
+        path = _tile_cache_path(year, lon, lat)
+        np.savez_compressed(path, emb=emb, crs=np.array(str(crs)),
+                            transform=np.array(list(transform)[:6]))
+    except Exception as e:
+        logger.debug("Failed to cache tile %s/%s/%s: %s", year, lon, lat, e)
 
 
 def _padded(gen):
@@ -298,11 +335,37 @@ def run_large_area():
                 all_unet_patches = [] if needs_unet else None
                 tiles_with_data = 0
 
-                for tile_idx, (yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform) in enumerate(
-                    gt.fetch_embeddings(tiles)
-                ):
+                # Separate cached vs uncached tiles
+                from affine import Affine as _Affine
+                cached_tiles = []
+                uncached_tiles = []
+                for t in tiles:
+                    # tiles are (year, lon, lat) tuples
+                    t_year, t_lon, t_lat = t[0], t[1], t[2]
+                    cached = _load_cached_tile(t_year, t_lon, t_lat)
+                    if cached:
+                        cached_tiles.append((t, cached))
+                    else:
+                        uncached_tiles.append(t)
+
+                tile_idx = 0
+                def _iter_all_tiles():
+                    """Iterate cached tiles first (instant), then download uncached."""
+                    nonlocal tile_idx
+                    for t, (emb, crs, transform_arr) in cached_tiles:
+                        transform = _Affine(*[float(x) for x in transform_arr])
+                        tile_idx += 1
+                        yield t[0], t[1], t[2], emb, crs, transform
+                    for yr, lon, lat, emb, crs, transform in gt.fetch_embeddings(uncached_tiles):
+                        _save_tile_to_cache(yr, lon, lat, emb, crs, transform)
+                        tile_idx += 1
+                        yield yr, lon, lat, emb, crs, transform
+
+                for yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform in _iter_all_tiles():
+                    cached_flag = tile_idx <= len(cached_tiles)
                     yield json.dumps({
-                        "event": "download_progress", "tile": tile_idx + 1, "total": total_tiles,
+                        "event": "download_progress", "tile": tile_idx, "total": total_tiles,
+                        "cached": cached_flag,
                     }) + "\n"
 
                     h, w, dim = tile_emb.shape
