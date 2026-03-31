@@ -371,11 +371,15 @@ def run_large_area():
                     cls_gdf = valid_gdf[valid_gdf["_label_id"] == cls_idx]
                     if cls_gdf.empty:
                         continue
+                    # sample_points(size=N) generates N points PER ROW.
+                    # We want per_class total, so divide by number of rows.
+                    n_rows = len(cls_gdf)
+                    pts_per_row = max(1, per_class // n_rows)
                     try:
                         import warnings
                         with warnings.catch_warnings():
                             warnings.simplefilter("ignore", UserWarning)
-                            pts = cls_gdf.sample_points(size=per_class)
+                            pts = cls_gdf.sample_points(size=pts_per_row)
                         # sample_points returns a GeoSeries of MultiPoints
                         for mp in pts:
                             if mp is not None and not mp.is_empty:
