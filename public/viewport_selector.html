@@ -830,9 +830,6 @@
                         <div id="dataStatusText">Loading...</div>
                     </div>
 
-                    <button class="btn-download" id="quickViewerBtn" onclick="goToViewer()" style="width: 100%; border-color: #667eea; color: #667eea; background: #f0f4ff;">
-                        <span>▶ Open Viewer</span>
-                    </button>
                 </div>
             </div>
         </div>
@@ -1711,16 +1708,6 @@
                 statusText.textContent = status.message;
                 statusEl.style.display = 'block';
 
-                // Disable viewer button if data not ready
-                const viewerBtn = document.getElementById('quickViewerBtn');
-                viewerBtn.disabled = !status.ready;
-                if (!status.ready) {
-                    viewerBtn.style.opacity = '0.5';
-                    viewerBtn.style.cursor = 'not-allowed';
-                } else {
-                    viewerBtn.style.opacity = '1';
-                    viewerBtn.style.cursor = 'pointer';
-                }
             } catch (error) {
                 console.error('Error checking data status:', error);
             }
@@ -1772,11 +1759,6 @@
                             statusEl.style.color = '#2e7d32';
                             statusText.textContent = 'Ready to view!';
 
-                            // Enable viewer button
-                            const viewerBtn = document.getElementById('quickViewerBtn');
-                            viewerBtn.disabled = false;
-                            viewerBtn.style.opacity = '1';
-                            viewerBtn.style.cursor = 'pointer';
                             return;
                         }
                         if (progress.status === 'error') {
@@ -1795,10 +1777,6 @@
                     const readyResp = await fetch(`/api/viewports/${viewportName}/is-ready`);
                     const readyData = await readyResp.json();
                     if (readyData.ready) {
-                        const viewerBtn = document.getElementById('quickViewerBtn');
-                        viewerBtn.disabled = false;
-                        viewerBtn.style.opacity = '1';
-                        viewerBtn.style.cursor = 'pointer';
                         const statusText = document.getElementById('dataStatusText');
                         statusText.textContent = readyData.message;
                         const statusEl = document.getElementById('dataStatusMessage');
