@@ -380,6 +380,14 @@ def run_large_area():
                         yield yr, lon, lat, emb, crs, transform, False
 
                 for yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform, was_cached in _iter_all_tiles():
+                    import psutil
+                    proc = psutil.Process()
+                    rss_gb = proc.memory_info().rss / (1024**3)
+                    logger.info("Tile %d/%d (%s) — RSS=%.1fGB, emb=%s",
+                                tile_idx, total_tiles,
+                                "cached" if was_cached else "download",
+                                rss_gb, tile_emb.shape)
+
                     yield json.dumps({
                         "event": "download_progress", "tile": tile_idx, "total": total_tiles,
                         "cached": was_cached,
@@ -432,6 +440,10 @@ def run_large_area():
                         from tessera_eval.unet import extract_labelled_patches
                         patches = extract_labelled_patches(tile_emb, class_raster)
                         all_unet_patches.extend(patches)
+
+                    # Free tile memory before loading next
+                    del tile_emb, class_raster, labelled_mask
+                    import gc; gc.collect()
 
                 if not all_vectors:
                     yield json.dumps({"event": "error", "message": "No labelled pixels found across any tiles"}) + "\n"
