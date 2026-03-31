@@ -875,9 +875,11 @@ function renderCMTable(classifierName, data) {
     const cm = data.confusion_matrices[classifierName];
     const labels = data.confusion_matrix_labels || [];
     const scroll = document.querySelector('#val-cm-panel .cm-scroll');
-    if (!cm) { scroll.innerHTML = '<div class="cm-placeholder">No data.</div>'; return; }
+    const viewBtn = document.getElementById('cm-view-btn');
+    if (!cm) { scroll.innerHTML = '<div class="cm-placeholder">No data.</div>'; if (viewBtn) viewBtn.style.display = 'none'; return; }
 
-    const n = cm.length;
+    // Always show View button for opening full-size modal
+    if (viewBtn) viewBtn.style.display = '';
 
     scroll.innerHTML = buildCMTableHTML(cm, labels, cmShowPct, false);
 }

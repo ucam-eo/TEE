@@ -1028,6 +1028,7 @@
                     <h3 id="val-cm-title">Confusion Matrix</h3>
                     <select id="cm-classifier-select"></select>
                     <button class="cm-toggle-pct" id="cm-toggle-pct" title="Toggle counts / percentages">%</button>
+                    <button id="cm-view-btn" onclick="openCMPopup(document.getElementById('cm-classifier-select').value, lastEvalData)" style="padding:3px 10px; background:#4a90d9; color:#fff; border:none; border-radius:4px; font-size:12px; cursor:pointer; display:none;" title="Open full-size confusion matrix">View</button>
                 </div>
                 <div id="cm-filtered-note" style="display:none; padding: 0 16px 4px; font-size: 11px; color: #e8a838;"></div>
                 <div class="cm-scroll">
