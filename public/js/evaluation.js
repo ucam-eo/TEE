@@ -879,15 +879,6 @@ function renderCMTable(classifierName, data) {
 
     const n = cm.length;
 
-    if (n > 10) {
-        scroll.innerHTML = `<div style="display:flex; align-items:center; justify-content:center; height:100%;">
-            <button onclick="openCMPopup('${classifierName}', lastEvalData)"
-                style="padding:12px 28px; font-size:15px; background:#4a90d9; color:#fff; border:none; border-radius:6px; cursor:pointer;">
-                Confusion Matrix (${n}&times;${n})
-            </button></div>`;
-        return;
-    }
-
     scroll.innerHTML = buildCMTableHTML(cm, labels, cmShowPct, false);
 }
 
