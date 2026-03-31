@@ -848,13 +848,15 @@
                     <div style="padding:8px 0;">
                         <h3 style="margin:0 0 12px; font-size:16px; color:#333;">Large-Scale Validation</h3>
                         <p style="font-size:13px; color:#666; margin-bottom:16px;">
-                            Upload a ground-truth shapefile and evaluate classifiers directly — no viewport needed.
-                            All computation runs on your local compute server.
+                            Evaluate classifiers on ground-truth shapefiles at any scale — from a single viewport to an entire country.
+                            Upload a .zip shapefile, select classifiers, and run. All computation runs on your compute server.
                         </p>
-                        <div id="standalone-val-controls">
-                            <!-- Validation controls will be populated here -->
-                            <p style="color:#999; font-size:13px;">Coming soon — use the viewer's Validation mode for now.</p>
-                        </div>
+                        <button onclick="window.location.href='viewer.html?mode=validation'" style="padding:10px 24px; background:#667eea; color:white; border:none; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">
+                            Open Validation
+                        </button>
+                        <p style="font-size:12px; color:#888; margin-top:12px;">
+                            Opens the viewer in validation mode. Your ground-truth data stays private — it never leaves your machine.
+                        </p>
                     </div>
                 </div>
 

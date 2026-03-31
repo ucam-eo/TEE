@@ -989,9 +989,12 @@ function setPanelLayout(mode) {
 
 // Restore panel mode preference on load
 function restorePanelMode() {
-    const saved = localStorage.getItem('panelMode');
     const validModes = ['explore', 'change-detection', 'labelling', 'validation'];
-    const mode = validModes.includes(saved) ? saved : 'explore';
+    // Check URL parameter first (e.g., ?mode=validation)
+    const urlMode = new URLSearchParams(window.location.search).get('mode');
+    const saved = localStorage.getItem('panelMode');
+    const mode = (urlMode && validModes.includes(urlMode)) ? urlMode
+               : (validModes.includes(saved) ? saved : 'explore');
     setPanelLayout(mode);
 }
 // Custom tile layer that uses canvas with imageSmoothingEnabled = false
