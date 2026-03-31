@@ -1409,7 +1409,9 @@ function updateMaxTrainPctHint() {
     const maxSamples = parseInt(input.value) || 0;
     if (valTotalLabelledPixels > 0 && maxSamples > 0) {
         const pct = Math.min(100, (100 * maxSamples / valTotalLabelledPixels)).toFixed(1);
-        hint.textContent = `${maxSamples.toLocaleString()} samples = ${pct}% of ${valTotalLabelledPixels.toLocaleString()} labelled pixels`;
+        hint.textContent = `${maxSamples.toLocaleString()} = ${pct}% of ${valTotalLabelledPixels.toLocaleString()} labelled pixels`;
+    } else if (maxSamples > 0) {
+        hint.textContent = `${maxSamples.toLocaleString()} pixels (% shown after first run)`;
     } else {
         hint.textContent = '';
     }
