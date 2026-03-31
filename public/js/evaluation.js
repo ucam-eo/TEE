@@ -563,7 +563,6 @@ function handleStreamEvent(ev) {
 
     } else if (ev.event === 'status') {
         status.dataset.updated = '1';
-        status.textContent = ev.message;
         showResultsPanel(ev.message);
 
     } else if (ev.event === 'error') {
