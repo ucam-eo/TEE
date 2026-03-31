@@ -865,11 +865,13 @@
         // Auth check: set demo mode for unauthenticated users
         let isLoggedIn = false;
         let authEnabled = false;
+        let currentUsername = null;
         let lastLoadedViewports = [];
         fetch('/api/auth/status').then(r => r.json()).then(data => {
             authEnabled = data.auth_enabled;
             if (data.logged_in && data.user) {
                 isLoggedIn = true;
+                currentUsername = data.user;
                 document.getElementById('userName').textContent = data.user;
                 document.getElementById('userInfo').style.display = '';
             }
@@ -2033,7 +2035,7 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             }
         }
 
-        // Display viewports in list
+        // Display viewports in list, grouped by creator
         function displayViewports(viewports) {
             const list = document.getElementById('viewportsList');
 
@@ -2042,35 +2044,72 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
                 return;
             }
 
-            list.innerHTML = viewports.map(vp => {
-                const isActive = vp.is_active ? 'active' : '';
-                const bounds = vp.bounds;
-                const coordsText = `${bounds.minLat.toFixed(4)}°, ${bounds.minLon.toFixed(4)}°`;
-                const dataSize = vp.data_size_mb || 0;
-                const sizeText = dataSize > 1000
-                    ? `${(dataSize / 1024).toFixed(1)} GB`
-                    : `${dataSize.toFixed(0)} MB`;
-                const deleteBtn = (!authEnabled || isLoggedIn)
-                    ? `<button class="viewport-item-btn delete" onclick="deleteViewport('${vp.name}')">Delete</button>`
-                    : '';
-                const addYearBtn = (!authEnabled || isLoggedIn)
-                    ? `<button class="viewport-item-btn add-year" onclick="openAddYearModal('${vp.name}')">+ Year</button>`
-                    : '';
+            // Group by creator
+            const myViewports = [];
+            const byCreator = {};  // creator → [viewports]
 
-                return `
-                    <div class="viewport-item ${isActive}">
-                        <div class="viewport-item-name" onclick="goToViewer('${vp.name}')" style="cursor: pointer;">${vp.name}</div>
-                        <div class="viewport-item-coords">${coordsText}</div>
-                        <div class="viewport-item-coords" style="color: #0066cc; font-weight: 500; margin-top: 3px;">💾 ${sizeText}</div>
-                        <div class="viewport-item-actions">
-                            <button class="viewport-item-btn" onclick="goToViewer('${vp.name}')">Open</button>
-                            ${addYearBtn}
-                            <button class="viewport-item-btn" onclick="exportViewportByName('${vp.name}')">Export</button>
-                            ${deleteBtn}
-                        </div>
-                    </div>
-                `;
-            }).join('');
+            for (const vp of viewports) {
+                const creator = vp.created_by;
+                const isOwner = !authEnabled || !creator || creator === currentUsername;
+                if (isOwner) {
+                    myViewports.push(vp);
+                } else {
+                    if (!byCreator[creator]) byCreator[creator] = [];
+                    byCreator[creator].push(vp);
+                }
+            }
+
+            let html = '';
+
+            // My viewports (or all viewports when not logged in)
+            if (myViewports.length > 0) {
+                const heading = authEnabled && isLoggedIn ? 'My Viewports' : 'Viewports';
+                html += renderViewportGroup(heading, myViewports, true);
+            }
+
+            // Other creators' viewports
+            const creators = Object.keys(byCreator).sort();
+            for (const creator of creators) {
+                html += renderViewportGroup(creator, byCreator[creator], false);
+            }
+
+            list.innerHTML = html;
+        }
+
+        function renderViewportGroup(heading, viewports, isOwner) {
+            const items = viewports.map(vp => renderViewportItem(vp, isOwner)).join('');
+            return `
+                <div style="margin-bottom: 16px;">
+                    <div style="font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; padding: 4px 0; border-bottom: 1px solid #eee; margin-bottom: 6px;">${heading}</div>
+                    ${items}
+                </div>
+            `;
+        }
+
+        function renderViewportItem(vp, isOwner) {
+            const isActive = vp.is_active ? 'active' : '';
+            const bounds = vp.bounds;
+            const coordsText = `${bounds.minLat.toFixed(4)}, ${bounds.minLon.toFixed(4)}`;
+            const dataSize = vp.data_size_mb || 0;
+            const sizeText = dataSize > 1000
+                ? `${(dataSize / 1024).toFixed(1)} GB`
+                : `${dataSize.toFixed(0)} MB`;
+
+            let actions = `<button class="viewport-item-btn" onclick="goToViewer('${vp.name}')">Open</button>`;
+            if (isOwner) {
+                actions += `<button class="viewport-item-btn add-year" onclick="openAddYearModal('${vp.name}')">+ Year</button>`;
+                actions += `<button class="viewport-item-btn" onclick="exportViewportByName('${vp.name}')">Export</button>`;
+                actions += `<button class="viewport-item-btn delete" onclick="deleteViewport('${vp.name}')">Delete</button>`;
+            }
+
+            return `
+                <div class="viewport-item ${isActive}">
+                    <div class="viewport-item-name" onclick="goToViewer('${vp.name}')" style="cursor: pointer;">${vp.name}</div>
+                    <div class="viewport-item-coords">${coordsText}</div>
+                    <div class="viewport-item-coords" style="color: #0066cc; font-weight: 500; margin-top: 3px;">${sizeText}</div>
+                    <div class="viewport-item-actions">${actions}</div>
+                </div>
+            `;
         }
 
         // Format bytes to human readable
