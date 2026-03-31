@@ -410,9 +410,10 @@ def run_large_area():
             "stats": stats,
         }) + "\n"
 
-        # Run learning curve
+        # Run learning curve (unet is handled separately — not an sklearn classifier)
+        curve_models = [m for m in active_models if m != 'unet']
         for event in run_learning_curve(
-            vectors, labels, active_models, training_sizes,
+            vectors, labels, curve_models, training_sizes,
             repeats=5, classifier_params=model_params,
             spatial_vectors=spatial_3x3, spatial_vectors_5x5=spatial_5x5,
             finish_classifiers=_finish_classifiers,
