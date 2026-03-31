@@ -145,8 +145,9 @@ def upload_shapefile():
         gdf = gdf.to_crs(epsg=4326)
 
     _uploaded_shapefiles.append((uploaded.filename, gdf))
-    _merged_gdf = None  # invalidate cache
-    _tile_cache["key"] = None  # invalidate tile cache
+    _merged_gdf = None  # invalidate merged GDF cache
+    # Note: _tile_cache is NOT invalidated here — tiles don't depend on shapefile.
+    # The cache key is (field, year) which naturally misses if field changes.
     logger.info("Uploaded '%s': %d features, %d fields",
                 uploaded.filename, len(gdf), len([c for c in gdf.columns if c != "geometry"]))
 
@@ -187,7 +188,6 @@ def clear_shapefiles():
     global _merged_gdf
     _uploaded_shapefiles.clear()
     _merged_gdf = None
-    _tile_cache["key"] = None
     return jsonify({"ok": True})
 
 

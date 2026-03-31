@@ -558,8 +558,9 @@ function handleStreamEvent(ev) {
         status.dataset.updated = '1';
         const elapsed = status.dataset.t0 ? ((Date.now() - parseInt(status.dataset.t0)) / 1000).toFixed(0) : '';
         const suffix = elapsed ? ` (${elapsed}s)` : '';
-        status.textContent = `Downloading tile ${ev.tile} / ${ev.total}${suffix}`;
-        showResultsPanel(`Downloading embeddings: tile ${ev.tile} / ${ev.total}...`);
+        const verb = ev.cached ? 'Loading cached' : 'Downloading';
+        status.textContent = `${verb} tile ${ev.tile} / ${ev.total}${suffix}`;
+        showResultsPanel(`${verb} tile ${ev.tile} / ${ev.total}...`);
 
     } else if (ev.event === 'field_start') {
         currentLargeAreaTask = ev.type;
