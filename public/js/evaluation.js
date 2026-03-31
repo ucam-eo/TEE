@@ -1439,6 +1439,7 @@ Object.defineProperty(window, 'valChart', {
 
 // Restore validation panel state when returning from another mode
 function restoreValidationState() {
+    console.log('[EVAL] restoreValidationState called', {valUploadedFilename, valFieldData: !!valFieldData, lastChartData: !!lastChartData, lastEvalData: !!lastEvalData});
     // Restore drop zone filename
     if (valUploadedFilename) {
         const dz = document.getElementById('val-drop-zone');
@@ -1451,7 +1452,8 @@ function restoreValidationState() {
     // Restore field selector
     if (valFieldData && valFieldData.length > 0) {
         const sel = document.getElementById('val-field-select');
-        if (sel && sel.options.length <= 1) {
+        if (sel) {
+            const prevValue = sel.value;
             sel.innerHTML = '';
             valFieldData.forEach(f => {
                 const opt = document.createElement('option');
@@ -1459,6 +1461,10 @@ function restoreValidationState() {
                 opt.textContent = `${f.name} (${f.unique_count} classes)`;
                 sel.appendChild(opt);
             });
+            // Restore previously selected field
+            if (prevValue && Array.from(sel.options).some(o => o.value === prevValue)) {
+                sel.value = prevValue;
+            }
             sel.disabled = false;
             document.getElementById('val-run-btn').disabled = false;
         }
