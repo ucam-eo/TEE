@@ -130,6 +130,19 @@ try {
         }
     }
 } catch (e) { /* sessionStorage may not be available */ }
+
+// Restore evaluation results from sessionStorage
+try {
+    const savedResults = sessionStorage.getItem('tee_val_results');
+    if (savedResults) {
+        const r = JSON.parse(savedResults);
+        if (r.chartData) {
+            lastChartData = r.chartData;
+            valTotalLabelledPixels = r.chartData.total_labelled_pixels || 0;
+        }
+        if (r.evalData) lastEvalData = r.evalData;
+    }
+} catch (e) { }
 dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('dragover');
@@ -579,6 +592,14 @@ function handleStreamEvent(ev) {
         lastChartData.confusion_matrices = ev.confusion_matrices;
         renderConfusionMatrix(lastChartData);
 
+        // Persist partial results
+        try {
+            sessionStorage.setItem('tee_val_results', JSON.stringify({
+                chartData: lastChartData,
+                evalData: lastEvalData,
+            }));
+        } catch (e) { }
+
     } else if (ev.event === 'done') {
         if (!lastChartData) return;
         lastChartData.elapsed_seconds = ev.elapsed_seconds;
@@ -594,6 +615,14 @@ function handleStreamEvent(ev) {
         const modelsReady = !!(ev.models_available && ev.models_available.length);
         if (dlBtnH) dlBtnH.disabled = !modelsReady;
         hideFinishButtons();
+
+        // Persist results for page navigation (Back button)
+        try {
+            sessionStorage.setItem('tee_val_results', JSON.stringify({
+                chartData: lastChartData,
+                evalData: lastEvalData,
+            }));
+        } catch (e) { /* may exceed sessionStorage quota */ }
 
     } else if (ev.event === 'status') {
         status.dataset.updated = '1';
