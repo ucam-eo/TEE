@@ -966,10 +966,15 @@ function setPanelLayout(mode) {
     } else if (mode === 'validation') {
         if (waitMsg) waitMsg.style.display = 'none';
         if (sameMsg) sameMsg.style.display = 'none';
-        // Resize chart if returning to validation with an active evaluation
+        // Re-render chart and CM if returning to validation with previous results
         setTimeout(() => {
-            if (window.valChart) window.valChart.resize();
-        }, 100);
+            if (window.lastChartData && window.lastChartData.training_pcts && window.lastChartData.training_pcts.length > 0) {
+                if (window.renderChart) window.renderChart(window.lastChartData);
+            }
+            if (window.lastEvalData && window.lastEvalData.confusion_matrices) {
+                if (window.renderConfusionMatrix) window.renderConfusionMatrix(window.lastEvalData);
+            }
+        }, 200);
     }
 
     // Leaflet maps and Three.js scene need resize after CSS transition

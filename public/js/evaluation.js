@@ -1439,6 +1439,11 @@ Object.defineProperty(window, 'valChart', {
 window.uploadShapefile = uploadShapefile;
 window.runEvaluation = runEvaluation;
 window.renderConfusionMatrix = renderConfusionMatrix;
+window.renderChart = renderChart;
+Object.defineProperty(window, 'lastChartData', {
+    get: () => lastChartData,
+    configurable: true,
+});
 window.exportEvalResults = exportEvalResults;
 window.openCMPopup = openCMPopup;
 window.generateConfig = generateConfig;
