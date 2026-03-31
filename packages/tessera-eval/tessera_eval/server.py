@@ -371,10 +371,6 @@ def run_large_area():
                     cls_gdf = valid_gdf[valid_gdf["_label_id"] == cls_idx]
                     if cls_gdf.empty:
                         continue
-                    # Estimate area-proportional sampling across polygons
-                    total_area = cls_gdf.geometry.area.sum()
-                    if total_area <= 0:
-                        continue
                     try:
                         pts = cls_gdf.sample_points(size=per_class)
                         # sample_points returns a GeoSeries of MultiPoints
