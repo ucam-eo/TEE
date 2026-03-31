@@ -1333,7 +1333,8 @@ function loadResultsFile() {
 }
 
 // Wire up Load Results file input
-document.getElementById('val-results-file').addEventListener('change', loadResultsFile);
+const _resultsFileInput = document.getElementById('val-results-file');
+if (_resultsFileInput) _resultsFileInput.addEventListener('change', loadResultsFile);
 
 // ── Upload Config ──
 
