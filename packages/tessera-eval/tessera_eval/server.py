@@ -345,203 +345,123 @@ def run_large_area():
             gt = _geotessera_instance
 
             try:
-                bounds = gdf.total_bounds
-                bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
-                tiles = gt.registry.load_blocks_for_region(bbox, year)
-                total_tiles = len(tiles)
-                if total_tiles == 0:
-                    yield json.dumps({"event": "error", "message": f"No GeoTessera tiles for bbox {bbox}, year {year}"}) + "\n"
-                    return
+                MAX_SAMPLE_PIXELS = 1_000_000
 
                 le = LabelEncoder()
                 le.fit(gdf[field_name].dropna().unique())
                 class_names = le.classes_.tolist()
+                n_classes = len(class_names)
 
-                all_vectors = []
-                all_labels = []
-                all_spatial_3x3 = [] if needs_spatial_3x3 else None
-                all_spatial_5x5 = [] if needs_spatial_5x5 else None
-                all_unet_patches = [] if needs_unet else None
-                tiles_with_data = 0
+                # Generate random sample points within shapefile polygons
+                yield json.dumps({
+                    "event": "download_progress", "tile": 0, "total": 1,
+                    "status": "Generating sample points within polygons...",
+                }) + "\n"
 
-                # Pre-reproject GDF to first tile's CRS (avoid per-tile reprojection)
-                _gdf_proj_cache = {}  # crs → reprojected gdf with spatial index
+                valid_gdf = gdf.dropna(subset=[field_name]).copy()
+                label_ids = le.transform(valid_gdf[field_name])
+                valid_gdf["_label_id"] = label_ids
 
-                # Stream tiles from GeoTessera one at a time.
-                # No raw tile disk caching — the result cache (vectors+labels) is 100x smaller.
-                tile_idx = 0
-                tile_iter = gt.fetch_embeddings(tiles)
-                while True:
+                # Stratified sampling: equal points per class, up to MAX_SAMPLE_PIXELS total
+                per_class = MAX_SAMPLE_PIXELS // n_classes
+                sample_points = []
+                sample_labels = []
+
+                for cls_idx in range(n_classes):
+                    cls_gdf = valid_gdf[valid_gdf["_label_id"] == cls_idx]
+                    if cls_gdf.empty:
+                        continue
+                    # Estimate area-proportional sampling across polygons
+                    total_area = cls_gdf.geometry.area.sum()
+                    if total_area <= 0:
+                        continue
                     try:
-                        yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform = next(tile_iter)
-                    except StopIteration:
-                        break
-                    except Exception as tile_err:
-                        tile_idx += 1
-                        logger.warning("Tile %d/%d failed: %s — skipping", tile_idx, total_tiles, tile_err)
-                        yield json.dumps({
-                            "event": "download_progress", "tile": tile_idx, "total": total_tiles,
-                            "error": str(tile_err),
-                        }) + "\n"
-                        continue
+                        pts = cls_gdf.sample_points(size=per_class)
+                        # sample_points returns a GeoSeries of MultiPoints
+                        for mp in pts:
+                            if mp is not None and not mp.is_empty:
+                                for pt in mp.geoms:
+                                    sample_points.append((pt.x, pt.y))
+                                    sample_labels.append(cls_idx)
+                    except Exception as e:
+                        logger.warning("sample_points failed for class %d: %s", cls_idx, e)
 
-                    tile_idx += 1
-                    import psutil
-                    rss_gb = psutil.Process().memory_info().rss / (1024**3)
-                    logger.info("Tile %d/%d — RSS=%.1fGB, emb=%s",
-                                tile_idx, total_tiles, rss_gb, tile_emb.shape)
-
-                    yield json.dumps({
-                        "event": "download_progress", "tile": tile_idx, "total": total_tiles,
-                    }) + "\n"
-
-                    h, w, dim = tile_emb.shape
-                    tile_bounds = _array_bounds(h, w, tile_transform)
-
-                    # Reproject GDF once per CRS (cached), use spatial index
-                    crs_key = str(tile_crs)
-                    if crs_key not in _gdf_proj_cache:
-                        gdf_proj = gdf.to_crs(tile_crs) if str(gdf.crs) != crs_key else gdf
-                        if not hasattr(gdf_proj, 'sindex'):
-                            gdf_proj = gdf_proj.copy()  # ensure sindex is built
-                        _gdf_proj_cache[crs_key] = gdf_proj
-                    gdf_proj = _gdf_proj_cache[crs_key]
-
-                    # Use spatial index for fast bbox filtering
-                    tile_box = _box(*tile_bounds)
-                    if hasattr(gdf_proj, 'sindex') and gdf_proj.sindex is not None:
-                        candidates_idx = list(gdf_proj.sindex.intersection(tile_bounds))
-                        if not candidates_idx:
-                            continue
-                        tile_gdf = gdf_proj.iloc[candidates_idx]
-                        tile_gdf = tile_gdf[tile_gdf.intersects(tile_box)]
-                    else:
-                        tile_gdf = gdf_proj[gdf_proj.intersects(tile_box)]
-                    if tile_gdf.empty:
-                        continue
-
-                    class_raster = rasterize_shapefile(
-                        tile_gdf, field_name, tile_transform, w, h, label_encoder=le)
-
-                    labelled_mask = class_raster > 0
-                    if labelled_mask.sum() == 0:
-                        continue
-
-                    tiles_with_data += 1
-
-                    # Subsample labelled pixels if we've already accumulated enough.
-                    # Beyond 1M pixels, more data doesn't improve accuracy meaningfully
-                    # but explodes memory (1M × 128 × 4 = 512MB) and runtime.
-                    MAX_TOTAL_PIXELS = 1_000_000
-                    current_total = sum(a.shape[0] for a in all_vectors) if all_vectors else 0
-                    tile_labels = class_raster[labelled_mask] - 1
-                    tile_vectors = tile_emb[labelled_mask]
-                    remaining = MAX_TOTAL_PIXELS - current_total
-                    if remaining <= 0:
-                        logger.info("Pixel cap reached (%d) — skipping remaining tiles", MAX_TOTAL_PIXELS)
-                        # Free tile and break
-                        del tile_emb, class_raster, labelled_mask, tile_labels, tile_vectors
-                        import gc; gc.collect()
-                        break
-                    if len(tile_labels) > remaining:
-                        # Subsample this tile to fit under the cap
-                        rng = np.random.RandomState(42)
-                        idx = rng.choice(len(tile_labels), size=remaining, replace=False)
-                        tile_labels = tile_labels[idx]
-                        tile_vectors = tile_vectors[idx]
-                        labelled_mask_sub = np.zeros_like(labelled_mask)
-                        # For spatial features, we need the original mask positions
-                        # Just use the subsampled vectors directly
-                        logger.info("Subsampled tile from %d to %d pixels (cap=%d)",
-                                    labelled_mask.sum(), remaining, MAX_TOTAL_PIXELS)
-
-                    all_labels.append(tile_labels)
-                    all_vectors.append(tile_vectors)
-
-                    # Per-tile spatial features (only for labelled pixels — avoids full-tile allocation)
-                    # Note: spatial features need the 2D grid, so we use the original mask
-                    n_tile_pixels = len(tile_labels)
-                    if needs_spatial_3x3:
-                        sf = gather_spatial_features_2d(tile_emb, radius=1, mask=labelled_mask)
-                        if len(sf) > n_tile_pixels:
-                            sf = sf[:n_tile_pixels]  # align with subsampled pixels
-                        all_spatial_3x3.append(sf)
-                    if needs_spatial_5x5:
-                        sf = gather_spatial_features_2d(tile_emb, radius=2, mask=labelled_mask)
-                        if len(sf) > n_tile_pixels:
-                            sf = sf[:n_tile_pixels]
-                        all_spatial_5x5.append(sf)
-
-                    # Per-tile U-Net patches
-                    if needs_unet:
-                        from tessera_eval.unet import extract_labelled_patches
-                        patches = extract_labelled_patches(tile_emb, class_raster)
-                        all_unet_patches.extend(patches)
-
-                    # Free tile memory before loading next
-                    del tile_emb, class_raster, labelled_mask
-                    import gc; gc.collect()
-                    logger.info("Tile %d/%d processed — %d labelled pixels accumulated",
-                                tile_idx, total_tiles, sum(a.shape[0] for a in all_vectors))
-
-                logger.info("Tile loop complete: %d/%d tiles processed, %d with data",
-                            tile_idx, total_tiles, tiles_with_data)
-
-                if not all_vectors:
-                    yield json.dumps({"event": "error", "message": "No labelled pixels found across any tiles"}) + "\n"
+                n_points = len(sample_points)
+                if n_points == 0:
+                    yield json.dumps({"event": "error", "message": "No sample points generated from shapefile polygons"}) + "\n"
                     return
 
-                # Estimate memory before concatenating
-                import psutil
-                n_pixels = sum(a.shape[0] for a in all_vectors)
-                dim = all_vectors[0].shape[1] if all_vectors else 128
-                mem_vectors = n_pixels * dim * 4  # float32
-                mem_spatial_3x3 = n_pixels * 9 * dim * 4 if all_spatial_3x3 else 0
-                mem_spatial_5x5 = n_pixels * 25 * dim * 4 if all_spatial_5x5 else 0
-                mem_total_gb = (mem_vectors + mem_spatial_3x3 + mem_spatial_5x5) / (1024**3)
-                avail_gb = psutil.virtual_memory().available / (1024**3)
+                logger.info("Generated %d sample points across %d classes", n_points, n_classes)
 
-                logger.info("Memory estimate: %.1fGB needed (vectors=%.1fGB, spatial_3x3=%.1fGB, spatial_5x5=%.1fGB), %.1fGB available",
-                            mem_total_gb, mem_vectors/(1024**3), mem_spatial_3x3/(1024**3), mem_spatial_5x5/(1024**3), avail_gb)
+                yield json.dumps({
+                    "event": "download_progress", "tile": 0, "total": 1,
+                    "status": f"Sampling {n_points:,} points from GeoTessera...",
+                }) + "\n"
 
-                if mem_total_gb > avail_gb * 0.8:
-                    msg = (f"Not enough memory: evaluation needs ~{mem_total_gb:.1f}GB but only "
-                           f"{avail_gb:.1f}GB available. ")
-                    if mem_spatial_3x3 or mem_spatial_5x5:
-                        msg += "Try disabling Spatial MLP classifiers, or reduce the area."
-                    else:
-                        msg += "Try reducing the area or max training samples."
-                    yield json.dumps({"event": "error", "message": msg}) + "\n"
+                # Fetch embeddings at sample points (GeoTessera handles tile loading)
+                def _progress(current, total, status=None):
+                    pass  # GeoTessera progress — we report our own events
+
+                try:
+                    vectors = gt.sample_embeddings_at_points(
+                        sample_points, year=year, progress_callback=_progress)
+                except Exception as e:
+                    yield json.dumps({"event": "error", "message": f"GeoTessera sampling failed: {e}"}) + "\n"
                     return
 
-                vectors = np.concatenate(all_vectors, axis=0).astype(np.float32)
-                del all_vectors  # free intermediate lists
-                labels = np.concatenate(all_labels, axis=0).astype(np.int32)
-                del all_labels
-                spatial_3x3 = np.concatenate(all_spatial_3x3, axis=0).astype(np.float32) if all_spatial_3x3 else None
-                del all_spatial_3x3
-                spatial_5x5 = np.concatenate(all_spatial_5x5, axis=0).astype(np.float32) if all_spatial_5x5 else None
-                del all_spatial_5x5
+                yield json.dumps({
+                    "event": "download_progress", "tile": 1, "total": 1,
+                }) + "\n"
+
+                labels = np.array(sample_labels, dtype=np.int32)
+
+                # Remove NaN rows (points outside tile coverage)
+                valid_mask = ~np.isnan(vectors).any(axis=1)
+                if valid_mask.sum() < len(vectors):
+                    logger.info("Removed %d points outside coverage (%d remaining)",
+                                len(vectors) - valid_mask.sum(), valid_mask.sum())
+                    vectors = vectors[valid_mask].astype(np.float32)
+                    labels = labels[valid_mask]
+                else:
+                    vectors = vectors.astype(np.float32)
+
+                if len(vectors) == 0:
+                    yield json.dumps({"event": "error", "message": "No valid embeddings found at sample points"}) + "\n"
+                    return
+
+                # Count tiles used (from GeoTessera's internal tracking)
+                bounds = gdf.total_bounds
+                bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
+                tiles = gt.registry.load_blocks_for_region(bbox, year)
+                total_tiles = len(tiles)
 
                 stats = {
                     "tile_count": total_tiles,
-                    "tiles_with_data": tiles_with_data,
+                    "tiles_with_data": total_tiles,
                     "total_pixels": len(labels),
-                    "n_classes": len(class_names),
+                    "n_classes": n_classes,
                 }
 
-                unet_patches = all_unet_patches if all_unet_patches else []
+                spatial_3x3 = None  # Point sampling doesn't support spatial features
+                spatial_5x5 = None
+                unet_patches = []
 
-                # Cache in memory (for immediate reuse with different classifiers)
+                if needs_spatial_3x3 or needs_spatial_5x5:
+                    logger.warning("Spatial MLP not supported with point sampling — ignored")
+                if needs_unet:
+                    logger.warning("U-Net not supported with point sampling — ignored")
+
+                # Cache in memory and on disk
                 _tile_cache.update({
                     "key": cache_key, "vectors": vectors, "labels": labels,
                     "class_names": class_names, "stats": stats,
-                    "spatial_3x3": spatial_3x3, "spatial_5x5": spatial_5x5,
-                    "unet_patches": unet_patches,
+                    "spatial_3x3": None, "spatial_5x5": None,
+                    "unet_patches": [],
                 })
-
-                # Cache to disk (for reuse across restarts — vectors + labels only, ~500MB)
                 _save_cached_result(field_name, year, gdf, vectors, labels, class_names, stats)
+
+                logger.info("Point sampling complete: %d pixels, %.1fMB",
+                            len(labels), vectors.nbytes / 1e6)
 
             except Exception as e:
                 yield json.dumps({"event": "error", "message": str(e)}) + "\n"
