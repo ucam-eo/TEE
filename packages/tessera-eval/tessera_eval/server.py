@@ -335,37 +335,44 @@ def run_large_area():
                 all_unet_patches = [] if needs_unet else None
                 tiles_with_data = 0
 
-                # Separate cached vs uncached tiles
+                # Check which tiles are cached on disk vs need downloading
                 from affine import Affine as _Affine
-                cached_tiles = []
+                cached_keys = set()
                 uncached_tiles = []
                 for t in tiles:
-                    # tiles are (year, lon, lat) tuples
                     t_year, t_lon, t_lat = t[0], t[1], t[2]
-                    cached = _load_cached_tile(t_year, t_lon, t_lat)
-                    if cached:
-                        cached_tiles.append((t, cached))
+                    if _tile_cache_path(t_year, t_lon, t_lat).exists():
+                        cached_keys.add((t_year, t_lon, t_lat))
                     else:
                         uncached_tiles.append(t)
 
                 tile_idx = 0
                 def _iter_all_tiles():
-                    """Iterate cached tiles first (instant), then download uncached."""
+                    """Load tiles one at a time: cached from disk, uncached from GeoTessera."""
                     nonlocal tile_idx
-                    for t, (emb, crs, transform_arr) in cached_tiles:
-                        transform = _Affine(*[float(x) for x in transform_arr])
-                        tile_idx += 1
-                        yield t[0], t[1], t[2], emb, crs, transform
+                    # Cached tiles: load from disk one at a time (not all at once)
+                    for t in tiles:
+                        t_year, t_lon, t_lat = t[0], t[1], t[2]
+                        if (t_year, t_lon, t_lat) in cached_keys:
+                            result = _load_cached_tile(t_year, t_lon, t_lat)
+                            if result:
+                                emb, crs, transform_arr = result
+                                transform = _Affine(*[float(x) for x in transform_arr])
+                                tile_idx += 1
+                                yield t_year, t_lon, t_lat, emb, crs, transform, True
+                                continue
+                            # Cache miss (corrupted file) — fall through to download
+                            uncached_tiles.append(t)
+                    # Uncached tiles: download from GeoTessera
                     for yr, lon, lat, emb, crs, transform in gt.fetch_embeddings(uncached_tiles):
                         _save_tile_to_cache(yr, lon, lat, emb, crs, transform)
                         tile_idx += 1
-                        yield yr, lon, lat, emb, crs, transform
+                        yield yr, lon, lat, emb, crs, transform, False
 
-                for yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform in _iter_all_tiles():
-                    cached_flag = tile_idx <= len(cached_tiles)
+                for yr, tile_lon, tile_lat, tile_emb, tile_crs, tile_transform, was_cached in _iter_all_tiles():
                     yield json.dumps({
                         "event": "download_progress", "tile": tile_idx, "total": total_tiles,
-                        "cached": cached_flag,
+                        "cached": was_cached,
                     }) + "\n"
 
                     h, w, dim = tile_emb.shape
