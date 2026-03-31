@@ -818,107 +818,56 @@ function openCMPopup(classifierName, data) {
     const labels = data.confusion_matrix_labels || [];
     if (!cm) return;
 
-    const n = cm.length;
-    const winW = Math.min(200 + n * 52, screen.width - 100);
-    const winH = Math.min(200 + n * 48, screen.height - 100);
-
-    if (cmPopupWindow && !cmPopupWindow.closed) cmPopupWindow.close();
-    cmPopupWindow = window.open('', 'cm_popup', `width=${winW},height=${winH},resizable=yes,scrollbars=yes`);
-    if (!cmPopupWindow) return;
+    // Create a full-screen modal overlay instead of window.open (blocked by popup blockers)
+    let overlay = document.getElementById('cm-modal-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'cm-modal-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;';
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.style.display = 'none'; });
+        document.body.appendChild(overlay);
+    }
 
     const tableHTML = buildCMTableHTML(cm, labels, cmShowPct, true);
     const classifierLabel = CLASSIFIER_LABELS[classifierName] || classifierName;
 
-    cmPopupWindow.document.write(`<!DOCTYPE html>
-<html><head><title>Confusion Matrix \u2014 ${classifierLabel}</title>
-<style>
-  body { margin: 0; padding: 16px; background: #1a1a2e; color: #ccc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-  .cm-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-  .cm-toolbar h3 { margin: 0; color: #e0e0e0; font-size: 15px; }
-  .cm-toolbar select, .cm-toolbar button { background: #2a2a3e; color: #ccc; border: 1px solid #444; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
-  .cm-toolbar button:hover, .cm-toolbar select:hover { background: #3a3a4e; }
-  .cm-toolbar button.active { background: #4a90d9; color: #fff; }
-  .cm-scroll-area { overflow: auto; max-height: calc(100vh - 70px); }
-  .cm-wrapper { position: relative; display: inline-block; padding: 24px 0 0 24px; }
-  .cm-axis-label { position: absolute; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
-  .cm-axis-label.y-axis { left: 0; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: 0 0; }
-  .cm-axis-label.x-axis { top: 6px; left: 50%; transform: translateX(-50%); }
-  .confusion-matrix { border-collapse: collapse; }
-  .confusion-matrix th, .confusion-matrix td { padding: 4px; text-align: center; font-size: 12px; min-width: 44px; height: 40px; }
-  .confusion-matrix th { color: #aaa; font-weight: normal; }
-  .cm-col-label { max-width: 50px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; writing-mode: vertical-lr; transform: rotate(180deg); height: 70px !important; vertical-align: bottom; }
-  .cm-row-label { text-align: right !important; padding-right: 8px !important; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .confusion-matrix td { cursor: default; position: relative; border: 1px solid rgba(255,255,255,0.05); }
-  .confusion-matrix td[data-tip]:hover::after { content: attr(data-tip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: #222; color: #fff; padding: 6px 10px; border-radius: 4px; font-size: 12px; white-space: pre; z-index: 100; pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
-  .cm-count { display: block; font-weight: 600; font-size: 13px; }
-  .cm-pct { display: block; font-size: 10px; opacity: 0.7; }
-</style></head><body>
-<div class="cm-toolbar">
-  <h3>Confusion Matrix</h3>
-  <select id="popup-cm-select"></select>
-  <button id="popup-cm-toggle" title="Toggle counts / percentages">${cmShowPct ? '#' : '%'}</button>
-</div>
-<div class="cm-scroll-area" id="popup-cm-scroll">${tableHTML}</div>
-`+ '<scr' + 'ipt>' + `
-  const cmData = ${JSON.stringify(data.confusion_matrices)};
-  const cmLabels = ${JSON.stringify(labels)};
-  const classifierLabels = ${JSON.stringify(CLASSIFIER_LABELS)};
-  let showPct = ${cmShowPct};
+    overlay.innerHTML = `
+        <div style="background:#1a1a2e; border-radius:8px; padding:20px; max-width:90vw; max-height:90vh; overflow:auto; position:relative;">
+            <button onclick="document.getElementById('cm-modal-overlay').style.display='none'"
+                style="position:absolute;top:8px;right:12px;background:none;border:none;color:#888;font-size:20px;cursor:pointer;">&times;</button>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                <h3 style="margin:0;color:#eee;font-size:15px;">Confusion Matrix</h3>
+                <select id="modal-cm-select" style="background:#2a2a3e;color:#ccc;border:1px solid #444;border-radius:4px;padding:4px 10px;font-size:13px;"></select>
+                <button id="modal-cm-toggle" style="background:#2a2a3e;color:#ccc;border:1px solid #444;border-radius:4px;padding:4px 10px;font-size:13px;cursor:pointer;">${cmShowPct ? '#' : '%'}</button>
+            </div>
+            <div id="modal-cm-scroll">${tableHTML}</div>
+        </div>`;
+    overlay.style.display = 'flex';
 
-  const sel = document.getElementById('popup-cm-select');
-  Object.keys(cmData).forEach(n => {
-    const opt = document.createElement('option');
-    opt.value = n;
-    opt.textContent = classifierLabels[n] || n;
-    if (n === '${classifierName}') opt.selected = true;
-    sel.appendChild(opt);
-  });
-  sel.style.display = Object.keys(cmData).length > 1 ? '' : 'none';
+    // Wire up classifier selector
+    const sel = document.getElementById('modal-cm-select');
+    Object.keys(data.confusion_matrices).forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        opt.textContent = CLASSIFIER_LABELS[n] || n;
+        if (n === classifierName) opt.selected = true;
+        sel.appendChild(opt);
+    });
+    sel.style.display = Object.keys(data.confusion_matrices).length > 1 ? '' : 'none';
 
-  function refresh() {
-    const name = sel.value;
-    const cm = cmData[name];
-    if (!cm) return;
-    document.getElementById('popup-cm-scroll').innerHTML = buildTable(cm, cmLabels, showPct);
-  }
-
-  sel.onchange = refresh;
-  document.getElementById('popup-cm-toggle').onclick = function() {
-    showPct = !showPct;
-    this.textContent = showPct ? '#' : '%';
-    this.classList.toggle('active', showPct);
-    refresh();
-  };
-
-  function buildTable(cm, labels, showPct) {
-    const n = cm.length;
-    const rowSums = cm.map(r => r.reduce((a,b) => a+b, 0));
-    let h = '<div class="cm-wrapper">';
-    h += '<div class="cm-axis-label y-axis">Actual</div>';
-    h += '<div class="cm-axis-label x-axis">Predicted</div>';
-    h += '<table class="confusion-matrix"><tr><th></th>';
-    for (let j=0;j<n;j++) { const l=labels[j]||'C'+j; h+='<th class="cm-col-label" title="'+l+'">'+l+'</th>'; }
-    h += '</tr>';
-    for (let i=0;i<n;i++) {
-      const rl=labels[i]||'C'+i;
-      h += '<tr><th class="cm-row-label" title="'+rl+'">'+rl+'</th>';
-      for (let j=0;j<n;j++) {
-        const c=cm[i][j], pct=rowSums[i]>0?(c/rowSums[i]*100):0, isDiag=i===j;
-        const int=Math.min(pct/100,1);
-        let bg; if(isDiag){bg='rgba(40,167,69,'+(0.15+int*0.7)+')';}else{bg=int>0.01?'rgba(220,53,69,'+(0.1+int*0.6)+')':'transparent';}
-        const tc=int>0.5?'#fff':'#ccc';
-        const tip='Actual: '+rl+'\\nPredicted: '+(labels[j]||'C'+j)+'\\n'+c+' ('+pct.toFixed(1)+'%)';
-        const ct=showPct?pct.toFixed(1)+'%':c;
-        const sec=showPct?c:pct.toFixed(1)+'%';
-        h+='<td style="background:'+bg+';color:'+tc+'" data-tip="'+tip+'"><span class="cm-count">'+ct+'</span><span class="cm-pct">'+sec+'</span></td>';
-      }
-      h += '</tr>';
+    let modalShowPct = cmShowPct;
+    function refresh() {
+        const name = sel.value;
+        const cmNow = data.confusion_matrices[name];
+        if (!cmNow) return;
+        document.getElementById('modal-cm-scroll').innerHTML = buildCMTableHTML(cmNow, labels, modalShowPct, true);
     }
-    h += '</table></div>';
-    return h;
-  }
-` + '</scr' + 'ipt></body></html>');
-    cmPopupWindow.document.close();
+    sel.onchange = refresh;
+    document.getElementById('modal-cm-toggle').onclick = function() {
+        modalShowPct = !modalShowPct;
+        this.textContent = modalShowPct ? '#' : '%';
+        refresh();
+    };
 }
 
 function renderCMTable(classifierName, data) {
