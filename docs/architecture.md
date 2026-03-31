@@ -167,29 +167,35 @@ Browser → Django :8001 → proxy → tee-compute :8002
 
 ### Evaluation flow
 
+All data loading uses GeoTessera's `sample_embeddings_at_points` API — no full
+tiles are loaded into memory. Pixel classifiers use random point samples; spatial
+classifiers (MLP, U-Net) use point-grid patches (256×256 grids of points at 10m
+spacing, reshaped to 2D).
+
 ```
 Upload shapefile(s) → select field + year + classifiers → Run
     ↓
 tee-compute:
-    1. field_start event (emitted immediately, before GeoTessera init)
+    1. field_start event (emitted immediately)
     2. GeoTessera init (cached instance reused across runs)
-    3. load_blocks_for_region(bbox, year)
-    4. Reproject GDF to tile CRS once (cached per CRS)
-    5. For each tile (lazy loading — one at a time):
-        a. download_progress event (shows "cached" or "downloading")
-        b. Load from disk cache or download from GeoTessera
-        c. Filter GDF to tile bbox using spatial index (R-tree)
-        d. Rasterize shapefile onto tile grid
-        e. Extract labelled pixel embeddings
-        f. Compute spatial features for labelled pixels only (if spatial_mlp)
-        g. Extract U-Net patches (if unet selected)
-    6. Memory check (abort with message if > 80% of available RAM)
-    7. start event (with pixel counts, class info, training percentages)
-    8. run_learning_curve (% of labels, adaptive repeats, capped test set)
-        → progress events per percentage
-    9. confusion_matrices event
-   10. Retrain all models on full data → model_ready events
-   11. done event
+    3. Generate stratified random points within shapefile polygons (200K max)
+    4. Fetch embeddings at points via sample_embeddings_at_points
+    5. If spatial MLP or U-Net selected:
+        a. Pick random labelled locations as patch centers
+        b. For each patch: generate 256×256 point grid at 10m spacing
+        c. Fetch embeddings via sample_embeddings_at_points (33MB/patch)
+        d. Reshape to (256, 256, 128) 2D patch
+        e. Rasterize labels, extract spatial features
+    6. start event (pixel counts, class info, training percentages)
+    7. run_learning_curve (% of labels, adaptive repeats, 200K test cap)
+        → progress events per percentage (with U-Net patch train/test)
+    8. confusion_matrices event
+    9. done event
+
+Download Models (deferred, user-triggered):
+   10. POST /api/evaluation/train-models
+   11. Train each classifier on full data → model_ready events
+   12. User downloads .joblib / .pt files
 ```
 
 ### NDJSON streaming
@@ -203,31 +209,30 @@ are set to 7200s (2 hours) on both Waitress and the proxy.
 
 | Layer | Key | Scope | Contents |
 |-------|-----|-------|----------|
-| **Disk tile cache** | `(year, lon, lat)` | `~/.cache/tessera-eval/tiles/` | Uncompressed `.npz` per tile (~488MB each). Survives restarts. |
-| **In-memory tile cache** | `(field, year)` | `_tile_cache` global | Concatenated vectors, labels, spatial features, U-Net patches. Lost on restart. |
+| **Disk result cache** | `(field, year, gdf_hash)` | `~/.cache/tessera-eval/` | Compressed `.npz` with vectors + labels (~100MB for 200K pixels). Survives restarts. |
+| **In-memory cache** | `(field, year)` | `_tile_cache` global | Vectors, labels, spatial features, U-Net patches, model params. Lost on restart. |
 | **GeoTessera instance** | singleton | `_geotessera_instance` | Loaded registry parquet. Avoids 10-30s HTTP check per run. |
 
 Re-running with different classifiers: uses in-memory cache (instant).
-Re-running after restart: uses disk cache (tiles load in ~0.15s each vs ~100s download).
-Changing field or year: in-memory cache misses, disk cache still valid.
-Uploading a new shapefile: caches are NOT invalidated (tiles don't depend on shapefile).
+Re-running after restart: uses disk result cache (<1s load).
+Changing field or year: both caches miss, full point sampling required.
+Uploading a new shapefile: in-memory cache not invalidated (keyed by field+year).
 
 ### Performance optimizations (country-scale)
 
 The pipeline is optimized for large evaluations (e.g., Austria: 40 tiles,
 42K features, 1M labelled pixels, 37 classes):
 
-**Tile loading phase:**
+**Data loading phase (point sampling):**
 
 | Optimization | What it avoids | Savings |
 |---|---|---|
-| Lazy tile loading (one at a time) | Loading all 40 tiles into memory at once (~10GB) | Prevents OOM |
-| Uncompressed disk cache | zlib decompression (2-3s/tile) | 60-80s per cached run |
+| Point sampling via `sample_embeddings_at_points` | Loading full tiles (~450MB each) | No OOM, ~33MB/patch |
+| Stratified sampling (200K points max) | Millions of labelled pixels | Memory bounded at ~100MB |
 | GeoTessera instance caching | Registry HTTP check + parquet read per run | 10-30s per run |
-| GDF reproject once per CRS | Reprojecting 42K features per tile (40x) | 4-20s |
-| Spatial index (R-tree) for bbox | Testing all 42K features per tile | 2-9s |
-| Masked spatial features | Computing features for full tile then indexing | 96% memory reduction |
-| Memory check before concatenation | Silent OOM kill | Clear error with advice |
+| Disk result cache (vectors + labels) | Re-downloading on restart | <1s vs minutes |
+| Point-grid patches for U-Net/spatial MLP | Loading full tiles for 2D context | 33MB per patch vs 450MB per tile |
+| Deferred model training (user-triggered) | 45+ minute U-Net training blocking results | Results in ~1 min |
 
 **Learning curve phase:**
 
@@ -239,10 +244,11 @@ The pipeline is optimized for large evaluations (e.g., Austria: 40 tiles,
 | Adaptive repeats (fewer at high %) | 5 repeats at 80% where variance is negligible | ~25% of high-% time |
 
 **When extending the pipeline**, keep these principles:
-- Never allocate H×W×dim arrays for the full tile — always mask to labelled pixels first
-- Never reproject or filter the full GDF per tile — cache reprojections, use spatial index
-- Never load all tiles into memory — process one at a time, accumulate only labelled pixels
-- Free intermediate lists (`del all_vectors`) after concatenation
+- Use `sample_embeddings_at_points` for pixel data — never load full tiles
+- For 2D patches, generate point grids at 10m spacing — never load full tiles
+- Cap total pixels at 200K — diminishing returns above that for learning curves
+- Defer expensive operations (model training) behind user-triggered endpoints
+- Every phase >2s must emit a status event to the browser
 
 ### tessera_eval library
 
