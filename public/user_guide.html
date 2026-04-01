@@ -40,6 +40,15 @@
 <body>
     <div id="content" class="loading">Loading user guide...</div>
     <script>
+        // Enable heading IDs for anchor links
+        const renderer = new marked.Renderer();
+        renderer.heading = function({ tokens, depth }) {
+            const text = this.parser.parseInline(tokens);
+            const slug = text.toLowerCase().replace(/<[^>]*>/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            return `<h${depth} id="${slug}">${text}</h${depth}>`;
+        };
+        marked.use({ renderer });
+
         fetch('/user_guide.md')
             .then(r => r.text())
             .then(md => {
