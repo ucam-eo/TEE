@@ -52,7 +52,9 @@
         fetch('/user_guide.md')
             .then(r => r.text())
             .then(md => {
-                document.getElementById('content').innerHTML = marked.parse(md);
+                const el = document.getElementById('content');
+                el.innerHTML = marked.parse(md);
+                el.classList.remove('loading');
                 // Scroll to anchor if present
                 if (window.location.hash) {
                     const el = document.getElementById(window.location.hash.slice(1));
