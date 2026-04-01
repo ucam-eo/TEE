@@ -35,6 +35,21 @@
         hr { border: none; border-top: 1px solid #eee; margin: 24px 0; }
         img { max-width: 100%; }
         .loading { text-align: center; color: #888; padding: 60px; font-size: 16px; }
+        #toc {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px 24px;
+            margin: 20px 0 32px;
+        }
+        #toc h2 { font-size: 16px; margin: 0 0 10px; border: none; padding: 0; color: #333; }
+        #toc ul { list-style: none; margin: 0; padding: 0; }
+        #toc li { margin: 3px 0; }
+        #toc a { text-decoration: none; color: #555; font-size: 13px; }
+        #toc a:hover { color: #667eea; }
+        #toc .toc-h2 { font-weight: 600; color: #333; font-size: 14px; margin-top: 6px; }
+        #toc .toc-h3 { padding-left: 16px; }
+        #toc .toc-h4 { padding-left: 32px; font-size: 12px; color: #888; }
     </style>
 </head>
 <body>
@@ -55,10 +70,51 @@
                 const el = document.getElementById('content');
                 el.innerHTML = marked.parse(md);
                 el.classList.remove('loading');
+
+                // Add section numbers and build TOC
+                const headings = el.querySelectorAll('h2, h3, h4');
+                const counters = [0, 0, 0]; // h2, h3, h4
+                const tocItems = [];
+
+                headings.forEach(h => {
+                    const level = parseInt(h.tagName[1]) - 2; // 0=h2, 1=h3, 2=h4
+                    counters[level]++;
+                    // Reset sub-counters
+                    for (let i = level + 1; i < counters.length; i++) counters[i] = 0;
+
+                    // Build section number
+                    let num;
+                    if (level === 0) num = `${counters[0]}`;
+                    else if (level === 1) num = `${counters[0]}.${counters[1]}`;
+                    else num = `${counters[0]}.${counters[1]}.${counters[2]}`;
+
+                    // Prepend number to heading
+                    h.innerHTML = `${num}. ${h.innerHTML}`;
+
+                    // Add to TOC
+                    const id = h.id;
+                    const text = h.textContent;
+                    tocItems.push({ level, num, text, id });
+                });
+
+                // Insert TOC after h1
+                const h1 = el.querySelector('h1');
+                if (h1 && tocItems.length > 0) {
+                    const toc = document.createElement('div');
+                    toc.id = 'toc';
+                    toc.innerHTML = '<h2>Contents</h2><ul>' +
+                        tocItems
+                            .filter(t => t.level < 2) // h2 and h3 only in TOC
+                            .map(t => `<li class="toc-h${t.level + 2}"><a href="#${t.id}">${t.text}</a></li>`)
+                            .join('') +
+                        '</ul>';
+                    h1.after(toc);
+                }
+
                 // Scroll to anchor if present
                 if (window.location.hash) {
-                    const el = document.getElementById(window.location.hash.slice(1));
-                    if (el) el.scrollIntoView();
+                    const target = document.getElementById(window.location.hash.slice(1));
+                    if (target) target.scrollIntoView();
                 }
             })
             .catch(() => {
