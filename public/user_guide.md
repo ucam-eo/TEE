@@ -390,15 +390,16 @@ alias tee='ssh -L 8001:localhost:8001 gpu-box "tee-compute"'
 
 ### What Runs Where
 
-| Component | Hosted server | Your machine |
-|-----------|:------------:|:------------:|
-| Map tiles, satellite imagery | ✓ | |
-| Embedding tile images | ✓ | |
-| Label sharing | ✓ | |
-| Viewport management | ✓ | |
-| Shapefile upload | | ✓ |
-| ML training + evaluation | | ✓ |
-| Model download | | ✓ |
+| Component | Hosted server | Local compute | GPU server (via SSH) |
+|-----------|:------------:|:------------:|:-------------------:|
+| Map tiles, satellite imagery | ✓ | | |
+| Embedding tile images | ✓ | | |
+| Label sharing | ✓ | | |
+| Viewport management | ✓ | | |
+| Shapefile upload | | ✓ | ✓ |
+| Embedding sampling (GeoTessera) | | ✓ | ✓ |
+| ML training + evaluation | | ✓ | ✓ |
+| Model download | | ✓ | ✓ |
 
 ### Command Reference
 
