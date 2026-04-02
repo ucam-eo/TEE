@@ -721,6 +721,7 @@
         <div class="toolbar-group">
             <button id="back-btn" style="background: #6c757d; color: white; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 13px;" onclick="window.location.href = '/'" title="Return to viewport list">← Back</button>
             <button id="status-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;" title="Show viewport status and info">ℹ️ Status</button>
+            <span id="compute-host-label" style="font-size: 11px; color: #8f8; opacity: 0.8; display: none;"></span>
             <select id="panel-layout-select" onchange="setPanelLayout(this.value)" style="padding: 5px 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 13px; cursor: pointer;">
                 <option value="explore">Explore</option>
                 <option value="change-detection">Change Detection</option>
@@ -1323,6 +1324,17 @@
         ].join('\n');
         window.location.href = `mailto:sk818@cam.ac.uk?subject=${encodeURIComponent('TEE Feedback — ' + vp)}&body=${encodeURIComponent(body)}`;
     }
+
+    // Show compute host in header
+    fetch('/health').then(r => r.json()).then(d => {
+        if (d.compute_host) {
+            const label = document.getElementById('compute-host-label');
+            if (label) {
+                label.textContent = 'compute: ' + d.compute_host;
+                label.style.display = '';
+            }
+        }
+    }).catch(() => {});
     </script>
 </body>
 </html>

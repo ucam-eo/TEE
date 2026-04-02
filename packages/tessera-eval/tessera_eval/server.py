@@ -789,10 +789,12 @@ def download_model(name):
 @app.route("/health", methods=["GET"])
 def health():
     """Health check — reports status, hosted server, and loaded data."""
+    import socket
     gdf = _get_merged_gdf()
     return jsonify({
         "status": "ok",
         "mode": "compute",
+        "compute_host": socket.gethostname(),
         "hosted": _hosted_url,
         "version": _get_version(),
         "shapefiles": len(_uploaded_shapefiles),
