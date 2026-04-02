@@ -381,7 +381,7 @@ Ask the admin to add this key to the server. They need to append it to `~/.ssh/a
 Add the server to your `~/.ssh/config` so you can refer to it by a short name:
 ```
 Host gpu-box
-    HostName daintree.cl.cam.ac.uk   # replace with your server's DNS name or IP
+    HostName myhost.uk   # replace with your server's DNS name or IP
     User yourname                     # replace with your username on the server
 ```
 
