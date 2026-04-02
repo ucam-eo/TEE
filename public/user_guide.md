@@ -350,9 +350,11 @@ tee-compute
 
 ### Remote Compute Setup (GPU Server)
 
+Run ML on a remote GPU server while browsing from your laptop. In the examples below, replace `gpu-box` with the DNS name or IP address of your GPU server.
+
 **One-time on the GPU server:**
 ```bash
-ssh-copy-id gpu-box
+ssh-copy-id gpu-box                # copies your SSH key so you can log in without a password
 ssh gpu-box 'python3 -m venv ~/tee-venv && ~/tee-venv/bin/pip install "tessera-eval[server]"   # the [server] part is required'
 ```
 
