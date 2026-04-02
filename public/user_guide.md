@@ -335,12 +335,23 @@ You open `localhost:8001`. The compute server handles ML evaluation locally and 
 
 ### Deployment Modes
 
-| Mode | What you run |
-|------|-------------|
-| **Hosted (default)** | Nothing — just open the website |
-| **Local compute** | `tee-compute` on your laptop |
-| **Remote compute** | `tee-compute` on GPU box + SSH tunnel |
-| **All local** | Django + tee-compute via `restart.sh` |
+| Mode | What you run | ML runs on |
+|------|-------------|-----------|
+| **Hosted (default)** | Nothing — just open the website | — (no ML) |
+| **Local compute** | `tee-compute` on your laptop | Your laptop |
+| **Remote compute** | `tee-compute` on GPU box + SSH tunnel | GPU server |
+| **All local** | Django + tee-compute via `restart.sh` | Your laptop |
+
+| Component | Hosted server | Local compute | GPU server (via SSH) |
+|-----------|:------------:|:------------:|:-------------------:|
+| Map tiles, satellite imagery | ✓ | | |
+| Embedding tile images | ✓ | | |
+| Label sharing | ✓ | | |
+| Viewport management | ✓ | | |
+| Shapefile upload | | ✓ | ✓ |
+| Embedding sampling (GeoTessera) | | ✓ | ✓ |
+| ML training + evaluation | | ✓ | ✓ |
+| Model download | | ✓ | ✓ |
 
 ### Local Compute Setup
 
@@ -387,19 +398,6 @@ Open `http://localhost:8001`.
 ```bash
 alias tee='ssh -L 8001:localhost:8001 gpu-box "tee-compute"'
 ```
-
-### What Runs Where
-
-| Component | Hosted server | Local compute | GPU server (via SSH) |
-|-----------|:------------:|:------------:|:-------------------:|
-| Map tiles, satellite imagery | ✓ | | |
-| Embedding tile images | ✓ | | |
-| Label sharing | ✓ | | |
-| Viewport management | ✓ | | |
-| Shapefile upload | | ✓ | ✓ |
-| Embedding sampling (GeoTessera) | | ✓ | ✓ |
-| ML training + evaluation | | ✓ | ✓ |
-| Model download | | ✓ | ✓ |
 
 ### Command Reference
 
