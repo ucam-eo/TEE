@@ -54,7 +54,7 @@
             const slug = text.toLowerCase().replace(/<[^>]*>/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
             return `<h${depth} id="${slug}">${text}</h${depth}>`;
         };
-        marked.use({ renderer });
+        marked.use({ renderer, smartypants: false });
 
         fetch('/user_guide.md')
             .then(r => r.text())
