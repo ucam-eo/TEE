@@ -293,7 +293,7 @@ python scripts/tee_evaluate.py --config eval_config.json --dry-run  # stats only
 
 ---
 
-## Running Evaluation on Your Own Machine
+## Running Evaluation on Your Own Machines
 
 All ML evaluation runs on a compute server (`tee-compute`). The hosted TEE server does not run ML.
 
