@@ -131,21 +131,7 @@
                         body.style.maxHeight = body.scrollHeight + 'px';
                     }
 
-                    // Click to toggle
-                    h2.addEventListener('click', () => {
-                        const isCollapsed = body.classList.contains('collapsed');
-                        if (isCollapsed) {
-                            body.classList.remove('collapsed');
-                            body.style.maxHeight = body.scrollHeight + 'px';
-                            toggle.classList.remove('collapsed');
-                        } else {
-                            body.style.maxHeight = body.scrollHeight + 'px';
-                            requestAnimationFrame(() => {
-                                body.classList.add('collapsed');
-                                toggle.classList.add('collapsed');
-                            });
-                        }
-                    });
+                    // Click handler added later via toggleSection (after TOC is built)
                 });
 
                 // Insert TOC after h1
