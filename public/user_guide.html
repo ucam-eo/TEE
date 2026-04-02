@@ -12,35 +12,28 @@
         h2:hover { color: #667eea; }
         h3 { font-size: 18px; margin: 24px 0 8px; color: #333; }
         h4 { font-size: 15px; margin: 16px 0 6px; color: #444; }
-        p { margin: 8px 0; }
-        a { color: #667eea; }
+        p { margin: 8px 0; } a { color: #667eea; }
         table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
         th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
         th { background: #f5f5f5; font-weight: 600; }
         code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; font-family: 'SF Mono', Menlo, monospace; }
         pre { background: #f5f5f5; padding: 16px; border-radius: 6px; overflow-x: auto; margin: 12px 0; }
         pre code { background: none; padding: 0; }
-        ul, ol { margin: 8px 0 8px 24px; }
-        li { margin: 4px 0; }
+        ul, ol { margin: 8px 0 8px 24px; } li { margin: 4px 0; }
         blockquote { border-left: 3px solid #667eea; padding-left: 16px; color: #555; margin: 12px 0; }
-        strong { color: #1a1a1a; }
-        hr { border: none; border-top: 1px solid #eee; margin: 24px 0; }
+        strong { color: #1a1a1a; } hr { border: none; border-top: 1px solid #eee; margin: 24px 0; }
         img { max-width: 100%; }
         .loading { text-align: center; color: #888; padding: 60px; font-size: 16px; }
-        .section-body { display: block; }
         .section-body.collapsed { display: none; }
         #toc { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px 24px; margin: 20px 0 32px; }
         #toc h2 { font-size: 16px; margin: 0 0 10px; border: none; padding: 0; color: #333; cursor: default; }
         #toc h2:hover { color: #333; }
         #toc ul { list-style: none; margin: 0; padding: 0; }
-        #toc li { margin: 3px 0; }
-        #toc a { text-decoration: none; color: #555; font-size: 13px; }
-        #toc a:hover { color: #667eea; }
+        #toc li { margin: 3px 0; cursor: pointer; }
+        #toc li:hover { color: #667eea; }
         #toc .toc-h2 { font-weight: 600; color: #333; font-size: 14px; margin-top: 6px; }
-        #toc .toc-h3 { padding-left: 16px; }
-        .toc-arrow { cursor: pointer; color: #aaa; font-size: 11px; margin-right: 4px; display: inline-block; }
-        .toc-arrow:hover { color: #667eea; }
-        .h2-arrow { font-size: 14px; color: #aaa; margin-right: 6px; }
+        #toc .toc-h3 { padding-left: 20px; color: #555; font-size: 13px; }
+        .arrow { color: #aaa; font-size: 12px; margin-right: 4px; }
     </style>
 </head>
 <body>
@@ -63,7 +56,7 @@
                 el.innerHTML = marked.parse(md);
                 el.classList.remove('loading');
 
-                // Number headings
+                // 1. Number headings
                 const headings = el.querySelectorAll('h2, h3, h4');
                 const c = [0, 0, 0];
                 const tocData = [];
@@ -76,8 +69,8 @@
                     tocData.push({ lv, text: h.textContent, id: h.id });
                 });
 
-                // Wrap h2 sections and make collapsible
-                const sections = {}; // id -> { body, arrow, tocArrow }
+                // 2. Wrap each h2's content in a section-body div
+                const sectionMap = {}; // id -> { body }
                 el.querySelectorAll('h2').forEach(h2 => {
                     const body = document.createElement('div');
                     body.className = 'section-body';
@@ -88,87 +81,89 @@
                         sib = next;
                     }
                     h2.after(body);
-
                     const open = KEEP_OPEN.some(k => h2.id.includes(k));
                     if (!open) body.classList.add('collapsed');
-
-                    const arrow = document.createElement('span');
-                    arrow.className = 'h2-arrow';
-                    arrow.textContent = open ? '▼' : '▶';
-                    h2.prepend(arrow);
-
-                    sections[h2.id] = { body, arrow, tocArrow: null };
-
-                    h2.addEventListener('click', () => toggle(h2.id));
+                    sectionMap[h2.id] = { body };
                 });
 
-                function toggle(id, forceOpen) {
-                    const s = sections[id];
+                // 3. Single toggle function
+                function setOpen(id, open) {
+                    const s = sectionMap[id];
                     if (!s) return;
-                    const collapsed = s.body.classList.contains('collapsed');
-                    if (forceOpen && !collapsed) return; // already open
-                    if (collapsed || forceOpen) {
+                    if (open) {
                         s.body.classList.remove('collapsed');
-                        s.arrow.textContent = '▼';
-                        if (s.tocArrow) s.tocArrow.textContent = '▼';
                     } else {
                         s.body.classList.add('collapsed');
-                        s.arrow.textContent = '▶';
-                        if (s.tocArrow) s.tocArrow.textContent = '▶';
                     }
+                    // Update all arrows for this section
+                    document.querySelectorAll(`[data-section="${id}"] .arrow, h2#${CSS.escape(id)} .arrow`).forEach(a => {
+                        a.textContent = open ? '▼ ' : '▶ ';
+                    });
                 }
 
-                // Build TOC
+                function isOpen(id) {
+                    return sectionMap[id] && !sectionMap[id].body.classList.contains('collapsed');
+                }
+
+                // 4. Add arrow + click handler to each h2
+                Object.keys(sectionMap).forEach(id => {
+                    const h2 = document.getElementById(id);
+                    if (!h2) return;
+                    const arrow = document.createElement('span');
+                    arrow.className = 'arrow';
+                    arrow.textContent = isOpen(id) ? '▼ ' : '▶ ';
+                    h2.prepend(arrow);
+                    h2.addEventListener('click', () => setOpen(id, !isOpen(id)));
+                });
+
+                // 5. Build TOC
                 const h1 = el.querySelector('h1');
                 if (h1 && tocData.length) {
                     const toc = document.createElement('div');
                     toc.id = 'toc';
-                    let html = '<h2>Contents</h2><ul>';
-                    tocData.filter(t => t.lv < 2).forEach(t => {
-                        if (t.lv === 0) {
-                            const open = KEEP_OPEN.some(k => t.id.includes(k));
-                            html += `<li class="toc-h2"><span class="toc-arrow" data-id="${t.id}">${open ? '▼' : '▶'}</span><a href="#${t.id}">${t.text}</a></li>`;
-                        } else {
-                            html += `<li class="toc-h3"><a href="#${t.id}">${t.text}</a></li>`;
-                        }
-                    });
-                    html += '</ul>';
-                    toc.innerHTML = html;
+                    toc.innerHTML = '<h2>Contents</h2><ul>' +
+                        tocData.filter(t => t.lv < 2).map(t => {
+                            if (t.lv === 0) {
+                                const open = KEEP_OPEN.some(k => t.id.includes(k));
+                                return `<li class="toc-h2" data-section="${t.id}"><span class="arrow">${open ? '▼ ' : '▶ '}</span>${t.text}</li>`;
+                            }
+                            return `<li class="toc-h3" data-scroll="${t.id}">${t.text}</li>`;
+                        }).join('') + '</ul>';
                     h1.after(toc);
 
-                    // Link TOC arrows to sections
-                    toc.querySelectorAll('.toc-arrow').forEach(a => {
-                        const id = a.dataset.id;
-                        if (sections[id]) sections[id].tocArrow = a;
-                        a.addEventListener('click', (e) => { e.stopPropagation(); toggle(id); });
-                    });
+                    // 6. Single click handler on TOC (event delegation)
+                    toc.addEventListener('click', (e) => {
+                        const li = e.target.closest('li');
+                        if (!li) return;
 
-                    // TOC links: expand + scroll
-                    toc.querySelectorAll('a').forEach(a => {
-                        a.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            const tid = a.getAttribute('href').slice(1);
-                            const target = document.getElementById(tid);
-                            if (!target) return;
-                            // Expand parent section
-                            const sb = target.closest('.section-body');
-                            if (sb) {
-                                const ph2 = sb.previousElementSibling;
-                                if (ph2 && ph2.id) toggle(ph2.id, true);
+                        const sectionId = li.dataset.section;
+                        const scrollId = li.dataset.scroll;
+
+                        if (sectionId) {
+                            // h2 entry: toggle expand/collapse
+                            setOpen(sectionId, !isOpen(sectionId));
+                        } else if (scrollId) {
+                            // h3 entry: expand parent section + scroll
+                            const target = document.getElementById(scrollId);
+                            if (target) {
+                                const parentBody = target.closest('.section-body');
+                                if (parentBody) {
+                                    const parentH2 = parentBody.previousElementSibling;
+                                    if (parentH2 && parentH2.id) setOpen(parentH2.id, true);
+                                }
+                                setTimeout(() => target.scrollIntoView({ behavior: 'smooth' }), 50);
                             }
-                            if (target.tagName === 'H2') toggle(target.id, true);
-                            setTimeout(() => target.scrollIntoView({ behavior: 'smooth' }), 50);
-                        });
+                        }
                     });
                 }
 
-                // Handle anchor on load
+                // 7. Handle anchor on load
                 if (window.location.hash) {
                     const t = document.getElementById(window.location.hash.slice(1));
                     if (t) {
                         const sb = t.closest('.section-body');
-                        if (sb) { const ph = sb.previousElementSibling; if (ph && ph.id) toggle(ph.id, true); }
-                        if (t.tagName === 'H2') toggle(t.id, true);
+                        if (sb && sb.previousElementSibling) setOpen(sb.previousElementSibling.id, true);
+                        if (t.tagName === 'H2') setOpen(t.id, true);
                         setTimeout(() => t.scrollIntoView(), 100);
                     }
                 }
