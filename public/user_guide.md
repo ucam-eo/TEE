@@ -395,9 +395,9 @@ ssh gpu-box    # should log in without a password prompt
 ```bash
 ssh gpu-box
 git clone -b dev https://github.com/ucam-eo/TEE.git ~/TEE   # first time only
-python3 -m venv ~/tee-venv                              # first time only
-source ~/tee-venv/bin/activate
-pip install -e '~/TEE/packages/tessera-eval[server]'    # the [server] part is required
+python3 -m venv ~/TEE/venv                                    # first time only
+source ~/TEE/venv/bin/activate
+pip install -e '~/TEE/packages/tessera-eval[server]'          # the [server] part is required
 exit
 ```
 
@@ -405,14 +405,14 @@ To update to the latest version later:
 ```bash
 ssh gpu-box
 cd ~/TEE && git pull
-source ~/tee-venv/bin/activate
+source venv/bin/activate
 pip install -e 'packages/tessera-eval[server]'
 exit
 ```
 
 **Each session (one command from your laptop):**
 ```bash
-ssh -L 8001:localhost:8001 gpu-box '~/tee-venv/bin/tee-compute'
+ssh -L 8001:localhost:8001 gpu-box '~/TEE/venv/bin/tee-compute'
 # Open http://localhost:8001 in your browser
 ```
 
@@ -420,7 +420,7 @@ This starts `tee-compute` on the server and creates an SSH tunnel so `localhost:
 
 > **Tip:** Add this alias to `~/.zshrc` or `~/.bashrc`:
 > ```bash
-> alias tee='ssh -L 8001:localhost:8001 gpu-box "~/tee-venv/bin/tee-compute"'
+> alias tee='ssh -L 8001:localhost:8001 gpu-box "~/TEE/venv/bin/tee-compute"'
 > ```
 > Then just type `tee` to start a session.
 
