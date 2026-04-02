@@ -332,58 +332,40 @@ All ML evaluation runs on a compute server (`tee-compute`). The hosted TEE serve
 | ML training + evaluation | | ✓ | ✓ |
 | Model download | | ✓ | ✓ |
 
-### Local Compute Setup
+### Setting Up a GPU Server
 
-**One-time:**
-```bash
-git clone https://github.com/ucam-eo/TEE.git
-python3 -m venv venv
-source venv/bin/activate
-pip install -e TEE/packages/tessera-eval[server]      # the [server] part is required
-```
-
-**Each session:**
-```bash
-source venv/bin/activate
-tee-compute
-# Open http://localhost:8001
-```
-
-### Remote Compute Setup (GPU Server)
-
-Run ML on a remote GPU server while browsing from your laptop.
+Before using either alternative below, set up the GPU server once:
 
 **Step 0: Open a terminal**
 
-You need a terminal (command line) to run these commands:
-- **Mac**: open **Terminal** (press Cmd+Space, type "Terminal", press Enter)
-- **Windows**: open **PowerShell** (press Win+X, select "Windows PowerShell") or install [Windows Terminal](https://learn.microsoft.com/en-us/windows/terminal/install)
+- **Mac**: press Cmd+Space, type "Terminal", press Enter
+- **Windows**: press Win+X, select "Windows PowerShell", or install [Windows Terminal](https://learn.microsoft.com/en-us/windows/terminal/install)
 
 For a full guide, see [How to open a terminal](https://tutorials.codebar.io/command-line/introduction/tutorial.html).
 
 **Step 1: Get SSH access**
 
-First, check if you already have an SSH key:
+Check if you already have an SSH key:
 ```bash
 cat ~/.ssh/id_rsa.pub
 ```
-If you see "No such file", generate a key (press Enter at every prompt to accept defaults):
+If you see "No such file", generate one (press Enter at every prompt):
 ```bash
 ssh-keygen
 ```
-Then copy the public key and send it to your server admin:
+Send the public key to your server admin:
 ```bash
 cat ~/.ssh/id_rsa.pub
 ```
-Ask the admin to add this key to the server. They need to append it to `~/.ssh/authorized_keys` in your home directory on the server.
+Ask them to append it to `~/.ssh/authorized_keys` in your home directory on the server.
 
 **Step 2: Configure SSH**
 
-Add the server to your `~/.ssh/config` so you can refer to it by a short name:
+Add the server to `~/.ssh/config` so you can refer to it by a short name:
 ```
 Host gpu-box
-    HostName myhost.uk   # replace with your server's DNS name or IP
-    User yourname                     # replace with your username on the server
+    HostName myhost.uk       # replace with your server's DNS name or IP
+    User yourname            # replace with your username on the server
 ```
 
 **Step 3: Verify SSH access**
@@ -397,11 +379,11 @@ ssh gpu-box
 git clone -b dev https://github.com/ucam-eo/TEE.git ~/TEE   # first time only
 python3 -m venv ~/TEE/venv                                    # first time only
 source ~/TEE/venv/bin/activate
-pip install -e "$HOME/TEE/packages/tessera-eval[server]"          # the [server] part is required
+pip install -e "$HOME/TEE/packages/tessera-eval[server]"
 exit
 ```
 
-To update to the latest version later:
+To update later:
 ```bash
 ssh gpu-box
 cd ~/TEE && git pull
@@ -410,18 +392,62 @@ pip install -e packages/tessera-eval[server]
 exit
 ```
 
-**Each session (one command from your laptop):**
-```bash
-ssh -L 8001:localhost:8001 gpu-box '~/TEE/venv/bin/tee-compute'
-# Open http://localhost:8001 in your browser
+---
+
+### Alternative A: Local UI + GPU Compute
+
+Your laptop runs the TEE UI, tiles, and data. The GPU server runs only ML evaluation.
+
+```
+Browser → localhost:8001 → Django (your laptop)
+                               │
+                               └── /api/evaluation/* → tunnel → gpu-box (tee-compute)
 ```
 
-This starts `tee-compute` on the server and creates an SSH tunnel so `localhost:8001` on your laptop reaches it.
+**Each session — open two terminals on your laptop:**
 
-> **Tip:** Add this alias to `~/.zshrc` or `~/.bashrc`:
+Terminal 1 — start Django:
+```bash
+cd ~/TEE
+./restart.sh
+# This starts Django on :8001 and local tee-compute on :8002
+```
+
+Terminal 2 — replace local tee-compute with GPU tunnel:
+```bash
+pkill -f tee-compute                    # stop the local tee-compute
+ssh -L 8002:localhost:5050 gpu-box '~/TEE/venv/bin/tee-compute --port 5050'
+```
+
+Open `http://localhost:8001`. The UI and tiles come from your laptop. When you click Run Evaluation, the ML runs on the GPU server.
+
+> **Why port 5050?** Port 8001 may already be in use on the GPU server. The tunnel maps your local port 8002 to the server's port 5050. Django automatically proxies evaluation requests to localhost:8002.
+
+---
+
+### Alternative B: Hosted UI + GPU Compute
+
+The hosted TEE server (tee.cl.cam.ac.uk) provides the UI, tiles, and data. The GPU server runs ML evaluation. Nothing runs on your laptop except the browser and SSH tunnel.
+
+```
+Browser → localhost:8001 → SSH tunnel → gpu-box (tee-compute)
+                                            │
+                                            ├── /api/evaluation/* → runs ML on gpu-box
+                                            └── everything else   → proxied to tee.cl.cam.ac.uk
+```
+
+**Each session — one command from your laptop:**
+```bash
+ssh -L 8001:localhost:5050 gpu-box '~/TEE/venv/bin/tee-compute --port 5050'
+```
+
+Open `http://localhost:8001`. The UI comes from tee.cl.cam.ac.uk (via proxy), evaluation runs on the GPU server.
+
+> **Tip:** Add an alias to `~/.zshrc` or `~/.bashrc`:
 > ```bash
-> alias tee='ssh -L 8001:localhost:8001 gpu-box "~/TEE/venv/bin/tee-compute"'
+> alias tee-gpu='ssh -L 8001:localhost:5050 gpu-box "~/TEE/venv/bin/tee-compute --port 5050"'
 > ```
+> Then just type `tee-gpu` to start a session.
 > Then just type `tee` to start a session.
 
 ### Command Reference
