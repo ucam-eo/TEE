@@ -338,7 +338,7 @@ All ML evaluation runs on a compute server (`tee-compute`). The hosted TEE serve
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install tessera-eval[server]
+pip install "tessera-eval[server]"   # the [server] part is required
 ```
 
 **Each session:**
@@ -353,7 +353,7 @@ tee-compute
 **One-time on the GPU server:**
 ```bash
 ssh-copy-id gpu-box
-ssh gpu-box 'python3 -m venv ~/tee-venv && ~/tee-venv/bin/pip install tessera-eval[server]'
+ssh gpu-box 'python3 -m venv ~/tee-venv && ~/tee-venv/bin/pip install "tessera-eval[server]"   # the [server] part is required'
 ```
 
 **Each session (one command from your laptop):**
@@ -382,7 +382,7 @@ tee-compute [OPTIONS]
 | `Connection refused` | Is `tee-compute` running? |
 | `Cannot reach hosted server` | Check internet: `curl https://tee.cl.cam.ac.uk/health` |
 | `No GeoTessera tiles found` | Try year 2025 (wider coverage) |
-| `ModuleNotFoundError` | `pip install tessera-eval[server]` |
+| `ModuleNotFoundError` | `pip install "tessera-eval[server]"   # the [server] part is required` |
 | SSH disconnects | Add `-o ServerAliveInterval=60` |
 | Port in use | Use `--port 8002` |
 
