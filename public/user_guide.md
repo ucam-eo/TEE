@@ -350,21 +350,52 @@ tee-compute
 
 ### Remote Compute Setup (GPU Server)
 
-Run ML on a remote GPU server while browsing from your laptop. In the examples below, replace `gpu-box` with the DNS name or IP address of your GPU server.
+Run ML on a remote GPU server while browsing from your laptop.
 
-**One-time on the GPU server:**
+**Step 1: Get SSH access**
+
+Ask your server admin to add your public key to the server. Send them the output of:
 ```bash
-ssh-copy-id gpu-box                # copies your SSH key so you can log in without a password
-ssh gpu-box 'python3 -m venv ~/tee-venv && ~/tee-venv/bin/pip install "tessera-eval[server]"   # the [server] part is required'
+cat ~/.ssh/id_rsa.pub
+```
+They need to append it to `~/.ssh/authorized_keys` on the server. If you don't have a key yet, run `ssh-keygen` first.
+
+**Step 2: Configure SSH**
+
+Add the server to your `~/.ssh/config` so you can refer to it by a short name:
+```
+Host gpu-box
+    HostName daintree.cl.cam.ac.uk   # replace with your server's DNS name or IP
+    User yourname                     # replace with your username on the server
+```
+
+**Step 3: Verify SSH access**
+```bash
+ssh gpu-box    # should log in without a password prompt
+```
+
+**Step 4: Install tessera-eval on the server**
+```bash
+ssh gpu-box
+python3 -m venv ~/tee-venv
+source ~/tee-venv/bin/activate
+pip install "tessera-eval[server]"   # the [server] part is required
+exit
 ```
 
 **Each session (one command from your laptop):**
 ```bash
 ssh -L 8001:localhost:8001 gpu-box '~/tee-venv/bin/tee-compute'
-# Open http://localhost:8001
+# Open http://localhost:8001 in your browser
 ```
 
-> **Tip:** Add `alias tee='ssh -L 8001:localhost:8001 gpu-box "~/tee-venv/bin/tee-compute"'` to your shell config.
+This starts `tee-compute` on the server and creates an SSH tunnel so `localhost:8001` on your laptop reaches it.
+
+> **Tip:** Add this alias to `~/.zshrc` or `~/.bashrc`:
+> ```bash
+> alias tee='ssh -L 8001:localhost:8001 gpu-box "~/tee-venv/bin/tee-compute"'
+> ```
+> Then just type `tee` to start a session.
 
 ### Command Reference
 
