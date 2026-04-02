@@ -442,9 +442,11 @@ tee-compute [OPTIONS]
 | `Connection refused` | Is `tee-compute` running? |
 | `Cannot reach hosted server` | Check internet: `curl https://tee.cl.cam.ac.uk/health` |
 | `No GeoTessera tiles found` | Try year 2025 (wider coverage) |
-| `ModuleNotFoundError` | `pip install -e 'path/to/TEE/packages/tessera-eval[server]'` |
+| `ModuleNotFoundError` | `pip install -e "$HOME/TEE/packages/tessera-eval[server]"` |
 | SSH disconnects | Add `-o ServerAliveInterval=60` |
-| Port in use | Use `--port 8002` |
+| `Address already in use` on the server | Port 8001 is taken by another service. Use a different port: `ssh -L 8001:localhost:5050 gpu-box '~/TEE/venv/bin/tee-compute --port 5050'` |
+| `Could not resolve hostname gpu-box` | Replace `gpu-box` with the name from your `~/.ssh/config`, or use the full hostname |
+| SSH asks for passphrase every time | Run `ssh-add` to cache your key, or use `ssh-agent` |
 
 ---
 
