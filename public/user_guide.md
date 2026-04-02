@@ -352,13 +352,29 @@ tee-compute
 
 Run ML on a remote GPU server while browsing from your laptop.
 
+**Step 0: Open a terminal**
+
+You need a terminal (command line) to run these commands:
+- **Mac**: open **Terminal** (press Cmd+Space, type "Terminal", press Enter)
+- **Windows**: open **PowerShell** (press Win+X, select "Windows PowerShell") or install [Windows Terminal](https://learn.microsoft.com/en-us/windows/terminal/install)
+
+For a full guide, see [How to open a terminal](https://tutorials.codebar.io/command-line/introduction/tutorial.html).
+
 **Step 1: Get SSH access**
 
-Ask your server admin to add your public key to the server. Send them the output of:
+First, check if you already have an SSH key:
 ```bash
 cat ~/.ssh/id_rsa.pub
 ```
-They need to append it to `~/.ssh/authorized_keys` on the server. If you don't have a key yet, run `ssh-keygen` first.
+If you see "No such file", generate a key (press Enter at every prompt to accept defaults):
+```bash
+ssh-keygen
+```
+Then copy the public key and send it to your server admin:
+```bash
+cat ~/.ssh/id_rsa.pub
+```
+Ask the admin to add this key to the server. They need to append it to `~/.ssh/authorized_keys` in your home directory on the server.
 
 **Step 2: Configure SSH**
 
