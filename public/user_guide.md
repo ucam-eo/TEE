@@ -339,7 +339,7 @@ All ML evaluation runs on a compute server (`tee-compute`). The hosted TEE serve
 git clone https://github.com/ucam-eo/TEE.git
 python3 -m venv venv
 source venv/bin/activate
-pip install -e 'TEE/packages/tessera-eval[server]'   # the [server] part is required
+pip install -e TEE/packages/tessera-eval[server]      # the [server] part is required
 ```
 
 **Each session:**
@@ -397,7 +397,7 @@ ssh gpu-box
 git clone -b dev https://github.com/ucam-eo/TEE.git ~/TEE   # first time only
 python3 -m venv ~/TEE/venv                                    # first time only
 source ~/TEE/venv/bin/activate
-pip install -e '~/TEE/packages/tessera-eval[server]'          # the [server] part is required
+pip install -e "$HOME/TEE/packages/tessera-eval[server]"          # the [server] part is required
 exit
 ```
 
@@ -406,7 +406,7 @@ To update to the latest version later:
 ssh gpu-box
 cd ~/TEE && git pull
 source venv/bin/activate
-pip install -e 'packages/tessera-eval[server]'
+pip install -e packages/tessera-eval[server]
 exit
 ```
 
