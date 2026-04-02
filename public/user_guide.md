@@ -394,7 +394,7 @@ ssh gpu-box    # should log in without a password prompt
 **Step 4: Install tessera-eval on the server**
 ```bash
 ssh gpu-box
-git clone https://github.com/ucam-eo/TEE.git ~/TEE    # first time only
+git clone -b dev https://github.com/ucam-eo/TEE.git ~/TEE   # first time only
 python3 -m venv ~/tee-venv                              # first time only
 source ~/tee-venv/bin/activate
 pip install -e '~/TEE/packages/tessera-eval[server]'    # the [server] part is required
