@@ -6,21 +6,10 @@
     <title>TEE User Guide</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        body {
-            max-width: 900px;
-            margin: 40px auto;
-            padding: 0 20px;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            color: #333;
-            line-height: 1.7;
-            font-size: 15px;
-            text-align: left;
-        }
+        body { max-width: 900px; margin: 40px auto; padding: 0 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #333; line-height: 1.7; font-size: 15px; text-align: left; }
         h1 { font-size: 28px; margin: 32px 0 16px; color: #1a1a1a; border-bottom: 2px solid #eee; padding-bottom: 8px; }
-        h2 { font-size: 22px; margin: 28px 0 12px; color: #1a1a1a; border-bottom: 1px solid #eee; padding-bottom: 6px; cursor: pointer; user-select: none; }
+        h2 { font-size: 22px; margin: 28px 0 0; color: #1a1a1a; border-bottom: 1px solid #eee; padding-bottom: 6px; cursor: pointer; user-select: none; }
         h2:hover { color: #667eea; }
-        h2 .toggle { font-size: 14px; color: #aaa; margin-right: 6px; display: inline-block; transition: transform 0.2s; }
-        h2 .toggle.collapsed { transform: rotate(-90deg); }
         h3 { font-size: 18px; margin: 24px 0 8px; color: #333; }
         h4 { font-size: 15px; margin: 16px 0 6px; color: #444; }
         p { margin: 8px 0; }
@@ -38,15 +27,9 @@
         hr { border: none; border-top: 1px solid #eee; margin: 24px 0; }
         img { max-width: 100%; }
         .loading { text-align: center; color: #888; padding: 60px; font-size: 16px; }
-        .section-body { overflow: hidden; transition: max-height 0.3s ease; }
-        .section-body.collapsed { max-height: 0 !important; }
-        #toc {
-            background: #f8f9fa;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 16px 24px;
-            margin: 20px 0 32px;
-        }
+        .section-body { display: block; }
+        .section-body.collapsed { display: none; }
+        #toc { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px 24px; margin: 20px 0 32px; }
         #toc h2 { font-size: 16px; margin: 0 0 10px; border: none; padding: 0; color: #333; cursor: default; }
         #toc h2:hover { color: #333; }
         #toc ul { list-style: none; margin: 0; padding: 0; }
@@ -55,12 +38,14 @@
         #toc a:hover { color: #667eea; }
         #toc .toc-h2 { font-weight: 600; color: #333; font-size: 14px; margin-top: 6px; }
         #toc .toc-h3 { padding-left: 16px; }
+        .toc-arrow { cursor: pointer; color: #aaa; font-size: 11px; margin-right: 4px; display: inline-block; }
+        .toc-arrow:hover { color: #667eea; }
+        .h2-arrow { font-size: 14px; color: #aaa; margin-right: 6px; }
     </style>
 </head>
 <body>
     <div id="content" class="loading">Loading user guide...</div>
     <script>
-        // Enable heading IDs for anchor links
         const renderer = new marked.Renderer();
         renderer.heading = function({ tokens, depth }) {
             const text = this.parser.parseInline(tokens);
@@ -69,8 +54,7 @@
         };
         marked.use({ renderer });
 
-        // Sections to keep expanded by default
-        const EXPANDED_BY_DEFAULT = ['what-is-tee', 'quick-start'];
+        const KEEP_OPEN = ['what-is-tee', 'quick-start'];
 
         fetch('/user_guide.md')
             .then(r => r.text())
@@ -79,172 +63,117 @@
                 el.innerHTML = marked.parse(md);
                 el.classList.remove('loading');
 
-                // Add section numbers, build TOC, and make h2 sections collapsible
+                // Number headings
                 const headings = el.querySelectorAll('h2, h3, h4');
-                const counters = [0, 0, 0];
-                const tocItems = [];
-
+                const c = [0, 0, 0];
+                const tocData = [];
                 headings.forEach(h => {
-                    const level = parseInt(h.tagName[1]) - 2;
-                    counters[level]++;
-                    for (let i = level + 1; i < counters.length; i++) counters[i] = 0;
-
-                    let num;
-                    if (level === 0) num = `${counters[0]}`;
-                    else if (level === 1) num = `${counters[0]}.${counters[1]}`;
-                    else num = `${counters[0]}.${counters[1]}.${counters[2]}`;
-
+                    const lv = parseInt(h.tagName[1]) - 2;
+                    c[lv]++;
+                    for (let i = lv + 1; i < 3; i++) c[i] = 0;
+                    const num = lv === 0 ? `${c[0]}` : lv === 1 ? `${c[0]}.${c[1]}` : `${c[0]}.${c[1]}.${c[2]}`;
                     h.innerHTML = `${num}. ${h.innerHTML}`;
-                    tocItems.push({ level, num, text: h.textContent, id: h.id });
+                    tocData.push({ lv, text: h.textContent, id: h.id });
                 });
 
-                // Wrap each h2 section's content in a collapsible div
-                const h2s = el.querySelectorAll('h2');
-                h2s.forEach(h2 => {
-                    // Collect all siblings until next h2 or end
+                // Wrap h2 sections and make collapsible
+                const sections = {}; // id -> { body, arrow, tocArrow }
+                el.querySelectorAll('h2').forEach(h2 => {
                     const body = document.createElement('div');
                     body.className = 'section-body';
-                    let sibling = h2.nextElementSibling;
-                    const siblings = [];
-                    while (sibling && sibling.tagName !== 'H2' && sibling.tagName !== 'H1') {
-                        siblings.push(sibling);
-                        sibling = sibling.nextElementSibling;
+                    let sib = h2.nextElementSibling;
+                    while (sib && sib.tagName !== 'H2' && sib.tagName !== 'H1') {
+                        const next = sib.nextElementSibling;
+                        body.appendChild(sib);
+                        sib = next;
                     }
-                    // Move siblings into body div
-                    siblings.forEach(s => body.appendChild(s));
                     h2.after(body);
 
-                    // Start collapsed unless in EXPANDED_BY_DEFAULT
-                    const expanded = EXPANDED_BY_DEFAULT.some(id => h2.id && h2.id.includes(id));
-                    if (!expanded) {
-                        body.classList.add('collapsed');
-                    }
+                    const open = KEEP_OPEN.some(k => h2.id.includes(k));
+                    if (!open) body.classList.add('collapsed');
 
-                    // Add toggle indicator
-                    const toggle = document.createElement('span');
-                    toggle.className = 'toggle' + (expanded ? '' : ' collapsed');
-                    toggle.textContent = '▼';
-                    h2.prepend(toggle);
+                    const arrow = document.createElement('span');
+                    arrow.className = 'h2-arrow';
+                    arrow.textContent = open ? '▼' : '▶';
+                    h2.prepend(arrow);
 
-                    // Set max-height for animation
-                    if (expanded) {
-                        body.style.maxHeight = body.scrollHeight + 'px';
-                    }
+                    sections[h2.id] = { body, arrow, tocArrow: null };
 
-                    // Click handler added later via toggleSection (after TOC is built)
+                    h2.addEventListener('click', () => toggle(h2.id));
                 });
 
-                // Insert TOC after h1
+                function toggle(id, forceOpen) {
+                    const s = sections[id];
+                    if (!s) return;
+                    const collapsed = s.body.classList.contains('collapsed');
+                    if (forceOpen && !collapsed) return; // already open
+                    if (collapsed || forceOpen) {
+                        s.body.classList.remove('collapsed');
+                        s.arrow.textContent = '▼';
+                        if (s.tocArrow) s.tocArrow.textContent = '▼';
+                    } else {
+                        s.body.classList.add('collapsed');
+                        s.arrow.textContent = '▶';
+                        if (s.tocArrow) s.tocArrow.textContent = '▶';
+                    }
+                }
+
+                // Build TOC
                 const h1 = el.querySelector('h1');
-                if (h1 && tocItems.length > 0) {
+                if (h1 && tocData.length) {
                     const toc = document.createElement('div');
                     toc.id = 'toc';
-                    // Build TOC with toggle indicators for h2 entries
-                    toc.innerHTML = '<h2>Contents</h2><ul>' +
-                        tocItems
-                            .filter(t => t.level < 2)
-                            .map(t => {
-                                if (t.level === 0) {
-                                    const isExpanded = EXPANDED_BY_DEFAULT.some(id => t.id.includes(id));
-                                    const arrow = isExpanded ? '▼' : '▶';
-                                    return `<li class="toc-h2"><span class="toc-toggle" data-target="${t.id}" style="cursor:pointer; color:#aaa; font-size:11px; margin-right:4px; display:inline-block;">${arrow}</span><a href="#${t.id}">${t.text}</a></li>`;
-                                }
-                                return `<li class="toc-h3"><a href="#${t.id}">${t.text}</a></li>`;
-                            })
-                            .join('') +
-                        '</ul>';
+                    let html = '<h2>Contents</h2><ul>';
+                    tocData.filter(t => t.lv < 2).forEach(t => {
+                        if (t.lv === 0) {
+                            const open = KEEP_OPEN.some(k => t.id.includes(k));
+                            html += `<li class="toc-h2"><span class="toc-arrow" data-id="${t.id}">${open ? '▼' : '▶'}</span><a href="#${t.id}">${t.text}</a></li>`;
+                        } else {
+                            html += `<li class="toc-h3"><a href="#${t.id}">${t.text}</a></li>`;
+                        }
+                    });
+                    html += '</ul>';
+                    toc.innerHTML = html;
                     h1.after(toc);
 
-                    // Helper: toggle a section by its h2 id
-                    function toggleSection(h2Id, forceExpand) {
-                        const target = document.getElementById(h2Id);
-                        if (!target || target.tagName !== 'H2') return;
-                        const body = target.nextElementSibling;
-                        if (!body || !body.classList.contains('section-body')) return;
-                        const toggle = target.querySelector('.toggle');
-                        const tocToggle = toc.querySelector(`.toc-toggle[data-target="${h2Id}"]`);
-                        const isCollapsed = body.classList.contains('collapsed');
-
-                        if (forceExpand || isCollapsed) {
-                            body.classList.remove('collapsed');
-                            body.style.maxHeight = body.scrollHeight + 'px';
-                            if (toggle) toggle.classList.remove('collapsed');
-                            if (tocToggle) tocToggle.textContent = '▼';
-                        } else {
-                            body.style.maxHeight = body.scrollHeight + 'px';
-                            requestAnimationFrame(() => {
-                                body.classList.add('collapsed');
-                                if (toggle) toggle.classList.add('collapsed');
-                                if (tocToggle) tocToggle.textContent = '▶';
-                            });
-                        }
-                    }
-
-                    // Sync h2 heading clicks with TOC toggles
-                    h2s.forEach(h2 => {
-                        // Override the existing click handler to also sync TOC
-                        h2.onclick = () => toggleSection(h2.id);
+                    // Link TOC arrows to sections
+                    toc.querySelectorAll('.toc-arrow').forEach(a => {
+                        const id = a.dataset.id;
+                        if (sections[id]) sections[id].tocArrow = a;
+                        a.addEventListener('click', (e) => { e.stopPropagation(); toggle(id); });
                     });
 
-                    // TOC toggle clicks: expand/collapse without scrolling
-                    toc.querySelectorAll('.toc-toggle').forEach(btn => {
-                        btn.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            toggleSection(btn.dataset.target);
-                        });
-                    });
-
-                    // TOC link clicks: expand and scroll
+                    // TOC links: expand + scroll
                     toc.querySelectorAll('a').forEach(a => {
                         a.addEventListener('click', (e) => {
                             e.preventDefault();
-                            const targetId = a.getAttribute('href').slice(1);
-                            let target = document.getElementById(targetId);
+                            const tid = a.getAttribute('href').slice(1);
+                            const target = document.getElementById(tid);
                             if (!target) return;
-
-                            // If h3/h4 inside a collapsed section, expand parent
-                            let sectionBody = target.closest('.section-body');
-                            if (sectionBody && sectionBody.classList.contains('collapsed')) {
-                                const parentH2 = sectionBody.previousElementSibling;
-                                if (parentH2) toggleSection(parentH2.id, true);
+                            // Expand parent section
+                            const sb = target.closest('.section-body');
+                            if (sb) {
+                                const ph2 = sb.previousElementSibling;
+                                if (ph2 && ph2.id) toggle(ph2.id, true);
                             }
-                            // If h2, expand it
-                            if (target.tagName === 'H2') {
-                                toggleSection(target.id, true);
-                            }
-                            setTimeout(() => target.scrollIntoView({ behavior: 'smooth' }), 100);
+                            if (target.tagName === 'H2') toggle(target.id, true);
+                            setTimeout(() => target.scrollIntoView({ behavior: 'smooth' }), 50);
                         });
                     });
                 }
 
-                // Scroll to anchor if present (and expand its section)
+                // Handle anchor on load
                 if (window.location.hash) {
-                    const target = document.getElementById(window.location.hash.slice(1));
-                    if (target) {
-                        let sectionBody = target.closest('.section-body');
-                        if (sectionBody && sectionBody.classList.contains('collapsed')) {
-                            sectionBody.classList.remove('collapsed');
-                            sectionBody.style.maxHeight = sectionBody.scrollHeight + 'px';
-                            const h2Toggle = sectionBody.previousElementSibling.querySelector('.toggle');
-                            if (h2Toggle) h2Toggle.classList.remove('collapsed');
-                        }
-                        if (target.tagName === 'H2') {
-                            const body = target.nextElementSibling;
-                            if (body && body.classList.contains('collapsed')) {
-                                body.classList.remove('collapsed');
-                                body.style.maxHeight = body.scrollHeight + 'px';
-                                const toggle = target.querySelector('.toggle');
-                                if (toggle) toggle.classList.remove('collapsed');
-                            }
-                        }
-                        setTimeout(() => target.scrollIntoView(), 200);
+                    const t = document.getElementById(window.location.hash.slice(1));
+                    if (t) {
+                        const sb = t.closest('.section-body');
+                        if (sb) { const ph = sb.previousElementSibling; if (ph && ph.id) toggle(ph.id, true); }
+                        if (t.tagName === 'H2') toggle(t.id, true);
+                        setTimeout(() => t.scrollIntoView(), 100);
                     }
                 }
             })
-            .catch(() => {
-                document.getElementById('content').innerHTML = '<p>Failed to load user guide.</p>';
-            });
+            .catch(() => { document.getElementById('content').innerHTML = '<p>Failed to load user guide.</p>'; });
     </script>
 </body>
 </html>
