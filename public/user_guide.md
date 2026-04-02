@@ -336,9 +336,10 @@ All ML evaluation runs on a compute server (`tee-compute`). The hosted TEE serve
 
 **One-time:**
 ```bash
+git clone https://github.com/ucam-eo/TEE.git
 python3 -m venv venv
 source venv/bin/activate
-pip install 'tessera-eval[server]'   # the [server] part is required
+pip install -e 'TEE/packages/tessera-eval[server]'   # the [server] part is required
 ```
 
 **Each session:**
@@ -393,9 +394,10 @@ ssh gpu-box    # should log in without a password prompt
 **Step 4: Install tessera-eval on the server**
 ```bash
 ssh gpu-box
+git clone https://github.com/ucam-eo/TEE.git ~/TEE
 python3 -m venv ~/tee-venv
 source ~/tee-venv/bin/activate
-pip install 'tessera-eval[server]'   # the [server] part is required
+pip install -e '~/TEE/packages/tessera-eval[server]'   # the [server] part is required
 exit
 ```
 
@@ -431,7 +433,7 @@ tee-compute [OPTIONS]
 | `Connection refused` | Is `tee-compute` running? |
 | `Cannot reach hosted server` | Check internet: `curl https://tee.cl.cam.ac.uk/health` |
 | `No GeoTessera tiles found` | Try year 2025 (wider coverage) |
-| `ModuleNotFoundError` | `pip install 'tessera-eval[server]'   # the [server] part is required` |
+| `ModuleNotFoundError` | `pip install -e 'path/to/TEE/packages/tessera-eval[server]'` |
 | SSH disconnects | Add `-o ServerAliveInterval=60` |
 | Port in use | Use `--port 8002` |
 
