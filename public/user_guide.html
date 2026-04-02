@@ -153,38 +153,79 @@
                 if (h1 && tocItems.length > 0) {
                     const toc = document.createElement('div');
                     toc.id = 'toc';
+                    // Build TOC with toggle indicators for h2 entries
                     toc.innerHTML = '<h2>Contents</h2><ul>' +
                         tocItems
                             .filter(t => t.level < 2)
-                            .map(t => `<li class="toc-h${t.level + 2}"><a href="#${t.id}">${t.text}</a></li>`)
+                            .map(t => {
+                                if (t.level === 0) {
+                                    const isExpanded = EXPANDED_BY_DEFAULT.some(id => t.id.includes(id));
+                                    const arrow = isExpanded ? '▼' : '▶';
+                                    return `<li class="toc-h2"><span class="toc-toggle" data-target="${t.id}" style="cursor:pointer; color:#aaa; font-size:11px; margin-right:4px; display:inline-block;">${arrow}</span><a href="#${t.id}">${t.text}</a></li>`;
+                                }
+                                return `<li class="toc-h3"><a href="#${t.id}">${t.text}</a></li>`;
+                            })
                             .join('') +
                         '</ul>';
                     h1.after(toc);
 
-                    // TOC links expand the target section
+                    // Helper: toggle a section by its h2 id
+                    function toggleSection(h2Id, forceExpand) {
+                        const target = document.getElementById(h2Id);
+                        if (!target || target.tagName !== 'H2') return;
+                        const body = target.nextElementSibling;
+                        if (!body || !body.classList.contains('section-body')) return;
+                        const toggle = target.querySelector('.toggle');
+                        const tocToggle = toc.querySelector(`.toc-toggle[data-target="${h2Id}"]`);
+                        const isCollapsed = body.classList.contains('collapsed');
+
+                        if (forceExpand || isCollapsed) {
+                            body.classList.remove('collapsed');
+                            body.style.maxHeight = body.scrollHeight + 'px';
+                            if (toggle) toggle.classList.remove('collapsed');
+                            if (tocToggle) tocToggle.textContent = '▼';
+                        } else {
+                            body.style.maxHeight = body.scrollHeight + 'px';
+                            requestAnimationFrame(() => {
+                                body.classList.add('collapsed');
+                                if (toggle) toggle.classList.add('collapsed');
+                                if (tocToggle) tocToggle.textContent = '▶';
+                            });
+                        }
+                    }
+
+                    // Sync h2 heading clicks with TOC toggles
+                    h2s.forEach(h2 => {
+                        // Override the existing click handler to also sync TOC
+                        h2.onclick = () => toggleSection(h2.id);
+                    });
+
+                    // TOC toggle clicks: expand/collapse without scrolling
+                    toc.querySelectorAll('.toc-toggle').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            toggleSection(btn.dataset.target);
+                        });
+                    });
+
+                    // TOC link clicks: expand and scroll
                     toc.querySelectorAll('a').forEach(a => {
                         a.addEventListener('click', (e) => {
+                            e.preventDefault();
                             const targetId = a.getAttribute('href').slice(1);
-                            // Find the h2 that contains this heading
                             let target = document.getElementById(targetId);
                             if (!target) return;
-                            // If it's an h3/h4, find its parent h2's section-body
+
+                            // If h3/h4 inside a collapsed section, expand parent
                             let sectionBody = target.closest('.section-body');
                             if (sectionBody && sectionBody.classList.contains('collapsed')) {
-                                sectionBody.classList.remove('collapsed');
-                                sectionBody.style.maxHeight = sectionBody.scrollHeight + 'px';
-                                const h2Toggle = sectionBody.previousElementSibling.querySelector('.toggle');
-                                if (h2Toggle) h2Toggle.classList.remove('collapsed');
+                                const parentH2 = sectionBody.previousElementSibling;
+                                if (parentH2) toggleSection(parentH2.id, true);
                             }
-                            // If it IS an h2, expand its body
+                            // If h2, expand it
                             if (target.tagName === 'H2') {
-                                const body = target.nextElementSibling;
-                                if (body && body.classList.contains('collapsed')) {
-                                    body.classList.remove('collapsed');
-                                    body.style.maxHeight = body.scrollHeight + 'px';
-                                    const toggle = target.querySelector('.toggle');
-                                    if (toggle) toggle.classList.remove('collapsed');
-                                }
+                                toggleSection(target.id, true);
                             }
                             setTimeout(() => target.scrollIntoView({ behavior: 'smooth' }), 100);
                         });
