@@ -17,7 +17,10 @@
             text-align: left;
         }
         h1 { font-size: 28px; margin: 32px 0 16px; color: #1a1a1a; border-bottom: 2px solid #eee; padding-bottom: 8px; }
-        h2 { font-size: 22px; margin: 28px 0 12px; color: #1a1a1a; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+        h2 { font-size: 22px; margin: 28px 0 12px; color: #1a1a1a; border-bottom: 1px solid #eee; padding-bottom: 6px; cursor: pointer; user-select: none; }
+        h2:hover { color: #667eea; }
+        h2 .toggle { font-size: 14px; color: #aaa; margin-right: 6px; display: inline-block; transition: transform 0.2s; }
+        h2 .toggle.collapsed { transform: rotate(-90deg); }
         h3 { font-size: 18px; margin: 24px 0 8px; color: #333; }
         h4 { font-size: 15px; margin: 16px 0 6px; color: #444; }
         p { margin: 8px 0; }
@@ -35,6 +38,8 @@
         hr { border: none; border-top: 1px solid #eee; margin: 24px 0; }
         img { max-width: 100%; }
         .loading { text-align: center; color: #888; padding: 60px; font-size: 16px; }
+        .section-body { overflow: hidden; transition: max-height 0.3s ease; }
+        .section-body.collapsed { max-height: 0 !important; }
         #toc {
             background: #f8f9fa;
             border: 1px solid #e0e0e0;
@@ -42,14 +47,14 @@
             padding: 16px 24px;
             margin: 20px 0 32px;
         }
-        #toc h2 { font-size: 16px; margin: 0 0 10px; border: none; padding: 0; color: #333; }
+        #toc h2 { font-size: 16px; margin: 0 0 10px; border: none; padding: 0; color: #333; cursor: default; }
+        #toc h2:hover { color: #333; }
         #toc ul { list-style: none; margin: 0; padding: 0; }
         #toc li { margin: 3px 0; }
         #toc a { text-decoration: none; color: #555; font-size: 13px; }
         #toc a:hover { color: #667eea; }
         #toc .toc-h2 { font-weight: 600; color: #333; font-size: 14px; margin-top: 6px; }
         #toc .toc-h3 { padding-left: 16px; }
-        #toc .toc-h4 { padding-left: 32px; font-size: 12px; color: #888; }
     </style>
 </head>
 <body>
@@ -64,6 +69,9 @@
         };
         marked.use({ renderer });
 
+        // Sections to keep expanded by default
+        const EXPANDED_BY_DEFAULT = ['what-is-tee', 'quick-start'];
+
         fetch('/user_guide.md')
             .then(r => r.text())
             .then(md => {
@@ -71,30 +79,73 @@
                 el.innerHTML = marked.parse(md);
                 el.classList.remove('loading');
 
-                // Add section numbers and build TOC
+                // Add section numbers, build TOC, and make h2 sections collapsible
                 const headings = el.querySelectorAll('h2, h3, h4');
-                const counters = [0, 0, 0]; // h2, h3, h4
+                const counters = [0, 0, 0];
                 const tocItems = [];
 
                 headings.forEach(h => {
-                    const level = parseInt(h.tagName[1]) - 2; // 0=h2, 1=h3, 2=h4
+                    const level = parseInt(h.tagName[1]) - 2;
                     counters[level]++;
-                    // Reset sub-counters
                     for (let i = level + 1; i < counters.length; i++) counters[i] = 0;
 
-                    // Build section number
                     let num;
                     if (level === 0) num = `${counters[0]}`;
                     else if (level === 1) num = `${counters[0]}.${counters[1]}`;
                     else num = `${counters[0]}.${counters[1]}.${counters[2]}`;
 
-                    // Prepend number to heading
                     h.innerHTML = `${num}. ${h.innerHTML}`;
+                    tocItems.push({ level, num, text: h.textContent, id: h.id });
+                });
 
-                    // Add to TOC
-                    const id = h.id;
-                    const text = h.textContent;
-                    tocItems.push({ level, num, text, id });
+                // Wrap each h2 section's content in a collapsible div
+                const h2s = el.querySelectorAll('h2');
+                h2s.forEach(h2 => {
+                    // Collect all siblings until next h2 or end
+                    const body = document.createElement('div');
+                    body.className = 'section-body';
+                    let sibling = h2.nextElementSibling;
+                    const siblings = [];
+                    while (sibling && sibling.tagName !== 'H2' && sibling.tagName !== 'H1') {
+                        siblings.push(sibling);
+                        sibling = sibling.nextElementSibling;
+                    }
+                    // Move siblings into body div
+                    siblings.forEach(s => body.appendChild(s));
+                    h2.after(body);
+
+                    // Start collapsed unless in EXPANDED_BY_DEFAULT
+                    const expanded = EXPANDED_BY_DEFAULT.some(id => h2.id && h2.id.includes(id));
+                    if (!expanded) {
+                        body.classList.add('collapsed');
+                    }
+
+                    // Add toggle indicator
+                    const toggle = document.createElement('span');
+                    toggle.className = 'toggle' + (expanded ? '' : ' collapsed');
+                    toggle.textContent = '▼';
+                    h2.prepend(toggle);
+
+                    // Set max-height for animation
+                    if (expanded) {
+                        body.style.maxHeight = body.scrollHeight + 'px';
+                    }
+
+                    // Click to toggle
+                    h2.addEventListener('click', () => {
+                        const isCollapsed = body.classList.contains('collapsed');
+                        if (isCollapsed) {
+                            body.classList.remove('collapsed');
+                            body.style.maxHeight = body.scrollHeight + 'px';
+                            toggle.classList.remove('collapsed');
+                        } else {
+                            body.style.maxHeight = body.scrollHeight + 'px';
+                            requestAnimationFrame(() => {
+                                body.classList.add('collapsed');
+                                toggle.classList.add('collapsed');
+                            });
+                        }
+                    });
                 });
 
                 // Insert TOC after h1
@@ -104,17 +155,64 @@
                     toc.id = 'toc';
                     toc.innerHTML = '<h2>Contents</h2><ul>' +
                         tocItems
-                            .filter(t => t.level < 2) // h2 and h3 only in TOC
+                            .filter(t => t.level < 2)
                             .map(t => `<li class="toc-h${t.level + 2}"><a href="#${t.id}">${t.text}</a></li>`)
                             .join('') +
                         '</ul>';
                     h1.after(toc);
+
+                    // TOC links expand the target section
+                    toc.querySelectorAll('a').forEach(a => {
+                        a.addEventListener('click', (e) => {
+                            const targetId = a.getAttribute('href').slice(1);
+                            // Find the h2 that contains this heading
+                            let target = document.getElementById(targetId);
+                            if (!target) return;
+                            // If it's an h3/h4, find its parent h2's section-body
+                            let sectionBody = target.closest('.section-body');
+                            if (sectionBody && sectionBody.classList.contains('collapsed')) {
+                                sectionBody.classList.remove('collapsed');
+                                sectionBody.style.maxHeight = sectionBody.scrollHeight + 'px';
+                                const h2Toggle = sectionBody.previousElementSibling.querySelector('.toggle');
+                                if (h2Toggle) h2Toggle.classList.remove('collapsed');
+                            }
+                            // If it IS an h2, expand its body
+                            if (target.tagName === 'H2') {
+                                const body = target.nextElementSibling;
+                                if (body && body.classList.contains('collapsed')) {
+                                    body.classList.remove('collapsed');
+                                    body.style.maxHeight = body.scrollHeight + 'px';
+                                    const toggle = target.querySelector('.toggle');
+                                    if (toggle) toggle.classList.remove('collapsed');
+                                }
+                            }
+                            setTimeout(() => target.scrollIntoView({ behavior: 'smooth' }), 100);
+                        });
+                    });
                 }
 
-                // Scroll to anchor if present
+                // Scroll to anchor if present (and expand its section)
                 if (window.location.hash) {
                     const target = document.getElementById(window.location.hash.slice(1));
-                    if (target) target.scrollIntoView();
+                    if (target) {
+                        let sectionBody = target.closest('.section-body');
+                        if (sectionBody && sectionBody.classList.contains('collapsed')) {
+                            sectionBody.classList.remove('collapsed');
+                            sectionBody.style.maxHeight = sectionBody.scrollHeight + 'px';
+                            const h2Toggle = sectionBody.previousElementSibling.querySelector('.toggle');
+                            if (h2Toggle) h2Toggle.classList.remove('collapsed');
+                        }
+                        if (target.tagName === 'H2') {
+                            const body = target.nextElementSibling;
+                            if (body && body.classList.contains('collapsed')) {
+                                body.classList.remove('collapsed');
+                                body.style.maxHeight = body.scrollHeight + 'px';
+                                const toggle = target.querySelector('.toggle');
+                                if (toggle) toggle.classList.remove('collapsed');
+                            }
+                        }
+                        setTimeout(() => target.scrollIntoView(), 200);
+                    }
                 }
             })
             .catch(() => {
