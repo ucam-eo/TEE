@@ -336,11 +336,14 @@ All ML evaluation runs on a compute server (`tee-compute`). The hosted TEE serve
 
 **One-time:**
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install tessera-eval[server]
 ```
 
 **Each session:**
 ```bash
+source venv/bin/activate
 tee-compute
 # Open http://localhost:8001
 ```
@@ -350,16 +353,16 @@ tee-compute
 **One-time on the GPU server:**
 ```bash
 ssh-copy-id gpu-box
-ssh gpu-box 'pip install tessera-eval[server]'
+ssh gpu-box 'python3 -m venv ~/tee-venv && ~/tee-venv/bin/pip install tessera-eval[server]'
 ```
 
 **Each session (one command from your laptop):**
 ```bash
-ssh -L 8001:localhost:8001 gpu-box 'tee-compute'
+ssh -L 8001:localhost:8001 gpu-box '~/tee-venv/bin/tee-compute'
 # Open http://localhost:8001
 ```
 
-> **Tip:** Add `alias tee='ssh -L 8001:localhost:8001 gpu-box "tee-compute"'` to your shell config.
+> **Tip:** Add `alias tee='ssh -L 8001:localhost:8001 gpu-box "~/tee-venv/bin/tee-compute"'` to your shell config.
 
 ### Command Reference
 
