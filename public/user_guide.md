@@ -1,322 +1,297 @@
 # TEE User Guide
 
-A guide to using the Tessera Embeddings Explorer (TEE) web interface.
+## What is TEE?
 
-**Privacy by design:** Your ground-truth labels and evaluation results stay private. All ML evaluation runs on your own machine (or a compute server you control) — never on the hosted TEE server. Similarity searches and labelling run entirely in your browser. The only data shared with the server is map tile requests and explicit label sharing (opt-in).
+TEE (Tessera Embeddings Explorer) is a web-based tool for exploring, labelling, and evaluating Sentinel-2 satellite embeddings. With TEE you can:
+
+- **Explore** any 5km × 5km area on Earth using 128-dimensional Tessera embeddings (2018–2025)
+- **Find similar pixels** instantly — double-click anywhere to highlight similar locations across the viewport
+- **Label habitats** using K-means clustering, manual pins, or polygon drawing
+- **Evaluate classifiers** on ground-truth shapefiles at any scale — from a single viewport to an entire country
+- **Compare years** side by side to detect land-use change
+
+> **Privacy by design:** Similarity searches and labelling run entirely in your browser. ML evaluation runs on your own machine. Ground-truth data never leaves your desktop. The hosted server only serves map tiles and satellite imagery.
+
+---
+
+## Quick Start
+
+### Path 1: Explore a location
+
+1. Open TEE → **Viewports** tab → **Create New Viewport**
+2. Search for a place or click the map → select years → **Create**
+3. When processing completes, click **Open** → double-click any pixel to find similar locations
+
+### Path 2: Label habitats
+
+1. Open a viewport → switch to **Labelling** mode (header dropdown)
+2. Click **Segment** to run K-means → review clusters → **Promote** good ones to labels
+3. Fine-tune with manual pins (Ctrl+click) and polygons (Ctrl+double-click)
+4. **Export** as Shapefile for use in GIS or as ground truth for validation
+
+### Path 3: Evaluate classifiers
+
+1. In the Viewport Manager → **Validation** tab → **Open Validation**
+2. Upload a ground-truth `.zip` shapefile → select a class field and year
+3. Check classifiers (k-NN, RF, XGBoost, MLP) → **Run Evaluation**
+4. View learning curves, confusion matrix, and download trained models
+
+---
 
 ## The Viewport Manager
 
-The **Viewport Manager** is the home page of TEE. It has three tabs:
+The **Viewport Manager** is the home page. It has three tabs:
 
-- **Viewports** — create, manage, and open viewports
-- **Validation** — evaluate classifiers on ground-truth shapefiles at any scale
-- **Users** — manage user accounts (admin only)
+| Tab | Purpose |
+|-----|---------|
+| **Viewports** | Create, manage, and open viewports |
+| **Validation** | Evaluate classifiers on ground-truth shapefiles |
+| **Users** | Manage user accounts (admin only) |
+
+<!-- Screenshot: viewport_manager.png — Viewport Manager showing the three tabs, viewport list grouped by creator, and the map -->
 
 ### Viewports Tab
 
-A **viewport** is a 5km x 5km geographic area for which TEE downloads and processes Sentinel-2 embeddings.
+A **viewport** is a 5km × 5km area for which TEE downloads and processes Sentinel-2 embeddings. The tab shows:
 
-The Viewports tab shows:
 1. **Search** — filter viewports by name
 2. **Active viewport** — the currently selected viewport
 3. **Create New Viewport** — click to expand the creation form
-4. **Export / Import** — bulk export all your viewports or import from a file
-5. **Viewport list** — grouped by creator. Your viewports show all actions (Open, + Year, Export, Delete). Other users' public viewports show only Open.
+4. **Export / Import** — bulk operations on your viewports
+5. **Viewport list** — grouped by creator; your viewports show all actions (Open, +Year, Export, Delete); others' viewports show only Open
 
-### Creating a Viewport
-
-1. Click **+ Create New Viewport** to expand the form
-2. Choose a location:
-   - **Search** — type a place name (e.g. "Cambridge") or coordinates (e.g. "52.2, 0.12")
-   - **Click the map** — a 5km preview box follows the cursor; click to place it
-   - **Reposition** — click again to move the box
-3. Enter a **viewport name** and select which **years** to process (2018–2025). Years without GeoTessera coverage for your area are greyed out.
-4. Click **Create** — processing runs in the background with a progress bar
-5. The viewer opens automatically when processing completes
-
-Only the creator of a viewport can delete it.
+> **Note:** Only the creator of a viewport can delete it. Years without GeoTessera coverage for your area are greyed out in the year selector.
 
 ### Validation Tab
 
-Click **Open Validation** to launch the viewer in validation mode. Evaluation runs locally on your machine — no labels leave your desktop. For GPU servers, see [Remote Compute Setup](#remote-compute-setup-gpu-server).
+Click **Open Validation** to launch the viewer in validation mode. Evaluation runs locally — no labels leave your machine. For GPU servers, see [Remote Compute Setup](#remote-compute-setup-gpu-server).
 
 ### Users Tab
 
 Visible to administrators only. Create accounts, set quotas, and manage enrolled users.
 
+---
+
 ## The Viewer
 
-The viewer has three modes, selected from the **layout dropdown** in the header:
+The viewer uses a **6-panel synchronized grid** — panning or zooming one panel pans/zooms all. Three modes are available from the **layout dropdown** in the header. **Validation** mode is accessed from the Viewport Manager's Validation tab.
 
-- **Explore** (default) — browse embeddings and run similarity searches
-- **Change Detection** — compare two years side by side
-- **Labelling** — build label sets via K-means or manual pins/polygons
+<!-- Screenshot: viewer_explore.png — Viewer in Explore mode showing all 6 panels -->
 
-**Validation** mode is accessed from the Viewport Manager's Validation tab, not from the viewer dropdown.
+### Panel Layout by Mode
 
-All modes use a 6-panel synchronized grid — panning or zooming one panel pans/zooms all.
+```
+┌──────────────┬──────────────┬──────────────┐
+│   Panel 1    │   Panel 2    │   Panel 3    │
+│              │              │              │
+├──────────────┼──────────────┼──────────────┤
+│   Panel 4    │   Panel 5    │   Panel 6    │
+│              │              │              │
+└──────────────┴──────────────┴──────────────┘
+```
 
-### Explore (default)
+| Panel | Explore | Change Detection | Labelling | Validation |
+|:-----:|---------|-----------------|-----------|------------|
+| 1 | OpenStreetMap | OpenStreetMap | OpenStreetMap | **Controls** |
+| 2 | Satellite | Satellite | Satellite + labels | Satellite + polygons |
+| 3 | Embeddings | Embeddings (Y1) | Embeddings | **Ground Truth classes** |
+| 4 | PCA / UMAP | Change Distribution | PCA / UMAP | **Progress / results** |
+| 5 | — | Change Heatmap | Classification | **Learning Curves** |
+| 6 | — | Embeddings (Y2) | Label management | **Confusion Matrix** |
 
-| Panel | Content |
-|-------|---------|
-| 1 | **OpenStreetMap** — geographic reference |
-| 2 | **Satellite** — Esri or Google imagery |
-| 3 | **Tessera Embeddings** — embedding visualization with year selector |
-| 4 | **PCA (Embedding Space)** — 3D scatter plot (PCA or UMAP) |
-| 5–6 | (available in other modes) |
+### Switching Modes
 
-Double-click any pixel to run a similarity search.
-
-### Change Detection
-
-| Panel | Content |
-|-------|---------|
-| 1 | **OpenStreetMap** |
-| 2 | **Satellite** |
-| 3 | **Tessera Embeddings** (Y1) |
-| 4 | **Change Distribution** — histogram of embedding distance between Y1 and Y2 |
-| 5 | **Change Heatmap** — bright = changed, dark = stable |
-| 6 | **Tessera Embeddings** (Y2) |
-
-Select different years for Y1 and Y2 using the year dropdowns.
-
-### Labelling
-
-| Panel | Content |
-|-------|---------|
-| 1 | **OpenStreetMap** |
-| 2 | **Satellite** with label overlays |
-| 3 | **Tessera Embeddings** |
-| 4 | **PCA (Embedding Space)** — colored by label classes |
-| 5 | **Segmentation** / **Classification** |
-| 6 | **Auto-label** / **Manual Label** — label management |
-
-Panel 6 has a sub-mode dropdown: **Auto-label** (K-means clusters) or **Manual Label** (pins, polygons, similarity expansion).
-
-### Validation
-
-Accessed from the Viewport Manager's **Validation** tab (opens viewer with `?mode=validation`).
-
-| Panel | Content |
-|-------|---------|
-| 1 | **Controls** — shapefile upload, field/year/classifier selection, Run button |
-| 2 | **Satellite** — with ground-truth polygon overlay (red outlines) |
-| 3 | **Ground Truth** — class table with polygon/pixel counts |
-| 4 | **Progress** — status messages and results table during evaluation |
-| 5 | **Learning Curves** — streaming chart (% labels vs F1 score) |
-| 6 | **Confusion Matrix** — with classifier selector and % toggle |
+Use the **layout dropdown** in the header for Explore, Change Detection, and Labelling. Validation is accessed from the Viewport Manager's **Validation** tab.
 
 ### Switching Years
 
-Use the **year dropdown** above the embedding panels. In Change Detection mode, Y1 and Y2 can be set to different years.
+Use the **year dropdown** above the embedding panels. In Change Detection mode, Y1 and Y2 can be set independently.
+
+---
 
 ## Similarity Search
 
-**Double-click** anywhere on the map to trigger a similarity search. TEE extracts the 128-dimensional embedding at that pixel and finds all similar locations across the viewport. All computation runs **locally in your browser** — no data is sent to the server.
+<!-- Screenshot: similarity_search.png — Showing colored dots across panels after a double-click search -->
 
-### How to Use
+**Double-click** anywhere on any panel to find similar pixels across the viewport. TEE extracts the 128-dimensional embedding at that pixel and computes distances to all other pixels — entirely in your browser.
 
-1. **Double-click any pixel** — similar locations are highlighted as colored dots
-2. Adjust the **similarity slider** to control match strictness
-3. Click **Save as Label** to name and color-code the results
+| Step | Action |
+|------|--------|
+| 1 | **Double-click** any pixel |
+| 2 | Adjust the **similarity slider** — lower = stricter matching |
+| 3 | Click **Save as Label** to keep the results |
 
-The first time you search for a viewport+year, vector data (~20–50MB) is downloaded and cached in your browser's IndexedDB. Subsequent searches are instant.
+> **First search** downloads vector data (~20–50MB) and caches it in your browser. Subsequent searches are instant.
 
-### Single-Click
+A **single click** (without double) places a synchronized marker across all panels — useful for cross-referencing locations without triggering a search.
 
-A **single click** places a synchronized marker across all panels, useful for cross-referencing a location without triggering a search.
+---
 
 ## Labels
 
-Labels are named, colored collections of similar pixels found through similarity search.
+Labels are named, colored collections of similar pixels.
 
-### Managing Labels
+| Action | How |
+|--------|-----|
+| Save | After a search, click **Save as Label** |
+| Show/hide | Click a label name |
+| Delete | Click the **×** next to a label |
+| Timeline | Click the **clock icon** — see coverage across all years |
+| Import | Click **Import** → select a JSON file |
+| Export | See [Export Options](#export-options) |
 
-- **Save** — after a similarity search, click "Save as Label"
-- **Toggle visibility** — click a label name to show/hide
-- **Delete** — click the X next to a label
-- **Labels persist** across page reloads (stored in browser localStorage)
+Labels persist across page reloads (stored in browser localStorage) and are portable across viewports.
 
-### Cross-Year Timeline
-
-Click **Timeline** on any saved label to see how coverage changes across years:
-- Bar chart of pixel counts per year
-- Percentage change summary between first and last years
-- Each year's vector data loads from cache or downloads automatically
-
-### Importing and Exporting Labels
-
-Labels are portable — they use embedding distance rather than coordinates, so they work across different viewports.
-
-- **Import** — use the Import button to load a previously exported JSON file
-- **Export** — see [Export Options](#export-options)
+---
 
 ## Manual Labelling
 
-Manual labelling lets you build label classes by hand — placing pins, drawing polygons, or combining both.
+Build label classes by hand — placing pins, drawing polygons, or combining both.
 
-### Entering Manual Mode
+### Getting Started
 
-1. Switch the layout to **Labelling** (header dropdown)
-2. In Panel 6, change the mode from **Auto-label** to **Manual Label**
+1. Switch to **Labelling** mode (header dropdown)
+2. In Panel 6, select **Manual Label** from the sub-mode dropdown
+3. Type a **label name**, pick a **color**, click **Set**
 
-### Setting a Label
+> **Tip:** Click **Schema** in the header to load a classification scheme (UKHab v2, HOTW, or custom) — click any entry to set it as the active label.
 
-1. Type a **label name** (e.g. "Woodland")
-2. Click the **color swatch** to choose a color
-3. Click **Set**
+### Placing Labels
 
-**Schema support:** Click **Schema** in the header to load a classification scheme (UKHab v2, HOTW, or custom).
+| Method | Action | Best for |
+|--------|--------|----------|
+| **Pin** | Ctrl+click (Cmd+click on Mac) | Scattered features, point samples |
+| **Polygon** | Ctrl+double-click → click vertices → close | Large homogeneous areas |
+| **Similarity slider** | Drag slider on any label entry (0–500) | Expanding coverage from a seed |
 
-### Placing Point Labels (Pins)
+### Polygon Search Mode
 
-**Ctrl+click** (Cmd+click on Mac) to drop a pin. The pin extracts the 128D embedding and appears in the Manual Labels panel.
+When drawing a polygon, choose how its embedding is stored:
 
-### Drawing Polygon Labels
+- **Mean** (default) — average of all pixel embeddings inside (best for homogeneous areas)
+- **Union** — every individual pixel embedding (best for heterogeneous areas)
 
-**Ctrl+double-click** to start drawing a polygon. Click to place vertices, close by clicking the first vertex or double-clicking. Press **Escape** to cancel.
+### Classification
 
-#### Polygon Search Mode
+Click **Classify** in Panel 5 to generate a full-viewport classification — each pixel is assigned to the nearest label class based on embedding distance.
 
-- **Mean** (default) — stores the average embedding of all pixels inside the polygon
-- **Union** — stores every individual pixel embedding (better for heterogeneous areas)
+### Suggested Workflow
 
-### Similarity Threshold
+```
+1. Auto-label (K-means, k=5+)
+   ↓
+2. Review clusters on heatmap + embedding panels
+   ↓
+3. Promote good clusters → merge duplicates by giving same name
+   ↓
+4. Fine-tune with manual pins + similarity sliders
+   ↓
+5. Export as Shapefile for validation or GIS
+```
 
-Each label entry has a **similarity slider** (0–500) controlling how far the search extends from the pin/polygon embedding.
+---
 
-### Classification (Panel 5)
-
-Click **Classify** to generate a full-viewport classification — each pixel is assigned to the nearest label class based on embedding distance.
-
-### Tips
-
-- **Combine pins and polygons** — polygons for large homogeneous areas, pins for scattered features
-- **Start with threshold = 0** — place pins, then increase the slider to expand coverage
-- **Check Panel 4** — the PCA/UMAP view shows whether labels form coherent clusters
-- **Labels persist** across page reloads
-
-## Auto-Labelling (K-Means Clustering)
+## Auto-Labelling (K-Means)
 
 TEE segments the viewport into clusters using K-means on the embedding space. Clusters are **temporary previews** until promoted to saved labels.
 
-### Running Segmentation
+| Step | Action |
+|------|--------|
+| 1 | Set **k** (2–20) using the slider |
+| 2 | Click **Segment** |
+| 3 | Review the cluster list (color, pixel count, %) |
+| 4 | **Promote** individual clusters (↗) or all at once |
 
-1. Set **k** using the slider (2–20)
-2. Click **Segment** — results appear as a colored overlay
-3. The cluster list shows each cluster's color, pixel count, and percentage
+> **Tip:** Name clusters before promoting. Two clusters with the same name are merged automatically.
 
-### Promoting Clusters to Labels
-
-- **Promote one** — click the ↗ button on a cluster row
-- **Promote all** — click **Promote All to Labels**
-- **Name before promoting** — type a label name next to the cluster first
-
-### Suggested Labelling Workflow
-
-1. **Auto-label** with k = 5 or higher
-2. **Review** clusters on the heatmap and embedding panels
-3. **Merge** related clusters by giving them the same name before promoting
-4. **Fine-tune** with manual pins and similarity sliders
+---
 
 ## Validation (Learning Curves)
 
-The Validation mode evaluates how well classifiers distinguish habitat classes using Tessera embeddings, given expert ground-truth polygons. It works at any scale — from a single viewport to an entire country.
+Evaluate how well classifiers distinguish habitat classes using Tessera embeddings and expert ground-truth polygons. Works at any scale — from a single viewport to an entire country.
 
-All ML evaluation runs on a **compute server** (`tee-compute`), not on the hosted TEE server. See [Running Evaluation on Your Own Machine](#running-evaluation-on-your-own-machine) for setup.
+<!-- Screenshot: validation_results.png — Showing learning curves in Panel 5, confusion matrix in Panel 6 -->
 
-### Accessing Validation
+> All ML evaluation runs on your **compute server** (`tee-compute`), not on the hosted server. See [Running Evaluation on Your Own Machine](#running-evaluation-on-your-own-machine).
 
-Click the **Validation** tab in the Viewport Manager, then click **Open Validation**. This opens the viewer in validation mode.
+### Step-by-Step
 
-### Preparing a Ground-Truth Shapefile
+| Step | Panel | Action |
+|------|-------|--------|
+| 1 | — | In Viewport Manager → **Validation** tab → **Open Validation** |
+| 2 | 1 | Drag and drop a `.zip` shapefile onto the upload zone |
+| 3 | 2 | Verify polygons appear as red outlines on satellite |
+| 4 | 3 | Check the class table — polygon counts per class |
+| 5 | 1 | Select **Class field**, **Year**, and **Classifiers** |
+| 6 | 1 | Click **Run Evaluation** |
+| 7 | 4 | Watch progress: status messages + results table |
+| 8 | 5 | Learning curve builds as each % completes |
+| 9 | 6 | Confusion matrix appears at the end |
 
-TEE accepts a **zipped ESRI shapefile** (`.zip` containing `.shp`, `.dbf`, `.shx`, `.prj`). Each polygon needs an attribute column with class labels (e.g. "Woodland", "Grassland"). Any CRS is accepted — TEE reprojects automatically.
+### Available Classifiers
 
-```bash
-zip ground_truth.zip polygons.shp polygons.dbf polygons.shx polygons.prj
+| Classifier | Type | Notes |
+|-----------|------|-------|
+| **k-NN** | Pixel | Fast, good baseline |
+| **Random Forest** | Pixel | Strong at all training sizes |
+| **XGBoost** | Pixel | Often best accuracy |
+| **MLP** | Pixel | Needs more data to converge |
+| **Spatial MLP (3×3)** | Neighbourhood | Uses 3×3 embedding context |
+| **Spatial MLP (5×5)** | Neighbourhood | Uses 5×5 embedding context |
+| **U-Net (GPU)** | Patch-based | Convolutional, 256×256 patches. Requires PyTorch. |
+
+### Understanding the Learning Curve
+
+```
+   F1 ↑
+  1.0 ┤
+      │         ╭───── RF
+  0.7 ┤     ╭──╯
+      │   ╭─╯──────── k-NN
+  0.4 ┤  ╯
+      │╭╯
+  0.1 ┤
+      └──────────────────→ % labels
+       1%  5%  10%  30%  80%
 ```
 
-### Uploading Ground Truth
-
-1. Drag and drop the `.zip` onto the upload zone in Panel 1 (or click to browse)
-2. Polygons appear as **red outlines** on the satellite panel
-3. The **Class field** dropdown shows available columns with class counts
-4. The satellite map zooms to the shapefile's extent
-
-### Running an Evaluation
-
-1. Select a **Class field** — TEE auto-detects classification vs regression
-2. Select the **year** for embeddings (years without coverage are greyed out)
-3. Check the **classifiers** to compare:
-   - **k-NN** — k-Nearest Neighbours
-   - **RF** — Random Forest
-   - **XGBoost** — Gradient boosted trees
-   - **MLP** — Multi-layer perceptron
-   - **Spatial MLP (3×3 / 5×5)** — MLP with neighbourhood context
-   - **U-Net (GPU)** — convolutional U-Net on 256×256 patches (requires PyTorch)
-4. *(Optional)* Expand hyperparameters with the **`...`** button
-5. *(Optional)* Adjust **Max training samples**
-6. Click **Run Evaluation**
-
-TEE samples up to 200,000 random points within the shapefile polygons (stratified by class), fetches embeddings from GeoTessera, and runs the learning curve. For spatial classifiers and U-Net, 256×256 2D patches are sampled via point grids.
-
-### Learning Curve Chart
-
-Results appear as a line chart in Panel 5:
-
-- **X axis**: % of labelled area used for training (1–80%)
-- **Y axis**: F1 score (0–1)
-- One line per classifier with shaded ±1 std bands
-- Use the **Macro F1 / Weighted F1** dropdown to switch metrics
+- **X axis**: % of labelled area used for training (remainder used for testing)
+- **Y axis**: F1 score (0–1), with shaded ±1 std bands
+- **Steeper curves** = embeddings separate classes well with few labels
+- Toggle **Macro F1** / **Weighted F1** with the dropdown
 
 ### Confusion Matrix
 
-Panel 6 shows a confusion matrix for the largest training percentage:
-
 - Rows = true class, columns = predicted class
-- Color-coded: green diagonal (correct), red off-diagonal (errors)
+- **Green diagonal** = correct, **red off-diagonal** = errors
 - **%** button toggles counts vs percentages
 - **View** button opens a full-size modal for large matrices
-- **Classifier dropdown** to switch between classifiers
+- **Classifier dropdown** switches between classifiers
 
 ### Downloading Trained Models
 
-Click **Download Models** in the header bar. This triggers model training on your compute server (deferred from the evaluation run for speed), then downloads `.joblib` files for each classifier.
+Click **Download Models** in the header bar. This trains each classifier on the full dataset (deferred from the evaluation for speed), then downloads `.joblib` files.
 
 ```python
 import joblib
 d = joblib.load("rf_model.joblib")
 clf = d["model"]          # the trained classifier
 names = d["class_names"]  # e.g. ["Grassland", "Urban", "Woodland"]
-predictions = clf.predict(embeddings)  # embeddings shape: (N, 128)
+predictions = clf.predict(embeddings)  # shape: (N, 128)
 ```
 
-### Regression Support
+### Regression
 
-When the selected field is numeric with >20 unique values, TEE switches to regression mode — showing R², RMSE, and MAE instead of F1 and confusion matrices.
+When the selected field is numeric with >20 unique values, TEE auto-switches to regression — showing R², RMSE, and MAE instead of F1 and confusion matrices.
 
 ### CLI for Headless Evaluation
 
-For batch processing without a browser:
-
 ```bash
 python scripts/tee_evaluate.py --config eval_config.json
+python scripts/tee_evaluate.py --config eval_config.json --dry-run  # stats only
 ```
 
-**Dry run** (stats only, no evaluation):
-```bash
-python scripts/tee_evaluate.py --config eval_config.json --dry-run
-```
-
-### Notes
-
-- All evaluation runs on your compute server, never the hosted server
-- Embeddings are sampled via GeoTessera's point API — no full tiles loaded
-- Re-running with different classifiers reuses cached data (instant)
-- The Back button is disabled during evaluation to prevent data loss
-- Spatial MLP and U-Net use 2D patches sampled as point grids (~33MB each vs ~450MB for full tiles)
+---
 
 ## Running Evaluation on Your Own Machine
 
@@ -325,170 +300,164 @@ All ML evaluation runs on a compute server (`tee-compute`). The hosted TEE serve
 ### How It Works
 
 ```
-Browser → http://localhost:8001
-              │
-              ├── /api/evaluation/*  → handled locally (ML on your machine)
-              └── everything else    → proxied to tee.cl.cam.ac.uk
+┌─────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+│   Browser    │────▶│  Django (port 8001)  │     │   tee-compute   │
+│             │     │  Serves UI, tiles,   │────▶│   (port 8002)   │
+│             │     │  proxies /eval/*     │     │  ML evaluation  │
+└─────────────┘     └──────────────────────┘     └────────┬────────┘
+                                                          │
+                                                 ┌────────▼────────┐
+                                                 │   GeoTessera    │
+                                                 │ dl2.geotessera  │
+                                                 └─────────────────┘
 ```
-
-You open `localhost:8001`. The compute server handles ML evaluation locally and forwards all other requests to the hosted server.
 
 ### Deployment Modes
 
 | Mode | What you run | ML runs on |
 |------|-------------|-----------|
-| **Hosted (default)** | Nothing — just open the website | — (no ML) |
+| **Hosted** | Nothing — open the website | — (no ML) |
 | **Local compute** | `tee-compute` on your laptop | Your laptop |
 | **Remote compute** | `tee-compute` on GPU box + SSH tunnel | GPU server |
 | **All local** | Django + tee-compute via `restart.sh` | Your laptop |
 
-| Component | Hosted server | Local compute | GPU server (via SSH) |
-|-----------|:------------:|:------------:|:-------------------:|
+| Component | Hosted server | Local compute | GPU server |
+|-----------|:------------:|:------------:|:----------:|
 | Map tiles, satellite imagery | ✓ | | |
 | Embedding tile images | ✓ | | |
 | Label sharing | ✓ | | |
 | Viewport management | ✓ | | |
 | Shapefile upload | | ✓ | ✓ |
-| Embedding sampling (GeoTessera) | | ✓ | ✓ |
+| Embedding sampling | | ✓ | ✓ |
 | ML training + evaluation | | ✓ | ✓ |
 | Model download | | ✓ | ✓ |
 
 ### Local Compute Setup
 
-**One-time setup:**
-
+**One-time:**
 ```bash
 pip install tessera-eval[server]
 ```
 
 **Each session:**
-
 ```bash
 tee-compute
+# Open http://localhost:8001
 ```
-
-Open `http://localhost:8001`. By default, proxies to `https://tee.cl.cam.ac.uk`.
 
 ### Remote Compute Setup (GPU Server)
 
-Run ML on a remote GPU server while browsing from your laptop.
-
-**One-time setup on the GPU server:**
-
-1. Copy your SSH public key:
-   ```bash
-   ssh-copy-id gpu-box
-   ```
-
-2. Install tessera-eval:
-   ```bash
-   ssh gpu-box 'pip install tessera-eval[server]'
-   ```
+**One-time on the GPU server:**
+```bash
+ssh-copy-id gpu-box
+ssh gpu-box 'pip install tessera-eval[server]'
+```
 
 **Each session (one command from your laptop):**
-
 ```bash
 ssh -L 8001:localhost:8001 gpu-box 'tee-compute'
+# Open http://localhost:8001
 ```
 
-Open `http://localhost:8001`.
-
-**Tip:** Create an alias:
-
-```bash
-alias tee='ssh -L 8001:localhost:8001 gpu-box "tee-compute"'
-```
+> **Tip:** Add `alias tee='ssh -L 8001:localhost:8001 gpu-box "tee-compute"'` to your shell config.
 
 ### Command Reference
 
 ```
 tee-compute [OPTIONS]
 
-Options:
-  --hosted URL    Hosted TEE server URL (default: https://tee.cl.cam.ac.uk)
+  --hosted URL    Hosted server URL (default: https://tee.cl.cam.ac.uk)
   --port PORT     Local port (default: 8001)
   --host HOST     Bind address (default: 127.0.0.1)
-  --debug         Flask debug mode with auto-reload
+  --debug         Flask debug mode
 ```
 
 ### Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| `Connection refused` on localhost:8001 | Is `tee-compute` running? |
-| `Cannot reach hosted server` | Check internet. Try `curl https://tee.cl.cam.ac.uk/health`. |
-| `No GeoTessera tiles found` | Try year 2025 (wider coverage). |
-| `ModuleNotFoundError: geotessera` | `pip install tessera-eval[server]` |
-| SSH tunnel disconnects | Add `-o ServerAliveInterval=60` to SSH command. |
-| Port 8001 in use | Use `--port 8002`. |
+| `Connection refused` | Is `tee-compute` running? |
+| `Cannot reach hosted server` | Check internet: `curl https://tee.cl.cam.ac.uk/health` |
+| `No GeoTessera tiles found` | Try year 2025 (wider coverage) |
+| `ModuleNotFoundError` | `pip install tessera-eval[server]` |
+| SSH disconnects | Add `-o ServerAliveInterval=60` |
+| Port in use | Use `--port 8002` |
+
+---
 
 ## Export Options
 
-### Header Export (Explore / Auto-label modes)
+### From Explore / Auto-label modes
 
-| Format | Description |
-|--------|-------------|
-| **Labels (JSON)** | Compact metadata for re-importing into TEE |
-| **Labels (GeoJSON)** | FeatureCollection with 10m polygons, compatible with QGIS |
-| **Map (JPG)** | High-resolution satellite image with label overlays and legend |
+| Format | Use case |
+|--------|----------|
+| **Labels (JSON)** | Re-import into TEE |
+| **Labels (GeoJSON)** | Open in QGIS or other GIS tools |
+| **Map (JPG)** | Presentation — satellite with label overlays |
 
-### Manual Label Export (Labelling mode)
+### From Manual Labelling mode
 
-| Format | Description |
-|--------|-------------|
-| **JSON** | Compact metadata with embeddings, for re-importing |
-| **GeoJSON** | Points and polygons as a FeatureCollection |
-| **ESRI Shapefile (ZIP)** | Standard GIS format — can be uploaded back as ground truth |
+| Format | Use case |
+|--------|----------|
+| **JSON** | Re-import into TEE (includes embeddings) |
+| **GeoJSON** | GIS-compatible points and polygons |
+| **ESRI Shapefile (ZIP)** | Standard GIS interchange — can be used as validation ground truth |
+
+---
 
 ## Sharing Labels
 
-Two sharing modes via the **Share** button in the labelling toolbar:
+Two modes via the **Share** button:
 
-- **Private** — sends only embedding vectors (no coordinates) to the Tessera global habitat directory
-- **Public** — uploads a full ESRI Shapefile that other users can browse and import
+| Mode | What's shared | Who sees it |
+|------|--------------|------------|
+| **Private** | Embedding vectors only (no coordinates) | Nobody — contributes to Tessera's global model |
+| **Public** | Full ESRI Shapefile with locations | Other users on the same server |
 
-## PCA / UMAP Visualization (Panel 4)
-
-- **PCA** — computed instantly in your browser
-- **UMAP** — richer structure, computed server-side (~1–2 min)
-- Points colored using satellite RGB values
-- Click to place markers; double-click for similarity search
-- Right-click drag to rotate
-
-## Heatmap (Panel 5)
-
-Temporal distance heatmap showing pixel-by-pixel embedding differences between Y1 and Y2. Bright = changed, dark = stable.
+---
 
 ## Data Privacy
 
-| What | Where it runs | Server sees |
-|------|--------------|-------------|
+| What | Where it runs | What the server sees |
+|------|--------------|---------------------|
 | Similarity search | Your browser | Nothing |
 | Labelling | Your browser | Nothing |
 | ML evaluation | Your compute server | Nothing |
-| Model download | Your compute server | Nothing |
+| Trained models | Your compute server | Nothing |
 | Label sharing | Hosted server | Only when you click Share |
 | Map tiles | Hosted server | Standard tile requests |
 
-Ground-truth shapefiles and evaluation results **never** leave your machine.
+> Ground-truth shapefiles and evaluation results **never** leave your machine.
 
-## Mouse Controls
+---
+
+## Reference
+
+### Mouse Controls
 
 | Action | Control |
 |--------|---------|
 | Pan | Click and drag |
-| Zoom | Scroll wheel, or +/- buttons |
+| Zoom | Scroll wheel or +/- buttons |
 | Place marker | Single-click |
 | Similarity search | Double-click |
-| Adjust similarity | Drag the similarity slider |
-| Drop pin (manual mode) | Ctrl+click (or double-click) |
-| Draw polygon (manual mode) | Ctrl+double-click, then click vertices |
+| Drop pin (labelling) | Ctrl+click |
+| Draw polygon (labelling) | Ctrl+double-click → click vertices |
 | Cancel polygon | Escape |
-| Rotate (PCA/UMAP) | Right-click drag |
+| Rotate PCA/UMAP | Right-click drag |
 
-## Tips
+### Keyboard Shortcuts
 
-- **Processing time** is roughly the same for 1 year or 8 — all download in parallel
-- **Features appear incrementally** — the viewer becomes usable as soon as pyramids are built
-- **Privacy** — similarity search and labelling run in your browser; evaluation runs on your compute server
-- **Storage** — each viewport uses ~5GB depending on years processed
+| Key | Action |
+|-----|--------|
+| Escape | Cancel polygon drawing |
+| Ctrl+click | Drop a pin in manual label mode |
+| Ctrl+double-click | Start polygon drawing |
+
+### Tips
+
+- Processing time is roughly the same for 1 year or 8 — all download in parallel
+- Features appear incrementally — the viewer is usable as soon as pyramids are built
+- Each viewport uses ~5GB of storage depending on years processed
+- Similarity search and labelling are completely private — they run in your browser
+- Evaluation is private too — it runs on your compute server, not the hosted server
