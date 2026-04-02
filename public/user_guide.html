@@ -6,10 +6,12 @@
     <title>TEE User Guide</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        body { max-width: 900px; margin: 40px auto; padding: 0 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #333; line-height: 1.7; font-size: 15px; text-align: left; }
-        h1 { font-size: 28px; margin: 32px 0 16px; color: #1a1a1a; border-bottom: 2px solid #eee; padding-bottom: 8px; }
-        h2 { font-size: 22px; margin: 28px 0 0; color: #1a1a1a; border-bottom: 1px solid #eee; padding-bottom: 6px; cursor: pointer; user-select: none; }
-        h2:hover { color: #667eea; }
+        body { max-width: 1200px; margin: 40px auto; padding: 0 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #333; line-height: 1.7; font-size: 15px; text-align: left; }
+        .two-col { display: flex; gap: 30px; }
+        #toc-col { width: 250px; flex-shrink: 0; position: sticky; top: 20px; align-self: flex-start; max-height: calc(100vh - 40px); overflow-y: auto; }
+        #content-col { flex: 1; min-width: 0; }
+        h1 { font-size: 28px; margin: 0 0 16px; color: #1a1a1a; border-bottom: 2px solid #eee; padding-bottom: 8px; }
+        h2 { font-size: 22px; margin: 28px 0 12px; color: #1a1a1a; border-bottom: 1px solid #eee; padding-bottom: 6px; }
         h3 { font-size: 18px; margin: 24px 0 8px; color: #333; }
         h4 { font-size: 15px; margin: 16px 0 6px; color: #444; }
         p { margin: 8px 0; } a { color: #667eea; }
@@ -24,20 +26,27 @@
         strong { color: #1a1a1a; } hr { border: none; border-top: 1px solid #eee; margin: 24px 0; }
         img { max-width: 100%; }
         .loading { text-align: center; color: #888; padding: 60px; font-size: 16px; }
-        .section-body.collapsed { display: none; }
-        #toc { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px 24px; margin: 20px 0 32px; }
-        #toc h2 { font-size: 16px; margin: 0 0 10px; border: none; padding: 0; color: #333; cursor: default; }
-        #toc h2:hover { color: #333; }
+        #toc { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px 16px; }
+        #toc h2 { font-size: 14px; margin: 0 0 8px; border: none; padding: 0; color: #333; font-weight: 700; }
         #toc ul { list-style: none; margin: 0; padding: 0; }
-        #toc li { margin: 3px 0; cursor: pointer; }
-        #toc li:hover { color: #667eea; }
-        #toc .toc-h2 { font-weight: 600; color: #333; font-size: 14px; margin-top: 6px; }
-        #toc .toc-h3 { padding-left: 20px; color: #555; font-size: 13px; }
-        .arrow { color: #aaa; font-size: 12px; margin-right: 4px; }
+        #toc li { margin: 2px 0; }
+        #toc a { text-decoration: none; color: #555; font-size: 12px; display: block; padding: 2px 6px; border-radius: 3px; }
+        #toc a:hover { color: #667eea; background: #eef; }
+        #toc a.active { color: #667eea; font-weight: 600; background: #e8ecff; }
+        #toc .toc-h2 a { font-weight: 600; color: #333; font-size: 13px; }
+        #toc .toc-h3 { padding-left: 12px; }
+        @media (max-width: 800px) {
+            .two-col { flex-direction: column; }
+            #toc-col { width: 100%; position: static; max-height: none; }
+        }
     </style>
 </head>
 <body>
-    <div id="content" class="loading">Loading user guide...</div>
+    <div id="loading" class="loading">Loading user guide...</div>
+    <div class="two-col" style="display:none;" id="main">
+        <div id="toc-col"><div id="toc"></div></div>
+        <div id="content-col"></div>
+    </div>
     <script>
         const renderer = new marked.Renderer();
         renderer.heading = function({ tokens, depth }) {
@@ -47,17 +56,16 @@
         };
         marked.use({ renderer });
 
-        const KEEP_OPEN = ['what-is-tee', 'quick-start'];
-
         fetch('/user_guide.md')
             .then(r => r.text())
             .then(md => {
-                const el = document.getElementById('content');
-                el.innerHTML = marked.parse(md);
-                el.classList.remove('loading');
+                const content = document.getElementById('content-col');
+                content.innerHTML = marked.parse(md);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('main').style.display = 'flex';
 
-                // 1. Number headings
-                const headings = el.querySelectorAll('h2, h3, h4');
+                // Number headings
+                const headings = content.querySelectorAll('h2, h3, h4');
                 const c = [0, 0, 0];
                 const tocData = [];
                 headings.forEach(h => {
@@ -69,106 +77,45 @@
                     tocData.push({ lv, text: h.textContent, id: h.id });
                 });
 
-                // 2. Wrap each h2's content in a section-body div
-                const sectionMap = {}; // id -> { body }
-                el.querySelectorAll('h2').forEach(h2 => {
-                    const body = document.createElement('div');
-                    body.className = 'section-body';
-                    let sib = h2.nextElementSibling;
-                    while (sib && sib.tagName !== 'H2' && sib.tagName !== 'H1') {
-                        const next = sib.nextElementSibling;
-                        body.appendChild(sib);
-                        sib = next;
-                    }
-                    h2.after(body);
-                    const open = KEEP_OPEN.some(k => h2.id.includes(k));
-                    if (!open) body.classList.add('collapsed');
-                    sectionMap[h2.id] = { body };
-                });
+                // Build sticky TOC
+                const toc = document.getElementById('toc');
+                toc.innerHTML = '<h2>Contents</h2><ul>' +
+                    tocData.filter(t => t.lv < 2).map(t =>
+                        `<li class="toc-h${t.lv + 2}"><a href="#${t.id}">${t.text}</a></li>`
+                    ).join('') + '</ul>';
 
-                // 3. Single toggle function
-                function setOpen(id, open) {
-                    const s = sectionMap[id];
-                    if (!s) return;
-                    if (open) {
-                        s.body.classList.remove('collapsed');
-                    } else {
-                        s.body.classList.add('collapsed');
-                    }
-                    // Update all arrows for this section
-                    document.querySelectorAll(`[data-section="${id}"] .arrow, h2#${CSS.escape(id)} .arrow`).forEach(a => {
-                        a.textContent = open ? '▼ ' : '▶ ';
+                // Smooth scroll on TOC click
+                toc.querySelectorAll('a').forEach(a => {
+                    a.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const target = document.getElementById(a.getAttribute('href').slice(1));
+                        if (target) target.scrollIntoView({ behavior: 'smooth' });
                     });
-                }
-
-                function isOpen(id) {
-                    return sectionMap[id] && !sectionMap[id].body.classList.contains('collapsed');
-                }
-
-                // 4. Add arrow + click handler to each h2
-                Object.keys(sectionMap).forEach(id => {
-                    const h2 = document.getElementById(id);
-                    if (!h2) return;
-                    const arrow = document.createElement('span');
-                    arrow.className = 'arrow';
-                    arrow.textContent = isOpen(id) ? '▼ ' : '▶ ';
-                    h2.prepend(arrow);
-                    h2.addEventListener('click', () => setOpen(id, !isOpen(id)));
                 });
 
-                // 5. Build TOC
-                const h1 = el.querySelector('h1');
-                if (h1 && tocData.length) {
-                    const toc = document.createElement('div');
-                    toc.id = 'toc';
-                    toc.innerHTML = '<h2>Contents</h2><ul>' +
-                        tocData.filter(t => t.lv < 2).map(t => {
-                            if (t.lv === 0) {
-                                const open = KEEP_OPEN.some(k => t.id.includes(k));
-                                return `<li class="toc-h2" data-section="${t.id}"><span class="arrow">${open ? '▼ ' : '▶ '}</span>${t.text}</li>`;
-                            }
-                            return `<li class="toc-h3" data-scroll="${t.id}">${t.text}</li>`;
-                        }).join('') + '</ul>';
-                    h1.after(toc);
-
-                    // 6. Single click handler on TOC (event delegation)
-                    toc.addEventListener('click', (e) => {
-                        const li = e.target.closest('li');
-                        if (!li) return;
-
-                        const sectionId = li.dataset.section;
-                        const scrollId = li.dataset.scroll;
-
-                        if (sectionId) {
-                            // h2 entry: toggle expand/collapse
-                            setOpen(sectionId, !isOpen(sectionId));
-                        } else if (scrollId) {
-                            // h3 entry: expand parent section + scroll
-                            const target = document.getElementById(scrollId);
-                            if (target) {
-                                const parentBody = target.closest('.section-body');
-                                if (parentBody) {
-                                    const parentH2 = parentBody.previousElementSibling;
-                                    if (parentH2 && parentH2.id) setOpen(parentH2.id, true);
-                                }
-                                setTimeout(() => target.scrollIntoView({ behavior: 'smooth' }), 50);
-                            }
+                // Highlight active TOC item on scroll
+                const tocLinks = Array.from(toc.querySelectorAll('a'));
+                const headingEls = tocData.filter(t => t.lv < 2).map(t => document.getElementById(t.id));
+                function updateActiveToc() {
+                    let active = null;
+                    for (let i = headingEls.length - 1; i >= 0; i--) {
+                        if (headingEls[i] && headingEls[i].getBoundingClientRect().top <= 80) {
+                            active = i;
+                            break;
                         }
-                    });
+                    }
+                    tocLinks.forEach((a, i) => a.classList.toggle('active', i === active));
                 }
+                window.addEventListener('scroll', updateActiveToc, { passive: true });
+                updateActiveToc();
 
-                // 7. Handle anchor on load
+                // Handle anchor on load
                 if (window.location.hash) {
                     const t = document.getElementById(window.location.hash.slice(1));
-                    if (t) {
-                        const sb = t.closest('.section-body');
-                        if (sb && sb.previousElementSibling) setOpen(sb.previousElementSibling.id, true);
-                        if (t.tagName === 'H2') setOpen(t.id, true);
-                        setTimeout(() => t.scrollIntoView(), 100);
-                    }
+                    if (t) setTimeout(() => t.scrollIntoView(), 100);
                 }
             })
-            .catch(() => { document.getElementById('content').innerHTML = '<p>Failed to load user guide.</p>'; });
+            .catch(() => { document.getElementById('loading').innerHTML = '<p>Failed to load user guide.</p>'; });
     </script>
 </body>
 </html>
