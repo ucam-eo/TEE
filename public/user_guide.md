@@ -222,9 +222,9 @@ Evaluate how well classifiers distinguish habitat classes using Tessera embeddin
 | 2 | 1 | Drag and drop a `.zip` shapefile onto the upload zone |
 | 3 | 2 | Verify polygons appear as red outlines on satellite |
 | 4 | 3 | Check the class table — polygon counts per class |
-| 5 | 1 | Select **Class field**, **Year**, **Sampling**, and **Classifiers** |
+| 5 | 1 | Select **Class field**, **Year**, **Sampling**, **Patches**, and **Classifiers** |
 | 6 | 1 | Click **Run Evaluation** |
-| 7 | 4 | Watch progress: status messages + results table |
+| 7 | 4 | Watch progress log: tile fetching, patch extraction, classifier training |
 | 8 | 5 | Learning curve builds as each % completes |
 | 9 | 6 | Confusion matrix appears at the end |
 
@@ -232,13 +232,17 @@ Evaluate how well classifiers distinguish habitat classes using Tessera embeddin
 
 | Classifier | Type | Notes |
 |-----------|------|-------|
-| **k-NN** | Pixel | Fast, good baseline |
-| **Random Forest** | Pixel | Strong at all training sizes |
-| **XGBoost** | Pixel | Often best accuracy |
-| **MLP** | Pixel | Needs more data to converge |
-| **Spatial MLP (3×3)** | Neighbourhood | Uses 3×3 embedding context |
-| **Spatial MLP (5×5)** | Neighbourhood | Uses 5×5 embedding context |
-| **U-Net (GPU)** | Patch-based | Convolutional, 256×256 patches. Requires PyTorch. |
+| **k-NN** | Pixel | Fast, good baseline. Uses point-sampled embeddings. |
+| **Random Forest** | Pixel | Strong at all training sizes. Uses point-sampled embeddings. |
+| **XGBoost** | Pixel | Often best accuracy. Uses point-sampled embeddings. |
+| **MLP** | Pixel | Needs more data to converge. Uses point-sampled embeddings. |
+| **Spatial MLP (3×3)** | Neighbourhood | Uses 3×3 embedding context from real tile patches. |
+| **Spatial MLP (5×5)** | Neighbourhood | Uses 5×5 embedding context from real tile patches. |
+| **U-Net** | Patch-based | Convolutional, 256×256 patches from real tiles. Requires PyTorch + GPU recommended. |
+
+**Pixel classifiers** (k-NN, RF, XGBoost, MLP) use point-sampled embeddings — fast and memory-efficient for any scale.
+
+**Spatial classifiers** (Spatial MLP, U-Net) fetch real GeoTessera tiles and extract pixel-aligned 256×256 crops. This gives them true spatial structure at the tile's native 10m resolution, which is critical for learning convolutional features. The number of patches can be set in the controls (default 100).
 
 ### Sampling Strategy
 
@@ -251,6 +255,18 @@ Controls how sample points are distributed across classes when evaluating large-
 | **Equal** | Same number of points per class | When every class matters equally regardless of area |
 
 With **equal** sampling, Macro F1 and Weighted F1 are identical (all classes have the same sample size). Use sqrt-proportional or proportional to get meaningful Weighted F1 scores.
+
+### Spatial/U-Net Patches
+
+When spatial MLP or U-Net is selected, TEE fetches real GeoTessera tiles and extracts random 256×256 pixel-aligned crops where labels exist. Controls:
+
+| Setting | Default | Notes |
+|---------|---------|-------|
+| **Spatial/U-Net patches** | 100 | Number of 256×256 crops to extract from tiles. More patches = better U-Net accuracy but slower. |
+
+Each patch is augmented 8× (4 rotations × 2 flips) during U-Net training. At 10% training with 100 patches, U-Net trains on ~80 augmented images.
+
+> **Tip:** For pixel-only classifiers (k-NN, RF, etc.), patches are not fetched — evaluation is much faster. Only select spatial MLP or U-Net when you need spatial context.
 
 ### Understanding the Learning Curve
 
@@ -295,6 +311,29 @@ predictions = clf.predict(embeddings)  # shape: (N, 128)
 ### Regression
 
 When the selected field is numeric with >20 unique values, TEE auto-switches to regression — showing R², RMSE, and MAE instead of F1 and confusion matrices.
+
+### Config Files
+
+Click **Generate Config** to download a JSON config matching your current UI settings. Click **Upload Config** to restore settings from a saved config. Example config:
+
+```json
+{
+  "shapefile": "/path/to/ground_truth.zip",
+  "fields": [{"name": "Habitat", "type": "auto"}],
+  "classifiers": {"nn": {}, "rf": {}, "spatial_mlp": {}},
+  "years": [2024],
+  "max_training_samples": 30000,
+  "sampling": "sqrt",
+  "max_patches": 100,
+  "output_dir": "./eval_output"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `sampling` | `"equal"`, `"sqrt"`, or `"proportional"` |
+| `max_patches` | Number of 256×256 tile patches for spatial MLP / U-Net |
+| `max_training_samples` | Cap on total sample points for pixel classifiers |
 
 ### CLI for Headless Evaluation
 
