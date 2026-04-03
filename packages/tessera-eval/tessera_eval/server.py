@@ -9,11 +9,6 @@ Usage:
     tee-compute --hosted https://tee.cl.cam.ac.uk --port 8001
 """
 
-# Must be set before numpy/scipy import to avoid OpenBLAS crash on >128-core machines
-import os as _os
-if 'OPENBLAS_NUM_THREADS' not in _os.environ:
-    _os.environ['OPENBLAS_NUM_THREADS'] = '64'
-
 import argparse
 import json
 import logging

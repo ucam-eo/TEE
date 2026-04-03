@@ -1,5 +1,10 @@
 """tessera-eval: Evaluate habitat classifiers on Tessera satellite embeddings."""
 
+# Must be set before numpy/scipy import to avoid OpenBLAS crash on >128-core machines
+import os as _os
+if 'OPENBLAS_NUM_THREADS' not in _os.environ:
+    _os.environ['OPENBLAS_NUM_THREADS'] = '64'
+
 __version__ = "0.2.0"
 
 from tessera_eval.data import load_tee_vectors, dequantize_uint8, dequantize_int8, load_embeddings_for_shapefile
