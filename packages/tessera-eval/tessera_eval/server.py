@@ -185,20 +185,28 @@ def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
 
         labelled_mask = label_patch > 0
         if needs_spatial_3x3:
+            if logger:
+                logger.info("Extracting 3x3 spatial features for patch %d/%d...", c_idx + 1, len(centers))
             sf = gather_spatial_features_2d(emb_patch, radius=1, mask=labelled_mask)
             all_spatial_3x3.append(sf)
             spatial_labels_3x3.append(label_patch[labelled_mask] - 1)
         if needs_spatial_5x5:
+            if logger:
+                logger.info("Extracting 5x5 spatial features for patch %d/%d...", c_idx + 1, len(centers))
             sf = gather_spatial_features_2d(emb_patch, radius=2, mask=labelled_mask)
             all_spatial_5x5.append(sf)
             spatial_labels_5x5.append(label_patch[labelled_mask] - 1)
 
+    if logger:
+        logger.info("Concatenating spatial features...")
     spatial_3x3 = np.concatenate(all_spatial_3x3, axis=0).astype(np.float32) if all_spatial_3x3 else None
     spatial_5x5 = np.concatenate(all_spatial_5x5, axis=0).astype(np.float32) if all_spatial_5x5 else None
 
     if logger:
-        logger.info("2D patches: %d valid of %d, %d U-Net patches",
-                     len(unet_patches), len(centers), len(unet_patches))
+        s3 = f", spatial_3x3={spatial_3x3.shape}" if spatial_3x3 is not None else ""
+        s5 = f", spatial_5x5={spatial_5x5.shape}" if spatial_5x5 is not None else ""
+        logger.info("2D patches: %d valid of %d%s%s",
+                     len(unet_patches), len(centers), s3, s5)
 
     return unet_patches, spatial_3x3, spatial_5x5
 
