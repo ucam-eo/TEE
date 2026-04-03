@@ -1,9 +1,11 @@
 """tessera-eval: Evaluate habitat classifiers on Tessera satellite embeddings."""
 
-# Must be set before numpy/scipy import to avoid OpenBLAS crash on >128-core machines
+# Must be set before numpy/scipy import to avoid OpenBLAS crash on >128-core machines.
+# Use 1 thread per BLAS call — joblib handles higher-level parallelism in sklearn.
 import os as _os
-if 'OPENBLAS_NUM_THREADS' not in _os.environ:
-    _os.environ['OPENBLAS_NUM_THREADS'] = '64'
+for _var in ('OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'OMP_NUM_THREADS'):
+    if _var not in _os.environ:
+        _os.environ[_var] = '1'
 
 __version__ = "0.2.0"
 
