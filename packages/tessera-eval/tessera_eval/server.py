@@ -79,123 +79,120 @@ def _load_cached_result(field, year, gdf, sampling="equal"):
     return None
 
 
-def _build_patch_grids(gdf, field_name, patch_size=256, n_patches=100, logger=None):
-    """Build patch grid points for 2D spatial/U-Net classifiers.
+def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
+                          patch_size=256, max_patches=100,
+                          needs_spatial_3x3=False, needs_spatial_5x5=False,
+                          logger=None, progress_cb=None):
+    """Extract pixel-aligned 2D patches from real GeoTessera tiles.
 
-    Returns (all_points, patch_meta) where all_points is a list of (lon, lat)
-    and patch_meta is a list of (lons_array, lats_array) per patch.
-    Returns ([], []) if no centers could be generated.
-    """
-    rng = np.random.RandomState(42)
-    valid_gdf = gdf.dropna(subset=[field_name])
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)
-        center_pts = valid_gdf.sample_points(size=max(1, n_patches // max(1, len(valid_gdf))))
-    centers = []
-    for mp in center_pts:
-        if mp is not None and not mp.is_empty:
-            if hasattr(mp, 'geoms'):
-                for pt in mp.geoms:
-                    centers.append((pt.x, pt.y))
-            else:
-                centers.append((mp.x, mp.y))
-    if len(centers) > n_patches:
-        idx = rng.choice(len(centers), size=n_patches, replace=False)
-        centers = [centers[i] for i in idx]
-
-    if not centers:
-        return [], []
-
-    deg_per_pixel = 0.0001  # ~10m at mid-latitudes
-    pixels_per_patch = patch_size * patch_size
-
-    if logger:
-        logger.info("Building %d patch grids (%d points each)...", len(centers), pixels_per_patch)
-    all_points = []
-    patch_meta = []
-    for clon, clat in centers:
-        half = patch_size // 2
-        lons = np.array([clon + (j - half) * deg_per_pixel for j in range(patch_size)])
-        lats = np.array([clat + (half - i) * deg_per_pixel for i in range(patch_size)])
-        grid_lons, grid_lats = np.meshgrid(lons, lats)
-        all_points.extend(zip(grid_lons.ravel(), grid_lats.ravel()))
-        patch_meta.append((lons, lats))
-
-    return all_points, patch_meta
-
-
-def _process_patch_embeddings(all_emb, patch_meta, gdf, field_name, le, n_classes,
-                               patch_size=256,
-                               needs_spatial_3x3=False, needs_spatial_5x5=False,
-                               logger=None):
-    """Process pre-fetched embeddings into U-Net patches and spatial features.
+    Fetches tiles that overlap labelled polygons, then extracts random
+    patch_size × patch_size crops where labels exist. Uses the tile's native
+    CRS and transform for pixel-perfect alignment (unlike point-grid sampling).
 
     Returns (unet_patches, spatial_3x3, spatial_5x5).
     """
     from tessera_eval.classify import gather_spatial_features_2d
-    from affine import Affine
-    from shapely.geometry import box as _box
     from tessera_eval.rasterize import rasterize_shapefile
+    from rasterio.transform import array_bounds
+    from shapely.geometry import box as _box
 
-    deg_per_pixel = 0.0001
-    pixels_per_patch = patch_size * patch_size
+    rng = np.random.RandomState(42)
+
+    # Find tiles overlapping the shapefile
+    bounds = gdf.total_bounds
+    bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
+    tiles_to_fetch = [(year, t[0], t[1]) for t in gt.registry.load_blocks_for_region(bbox, year)]
+    if logger:
+        logger.info("Extracting patches from %d tiles...", len(tiles_to_fetch))
 
     unet_patches = []
     all_spatial_3x3 = [] if needs_spatial_3x3 else None
     all_spatial_5x5 = [] if needs_spatial_5x5 else None
-    spatial_labels_3x3 = []
-    spatial_labels_5x5 = []
 
-    for c_idx, (lons, lats) in enumerate(patch_meta):
-        start = c_idx * pixels_per_patch
-        emb_flat = all_emb[start:start + pixels_per_patch]
-        emb_patch = emb_flat.reshape(patch_size, patch_size, -1).astype(np.float32)
+    patches_per_tile = max(1, max_patches // max(1, len(tiles_to_fetch)))
+    total_tiles = len(tiles_to_fetch)
 
-        nan_mask = np.isnan(emb_patch)
-        if nan_mask.any():
-            emb_patch[nan_mask] = 0.0
+    for t_idx, (yr, tlon, tlat, tile_emb, crs, transform) in enumerate(
+            gt.fetch_embeddings(tiles_to_fetch)):
+        if len(unet_patches) >= max_patches:
+            break
 
-        transform = Affine(deg_per_pixel, 0, lons[0], 0, -deg_per_pixel, lats[0])
-        patch_bounds = (lons[0], lats[-1], lons[-1], lats[0])
-        patch_gdf = gdf[gdf.intersects(_box(*patch_bounds))]
-        if patch_gdf.empty:
-            continue
-
-        label_patch = rasterize_shapefile(patch_gdf, field_name, transform,
-                                          patch_size, patch_size, label_encoder=le)
-
-        if (label_patch > 0).sum() < 10:
-            continue
-
-        unet_patches.append((emb_patch, label_patch.astype(np.int32)))
+        if progress_cb:
+            progress_cb(t_idx, total_tiles)
         if logger:
-            logger.info("Patch %d/%d: %d labelled pixels", c_idx + 1, len(patch_meta), (label_patch > 0).sum())
+            logger.info("Tile %d/%d (%.2f, %.2f): %s, extracting patches...",
+                        t_idx + 1, total_tiles, tlon, tlat, tile_emb.shape[:2])
 
-        labelled_mask = label_patch > 0
-        if needs_spatial_3x3:
-            if logger:
-                logger.info("Extracting 3x3 spatial features for patch %d/%d...", c_idx + 1, len(patch_meta))
-            sf = gather_spatial_features_2d(emb_patch, radius=1, mask=labelled_mask)
-            all_spatial_3x3.append(sf)
-            spatial_labels_3x3.append(label_patch[labelled_mask] - 1)
-        if needs_spatial_5x5:
-            if logger:
-                logger.info("Extracting 5x5 spatial features for patch %d/%d...", c_idx + 1, len(patch_meta))
-            sf = gather_spatial_features_2d(emb_patch, radius=2, mask=labelled_mask)
-            all_spatial_5x5.append(sf)
-            spatial_labels_5x5.append(label_patch[labelled_mask] - 1)
+        h, w = tile_emb.shape[:2]
+        tile_emb = tile_emb.astype(np.float32)
 
-    if logger:
-        logger.info("Concatenating spatial features...")
+        # Reproject GDF to tile CRS for rasterization
+        tile_gdf = gdf.to_crs(crs)
+        tile_bounds = array_bounds(h, w, transform)
+        tile_gdf = tile_gdf[tile_gdf.intersects(_box(*tile_bounds))]
+        if tile_gdf.empty:
+            continue
+
+        # Rasterize labels for the full tile
+        tile_labels = rasterize_shapefile(tile_gdf, field_name, transform,
+                                          h, w, label_encoder=le)
+
+        # Find rows/cols where labels exist, with enough margin for a patch
+        labelled_rows, labelled_cols = np.where(tile_labels > 0)
+        if len(labelled_rows) == 0:
+            continue
+
+        margin = patch_size // 2
+        valid = ((labelled_rows >= margin) & (labelled_rows < h - margin) &
+                 (labelled_cols >= margin) & (labelled_cols < w - margin))
+        valid_rows = labelled_rows[valid]
+        valid_cols = labelled_cols[valid]
+        if len(valid_rows) == 0:
+            continue
+
+        # Pick random centers
+        n_pick = min(patches_per_tile, len(valid_rows), max_patches - len(unet_patches))
+        idx = rng.choice(len(valid_rows), size=n_pick, replace=False)
+
+        for i in idx:
+            r, c = valid_rows[i], valid_cols[i]
+            r0, r1 = r - margin, r + margin
+            c0, c1 = c - margin, c + margin
+
+            emb_patch = tile_emb[r0:r1, c0:c1]
+            label_patch = tile_labels[r0:r1, c0:c1]
+
+            if emb_patch.shape != (patch_size, patch_size, tile_emb.shape[2]):
+                continue
+            if (label_patch > 0).sum() < 10:
+                continue
+
+            # Replace NaN with 0
+            nan_mask = np.isnan(emb_patch)
+            if nan_mask.any():
+                emb_patch = emb_patch.copy()
+                emb_patch[nan_mask] = 0.0
+
+            unet_patches.append((emb_patch, label_patch.astype(np.int32)))
+
+            labelled_mask = label_patch > 0
+            if needs_spatial_3x3:
+                sf = gather_spatial_features_2d(emb_patch, radius=1, mask=labelled_mask)
+                all_spatial_3x3.append(sf)
+            if needs_spatial_5x5:
+                sf = gather_spatial_features_2d(emb_patch, radius=2, mask=labelled_mask)
+                all_spatial_5x5.append(sf)
+
+        if logger:
+            logger.info("  %d patches so far (%d from this tile)", len(unet_patches), n_pick)
+
     spatial_3x3 = np.concatenate(all_spatial_3x3, axis=0).astype(np.float32) if all_spatial_3x3 else None
     spatial_5x5 = np.concatenate(all_spatial_5x5, axis=0).astype(np.float32) if all_spatial_5x5 else None
 
     if logger:
         s3 = f", spatial_3x3={spatial_3x3.shape}" if spatial_3x3 is not None else ""
         s5 = f", spatial_5x5={spatial_5x5.shape}" if spatial_5x5 is not None else ""
-        logger.info("2D patches: %d valid of %d%s%s",
-                     len(unet_patches), len(patch_meta), s3, s5)
+        logger.info("Tile patches: %d total%s%s", len(unet_patches), s3, s5)
 
     return unet_patches, spatial_3x3, spatial_5x5
 
@@ -555,21 +552,8 @@ def run_large_area():
                 logger.info("Generated %d sample points across %d classes", n_points, n_classes)
                 yield json.dumps({"event": "status", "message": f"Generated {n_points:,} sample points across {n_classes} classes"}) + "\n"
 
-                # Build patch grids if spatial/U-Net classifiers are needed
-                patch_grid_points = []
-                patch_meta = []
-                if needs_spatial_3x3 or needs_spatial_5x5 or needs_unet:
-                    logger.info("Building 2D patch grids...")
-                    yield json.dumps({"event": "status", "message": "Building 2D patch grids..."}) + "\n"
-                    patch_grid_points, patch_meta = _build_patch_grids(
-                        gdf, field_name, logger=logger)
-
-                # Combine pixel sample points + patch grid points into one fetch
-                all_fetch_points = sample_points + patch_grid_points
-                n_total = len(all_fetch_points)
-                logger.info("Fetching embeddings for %d points (%d pixel + %d patch)...",
-                            n_total, n_points, len(patch_grid_points))
-                yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_total:,} points..."}) + "\n"
+                logger.info("Fetching embeddings for %d points...", n_points)
+                yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_points:,} points..."}) + "\n"
 
                 # Use a thread + queue so we can yield progress from the callback.
                 import queue, threading
@@ -581,7 +565,7 @@ def run_large_area():
                         def _cb(current, total, status):
                             progress_q.put((current, total, status))
                         vecs = gt.sample_embeddings_at_points(
-                            all_fetch_points, year=year, progress_callback=_cb)
+                            sample_points, year=year, progress_callback=_cb)
                         result_holder[0] = vecs
                     except Exception as e:
                         result_holder[1] = e
@@ -613,11 +597,7 @@ def run_large_area():
                 if result_holder[1] is not None:
                     yield json.dumps({"event": "error", "message": f"GeoTessera sampling failed: {result_holder[1]}"}) + "\n"
                     return
-
-                # Split results: first n_points are pixel samples, rest are patch grids
-                all_emb = result_holder[0]
-                vectors = all_emb[:n_points]
-                patch_emb = all_emb[n_points:] if patch_grid_points else None
+                vectors = result_holder[0]
 
                 logger.info("Processing embeddings...")
                 yield json.dumps({"event": "status", "message": "Processing embeddings..."}) + "\n"
@@ -657,15 +637,51 @@ def run_large_area():
                 spatial_5x5 = None
                 unet_patches = []
 
-                if patch_emb is not None and len(patch_meta) > 0:
-                    logger.info("Processing 2D patches for spatial/U-Net classifiers...")
-                    yield json.dumps({"event": "status", "message": "Processing 2D patches..."}) + "\n"
-                    unet_patches, spatial_3x3, spatial_5x5 = _process_patch_embeddings(
-                        patch_emb, patch_meta, gdf, field_name, le, n_classes,
-                        needs_spatial_3x3=needs_spatial_3x3,
-                        needs_spatial_5x5=needs_spatial_5x5,
-                        logger=logger,
-                    )
+                if needs_spatial_3x3 or needs_spatial_5x5 or needs_unet:
+                    logger.info("Extracting tile-aligned patches for spatial/U-Net...")
+                    yield json.dumps({"event": "status", "message": "Extracting tile-aligned patches..."}) + "\n"
+
+                    def _patch_progress(current, total):
+                        progress_q.put(("patch", current, total))
+
+                    # Run in thread so we can yield progress
+                    patch_result = [None, None]
+                    def _extract():
+                        try:
+                            patch_result[0] = _extract_tile_patches(
+                                gt, gdf, field_name, year, le, n_classes,
+                                needs_spatial_3x3=needs_spatial_3x3,
+                                needs_spatial_5x5=needs_spatial_5x5,
+                                logger=logger,
+                                progress_cb=_patch_progress,
+                            )
+                        except Exception as e:
+                            patch_result[1] = e
+                        finally:
+                            progress_q.put(None)
+
+                    pt = threading.Thread(target=_extract, daemon=True)
+                    pt.start()
+
+                    while True:
+                        try:
+                            item = progress_q.get(timeout=10)
+                        except queue.Empty:
+                            yield json.dumps({"event": "heartbeat"}) + "\n"
+                            continue
+                        if item is None:
+                            break
+                        if item[0] == "patch":
+                            _, cur, tot = item
+                            pct = int(100 * cur / tot) if tot else 0
+                            msg = f"Extracting patches: tile {cur}/{tot} ({pct}%)"
+                            yield json.dumps({"event": "progress", "pct": pct, "message": msg}) + "\n"
+
+                    pt.join()
+                    if patch_result[1] is not None:
+                        logger.warning("Tile patch extraction failed: %s", patch_result[1])
+                    elif patch_result[0] is not None:
+                        unet_patches, spatial_3x3, spatial_5x5 = patch_result[0]
 
                 # Cache in memory and on disk
                 _tile_cache.update({
