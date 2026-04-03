@@ -1139,8 +1139,9 @@ async function runLargeAreaEvaluation() {
     cancelBtn.onclick = () => {
         userCancelled = true;
         evalAbortController.abort();
-        // Tell the server to stop the backend computation
+        // Tell the compute server to stop — hit it directly to avoid proxy blocking
         fetch('/api/evaluation/cancel', { method: 'POST' }).catch(() => {});
+        fetch('http://localhost:8002/api/evaluation/cancel', { method: 'POST' }).catch(() => {});
     };
 
     try {
