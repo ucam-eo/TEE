@@ -263,25 +263,40 @@ def train_unet_on_patches(patches, n_classes, params=None, progress_callback=Non
     if not filtered:
         raise ValueError("No patches with consistent shapes")
 
-    # emb_patch: (H, W, dim) -> (dim, H, W), with augmentation (flips + 90° rotations)
+    # Augmentation: 8 geometric variants × 3 noise levels = 24× per patch
+    # Geometric: 4 rotations × 2 flips = 8
+    # Noise: original + 2 Gaussian noise variants per geometric transform
+    rng_aug = np.random.RandomState(42)
     emb_list = []
     lbl_list = []
     for emb_patch, lbl_patch in filtered:
         emb = emb_patch.transpose(2, 0, 1)  # (dim, H, W)
         lbl = lbl_patch.astype(np.int64)     # (H, W)
-        # Original + 3 rotations + horizontal flip + 3 flipped rotations = 8x
         for k in range(4):
             emb_r = np.rot90(emb, k, axes=(1, 2)).copy()
             lbl_r = np.rot90(lbl, k, axes=(0, 1)).copy()
+            # Original geometric variant
             emb_list.append(emb_r)
             lbl_list.append(lbl_r)
+            # + Gaussian noise variant
+            noise = rng_aug.normal(0, 0.02, emb_r.shape).astype(np.float32)
+            emb_list.append(emb_r + noise)
+            lbl_list.append(lbl_r)
             # Horizontal flip
-            emb_list.append(emb_r[:, :, ::-1].copy())
-            lbl_list.append(lbl_r[:, ::-1].copy())
+            emb_f = emb_r[:, :, ::-1].copy()
+            lbl_f = lbl_r[:, ::-1].copy()
+            emb_list.append(emb_f)
+            lbl_list.append(lbl_f)
+            # + Gaussian noise on flip
+            noise = rng_aug.normal(0, 0.02, emb_f.shape).astype(np.float32)
+            emb_list.append(emb_f + noise)
+            lbl_list.append(lbl_f)
 
-    X = torch.from_numpy(np.stack(emb_list))      # (N*8, dim, H, W)
-    Y = torch.from_numpy(np.stack(lbl_list))       # (N*8, H, W)
-    logger.info("U-Net training: %d patches (%d original × 8 augmentation)", len(emb_list), len(filtered))
+    aug_factor = len(emb_list) // len(filtered) if filtered else 0
+    X = torch.from_numpy(np.stack(emb_list))
+    Y = torch.from_numpy(np.stack(lbl_list))
+    logger.info("U-Net training: %d original patches (×%d augmentation = %d)",
+                len(filtered), aug_factor, len(emb_list))
 
     dataset = TensorDataset(X, Y)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
