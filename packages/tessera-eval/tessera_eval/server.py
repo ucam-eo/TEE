@@ -102,16 +102,17 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
     bounds = gdf.total_bounds
     bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
     tiles_to_fetch = gt.registry.load_blocks_for_region(bbox, year)  # returns [(year, lon, lat), ...]
+    # Shuffle tiles so patches come from diverse geographic regions
+    tiles_to_fetch = list(tiles_to_fetch)
+    rng.shuffle(tiles_to_fetch)
     if logger:
-        logger.info("Extracting patches from %d tiles...", len(tiles_to_fetch))
+        logger.info("Extracting patches from %d tiles (shuffled)...", len(tiles_to_fetch))
 
     unet_patches = []
     all_spatial_3x3 = [] if needs_spatial_3x3 else None
     all_spatial_5x5 = [] if needs_spatial_5x5 else None
 
-    # Allow plenty per tile — the max_patches cap on line 117 stops us
-    patches_per_tile = max(1, max_patches // max(1, len(tiles_to_fetch)))
-    patches_per_tile = max(patches_per_tile, 5)  # at least 5 per tile
+    patches_per_tile = 5  # cap per tile to ensure geographic diversity
     total_tiles = len(tiles_to_fetch)
 
     for t_idx, (yr, tlon, tlat, tile_emb, crs, transform) in enumerate(
