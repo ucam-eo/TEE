@@ -893,10 +893,10 @@
                         <option value="2025">2025</option>
                     </select>
 
-                    <label>Max training samples</label>
-                    <input type="number" id="val-max-train-large" value="30000" min="100" max="500000" step="1000"
+                    <label>Max pixel samples</label>
+                    <input type="number" id="val-max-train-large" value="200000" min="1000" max="500000" step="10000"
                         style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
-                    <div id="val-max-train-pct" style="font-size:11px; color:#888; margin-top:2px;"></div>
+                    <div id="val-max-train-pct" style="font-size:11px; color:#888; margin-top:2px;">Random points sampled from labelled polygons for pixel classifiers</div>
 
                     <label>Sampling</label>
                     <select id="val-sampling-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">

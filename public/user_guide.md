@@ -329,7 +329,7 @@ Click **Generate Config** to download a JSON config matching your current UI set
   "fields": [{"name": "Habitat", "type": "auto"}],
   "classifiers": {"nn": {}, "rf": {}, "spatial_mlp": {}},
   "years": [2024],
-  "max_training_samples": 30000,
+  "max_training_samples": 200000,
   "sampling": "sqrt",
   "max_patches": 100,
   "output_dir": "./eval_output"
@@ -340,7 +340,7 @@ Click **Generate Config** to download a JSON config matching your current UI set
 |-------|-------------|
 | `sampling` | `"equal"`, `"sqrt"`, or `"proportional"` |
 | `max_patches` | Number of 256×256 tile patches for spatial MLP / U-Net |
-| `max_training_samples` | Cap on total sample points for pixel classifiers |
+| `max_training_samples` | Max random points sampled from labelled polygons (pixel classifiers draw training + test from this pool) |
 
 ### CLI for Headless Evaluation
 
