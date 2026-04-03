@@ -79,27 +79,14 @@ def _load_cached_result(field, year, gdf, sampling="equal"):
     return None
 
 
-def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
-                       patch_size=256, n_patches=100,
-                       needs_spatial_3x3=False, needs_spatial_5x5=False,
-                       logger=None):
-    """Sample 2D embedding patches by generating point grids via GeoTessera.
+def _build_patch_grids(gdf, field_name, patch_size=256, n_patches=100, logger=None):
+    """Build patch grid points for 2D spatial/U-Net classifiers.
 
-    Instead of loading full tiles (~450MB each), generates a patch_size x patch_size
-    grid of (lon, lat) points at ~10m spacing centered on random labelled locations,
-    fetches embeddings via sample_embeddings_at_points, and reshapes to 2D.
-
-    Returns:
-        (unet_patches, spatial_3x3, spatial_5x5) where:
-        - unet_patches: list of (emb_patch, label_patch) tuples
-        - spatial_3x3: float32 array (N, 1152) or None
-        - spatial_5x5: float32 array (N, 3200) or None
+    Returns (all_points, patch_meta) where all_points is a list of (lon, lat)
+    and patch_meta is a list of (lons_array, lats_array) per patch.
+    Returns ([], []) if no centers could be generated.
     """
-    from tessera_eval.classify import gather_spatial_features_2d
-
     rng = np.random.RandomState(42)
-
-    # Pick random points inside labelled polygons as patch centers
     valid_gdf = gdf.dropna(subset=[field_name])
     import warnings
     with warnings.catch_warnings():
@@ -118,17 +105,15 @@ def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
         centers = [centers[i] for i in idx]
 
     if not centers:
-        return [], None, None
+        return [], []
 
-    # 10m spacing in degrees (approximate)
     deg_per_pixel = 0.0001  # ~10m at mid-latitudes
     pixels_per_patch = patch_size * patch_size
 
-    # Build all patch grids and collect into one big point list
     if logger:
         logger.info("Building %d patch grids (%d points each)...", len(centers), pixels_per_patch)
     all_points = []
-    patch_meta = []  # (center_lon, center_lat, lons_array, lats_array)
+    patch_meta = []
     for clon, clat in centers:
         half = patch_size // 2
         lons = np.array([clon + (j - half) * deg_per_pixel for j in range(patch_size)])
@@ -137,20 +122,24 @@ def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
         all_points.extend(zip(grid_lons.ravel(), grid_lats.ravel()))
         patch_meta.append((lons, lats))
 
-    # One bulk fetch for all patches — GeoTessera fetches each tile once
-    if logger:
-        logger.info("Fetching embeddings for %d patches (%d points total)...",
-                     len(centers), len(all_points))
-    try:
-        all_emb = gt.sample_embeddings_at_points(all_points, year=year)
-    except Exception as e:
-        if logger:
-            logger.warning("Bulk patch fetch failed: %s", e)
-        return [], None, None
+    return all_points, patch_meta
 
+
+def _process_patch_embeddings(all_emb, patch_meta, gdf, field_name, le, n_classes,
+                               patch_size=256,
+                               needs_spatial_3x3=False, needs_spatial_5x5=False,
+                               logger=None):
+    """Process pre-fetched embeddings into U-Net patches and spatial features.
+
+    Returns (unet_patches, spatial_3x3, spatial_5x5).
+    """
+    from tessera_eval.classify import gather_spatial_features_2d
     from affine import Affine
     from shapely.geometry import box as _box
     from tessera_eval.rasterize import rasterize_shapefile
+
+    deg_per_pixel = 0.0001
+    pixels_per_patch = patch_size * patch_size
 
     unet_patches = []
     all_spatial_3x3 = [] if needs_spatial_3x3 else None
@@ -181,18 +170,18 @@ def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
 
         unet_patches.append((emb_patch, label_patch.astype(np.int32)))
         if logger:
-            logger.info("Patch %d/%d: %d labelled pixels", c_idx + 1, len(centers), (label_patch > 0).sum())
+            logger.info("Patch %d/%d: %d labelled pixels", c_idx + 1, len(patch_meta), (label_patch > 0).sum())
 
         labelled_mask = label_patch > 0
         if needs_spatial_3x3:
             if logger:
-                logger.info("Extracting 3x3 spatial features for patch %d/%d...", c_idx + 1, len(centers))
+                logger.info("Extracting 3x3 spatial features for patch %d/%d...", c_idx + 1, len(patch_meta))
             sf = gather_spatial_features_2d(emb_patch, radius=1, mask=labelled_mask)
             all_spatial_3x3.append(sf)
             spatial_labels_3x3.append(label_patch[labelled_mask] - 1)
         if needs_spatial_5x5:
             if logger:
-                logger.info("Extracting 5x5 spatial features for patch %d/%d...", c_idx + 1, len(centers))
+                logger.info("Extracting 5x5 spatial features for patch %d/%d...", c_idx + 1, len(patch_meta))
             sf = gather_spatial_features_2d(emb_patch, radius=2, mask=labelled_mask)
             all_spatial_5x5.append(sf)
             spatial_labels_5x5.append(label_patch[labelled_mask] - 1)
@@ -206,7 +195,7 @@ def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
         s3 = f", spatial_3x3={spatial_3x3.shape}" if spatial_3x3 is not None else ""
         s5 = f", spatial_5x5={spatial_5x5.shape}" if spatial_5x5 is not None else ""
         logger.info("2D patches: %d valid of %d%s%s",
-                     len(unet_patches), len(centers), s3, s5)
+                     len(unet_patches), len(patch_meta), s3, s5)
 
     return unet_patches, spatial_3x3, spatial_5x5
 
@@ -565,11 +554,23 @@ def run_large_area():
 
                 logger.info("Generated %d sample points across %d classes", n_points, n_classes)
                 yield json.dumps({"event": "status", "message": f"Generated {n_points:,} sample points across {n_classes} classes"}) + "\n"
-                logger.info("Fetching embeddings for %d points...", n_points)
-                yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_points:,} points..."}) + "\n"
 
-                # Fetch embeddings in a single call (GeoTessera groups by tile
-                # internally — batching would re-fetch the same tiles per batch).
+                # Build patch grids if spatial/U-Net classifiers are needed
+                patch_grid_points = []
+                patch_meta = []
+                if needs_spatial_3x3 or needs_spatial_5x5 or needs_unet:
+                    logger.info("Building 2D patch grids...")
+                    yield json.dumps({"event": "status", "message": "Building 2D patch grids..."}) + "\n"
+                    patch_grid_points, patch_meta = _build_patch_grids(
+                        gdf, field_name, logger=logger)
+
+                # Combine pixel sample points + patch grid points into one fetch
+                all_fetch_points = sample_points + patch_grid_points
+                n_total = len(all_fetch_points)
+                logger.info("Fetching embeddings for %d points (%d pixel + %d patch)...",
+                            n_total, n_points, len(patch_grid_points))
+                yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_total:,} points..."}) + "\n"
+
                 # Use a thread + queue so we can yield progress from the callback.
                 import queue, threading
                 progress_q = queue.Queue()
@@ -580,7 +581,7 @@ def run_large_area():
                         def _cb(current, total, status):
                             progress_q.put((current, total, status))
                         vecs = gt.sample_embeddings_at_points(
-                            sample_points, year=year, progress_callback=_cb)
+                            all_fetch_points, year=year, progress_callback=_cb)
                         result_holder[0] = vecs
                     except Exception as e:
                         result_holder[1] = e
@@ -612,7 +613,11 @@ def run_large_area():
                 if result_holder[1] is not None:
                     yield json.dumps({"event": "error", "message": f"GeoTessera sampling failed: {result_holder[1]}"}) + "\n"
                     return
-                vectors = result_holder[0]
+
+                # Split results: first n_points are pixel samples, rest are patch grids
+                all_emb = result_holder[0]
+                vectors = all_emb[:n_points]
+                patch_emb = all_emb[n_points:] if patch_grid_points else None
 
                 logger.info("Processing embeddings...")
                 yield json.dumps({"event": "status", "message": "Processing embeddings..."}) + "\n"
@@ -652,11 +657,11 @@ def run_large_area():
                 spatial_5x5 = None
                 unet_patches = []
 
-                if needs_spatial_3x3 or needs_spatial_5x5 or needs_unet:
-                    logger.info("Generating 2D patches for spatial/U-Net classifiers...")
-                    yield json.dumps({"event": "status", "message": "Generating 2D patches for spatial classifiers..."}) + "\n"
-                    unet_patches, spatial_3x3, spatial_5x5 = _sample_2d_patches(
-                        gt, gdf, field_name, year, le, n_classes,
+                if patch_emb is not None and len(patch_meta) > 0:
+                    logger.info("Processing 2D patches for spatial/U-Net classifiers...")
+                    yield json.dumps({"event": "status", "message": "Processing 2D patches..."}) + "\n"
+                    unet_patches, spatial_3x3, spatial_5x5 = _process_patch_embeddings(
+                        patch_emb, patch_meta, gdf, field_name, le, n_classes,
                         needs_spatial_3x3=needs_spatial_3x3,
                         needs_spatial_5x5=needs_spatial_5x5,
                         logger=logger,
