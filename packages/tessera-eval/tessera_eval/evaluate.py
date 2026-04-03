@@ -58,6 +58,13 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
     pixel_classifiers = [n for n in classifier_names if n != 'unet']
     has_unet = 'unet' in classifier_names and unet_patches and len(unet_patches) > 0
 
+    # Count total labelled pixels across all patches (for unified x-axis)
+    unet_patch_pixel_counts = []
+    if has_unet:
+        for emb_p, lbl_p in unet_patches:
+            unet_patch_pixel_counts.append(int((lbl_p > 0).sum()))
+    total_unet_pixels = sum(unet_patch_pixel_counts)
+
     cm_accum = {name: np.zeros((n_classes, n_classes), dtype=np.int64) for name in classifier_names}
 
     # Pre-compute per-class indices once (avoid N*n_classes scans in the loop)
@@ -220,11 +227,26 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                 "std_f1w": round(float(np.std(scoresw)), 4) if scoresw else 0.0,
             }
 
+        # Compute actual training pixel counts for unified x-axis
+        pixel_train_count = len(train_idx)  # from last repeat (representative)
+        unet_train_count = 0
+        if has_unet and 'unet' in active:
+            n_train_patches = max(1, int(len(unet_patches) * pct / 100.0))
+            n_train_patches = min(n_train_patches, len(unet_patches) - 1)
+            n_train_patches = min(n_train_patches, 20)
+            unet_train_count = sum(unet_patch_pixel_counts[:n_train_patches])
+
         pct_elapsed = _time.time() - pct_t0
         f1_summary = ", ".join(f"{n}={pct_results[n]['mean_f1']:.3f}" for n in active if n in pct_results)
         logger.info("Pct %d/%d (%.0f%%) done in %.1fs — %s",
                      pct_idx + 1, len(training_pcts), pct, pct_elapsed, f1_summary)
-        yield {"type": "progress", "pct": pct, "classifiers": pct_results}
+        yield {
+            "type": "progress", "pct": pct, "classifiers": pct_results,
+            "pixel_train_count": pixel_train_count,
+            "unet_train_count": unet_train_count,
+            "total_pixels": n_samples,
+            "total_unet_pixels": total_unet_pixels,
+        }
 
     confusion_matrices = {}
     for name in classifier_names:

@@ -786,6 +786,10 @@ def run_large_area():
                     "event": "progress",
                     "pct": event["pct"],
                     "classifiers": event["classifiers"],
+                    "pixel_train_count": event.get("pixel_train_count", 0),
+                    "unet_train_count": event.get("unet_train_count", 0),
+                    "total_pixels": event.get("total_pixels", 0),
+                    "total_unet_pixels": event.get("total_unet_pixels", 0),
                 }) + "\n"
             elif event["type"] == "classifier_status":
                 yield json.dumps({
