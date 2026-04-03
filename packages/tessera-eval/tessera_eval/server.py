@@ -487,11 +487,16 @@ def run_large_area():
                         with warnings.catch_warnings():
                             warnings.simplefilter("ignore", UserWarning)
                             pts = cls_gdf.sample_points(size=pts_per_row)
-                        # sample_points returns a GeoSeries of MultiPoints
+                        # sample_points returns a GeoSeries of MultiPoint or Point
                         for mp in pts:
                             if mp is not None and not mp.is_empty:
-                                for pt in mp.geoms:
-                                    sample_points.append((pt.x, pt.y))
+                                if hasattr(mp, 'geoms'):
+                                    for pt in mp.geoms:
+                                        sample_points.append((pt.x, pt.y))
+                                        sample_labels.append(cls_idx)
+                                else:
+                                    # Single Point (not MultiPoint) — single-polygon class
+                                    sample_points.append((mp.x, mp.y))
                                     sample_labels.append(cls_idx)
                     except Exception as e:
                         logger.warning("sample_points failed for class %d: %s", cls_idx, e)
@@ -506,10 +511,24 @@ def run_large_area():
                 logger.info("Fetching embeddings for %d points...", n_points)
                 yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_points:,} points..."}) + "\n"
 
-                # Fetch embeddings at sample points (GeoTessera handles tile loading)
+                # Fetch embeddings in batches so we can yield progress events
+                BATCH_SIZE = 20_000
+                n_batches = (n_points + BATCH_SIZE - 1) // BATCH_SIZE
+                vector_batches = []
                 try:
-                    vectors = gt.sample_embeddings_at_points(
-                        sample_points, year=year)
+                    for b_idx in range(n_batches):
+                        start = b_idx * BATCH_SIZE
+                        end = min(start + BATCH_SIZE, n_points)
+                        batch_pts = sample_points[start:end]
+                        batch_vecs = gt.sample_embeddings_at_points(
+                            batch_pts, year=year)
+                        vector_batches.append(batch_vecs)
+                        pct = int(100 * (b_idx + 1) / n_batches)
+                        logger.info("Fetched batch %d/%d (%d points, %d%%)",
+                                    b_idx + 1, n_batches, end - start, pct)
+                        yield json.dumps({"event": "progress", "pct": pct,
+                                          "message": f"Fetching embeddings: {end:,}/{n_points:,} points ({pct}%)"}) + "\n"
+                    vectors = np.concatenate(vector_batches, axis=0)
                 except Exception as e:
                     yield json.dumps({"event": "error", "message": f"GeoTessera sampling failed: {e}"}) + "\n"
                     return
