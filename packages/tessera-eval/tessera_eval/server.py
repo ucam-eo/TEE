@@ -862,6 +862,11 @@ def _get_version():
 
 # ── CLI entry point ──
 
+# Prevent OpenBLAS crash on many-core servers (>128 threads)
+import os
+if 'OPENBLAS_NUM_THREADS' not in os.environ:
+    os.environ['OPENBLAS_NUM_THREADS'] = '64'
+
 def main():
     global _hosted_url
 
