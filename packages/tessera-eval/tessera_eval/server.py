@@ -101,7 +101,7 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
     # Find tiles overlapping the shapefile
     bounds = gdf.total_bounds
     bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
-    tiles_to_fetch = [(year, t[0], t[1]) for t in gt.registry.load_blocks_for_region(bbox, year)]
+    tiles_to_fetch = gt.registry.load_blocks_for_region(bbox, year)  # returns [(year, lon, lat), ...]
     if logger:
         logger.info("Extracting patches from %d tiles...", len(tiles_to_fetch))
 
@@ -732,31 +732,10 @@ def run_large_area():
                         continue
                 except ImportError:
                     continue
-                # Sample 2D patches via point grids (no full tile loading needed)
-                if not unet_patches:
-                    yield json.dumps({"event": "status", "message": "Sampling 2D patches for U-Net..."}) + "\n"
-                    unet_patches, spatial_3x3, spatial_5x5 = _sample_2d_patches(
-                        gt, gdf, field_name, year, le, n_classes,
-                        needs_spatial_3x3=needs_spatial_3x3,
-                        needs_spatial_5x5=needs_spatial_5x5,
-                        logger=logger,
-                    )
-                    logger.info("Sampled %d patches", len(unet_patches))
-                    yield json.dumps({"event": "status", "message": f"Sampled {len(unet_patches)} 2D patches"}) + "\n"
                 if not unet_patches:
                     yield json.dumps({"event": "status", "message": "U-Net skipped — no labelled patches found"}) + "\n"
                     continue
             if name in ("spatial_mlp", "spatial_mlp_5x5"):
-                # Spatial features extracted alongside U-Net patches if available
-                if (name == "spatial_mlp" and spatial_3x3 is None) or (name == "spatial_mlp_5x5" and spatial_5x5 is None):
-                    yield json.dumps({"event": "status", "message": "Sampling 2D patches for spatial features..."}) + "\n"
-                    _, spatial_3x3, spatial_5x5 = _sample_2d_patches(
-                        gt, gdf, field_name, year, le, n_classes,
-                        needs_spatial_3x3=needs_spatial_3x3,
-                        needs_spatial_5x5=needs_spatial_5x5,
-                        logger=logger,
-                    )
-                    yield json.dumps({"event": "status", "message": "Spatial features sampled"}) + "\n"
                 if (name == "spatial_mlp" and spatial_3x3 is None) or (name == "spatial_mlp_5x5" and spatial_5x5 is None):
                     yield json.dumps({"event": "status", "message": f"{name} skipped — no spatial features"}) + "\n"
                     continue
