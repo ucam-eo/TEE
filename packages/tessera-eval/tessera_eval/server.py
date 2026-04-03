@@ -345,6 +345,7 @@ def run_large_area():
     max_train = body.get("max_training_samples")
     if max_train is not None:
         max_train = int(max_train)
+    sampling = body.get("sampling", "sqrt")  # equal, proportional, sqrt
 
     if not field_name:
         return jsonify({"error": "field is required"}), 400
@@ -475,24 +476,31 @@ def run_large_area():
                 label_ids = le.transform(valid_gdf[field_name])
                 valid_gdf["_label_id"] = label_ids
 
-                # Proportional sampling: points per class proportional to total area,
-                # with a minimum so rare classes still get representation.
+                # Sampling strategy: equal, proportional, or sqrt-proportional
                 MIN_PER_CLASS = 50
-                # Compute area in a projected CRS for accuracy
-                area_crs = valid_gdf.estimate_utm_crs()
-                projected = valid_gdf.to_crs(area_crs)
-                projected["_area"] = projected.geometry.area
-                valid_gdf["_area"] = projected["_area"].values
-                class_areas = valid_gdf.groupby("_label_id")["_area"].sum()
-                total_area = class_areas.sum()
-                # Allocate points proportional to area, then enforce minimum
-                raw_alloc = {c: max(MIN_PER_CLASS, int(MAX_SAMPLE_PIXELS * a / total_area))
-                             for c, a in class_areas.items()}
-                # Scale down if total exceeds budget
-                alloc_total = sum(raw_alloc.values())
-                if alloc_total > MAX_SAMPLE_PIXELS:
-                    scale = MAX_SAMPLE_PIXELS / alloc_total
-                    raw_alloc = {c: max(MIN_PER_CLASS, int(n * scale)) for c, n in raw_alloc.items()}
+                if sampling in ("proportional", "sqrt"):
+                    import math
+                    area_crs = valid_gdf.estimate_utm_crs()
+                    projected = valid_gdf.to_crs(area_crs)
+                    projected["_area"] = projected.geometry.area
+                    valid_gdf["_area"] = projected["_area"].values
+                    class_areas = valid_gdf.groupby("_label_id")["_area"].sum()
+                    if sampling == "sqrt":
+                        weights = {c: math.sqrt(a) for c, a in class_areas.items()}
+                    else:
+                        weights = dict(class_areas)
+                    total_weight = sum(weights.values())
+                    raw_alloc = {c: max(MIN_PER_CLASS, int(MAX_SAMPLE_PIXELS * w / total_weight))
+                                 for c, w in weights.items()}
+                    # Scale down if total exceeds budget
+                    alloc_total = sum(raw_alloc.values())
+                    if alloc_total > MAX_SAMPLE_PIXELS:
+                        scale = MAX_SAMPLE_PIXELS / alloc_total
+                        raw_alloc = {c: max(MIN_PER_CLASS, int(n * scale)) for c, n in raw_alloc.items()}
+                else:
+                    # Equal per class
+                    equal_n = MAX_SAMPLE_PIXELS // n_classes
+                    raw_alloc = {c: equal_n for c in range(n_classes)}
 
                 sample_points = []
                 sample_labels = []
@@ -615,14 +623,19 @@ def run_large_area():
                     "n_classes": n_classes,
                 }
 
-                spatial_3x3 = None  # Point sampling doesn't support spatial features
+                spatial_3x3 = None
                 spatial_5x5 = None
                 unet_patches = []
 
-                if needs_spatial_3x3 or needs_spatial_5x5:
-                    logger.warning("Spatial MLP not supported with point sampling — ignored")
-                if needs_unet:
-                    logger.warning("U-Net not supported with point sampling — ignored")
+                if needs_spatial_3x3 or needs_spatial_5x5 or needs_unet:
+                    logger.info("Generating 2D patches for spatial/U-Net classifiers...")
+                    yield json.dumps({"event": "status", "message": "Generating 2D patches for spatial classifiers..."}) + "\n"
+                    unet_patches, spatial_3x3, spatial_5x5 = _sample_2d_patches(
+                        gt, gdf, field_name, year, le, n_classes,
+                        needs_spatial_3x3=needs_spatial_3x3,
+                        needs_spatial_5x5=needs_spatial_5x5,
+                        logger=logger,
+                    )
 
                 # Cache in memory and on disk
                 _tile_cache.update({

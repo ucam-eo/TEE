@@ -721,7 +721,6 @@
         <div class="toolbar-group">
             <button id="back-btn" style="background: #6c757d; color: white; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 13px;" onclick="window.location.href = '/'" title="Return to viewport list">← Back</button>
             <button id="status-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;" title="Show viewport status and info">ℹ️ Status</button>
-            <span id="compute-host-label" style="font-size: 11px; color: #8f8; opacity: 0.8; display: none;"></span>
             <select id="panel-layout-select" onchange="setPanelLayout(this.value)" style="padding: 5px 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 13px; cursor: pointer;">
                 <option value="explore">Explore</option>
                 <option value="change-detection">Change Detection</option>
@@ -898,6 +897,14 @@
                     <input type="number" id="val-max-train-large" value="30000" min="100" max="500000" step="1000"
                         style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
                     <div id="val-max-train-pct" style="font-size:11px; color:#888; margin-top:2px;"></div>
+
+                    <label>Sampling</label>
+                    <select id="val-sampling-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+                        <option value="sqrt" selected>Sqrt-proportional (balanced)</option>
+                        <option value="proportional">Proportional to area</option>
+                        <option value="equal">Equal per class</option>
+                    </select>
+                    <div style="font-size:11px; color:#888; margin-top:2px;">How to distribute sample points across classes</div>
 
                     <div style="display:flex; gap:6px; margin-top:6px;">
                         <button id="val-generate-config" onclick="generateConfig()" style="flex:1; padding:6px; border:1px solid #555; border-radius:4px; background:#333; color:#ccc; font-size:12px; cursor:pointer;" title="Download JSON config for CLI use">Generate Config</button>
@@ -1325,21 +1332,6 @@
         window.location.href = `mailto:sk818@cam.ac.uk?subject=${encodeURIComponent('TEE Feedback — ' + vp)}&body=${encodeURIComponent(body)}`;
     }
 
-    // Show compute host in header (check both /health and eval proxy health)
-    fetch('/health').then(r => r.json()).then(d => {
-        if (d.compute_host) {
-            const label = document.getElementById('compute-host-label');
-            if (label) { label.textContent = 'compute: ' + d.compute_host; label.style.display = ''; }
-        } else {
-            // Django doesn't have compute_host — try the eval proxy which reaches tee-compute
-            fetch('/api/evaluation/health').then(r => r.json()).then(d2 => {
-                if (d2.compute_host) {
-                    const label = document.getElementById('compute-host-label');
-                    if (label) { label.textContent = 'compute: ' + d2.compute_host; label.style.display = ''; }
-                }
-            }).catch(() => {});
-        }
-    }).catch(() => {});
     </script>
 </body>
 </html>

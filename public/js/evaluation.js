@@ -464,6 +464,7 @@ function handleStreamEvent(ev) {
     const stdKey = metric === 'weighted' ? 'std_f1w' : 'std_f1';
 
     if (ev.event === 'start') {
+        stopResultsLog();
         lastChartData = {
             training_pcts: [],
             _plannedPcts: ev.training_pcts || [],
@@ -496,6 +497,12 @@ function handleStreamEvent(ev) {
             const names = ev.classes.map(c => c.name);
             populateValClassTable(names, ev.classes, true);
         }
+
+    } else if (ev.event === 'progress' && !ev.classifiers) {
+        // Tile fetch progress (no classifiers field)
+        status.dataset.updated = '1';
+        status.textContent = ev.message;
+        showResultsPanel(ev.message);
 
     } else if (ev.event === 'progress') {
         lastChartData.training_pcts.push(ev.pct);
@@ -564,8 +571,12 @@ function handleStreamEvent(ev) {
         hideFinishButtons();
 
 
+    } else if (ev.event === 'heartbeat') {
+        // Keep-alive, ignore
+
     } else if (ev.event === 'status') {
         status.dataset.updated = '1';
+        status.textContent = ev.message;
         showResultsPanel(ev.message);
 
     } else if (ev.event === 'error') {
@@ -586,6 +597,7 @@ function handleStreamEvent(ev) {
         currentLargeAreaTask = ev.type;
         status.dataset.updated = '1';
         status.textContent = `Loading GeoTessera tile index...`;
+        startResultsLog();
         showResultsPanel(`Loading embeddings for ${ev.field} (${ev.type})...`);
 
     } else if (ev.event === 'fold_result') {
@@ -1127,6 +1139,7 @@ async function runLargeAreaEvaluation() {
                 classifiers: classifiers,
                 classifier_params: params,
                 max_training_samples: parseInt(document.getElementById('val-max-train-large').value) || 30000,
+                sampling: document.getElementById('val-sampling-select').value || 'sqrt',
             }),
             signal: evalAbortController.signal,
         });
@@ -1161,8 +1174,38 @@ async function runLargeAreaEvaluation() {
 let _resultsTableModels = [];
 
 // Update panel 4 status text. Visibility is controlled by PANEL_LAYOUT, not here.
+// In log mode, appends lines; otherwise replaces text.
+let _resultsLogMode = false;
+
 function showResultsPanel(message) {
-    document.getElementById('val-results-status').textContent = message;
+    const el = document.getElementById('val-results-status');
+    if (_resultsLogMode) {
+        el.textContent += '\n' + message;
+        // Auto-scroll the parent container
+        const panel = el.closest('[style*="overflow"]') || el.parentElement;
+        if (panel) panel.scrollTop = panel.scrollHeight;
+    } else {
+        el.textContent = message;
+    }
+}
+
+function startResultsLog() {
+    _resultsLogMode = true;
+    const el = document.getElementById('val-results-status');
+    el.textContent = '';
+    el.style.whiteSpace = 'pre-wrap';
+    el.style.fontFamily = 'monospace';
+    el.style.fontSize = '12px';
+    el.style.lineHeight = '1.6';
+}
+
+function stopResultsLog() {
+    _resultsLogMode = false;
+    const el = document.getElementById('val-results-status');
+    el.style.whiteSpace = '';
+    el.style.fontFamily = '';
+    el.style.fontSize = '13px';
+    el.style.lineHeight = '';
 }
 
 function setResultsStatus(message) {
