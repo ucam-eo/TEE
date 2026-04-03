@@ -80,7 +80,7 @@ def _load_cached_result(field, year, gdf, sampling="equal"):
 
 
 def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
-                       patch_size=256, n_patches=20,
+                       patch_size=256, n_patches=100,
                        needs_spatial_3x3=False, needs_spatial_5x5=False,
                        logger=None):
     """Sample 2D embedding patches by generating point grids via GeoTessera.

@@ -250,13 +250,26 @@ def train_unet_on_patches(patches, n_classes, params=None, progress_callback=Non
     base_filters = int(p.get("base_filters", 64))
     batch_size = int(p.get("batch_size", 4))
 
-    # Stack patches into tensors
+    # Stack patches into tensors with augmentation (flips + 90° rotations)
     # emb_patch: (patch_size, patch_size, dim) -> (dim, patch_size, patch_size)
-    emb_list = [patch[0].transpose(2, 0, 1) for patch in patches]
-    lbl_list = [patch[1].astype(np.int64) for patch in patches]
+    emb_list = []
+    lbl_list = []
+    for emb_patch, lbl_patch in patches:
+        emb = emb_patch.transpose(2, 0, 1)  # (dim, H, W)
+        lbl = lbl_patch.astype(np.int64)     # (H, W)
+        # Original + 3 rotations + horizontal flip + 3 flipped rotations = 8x
+        for k in range(4):
+            emb_r = np.rot90(emb, k, axes=(1, 2)).copy()
+            lbl_r = np.rot90(lbl, k, axes=(0, 1)).copy()
+            emb_list.append(emb_r)
+            lbl_list.append(lbl_r)
+            # Horizontal flip
+            emb_list.append(emb_r[:, :, ::-1].copy())
+            lbl_list.append(lbl_r[:, ::-1].copy())
 
-    X = torch.from_numpy(np.stack(emb_list))      # (N, dim, H, W)
-    Y = torch.from_numpy(np.stack(lbl_list))       # (N, H, W)
+    X = torch.from_numpy(np.stack(emb_list))      # (N*8, dim, H, W)
+    Y = torch.from_numpy(np.stack(lbl_list))       # (N*8, H, W)
+    logger.info("U-Net training: %d patches (%d original + augmentation)", len(emb_list), len(patches))
 
     dataset = TensorDataset(X, Y)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
