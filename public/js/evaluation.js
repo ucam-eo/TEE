@@ -410,7 +410,7 @@ function createStreamChart(classifierNames) {
             scales: {
                 x: {
                     type: 'linear',
-                    title: { display: true, text: '% of sampled pixels used for training', color: '#aaa' },
+                    title: { display: true, text: '% of labelled pixels used for training', color: '#aaa' },
                     ticks: { color: '#aaa', callback: v => v + '%' },
                     min: 0, max: 100,
                     grid: { color: 'rgba(255,255,255,0.08)' },
@@ -507,9 +507,10 @@ function handleStreamEvent(ev) {
     } else if (ev.event === 'progress') {
         lastChartData.training_pcts.push(ev.pct);
 
-        // Compute unified x-axis: fraction of labelled pixels used for training
-        const pixelFrac = ev.total_pixels ? (ev.pixel_train_count / ev.total_pixels * 100) : ev.pct;
-        const unetFrac = ev.total_unet_pixels ? (ev.unet_train_count / ev.total_unet_pixels * 100) : ev.pct;
+        // Unified x-axis: all classifiers plotted as fraction of total labelled pixels.
+        // Denominator = total labelled pixels across all patches (most complete view),
+        // or total sampled pixels if no patches were extracted.
+        const totalLabels = ev.total_unet_pixels || ev.total_pixels || 1;
 
         for (const [name, vals] of Object.entries(ev.classifiers)) {
             const acc = lastChartData.classifiers[name];
@@ -523,27 +524,30 @@ function handleStreamEvent(ev) {
             if (baseIdx !== undefined && valChart) {
                 const mean = vals[meanKey];
                 const std = vals[stdKey];
-                // U-Net uses patch pixel fraction, others use sampled pixel fraction
-                const x = (name === 'unet') ? unetFrac : pixelFrac;
+                // Both use same denominator: total labelled pixels
+                const trainPx = (name === 'unet') ? ev.unet_train_count : ev.pixel_train_count;
+                const x = trainPx / totalLabels * 100;
                 valChart.data.datasets[baseIdx].data.push({ x, y: mean });
                 valChart.data.datasets[baseIdx + 1].data.push({ x, y: Math.min(1, mean + std) });
                 valChart.data.datasets[baseIdx + 2].data.push({ x, y: Math.max(0, mean - std) });
             }
         }
         if (valChart) valChart.update();
-        // Show completed pct and training pixel counts
-        const pixelK = ev.pixel_train_count ? `${(ev.pixel_train_count / 1000).toFixed(0)}K pixels` : '';
-        const unetK = ev.unet_train_count ? `, ${(ev.unet_train_count / 1000).toFixed(0)}K U-Net pixels` : '';
+        // Show training pixel counts
+        const pixelK = ev.pixel_train_count ? `${(ev.pixel_train_count / 1000).toFixed(1)}K` : '0';
+        const unetK = ev.unet_train_count ? `${(ev.unet_train_count / 1000).toFixed(0)}K` : '';
+        const totalK = `${(totalLabels / 1000).toFixed(0)}K`;
+        const trainInfo = unetK ? `${pixelK} pixel + ${unetK} patch of ${totalK} labels` : `${pixelK} of ${totalK} labels`;
         const planned = lastChartData._plannedPcts || [];
         const doneIdx = planned.indexOf(ev.pct);
         if (doneIdx >= 0 && doneIdx < planned.length - 1) {
-            status.textContent = `Done ${ev.pct}% (${pixelK}${unetK}), training ${planned[doneIdx + 1]}%...`;
+            status.textContent = `Training: ${trainInfo}`;
         } else {
-            status.textContent = `${ev.pct}% complete (${pixelK}${unetK})`;
+            status.textContent = `Done: ${trainInfo}`;
         }
         appendResultsRow(ev.pct, ev.classifiers);
         const elapsed = status.dataset.t0 ? ((Date.now() - parseInt(status.dataset.t0)) / 1000).toFixed(0) : '';
-        setResultsStatus(`${ev.pct}% complete — ${pixelK}${unetK} (${elapsed}s)`);
+        setResultsStatus(`${trainInfo} (${elapsed}s)`);
 
     } else if (ev.event === 'model_ready') {
         const btn = document.getElementById('finish-' + ev.classifier);
@@ -741,7 +745,7 @@ function renderChart(data, metric) {
             scales: {
                 x: {
                     type: 'linear',
-                    title: { display: true, text: '% of sampled pixels used for training', color: '#aaa' },
+                    title: { display: true, text: '% of labelled pixels used for training', color: '#aaa' },
                     ticks: { color: '#aaa', callback: v => v + '%' },
                     min: 0, max: 100,
                     grid: { color: 'rgba(255,255,255,0.08)' },

@@ -59,8 +59,9 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
     has_unet = 'unet' in classifier_names and unet_patches and len(unet_patches) > 0
 
     # Count total labelled pixels across all patches (for unified x-axis)
+    # Computed even without U-Net — spatial MLP uses patches too
     unet_patch_pixel_counts = []
-    if has_unet:
+    if unet_patches:
         for emb_p, lbl_p in unet_patches:
             unet_patch_pixel_counts.append(int((lbl_p > 0).sum()))
     total_unet_pixels = sum(unet_patch_pixel_counts)
