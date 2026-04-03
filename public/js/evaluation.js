@@ -404,10 +404,10 @@ function createStreamChart(classifierNames) {
             },
             scales: {
                 x: {
-                    type: 'linear',
+                    type: 'logarithmic',
                     title: { display: true, text: '% of labelled pixels used for training', color: '#aaa' },
-                    ticks: { color: '#aaa', callback: v => v + '%' },
-                    min: 0, max: 100,
+                    ticks: { color: '#aaa', callback: v => v < 1 ? v.toFixed(1) + '%' : Math.round(v) + '%' },
+                    min: 0.01, max: 100,
                     grid: { color: 'rgba(255,255,255,0.08)' },
                 },
                 y: {
@@ -540,7 +540,7 @@ function handleStreamEvent(ev) {
         } else {
             status.textContent = `Done: ${trainInfo}`;
         }
-        appendResultsRow(ev.pct, ev.classifiers);
+        appendResultsRow(ev.pct, ev.classifiers, ev);
         const elapsed = status.dataset.t0 ? ((Date.now() - parseInt(status.dataset.t0)) / 1000).toFixed(0) : '';
         setResultsStatus(`${trainInfo} (${elapsed}s)`);
 
@@ -739,10 +739,10 @@ function renderChart(data, metric) {
             },
             scales: {
                 x: {
-                    type: 'linear',
+                    type: 'logarithmic',
                     title: { display: true, text: '% of labelled pixels used for training', color: '#aaa' },
-                    ticks: { color: '#aaa', callback: v => v + '%' },
-                    min: 0, max: 100,
+                    ticks: { color: '#aaa', callback: v => v < 1 ? v.toFixed(1) + '%' : Math.round(v) + '%' },
+                    min: 0.01, max: 100,
                     grid: { color: 'rgba(255,255,255,0.08)' },
                 },
                 y: {
@@ -1233,18 +1233,25 @@ function initResultsTable(modelNames, task) {
     const tbody = document.getElementById('val-results-tbody');
 
     const metric = task === 'regression' ? 'R²' : 'F1';
-    thead.innerHTML = '<th style="text-align:left; padding:6px;">% Labels</th>'
+    thead.innerHTML = '<th style="text-align:left; padding:6px;">Training labels</th>'
         + modelNames.map(n =>
             `<th style="text-align:right; padding:6px;">${CLASSIFIER_LABELS[n] || n} (${metric})</th>`
         ).join('');
     tbody.innerHTML = '';
 }
 
-function appendResultsRow(pct, classifiers) {
+function appendResultsRow(pct, classifiers, ev) {
     const tbody = document.getElementById('val-results-tbody');
+    const totalLabels = valEstimatedLabelledPixels || (ev && ev.total_unet_pixels) || (ev && ev.total_pixels) || 0;
+
+    // Show pixel and patch training counts
+    const pixelK = ev && ev.pixel_train_count ? `${(ev.pixel_train_count / 1000).toFixed(1)}K` : '';
+    const unetK = ev && ev.unet_train_count ? `${(ev.unet_train_count / 1000).toFixed(0)}K` : '';
+    const labelStr = unetK ? `${pixelK}px + ${unetK}patch` : pixelK || `${pct}%`;
+
     const tr = document.createElement('tr');
     tr.style.borderBottom = '1px solid #333';
-    let cells = `<td style="padding:6px;">${pct}%</td>`;
+    let cells = `<td style="padding:6px; font-size:12px;">${labelStr}</td>`;
     for (const name of _resultsTableModels) {
         const m = classifiers[name] || {};
         const val = m.mean_f1;
