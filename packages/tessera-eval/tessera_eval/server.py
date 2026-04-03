@@ -9,6 +9,11 @@ Usage:
     tee-compute --hosted https://tee.cl.cam.ac.uk --port 8001
 """
 
+# Must be set before numpy/scipy import to avoid OpenBLAS crash on >128-core machines
+import os as _os
+if 'OPENBLAS_NUM_THREADS' not in _os.environ:
+    _os.environ['OPENBLAS_NUM_THREADS'] = '64'
+
 import argparse
 import json
 import logging
@@ -533,18 +538,21 @@ def run_large_area():
                 t = threading.Thread(target=_fetch, daemon=True)
                 t.start()
 
+                last_reported = -1
                 while True:
                     try:
-                        item = progress_q.get(timeout=5)
+                        item = progress_q.get(timeout=10)
                     except queue.Empty:
-                        # Heartbeat so the browser knows we're alive
-                        yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_points:,} points..."}) + "\n"
+                        yield json.dumps({"event": "heartbeat"}) + "\n"
                         continue
                     if item is None:
                         break
                     current, total, cb_status = item
+                    if current == last_reported:
+                        continue  # skip duplicate / status-only callbacks
+                    last_reported = current
                     pct = int(100 * current / total) if total else 0
-                    msg = f"Fetching embeddings: {current:,}/{total:,} tiles ({pct}%)"
+                    msg = f"Fetching embeddings: {current}/{total} tiles ({pct}%)"
                     logger.info(msg)
                     yield json.dumps({"event": "progress", "pct": pct, "message": msg}) + "\n"
 
@@ -901,11 +909,6 @@ def _get_version():
 
 
 # ── CLI entry point ──
-
-# Prevent OpenBLAS crash on many-core servers (>128 threads)
-import os
-if 'OPENBLAS_NUM_THREADS' not in os.environ:
-    os.environ['OPENBLAS_NUM_THREADS'] = '64'
 
 def main():
     global _hosted_url
