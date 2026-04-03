@@ -120,7 +120,10 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
             X_test, y_test = vectors[test_idx], labels[test_idx]
 
             # Pixel-based classifiers
-            for name in active_pixel:
+            for clf_idx, name in enumerate(active_pixel):
+                if seed == 0:
+                    yield {"type": "classifier_status",
+                           "message": f"Pct {pct}%: training {name} (repeat {seed+1}/{n_repeats})..."}
                 if name == "spatial_mlp" and spatial_vectors is not None:
                     X_tr, X_te = spatial_vectors[train_idx], spatial_vectors[test_idx]
                     X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=3, dim=vectors.shape[1])
@@ -150,6 +153,8 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
             # U-Net: patch-based train/test split
             # Only run 1 repeat for U-Net (training is expensive, variance is dominated by SGD noise)
             if has_unet and 'unet' in active and seed == 0:
+                yield {"type": "classifier_status",
+                       "message": f"Pct {pct}%: training U-Net..."}
                 try:
                     from tessera_eval.unet import train_unet_on_patches, predict_unet_tile, _HAS_TORCH
                     if _HAS_TORCH:

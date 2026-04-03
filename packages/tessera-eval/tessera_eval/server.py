@@ -765,6 +765,11 @@ def run_large_area():
                     "pct": event["pct"],
                     "classifiers": event["classifiers"],
                 }) + "\n"
+            elif event["type"] == "classifier_status":
+                yield json.dumps({
+                    "event": "status",
+                    "message": event["message"],
+                }) + "\n"
             elif event["type"] == "confusion_matrices":
                 yield json.dumps({
                     "event": "confusion_matrices",
