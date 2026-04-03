@@ -84,7 +84,7 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
                           patch_size=256, max_patches=500,
                           needs_spatial_3x3=False, needs_spatial_5x5=False,
                           sample_points_lonlat=None,
-                          logger=None, progress_cb=None):
+                          logger=None, progress_cb=None, cancel_flag=None):
     """Extract pixel-aligned 2D patches and optionally point samples from tiles.
 
     Fetches tiles once and extracts both:
@@ -138,6 +138,10 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
     for t_idx, (yr, tlon, tlat, tile_emb, crs, transform) in enumerate(
             gt.fetch_embeddings(tiles_to_fetch)):
+        if cancel_flag and cancel_flag.is_set():
+            if logger:
+                logger.info("Tile extraction cancelled")
+            break
         if progress_cb:
             progress_cb(t_idx, total_tiles)
 
@@ -669,6 +673,7 @@ def run_large_area():
                                 sample_points_lonlat=sample_points,
                                 logger=logger,
                                 progress_cb=_tile_progress,
+                                cancel_flag=_cancel_flag,
                             )
                         except Exception as e:
                             tile_result[1] = e
@@ -679,8 +684,12 @@ def run_large_area():
                     t.start()
 
                     while True:
+                        if _cancelled():
+                            logger.info("Cancelled during tile fetch")
+                            yield json.dumps({"event": "error", "message": "Cancelled"}) + "\n"
+                            return
                         try:
-                            item = progress_q.get(timeout=10)
+                            item = progress_q.get(timeout=5)
                         except queue.Empty:
                             yield json.dumps({"event": "heartbeat"}) + "\n"
                             continue
@@ -722,8 +731,12 @@ def run_large_area():
 
                     last_reported = -1
                     while True:
+                        if _cancelled():
+                            logger.info("Cancelled during pixel fetch")
+                            yield json.dumps({"event": "error", "message": "Cancelled"}) + "\n"
+                            return
                         try:
-                            item = progress_q.get(timeout=10)
+                            item = progress_q.get(timeout=5)
                         except queue.Empty:
                             yield json.dumps({"event": "heartbeat"}) + "\n"
                             continue
