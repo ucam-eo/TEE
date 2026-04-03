@@ -108,8 +108,11 @@ def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
     centers = []
     for mp in center_pts:
         if mp is not None and not mp.is_empty:
-            for pt in mp.geoms:
-                centers.append((pt.x, pt.y))
+            if hasattr(mp, 'geoms'):
+                for pt in mp.geoms:
+                    centers.append((pt.x, pt.y))
+            else:
+                centers.append((mp.x, mp.y))
     if len(centers) > n_patches:
         idx = rng.choice(len(centers), size=n_patches, replace=False)
         centers = [centers[i] for i in idx]
@@ -119,6 +122,35 @@ def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
 
     # 10m spacing in degrees (approximate)
     deg_per_pixel = 0.0001  # ~10m at mid-latitudes
+    pixels_per_patch = patch_size * patch_size
+
+    # Build all patch grids and collect into one big point list
+    if logger:
+        logger.info("Building %d patch grids (%d points each)...", len(centers), pixels_per_patch)
+    all_points = []
+    patch_meta = []  # (center_lon, center_lat, lons_array, lats_array)
+    for clon, clat in centers:
+        half = patch_size // 2
+        lons = np.array([clon + (j - half) * deg_per_pixel for j in range(patch_size)])
+        lats = np.array([clat + (half - i) * deg_per_pixel for i in range(patch_size)])
+        grid_lons, grid_lats = np.meshgrid(lons, lats)
+        all_points.extend(zip(grid_lons.ravel(), grid_lats.ravel()))
+        patch_meta.append((lons, lats))
+
+    # One bulk fetch for all patches — GeoTessera fetches each tile once
+    if logger:
+        logger.info("Fetching embeddings for %d patches (%d points total)...",
+                     len(centers), len(all_points))
+    try:
+        all_emb = gt.sample_embeddings_at_points(all_points, year=year)
+    except Exception as e:
+        if logger:
+            logger.warning("Bulk patch fetch failed: %s", e)
+        return [], None, None
+
+    from affine import Affine
+    from shapely.geometry import box as _box
+    from tessera_eval.rasterize import rasterize_shapefile
 
     unet_patches = []
     all_spatial_3x3 = [] if needs_spatial_3x3 else None
@@ -126,40 +158,21 @@ def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
     spatial_labels_3x3 = []
     spatial_labels_5x5 = []
 
-    for c_idx, (clon, clat) in enumerate(centers):
-        # Generate a grid of points for this patch
-        half = patch_size // 2
-        lons = np.array([clon + (j - half) * deg_per_pixel for j in range(patch_size)])
-        lats = np.array([clat + (half - i) * deg_per_pixel for i in range(patch_size)])  # lat decreases downward
-        grid_lons, grid_lats = np.meshgrid(lons, lats)
-        grid_points = list(zip(grid_lons.ravel(), grid_lats.ravel()))
-
-        # Fetch embeddings for the grid
-        try:
-            emb_flat = gt.sample_embeddings_at_points(grid_points, year=year)
-        except Exception as e:
-            if logger:
-                logger.warning("Patch %d/%d failed: %s", c_idx + 1, len(centers), e)
-            continue
-
-        # Reshape to 2D
+    for c_idx, (lons, lats) in enumerate(patch_meta):
+        start = c_idx * pixels_per_patch
+        emb_flat = all_emb[start:start + pixels_per_patch]
         emb_patch = emb_flat.reshape(patch_size, patch_size, -1).astype(np.float32)
 
-        # Replace NaN with 0 (points outside coverage)
         nan_mask = np.isnan(emb_patch)
         if nan_mask.any():
             emb_patch[nan_mask] = 0.0
 
-        # Rasterize labels onto the same grid
-        from affine import Affine
         transform = Affine(deg_per_pixel, 0, lons[0], 0, -deg_per_pixel, lats[0])
-        from shapely.geometry import box as _box
         patch_bounds = (lons[0], lats[-1], lons[-1], lats[0])
         patch_gdf = gdf[gdf.intersects(_box(*patch_bounds))]
         if patch_gdf.empty:
             continue
 
-        from tessera_eval.rasterize import rasterize_shapefile
         label_patch = rasterize_shapefile(patch_gdf, field_name, transform,
                                           patch_size, patch_size, label_encoder=le)
 
@@ -167,8 +180,9 @@ def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
             continue
 
         unet_patches.append((emb_patch, label_patch.astype(np.int32)))
+        if logger:
+            logger.info("Patch %d/%d: %d labelled pixels", c_idx + 1, len(centers), (label_patch > 0).sum())
 
-        # Extract spatial features from the 2D patch
         labelled_mask = label_patch > 0
         if needs_spatial_3x3:
             sf = gather_spatial_features_2d(emb_patch, radius=1, mask=labelled_mask)
@@ -179,9 +193,12 @@ def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
             all_spatial_5x5.append(sf)
             spatial_labels_5x5.append(label_patch[labelled_mask] - 1)
 
-    # Concatenate spatial features
     spatial_3x3 = np.concatenate(all_spatial_3x3, axis=0).astype(np.float32) if all_spatial_3x3 else None
     spatial_5x5 = np.concatenate(all_spatial_5x5, axis=0).astype(np.float32) if all_spatial_5x5 else None
+
+    if logger:
+        logger.info("2D patches: %d valid of %d, %d U-Net patches",
+                     len(unet_patches), len(centers), len(unet_patches))
 
     return unet_patches, spatial_3x3, spatial_5x5
 
