@@ -178,9 +178,14 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                             for emb_patch, lbl_patch in test_patches:
                                 pred = predict_unet_tile(model, emb_patch,
                                                          patch_size=emb_patch.shape[0])
-                                mask = lbl_patch > 0
+                                # Ensure pred and lbl_patch have matching shapes
+                                ph = min(pred.shape[0], lbl_patch.shape[0])
+                                pw = min(pred.shape[1], lbl_patch.shape[1])
+                                pred = pred[:ph, :pw]
+                                lbl = lbl_patch[:ph, :pw]
+                                mask = lbl > 0
                                 if mask.any():
-                                    all_true.append(lbl_patch[mask] - 1)  # 1-based → 0-based
+                                    all_true.append(lbl[mask] - 1)  # 1-based → 0-based
                                     all_pred.append(pred[mask] - 1)
 
                             if all_true:

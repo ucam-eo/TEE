@@ -124,6 +124,10 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
                         t_idx + 1, total_tiles, tlon, tlat, tile_emb.shape[:2])
 
         h, w = tile_emb.shape[:2]
+        if h < patch_size or w < patch_size:
+            if logger:
+                logger.info("  Skipping tile (%d×%d) — smaller than patch size %d", h, w, patch_size)
+            continue
         tile_emb = tile_emb.astype(np.float32)
 
         # Reproject GDF to tile CRS for rasterization
