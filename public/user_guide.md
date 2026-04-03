@@ -446,33 +446,36 @@ pip install -e "$HOME/TEE/packages/tessera-eval[server]"
 exit
 ```
 
-**Step 5 (optional): Install PyTorch for U-Net**
+**Step 5 (optional): Install PyTorch for U-Net and spatial MLP**
 
-U-Net requires PyTorch. If your server has a GPU with CUDA:
+U-Net and spatial MLP require PyTorch. First check if the server has a GPU:
 ```bash
-ssh gpu-box '~/TEE/venv/bin/pip install torch'
+ssh gpu-box 'nvidia-smi'
 ```
-If CPU only:
+
+If it shows a GPU, note the **CUDA Version** in the top-right corner. Install a PyTorch version built for that CUDA version or lower:
+```bash
+# Example: CUDA Version 12.2 → use cu121 index
+ssh gpu-box '~/TEE/venv/bin/pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121'
+```
+
+If no GPU (or you want CPU only):
 ```bash
 ssh gpu-box '~/TEE/venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu'
 ```
 
-**Updating later**
-
-To update later, or use the deploy script (if you have one at `scripts/deploy-daintree.sh`):
+Verify CUDA works:
 ```bash
-ssh gpu-box
-cd ~/TEE && git pull
-source venv/bin/activate
-pip install -e packages/tessera-eval[server]
-exit
+ssh gpu-box '~/TEE/venv/bin/python3 -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"CPU\")"'
 ```
 
-Or with the deploy script:
+> **Common mistake:** `pip install torch` without specifying an index URL installs the latest PyTorch which may require a newer CUDA driver than your server has. Always match the CUDA version. See [Fixing PyTorch CUDA version mismatch](#fixing-pytorch-cuda-version-mismatch) below.
+
+**Updating later**
+
+SSH in and pull:
 ```bash
-./scripts/deploy-daintree.sh                  # deploy + start tunnel
-./scripts/deploy-daintree.sh --install-torch  # also install/update PyTorch
-./scripts/deploy-daintree.sh --no-tunnel      # deploy only, no tunnel
+ssh gpu-box 'cd ~/TEE && git pull && ~/TEE/venv/bin/pip install -q -e "packages/tessera-eval[server]"'
 ```
 
 ---
@@ -499,12 +502,14 @@ cd ~/TEE
 Terminal 2 — replace local tee-compute with GPU tunnel:
 ```bash
 pkill -f tee-compute                    # stop the local tee-compute
-ssh -L 8002:localhost:5050 gpu-box '~/TEE/venv/bin/tee-compute --port 5050'
+ssh -L 8002:localhost:5050 gpu-box 'OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050'
 ```
 
-Open `http://localhost:8001`. The UI and tiles come from your laptop. When you click Run Evaluation, the ML runs on the GPU server.
+Open `http://localhost:8001`. The UI and tiles come from your laptop. When you click Run Evaluation, the ML runs on the GPU server. Click **Status** in the header to confirm — it should show the GPU server hostname under "Compute".
 
 > **Why port 5050?** Port 8001 may already be in use on the GPU server. The tunnel maps your local port 8002 to the server's port 5050. Django automatically proxies evaluation requests to localhost:8002.
+>
+> **Why OPENBLAS_NUM_THREADS=1?** Servers with >128 CPU cores crash OpenBLAS if threads aren't limited. Setting to 1 lets sklearn's joblib handle parallelism instead.
 
 ---
 
@@ -521,17 +526,16 @@ Browser → localhost:8001 → SSH tunnel → gpu-box (tee-compute)
 
 **Each session — one command from your laptop:**
 ```bash
-ssh -L 8001:localhost:5050 gpu-box '~/TEE/venv/bin/tee-compute --port 5050'
+ssh -L 8001:localhost:5050 gpu-box 'OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050'
 ```
 
 Open `http://localhost:8001`. The UI comes from tee.cl.cam.ac.uk (via proxy), evaluation runs on the GPU server.
 
 > **Tip:** Add an alias to `~/.zshrc` or `~/.bashrc`:
 > ```bash
-> alias tee-gpu='ssh -L 8001:localhost:5050 gpu-box "~/TEE/venv/bin/tee-compute --port 5050"'
+> alias tee-gpu='ssh -L 8001:localhost:5050 gpu-box "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050"'
 > ```
 > Then just type `tee-gpu` to start a session.
-> Then just type `tee` to start a session.
 
 ### Command Reference
 
@@ -568,21 +572,23 @@ tee-compute [OPTIONS]
 If U-Net ignores the GPU and falls back to CPU, the installed PyTorch was built for a newer CUDA than your driver supports. To diagnose:
 
 ```bash
+# Run these on the GPU server (ssh gpu-box first)
+
 # Check your driver's CUDA version (look for "CUDA Version: XX.Y" in the top-right)
 nvidia-smi
 
-# Check if PyTorch can see the GPU
-python3 -c "import torch; print(torch.cuda.is_available())"
+# Check if PyTorch can see the GPU (use the venv python, not system python)
+~/TEE/venv/bin/python3 -c "import torch; print(torch.cuda.is_available())"
 ```
 
 If `nvidia-smi` shows a GPU but `torch.cuda.is_available()` returns False, you need a PyTorch version that matches your driver. The driver's CUDA version is the **maximum** it supports — install a PyTorch built for that version or lower.
 
 ```bash
 # Example: driver reports CUDA 12.2 → install PyTorch for CUDA 12.1
-pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+~/TEE/venv/bin/pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
 
 # Verify
-python3 -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+~/TEE/venv/bin/python3 -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
 
 Common CUDA index URLs:
