@@ -155,9 +155,10 @@ Django proxies `/api/evaluation/*` requests to it.
 
 ```
 Browser → Django :8001 → proxy → tee-compute :8002
-                                    ├── /api/evaluation/upload-shapefile
+                                    ├── /api/evaluation/upload-shapefile (returns estimated_labelled_pixels, per-class polygon counts)
                                     ├── /api/evaluation/clear-shapefiles
                                     ├── /api/evaluation/run-large-area
+                                    ├── /api/evaluation/cancel (CORS-enabled for direct access)
                                     ├── /api/evaluation/finish-classifier
                                     ├── /api/evaluation/download-model/<name>
                                     └── /health
@@ -180,23 +181,24 @@ tee-compute:
     2. GeoTessera init (cached instance reused across runs)
     3. Generate stratified random points within shapefile polygons (200K max)
        Sampling strategy: equal, sqrt-proportional, or proportional to area
-    4. Fetch embeddings at points via sample_embeddings_at_points
-    5. If spatial MLP or U-Net selected:
-        a. Fetch real tiles via gt.fetch_embeddings (tiles shuffled for
-           geographic diversity, up to 5 patches per tile)
-        b. For each tile: rasterize labels at native CRS, extract random
-           256×256 pixel-aligned crops where labels exist
+    4. If spatial MLP or U-Net selected → single tile pass:
+        a. Fetch tiles via gt.fetch_embeddings (shuffled for geographic
+           diversity, up to 5 patches per tile, cancellable per tile)
+        b. From each tile: extract point sample values AND random 256×256
+           pixel-aligned crops (both from the same tile, tiles fetched once)
         c. Spatial MLP: extract 3×3 or 5×5 neighbourhood features,
-           subsampled to 5000 pixels/patch to cap memory (~2.3GB total)
+           subsampled to 5000 pixels/patch to cap memory
         d. U-Net: receives full 256×256 patches (no subsampling)
-        e. Augmentation: 8× per patch (4 rotations × 2 flips) during
-           U-Net training
-    6. start event (pixel counts, class info, training percentages)
-    7. run_learning_curve (% of labels, adaptive repeats, 200K test cap)
+        e. Augmentation: 16× per patch (4 rotations × 2 flips × 2 noise
+           levels) during U-Net training
+       If pixel-only classifiers → use sample_embeddings_at_points (faster)
+    5. start event (pixel counts, class info, training percentages,
+       estimated total labelled pixels from shapefile polygon areas)
+    6. run_learning_curve (% of labels, adaptive repeats, 200K test cap)
         → classifier_status events per model
-        → progress events per percentage (with U-Net patch train/test)
-    8. confusion_matrices event
-    9. done event
+        → progress events with actual training pixel counts per classifier
+    7. confusion_matrices event
+    8. done event (or Cancelled if user clicks Cancel)
 
 Download Models (deferred, user-triggered):
    10. POST /api/evaluation/train-models
@@ -215,8 +217,8 @@ are set to 7200s (2 hours) on both Waitress and the proxy.
 
 | Layer | Key | Scope | Contents |
 |-------|-----|-------|----------|
-| **Disk result cache** | `(field, year, gdf_hash)` | `~/.cache/tessera-eval/` | Compressed `.npz` with vectors + labels (~100MB for 200K pixels). Survives restarts. |
-| **In-memory cache** | `(field, year)` | `_tile_cache` global | Vectors, labels, spatial features, U-Net patches, model params. Lost on restart. |
+| **Disk result cache** | `(field, year, sampling, gdf_hash)` | `~/.cache/tessera-eval/` | Compressed `.npz` with vectors + labels (~100MB for 200K pixels). Survives restarts. |
+| **In-memory cache** | `(field, year, sampling)` | `_tile_cache` global | Vectors, labels, spatial features, U-Net patches, model params. Lost on restart. |
 | **GeoTessera instance** | singleton | `_geotessera_instance` | Loaded registry parquet. Avoids 10-30s HTTP check per run. |
 
 Re-running with different classifiers: uses in-memory cache (instant).
@@ -237,10 +239,12 @@ The pipeline is optimized for large evaluations (e.g., Austria: 40 tiles,
 | Configurable sampling (equal/sqrt/proportional) | Equal sampling making weighted F1 meaningless | Meaningful weighted F1 scores |
 | GeoTessera instance caching | Registry HTTP check + parquet read per run | 10-30s per run |
 | Disk result cache (vectors + labels + sampling) | Re-downloading on restart | <1s vs minutes |
+| Single tile pass for point + patch extraction | Two separate tile fetches (point sampling then patches) | Tiles fetched once, halves fetch time |
 | Real tile patches for U-Net/spatial MLP | Point-grid patches with no spatial coherence | Pixel-aligned patches, U-Net F1 comparable to viewport mode |
 | Spatial feature subsampling (5K px/patch) | 65K×1152 features per patch (~300MB) | ~11.5GB total for 500 patches |
 | Tile shuffling for patch extraction | Geographic clustering of patches | Diverse coverage across study area |
-| 8× augmentation (rotations + flips) | Limited U-Net training data | Effective 4000 training images from 500 patches |
+| 16× augmentation (rotations + flips + noise) | Limited U-Net training data | Effective 8000 training images from 500 patches |
+| Server-side cancellation via cancel flag | Zombie computations after user cancels | Cancel checked per tile, per learning curve step |
 | Deferred model training (user-triggered) | 45+ minute U-Net training blocking results | Results in ~1 min |
 
 **Learning curve phase:**
@@ -253,12 +257,13 @@ The pipeline is optimized for large evaluations (e.g., Austria: 40 tiles,
 | Adaptive repeats (fewer at high %) | 5 repeats at 80% where variance is negligible | ~25% of high-% time |
 
 **When extending the pipeline**, keep these principles:
-- Use `sample_embeddings_at_points` for pixel data — no full tile loading needed
-- Use `fetch_embeddings` for spatial/U-Net — gives pixel-aligned tile crops
-- For 2D patches, generate point grids at 10m spacing — never load full tiles
-- Cap total pixels at 200K — diminishing returns above that for learning curves
+- Use `sample_embeddings_at_points` for pixel-only classifiers (fast, no tile loading)
+- Use `fetch_embeddings` for spatial/U-Net — pixel-aligned tile crops, single pass for both points and patches
+- Cap total pixel samples at 200K — diminishing returns above that for learning curves
+- Cap spatial features at 5K pixels per patch to prevent memory blow-up on dense labels
 - Defer expensive operations (model training) behind user-triggered endpoints
 - Every phase >2s must emit a status event to the browser
+- Check `cancel_flag` in any loop that processes tiles or learning curve steps
 
 ### tessera_eval library
 
