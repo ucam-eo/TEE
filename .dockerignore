@@ -40,6 +40,13 @@ deprecated/
 *.log
 *.png
 
+# Shapefiles (private ground-truth data)
+*.zip
+cumbria_naddle.zip
+Cumbria_naddle/
+manual-labels-Eddington.zip
+manual-labels-Eddington/
+
 # Documentation (not needed in container)
 *.md
 !README.md

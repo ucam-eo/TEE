@@ -43,9 +43,11 @@ vectors/
 *.npy
 *.index
 
-# Shapefiles / ground-truth data
+# Shapefiles / ground-truth data (private)
 Cumbria_naddle/
-*.zip
+cumbria_naddle.zip
+manual-labels-Eddington.zip
+# austria.zip is public example data — tracked in git
 
 # Private planning files
 docs/plan_tessera_tools_library.md
