@@ -36,6 +36,8 @@ TEE (Tessera Embeddings Explorer) is a web-based tool for exploring, labelling, 
 3. Check classifiers (k-NN, RF, XGBoost, MLP) → **Run Evaluation**
 4. View learning curves, confusion matrix, and download trained models
 
+> **Try it:** The repository includes `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). Upload it, select field **"Crop"**, year **2024**, and click Run.
+
 ---
 
 ## The Viewport Manager

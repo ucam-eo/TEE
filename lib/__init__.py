@@ -1,3 +1,3 @@
 """Blore project library utilities."""
 
-__version__ = "alpha 3.10"
+__version__ = "beta 1.0.0"

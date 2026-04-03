@@ -7,7 +7,7 @@ for _var in ('OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'OMP_NUM_THREADS'):
     if _var not in _os.environ:
         _os.environ[_var] = '1'
 
-__version__ = "0.2.0"
+__version__ = "1.0.0"
 
 from tessera_eval.data import load_tee_vectors, dequantize_uint8, dequantize_int8, load_embeddings_for_shapefile
 from tessera_eval.rasterize import rasterize_shapefile

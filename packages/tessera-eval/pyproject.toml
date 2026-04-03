@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tessera-eval"
-version = "0.1.0"
+version = "1.0.0"
 description = "Evaluate habitat classifiers on Tessera satellite embeddings"
 readme = "README.md"
 license = {text = "MIT"}
