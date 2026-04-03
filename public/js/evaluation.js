@@ -34,6 +34,7 @@ let lastEvalData = null;
 let cmShowPct = false;
 let cmPopupWindow = null;
 let valUploadedFilename = null;
+let valEstimatedLabelledPixels = 0;
 let currentLargeAreaTask = null; // 'classification' or 'regression'
 let valUploadedFiles = []; // list of uploaded filenames
 let valTotalLabelledPixels = 0; // set by start event, used for % hint
@@ -154,10 +155,14 @@ async function uploadShapefile(file) {
         });
         sel.disabled = false;
         document.getElementById('val-run-btn').disabled = false;
-        status.textContent = `${data.fields.length} fields found`;
+        const estK = valEstimatedLabelledPixels > 0
+            ? ` (~${(valEstimatedLabelledPixels / 1e6).toFixed(1)}M labelled pixels at 10m)`
+            : '';
+        status.textContent = `${data.fields.length} fields found${estK}`;
         status.style.color = '#28a745';
 
         valGeoJsonData = data.geojson;
+        valEstimatedLabelledPixels = data.estimated_labelled_pixels || 0;
         addValGeoJsonLayer();
         updateClassSummary();
         updateYearCoverage(data.geojson);
@@ -508,9 +513,9 @@ function handleStreamEvent(ev) {
         lastChartData.training_pcts.push(ev.pct);
 
         // Unified x-axis: all classifiers plotted as fraction of total labelled pixels.
-        // Denominator = total labelled pixels across all patches (most complete view),
-        // or total sampled pixels if no patches were extracted.
-        const totalLabels = ev.total_unet_pixels || ev.total_pixels || 1;
+        // Denominator = estimated total labelled pixels from shapefile polygon areas
+        // (computed at upload from polygon area / 100m²). Falls back to patch or sample totals.
+        const totalLabels = valEstimatedLabelledPixels || ev.total_unet_pixels || ev.total_pixels || 1;
 
         for (const [name, vals] of Object.entries(ev.classifiers)) {
             const acc = lastChartData.classifiers[name];

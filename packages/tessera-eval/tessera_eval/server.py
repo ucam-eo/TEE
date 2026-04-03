@@ -329,9 +329,18 @@ def upload_shapefile():
     else:
         geojson = json.loads(merged.to_json())
 
+    # Estimate total labelled pixels from polygon areas at 10m resolution
+    try:
+        area_crs = merged.estimate_utm_crs()
+        total_area_m2 = merged.to_crs(area_crs).geometry.area.sum()
+        estimated_labelled_pixels = int(total_area_m2 / 100)  # 10m × 10m per pixel
+    except Exception:
+        estimated_labelled_pixels = 0
+
     return jsonify({
         "fields": fields, "geojson": geojson,
         "files": [f for f, _ in _uploaded_shapefiles],
+        "estimated_labelled_pixels": estimated_labelled_pixels,
     })
 
 
