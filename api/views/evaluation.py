@@ -79,6 +79,10 @@ def clear_shapefiles(request):
     return _proxy_to_compute(request, "api/evaluation/clear-shapefiles")
 
 
+def compute_health(request):
+    return _proxy_to_compute(request, "health")
+
+
 def run_evaluation(request):
     return _proxy_to_compute(request, "api/evaluation/run-large-area")
 

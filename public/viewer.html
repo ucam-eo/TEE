@@ -1325,14 +1325,19 @@
         window.location.href = `mailto:sk818@cam.ac.uk?subject=${encodeURIComponent('TEE Feedback — ' + vp)}&body=${encodeURIComponent(body)}`;
     }
 
-    // Show compute host in header
+    // Show compute host in header (check both /health and eval proxy health)
     fetch('/health').then(r => r.json()).then(d => {
         if (d.compute_host) {
             const label = document.getElementById('compute-host-label');
-            if (label) {
-                label.textContent = 'compute: ' + d.compute_host;
-                label.style.display = '';
-            }
+            if (label) { label.textContent = 'compute: ' + d.compute_host; label.style.display = ''; }
+        } else {
+            // Django doesn't have compute_host — try the eval proxy which reaches tee-compute
+            fetch('/api/evaluation/health').then(r => r.json()).then(d2 => {
+                if (d2.compute_host) {
+                    const label = document.getElementById('compute-host-label');
+                    if (label) { label.textContent = 'compute: ' + d2.compute_host; label.style.display = ''; }
+                }
+            }).catch(() => {});
         }
     }).catch(() => {});
     </script>
