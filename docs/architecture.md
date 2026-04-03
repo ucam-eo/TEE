@@ -238,9 +238,9 @@ The pipeline is optimized for large evaluations (e.g., Austria: 40 tiles,
 | GeoTessera instance caching | Registry HTTP check + parquet read per run | 10-30s per run |
 | Disk result cache (vectors + labels + sampling) | Re-downloading on restart | <1s vs minutes |
 | Real tile patches for U-Net/spatial MLP | Point-grid patches with no spatial coherence | Pixel-aligned patches, U-Net F1 comparable to viewport mode |
-| Spatial feature subsampling (5K px/patch) | 65K×1152 features per patch (~300MB) | ~2.3GB total for 100 patches |
+| Spatial feature subsampling (5K px/patch) | 65K×1152 features per patch (~300MB) | ~11.5GB total for 500 patches |
 | Tile shuffling for patch extraction | Geographic clustering of patches | Diverse coverage across study area |
-| 8× augmentation (rotations + flips) | Limited U-Net training data | Effective 800 training images from 100 patches |
+| 8× augmentation (rotations + flips) | Limited U-Net training data | Effective 4000 training images from 500 patches |
 | Deferred model training (user-triggered) | 45+ minute U-Net training blocking results | Results in ~1 min |
 
 **Learning curve phase:**

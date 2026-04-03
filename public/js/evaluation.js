@@ -410,7 +410,7 @@ function createStreamChart(classifierNames) {
             scales: {
                 x: {
                     type: 'linear',
-                    title: { display: true, text: '% of labels', color: '#aaa' },
+                    title: { display: true, text: '% of sampled pixels used for training', color: '#aaa' },
                     ticks: { color: '#aaa', callback: v => v + '%' },
                     min: 0, max: 100,
                     grid: { color: 'rgba(255,255,255,0.08)' },
@@ -733,7 +733,7 @@ function renderChart(data, metric) {
             scales: {
                 x: {
                     type: 'linear',
-                    title: { display: true, text: '% of labels', color: '#aaa' },
+                    title: { display: true, text: '% of sampled pixels used for training', color: '#aaa' },
                     ticks: { color: '#aaa', callback: v => v + '%' },
                     min: 0, max: 100,
                     grid: { color: 'rgba(255,255,255,0.08)' },
@@ -1043,7 +1043,7 @@ function generateConfig() {
         "years": [parseInt(document.getElementById('val-year-select').value) || 2024],
         "max_training_samples": parseInt(document.getElementById('val-max-train-large').value) || 30000,
         "sampling": document.getElementById('val-sampling-select').value || 'sqrt',
-        "max_patches": parseInt(document.getElementById('val-max-patches').value) || 100,
+        "max_patches": parseInt(document.getElementById('val-max-patches').value) || 500,
         "output_dir": "./eval_output",
         "dry_run": false,
         "seed": 42,
@@ -1142,7 +1142,7 @@ async function runLargeAreaEvaluation() {
                 classifier_params: params,
                 max_training_samples: parseInt(document.getElementById('val-max-train-large').value) || 30000,
                 sampling: document.getElementById('val-sampling-select').value || 'sqrt',
-                max_patches: parseInt(document.getElementById('val-max-patches').value) || 100,
+                max_patches: parseInt(document.getElementById('val-max-patches').value) || 500,
             }),
             signal: evalAbortController.signal,
         });

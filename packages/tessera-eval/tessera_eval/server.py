@@ -80,7 +80,7 @@ def _load_cached_result(field, year, gdf, sampling="equal"):
 
 
 def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
-                          patch_size=256, max_patches=100,
+                          patch_size=256, max_patches=500,
                           needs_spatial_3x3=False, needs_spatial_5x5=False,
                           logger=None, progress_cb=None):
     """Extract pixel-aligned 2D patches from real GeoTessera tiles.
@@ -377,7 +377,7 @@ def run_large_area():
     if max_train is not None:
         max_train = int(max_train)
     sampling = body.get("sampling", "sqrt")  # equal, proportional, sqrt
-    max_patches = int(body.get("max_patches", 100))
+    max_patches = int(body.get("max_patches", 500))
 
     if not field_name:
         return jsonify({"error": "field is required"}), 400

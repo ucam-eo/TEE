@@ -242,7 +242,7 @@ Evaluate how well classifiers distinguish habitat classes using Tessera embeddin
 
 **Pixel classifiers** (k-NN, RF, XGBoost, MLP) use point-sampled embeddings — fast and memory-efficient for any scale.
 
-**Spatial classifiers** (Spatial MLP, U-Net) fetch real GeoTessera tiles and extract pixel-aligned 256×256 crops. This gives them true spatial structure at the tile's native 10m resolution, which is critical for learning convolutional features. The number of patches can be set in the controls (default 100).
+**Spatial classifiers** (Spatial MLP, U-Net) fetch real GeoTessera tiles and extract pixel-aligned 256×256 crops. This gives them true spatial structure at the tile's native 10m resolution, which is critical for learning convolutional features. The number of patches can be set in the controls (default 500, minimum 100).
 
 ### Sampling Strategy
 
@@ -262,9 +262,11 @@ When spatial MLP or U-Net is selected, TEE fetches real GeoTessera tiles and ext
 
 | Setting | Default | Notes |
 |---------|---------|-------|
-| **Spatial/U-Net patches** | 100 | Number of 256×256 crops to extract from tiles. More patches = better U-Net accuracy but slower. |
+| **Spatial/U-Net patches** | 500 | Number of 256×256 crops to extract from tiles (minimum 100). More patches = better U-Net accuracy but slower tile fetching. |
 
-Tiles are shuffled before extraction so patches come from diverse geographic regions (max 5 per tile). Each patch is augmented 8× (4 rotations × 2 flips) during U-Net training. At 10% training with 100 patches, U-Net trains on ~80 augmented images.
+Tiles are shuffled before extraction so patches come from diverse geographic regions (max 5 per tile). Each patch is augmented 8× (4 rotations × 2 flips) during U-Net training. At 10% training with 500 patches, U-Net trains on 50 original × 8 augmented = 400 training images.
+
+**Learning curve x-axis:** The "% of sampled pixels" axis shows what fraction of the sampled data is used for training. For pixel classifiers (k-NN, RF, etc.), this is a percentage of the ~200K sampled points. For U-Net, it's a percentage of the extracted patches. Note that even 100% of sampled data is a small fraction of the total labelled area — sampling is designed to be representative, not exhaustive.
 
 **How spatial MLP and U-Net use patches differently:**
 
