@@ -512,8 +512,39 @@ tee-compute [OPTIONS]
 | SSH asks for passphrase every time | Run `ssh-add` to cache your key, or use `ssh-agent` |
 | `OpenBLAS: too many memory regions` | Server has >128 CPU cores. Update the code on the server (`cd ~/TEE && git pull`) to get the built-in fix, or run with: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050` |
 | Evaluation takes 6+ minutes to start | First run downloads tile data from GeoTessera (~6 min for country-scale). Results are cached — subsequent runs with the same shapefile/field/year are instant. |
+| `Skipping U-Net: PyTorch not installed` | Install PyTorch — see [Step 5](#step-5-optional-install-pytorch-for-u-net) above |
+| U-Net runs but `torch.cuda.is_available()` is False | CUDA driver mismatch — see below |
 
 > **Tip:** Click the **Status** button in the viewer header to see which machines are running the backend and compute server.
+
+#### Fixing PyTorch CUDA version mismatch
+
+If U-Net ignores the GPU and falls back to CPU, the installed PyTorch was built for a newer CUDA than your driver supports. To diagnose:
+
+```bash
+# Check your driver's CUDA version (look for "CUDA Version: XX.Y" in the top-right)
+nvidia-smi
+
+# Check if PyTorch can see the GPU
+python3 -c "import torch; print(torch.cuda.is_available())"
+```
+
+If `nvidia-smi` shows a GPU but `torch.cuda.is_available()` returns False, you need a PyTorch version that matches your driver. The driver's CUDA version is the **maximum** it supports — install a PyTorch built for that version or lower.
+
+```bash
+# Example: driver reports CUDA 12.2 → install PyTorch for CUDA 12.1
+pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+
+# Verify
+python3 -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```
+
+Common CUDA index URLs:
+| Driver CUDA version | PyTorch index URL |
+|---------------------|-------------------|
+| 11.8+ | `https://download.pytorch.org/whl/cu118` |
+| 12.1+ | `https://download.pytorch.org/whl/cu121` |
+| No GPU / CPU only | `https://download.pytorch.org/whl/cpu` |
 
 ---
 
