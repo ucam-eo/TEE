@@ -511,27 +511,48 @@ def run_large_area():
                 logger.info("Fetching embeddings for %d points...", n_points)
                 yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_points:,} points..."}) + "\n"
 
-                # Fetch embeddings in batches so we can yield progress events
-                BATCH_SIZE = 20_000
-                n_batches = (n_points + BATCH_SIZE - 1) // BATCH_SIZE
-                vector_batches = []
-                try:
-                    for b_idx in range(n_batches):
-                        start = b_idx * BATCH_SIZE
-                        end = min(start + BATCH_SIZE, n_points)
-                        batch_pts = sample_points[start:end]
-                        batch_vecs = gt.sample_embeddings_at_points(
-                            batch_pts, year=year)
-                        vector_batches.append(batch_vecs)
-                        pct = int(100 * (b_idx + 1) / n_batches)
-                        logger.info("Fetched batch %d/%d (%d points, %d%%)",
-                                    b_idx + 1, n_batches, end - start, pct)
-                        yield json.dumps({"event": "progress", "pct": pct,
-                                          "message": f"Fetching embeddings: {end:,}/{n_points:,} points ({pct}%)"}) + "\n"
-                    vectors = np.concatenate(vector_batches, axis=0)
-                except Exception as e:
-                    yield json.dumps({"event": "error", "message": f"GeoTessera sampling failed: {e}"}) + "\n"
+                # Fetch embeddings in a single call (GeoTessera groups by tile
+                # internally — batching would re-fetch the same tiles per batch).
+                # Use a thread + queue so we can yield progress from the callback.
+                import queue, threading
+                progress_q = queue.Queue()
+                result_holder = [None, None]  # [vectors, error]
+
+                def _fetch():
+                    try:
+                        def _cb(current, total, status):
+                            progress_q.put((current, total, status))
+                        vecs = gt.sample_embeddings_at_points(
+                            sample_points, year=year, progress_callback=_cb)
+                        result_holder[0] = vecs
+                    except Exception as e:
+                        result_holder[1] = e
+                    finally:
+                        progress_q.put(None)  # sentinel
+
+                t = threading.Thread(target=_fetch, daemon=True)
+                t.start()
+
+                while True:
+                    try:
+                        item = progress_q.get(timeout=5)
+                    except queue.Empty:
+                        # Heartbeat so the browser knows we're alive
+                        yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_points:,} points..."}) + "\n"
+                        continue
+                    if item is None:
+                        break
+                    current, total, cb_status = item
+                    pct = int(100 * current / total) if total else 0
+                    msg = f"Fetching embeddings: {current:,}/{total:,} tiles ({pct}%)"
+                    logger.info(msg)
+                    yield json.dumps({"event": "progress", "pct": pct, "message": msg}) + "\n"
+
+                t.join()
+                if result_holder[1] is not None:
+                    yield json.dumps({"event": "error", "message": f"GeoTessera sampling failed: {result_holder[1]}"}) + "\n"
                     return
+                vectors = result_holder[0]
 
                 logger.info("Processing embeddings...")
                 yield json.dumps({"event": "status", "message": "Processing embeddings..."}) + "\n"
