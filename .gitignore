@@ -49,6 +49,8 @@ Cumbria_naddle/
 
 # Private planning files
 docs/plan_tessera_tools_library.md
+docs/plan_delegated_enrolment.md
+docs/plan_viewport_manager_tabs.md
 docs/video_scripts.md
 docs/label_sharing_plan.md
 CANVAS_HANDOFF_TO_SONNET.md
@@ -56,6 +58,13 @@ DEBUG_IMPORT.md
 SETUP.md
 TEST_IMPORT_WORKFLOW.md
 BACKUP_README.md
+REFACTORING_PLAN.md
+geotessera-tile-cache-issue.md
+tee-logo.html
+
+# Data files
+hotw_schema.json
+manual-labels-Eddington/
 
 # Private test/development scripts
 test_full_workflow.py
