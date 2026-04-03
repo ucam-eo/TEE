@@ -396,15 +396,26 @@ def clear_shapefiles():
     return jsonify({"ok": True})
 
 
-@app.route("/api/evaluation/cancel", methods=["POST"])
+@app.route("/api/evaluation/cancel", methods=["POST", "OPTIONS"])
 def cancel_evaluation():
     """Cancel the running evaluation."""
+    # Handle CORS preflight for direct browser requests
+    if request.method == "OPTIONS":
+        resp = app.make_default_options_response()
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Methods"] = "POST"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return resp
+
     global _cancel_flag
     if _cancel_flag is not None:
         _cancel_flag.set()
         logger.info("Evaluation cancelled by user")
-        return jsonify({"ok": True, "message": "Cancellation requested"})
-    return jsonify({"ok": False, "message": "No evaluation running"})
+        resp = jsonify({"ok": True, "message": "Cancellation requested"})
+    else:
+        resp = jsonify({"ok": False, "message": "No evaluation running"})
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
 
 
 @app.route("/api/evaluation/finish-classifier", methods=["POST"])
