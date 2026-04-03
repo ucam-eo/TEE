@@ -109,7 +109,9 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
     all_spatial_3x3 = [] if needs_spatial_3x3 else None
     all_spatial_5x5 = [] if needs_spatial_5x5 else None
 
+    # Allow plenty per tile — the max_patches cap on line 117 stops us
     patches_per_tile = max(1, max_patches // max(1, len(tiles_to_fetch)))
+    patches_per_tile = max(patches_per_tile, 5)  # at least 5 per tile
     total_tiles = len(tiles_to_fetch)
 
     for t_idx, (yr, tlon, tlat, tile_emb, crs, transform) in enumerate(
