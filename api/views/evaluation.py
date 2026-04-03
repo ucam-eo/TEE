@@ -87,6 +87,10 @@ def run_evaluation(request):
     return _proxy_to_compute(request, "api/evaluation/run-large-area")
 
 
+def cancel_evaluation(request):
+    return _proxy_to_compute(request, "api/evaluation/cancel")
+
+
 def finish_classifier(request):
     return _proxy_to_compute(request, "api/evaluation/finish-classifier")
 

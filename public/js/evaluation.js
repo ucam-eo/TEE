@@ -1137,7 +1137,12 @@ async function runLargeAreaEvaluation() {
         if (backBtn) { backBtn.disabled = false; backBtn.style.opacity = ''; }
     }
 
-    cancelBtn.onclick = () => { userCancelled = true; evalAbortController.abort(); };
+    cancelBtn.onclick = () => {
+        userCancelled = true;
+        evalAbortController.abort();
+        // Tell the server to stop the backend computation
+        fetch('/api/evaluation/cancel', { method: 'POST' }).catch(() => {});
+    };
 
     try {
         const resp = await fetch('/api/evaluation/run-large-area', {

@@ -37,6 +37,7 @@ _tile_cache = {"key": None, "vectors": None, "labels": None, "class_names": None
 _hosted_url = None
 _tile_disk_cache_dir = None  # set in main()
 _geotessera_instance = None  # cached to avoid 10-30s registry init per run
+_cancel_flag = None  # threading.Event, set when user cancels
 
 FLUSH_PAD = 18 * 1024  # pad NDJSON lines to force Waitress flush
 
@@ -343,6 +344,17 @@ def clear_shapefiles():
     return jsonify({"ok": True})
 
 
+@app.route("/api/evaluation/cancel", methods=["POST"])
+def cancel_evaluation():
+    """Cancel the running evaluation."""
+    global _cancel_flag
+    if _cancel_flag is not None:
+        _cancel_flag.set()
+        logger.info("Evaluation cancelled by user")
+        return jsonify({"ok": True, "message": "Cancellation requested"})
+    return jsonify({"ok": False, "message": "No evaluation running"})
+
+
 @app.route("/api/evaluation/finish-classifier", methods=["POST"])
 def finish_classifier():
     """Mark a classifier as finished for early stop."""
@@ -416,6 +428,10 @@ def run_large_area():
     needs_unet = "unet" in model_names
 
     def stream():
+        import threading
+        global _cancel_flag
+        _cancel_flag = threading.Event()
+
         from geotessera import GeoTessera
         from rasterio.transform import array_bounds as _array_bounds
         from shapely.geometry import box as _box
@@ -425,6 +441,9 @@ def run_large_area():
         from tessera_eval.classify import make_classifier, gather_spatial_features_2d
 
         _finish_classifiers.clear()
+
+        def _cancelled():
+            return _cancel_flag is not None and _cancel_flag.is_set()
 
         # Clean up old models
         for old_path in _trained_models.values():
@@ -573,6 +592,10 @@ def run_large_area():
                 logger.info("Generated %d sample points across %d classes", n_points, n_classes)
                 yield json.dumps({"event": "status", "message": f"Generated {n_points:,} sample points across {n_classes} classes"}) + "\n"
 
+                if _cancelled():
+                    yield json.dumps({"event": "error", "message": "Cancelled"}) + "\n"
+                    return
+
                 logger.info("Fetching embeddings for %d points...", n_points)
                 yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_points:,} points..."}) + "\n"
 
@@ -657,6 +680,10 @@ def run_large_area():
                 spatial_3x3 = None
                 spatial_5x5 = None
                 unet_patches = []
+
+                if _cancelled():
+                    yield json.dumps({"event": "error", "message": "Cancelled"}) + "\n"
+                    return
 
                 if needs_spatial_3x3 or needs_spatial_5x5 or needs_unet:
                     logger.info("Extracting tile-aligned patches for spatial/U-Net...")
@@ -781,6 +808,10 @@ def run_large_area():
             finish_classifiers=_finish_classifiers,
             unet_patches=unet_patches,
         ):
+            if _cancelled():
+                logger.info("Evaluation cancelled during learning curve")
+                yield json.dumps({"event": "error", "message": "Cancelled"}) + "\n"
+                return
             if event["type"] == "progress":
                 yield json.dumps({
                     "event": "progress",
@@ -807,6 +838,7 @@ def run_large_area():
         _tile_cache["_model_params"] = model_params
         _tile_cache["_unet_patches"] = unet_patches
 
+        _cancel_flag = None  # reset cancellation flag
         elapsed = time.time() - t0
         yield json.dumps({
             "event": "done",
