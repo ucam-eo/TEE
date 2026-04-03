@@ -264,9 +264,14 @@ When spatial MLP or U-Net is selected, TEE fetches real GeoTessera tiles and ext
 |---------|---------|-------|
 | **Spatial/U-Net patches** | 100 | Number of 256×256 crops to extract from tiles. More patches = better U-Net accuracy but slower. |
 
-Each patch is augmented 8× (4 rotations × 2 flips) during U-Net training. At 10% training with 100 patches, U-Net trains on ~80 augmented images.
+Tiles are shuffled before extraction so patches come from diverse geographic regions (max 5 per tile). Each patch is augmented 8× (4 rotations × 2 flips) during U-Net training. At 10% training with 100 patches, U-Net trains on ~80 augmented images.
 
-> **Tip:** For pixel-only classifiers (k-NN, RF, etc.), patches are not fetched — evaluation is much faster. Only select spatial MLP or U-Net when you need spatial context.
+**How spatial MLP and U-Net use patches differently:**
+
+- **U-Net** receives the full 256×256 patch (embeddings + labels) — no subsampling. It needs complete spatial context to learn convolutional features.
+- **Spatial MLP** extracts 3×3 or 5×5 neighbourhood feature vectors from each patch. To cap memory, labelled pixels are subsampled to 5000 per patch (~500K total across 100 patches, ~2.3GB of features). This does not affect U-Net.
+
+> **Tip:** For pixel-only classifiers (k-NN, RF, etc.), no tiles are fetched — evaluation is much faster. Only select spatial MLP or U-Net when you need spatial context.
 
 ### Understanding the Learning Curve
 

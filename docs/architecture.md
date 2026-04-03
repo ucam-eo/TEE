@@ -167,27 +167,33 @@ Browser → Django :8001 → proxy → tee-compute :8002
 
 ### Evaluation flow
 
-All data loading uses GeoTessera's `sample_embeddings_at_points` API — no full
-tiles are loaded into memory. Pixel classifiers use random point samples; spatial
-classifiers (MLP, U-Net) use point-grid patches (256×256 grids of points at 10m
-spacing, reshaped to 2D).
+Pixel classifiers (k-NN, RF, XGBoost, MLP) use `sample_embeddings_at_points` to
+fetch embeddings at random point locations — fast and memory-efficient. Spatial
+classifiers (Spatial MLP, U-Net) fetch real tiles via `fetch_embeddings` and
+extract pixel-aligned 256×256 crops with the tile's native CRS and transform.
 
 ```
-Upload shapefile(s) → select field + year + classifiers → Run
+Upload shapefile(s) → select field + year + classifiers + sampling → Run
     ↓
 tee-compute:
     1. field_start event (emitted immediately)
     2. GeoTessera init (cached instance reused across runs)
     3. Generate stratified random points within shapefile polygons (200K max)
+       Sampling strategy: equal, sqrt-proportional, or proportional to area
     4. Fetch embeddings at points via sample_embeddings_at_points
     5. If spatial MLP or U-Net selected:
-        a. Pick random labelled locations as patch centers
-        b. For each patch: generate 256×256 point grid at 10m spacing
-        c. Fetch embeddings via sample_embeddings_at_points (33MB/patch)
-        d. Reshape to (256, 256, 128) 2D patch
-        e. Rasterize labels, extract spatial features
+        a. Fetch real tiles via gt.fetch_embeddings (tiles shuffled for
+           geographic diversity, up to 5 patches per tile)
+        b. For each tile: rasterize labels at native CRS, extract random
+           256×256 pixel-aligned crops where labels exist
+        c. Spatial MLP: extract 3×3 or 5×5 neighbourhood features,
+           subsampled to 5000 pixels/patch to cap memory (~2.3GB total)
+        d. U-Net: receives full 256×256 patches (no subsampling)
+        e. Augmentation: 8× per patch (4 rotations × 2 flips) during
+           U-Net training
     6. start event (pixel counts, class info, training percentages)
     7. run_learning_curve (% of labels, adaptive repeats, 200K test cap)
+        → classifier_status events per model
         → progress events per percentage (with U-Net patch train/test)
     8. confusion_matrices event
     9. done event
@@ -227,11 +233,14 @@ The pipeline is optimized for large evaluations (e.g., Austria: 40 tiles,
 
 | Optimization | What it avoids | Savings |
 |---|---|---|
-| Point sampling via `sample_embeddings_at_points` | Loading full tiles (~450MB each) | No OOM, ~33MB/patch |
-| Stratified sampling (200K points max) | Millions of labelled pixels | Memory bounded at ~100MB |
+| Point sampling via `sample_embeddings_at_points` | Loading full tiles (~450MB each) for pixel classifiers | Memory bounded at ~100MB |
+| Configurable sampling (equal/sqrt/proportional) | Equal sampling making weighted F1 meaningless | Meaningful weighted F1 scores |
 | GeoTessera instance caching | Registry HTTP check + parquet read per run | 10-30s per run |
-| Disk result cache (vectors + labels) | Re-downloading on restart | <1s vs minutes |
-| Point-grid patches for U-Net/spatial MLP | Loading full tiles for 2D context | 33MB per patch vs 450MB per tile |
+| Disk result cache (vectors + labels + sampling) | Re-downloading on restart | <1s vs minutes |
+| Real tile patches for U-Net/spatial MLP | Point-grid patches with no spatial coherence | Pixel-aligned patches, U-Net F1 comparable to viewport mode |
+| Spatial feature subsampling (5K px/patch) | 65K×1152 features per patch (~300MB) | ~2.3GB total for 100 patches |
+| Tile shuffling for patch extraction | Geographic clustering of patches | Diverse coverage across study area |
+| 8× augmentation (rotations + flips) | Limited U-Net training data | Effective 800 training images from 100 patches |
 | Deferred model training (user-triggered) | 45+ minute U-Net training blocking results | Results in ~1 min |
 
 **Learning curve phase:**
@@ -244,7 +253,8 @@ The pipeline is optimized for large evaluations (e.g., Austria: 40 tiles,
 | Adaptive repeats (fewer at high %) | 5 repeats at 80% where variance is negligible | ~25% of high-% time |
 
 **When extending the pipeline**, keep these principles:
-- Use `sample_embeddings_at_points` for pixel data — never load full tiles
+- Use `sample_embeddings_at_points` for pixel data — no full tile loading needed
+- Use `fetch_embeddings` for spatial/U-Net — gives pixel-aligned tile crops
 - For 2D patches, generate point grids at 10m spacing — never load full tiles
 - Cap total pixels at 200K — diminishing returns above that for learning curves
 - Defer expensive operations (model training) behind user-triggered endpoints
