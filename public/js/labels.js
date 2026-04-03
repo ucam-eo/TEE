@@ -2414,8 +2414,15 @@ document.addEventListener('DOMContentLoaded', () => {
         content.innerHTML = 'Loading...';
 
         try {
-            const response = await fetch(`/api/viewports/${window.currentViewportName}/is-ready`);
+            // Fetch viewport status, backend health, and compute health in parallel
+            const [response, healthResp, computeResp] = await Promise.all([
+                fetch(`/api/viewports/${window.currentViewportName}/is-ready`),
+                fetch('/health').catch(() => null),
+                fetch('/api/evaluation/health').catch(() => null),
+            ]);
             const status = await response.json();
+            const health = healthResp ? await healthResp.json().catch(() => null) : null;
+            const compute = computeResp ? await computeResp.json().catch(() => null) : null;
 
             // Format the status nicely
             const readyIcon = status.ready ? '✅' : '⏳';
@@ -2427,6 +2434,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const unavailable = status.years_unavailable && status.years_unavailable.length
                 ? status.years_unavailable.join(', ')
                 : null;
+
+            const backendHost = health && health.host ? health.host : 'unknown';
+            const computeHost = compute && compute.compute_host ? compute.compute_host : 'unavailable';
+            const version = health && health.version ? health.version : '?';
 
             content.innerHTML = `
                 <div style="margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #ddd;">
@@ -2451,7 +2462,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     <strong>Years Available:</strong> ${years}
                 </div>
                 ${unavailable ? `<div style="margin-bottom: 8px;"><strong>Years Unavailable:</strong> &#10060; ${unavailable}</div>` : ''}
-                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 10px; color: #666;">
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd;">
+                    <strong>Backend:</strong> ${backendHost} (${version})<br>
+                    <strong>Compute:</strong> ${computeHost}
+                </div>
+                <div style="margin-top: 6px; font-size: 10px; color: #666;">
                     Last checked: ${new Date().toLocaleTimeString()}
                 </div>
             `;

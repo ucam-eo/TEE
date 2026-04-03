@@ -1,6 +1,7 @@
 """Static file serving, health check, and client config endpoints."""
 
 import mimetypes
+import socket
 import subprocess
 
 from django.http import JsonResponse, FileResponse, Http404
@@ -53,6 +54,7 @@ def health(request):
         'status': 'healthy',
         'service': 'TEE',
         'version': _VERSION,
+        'host': socket.gethostname(),
     })
 
 

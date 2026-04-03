@@ -222,7 +222,7 @@ Evaluate how well classifiers distinguish habitat classes using Tessera embeddin
 | 2 | 1 | Drag and drop a `.zip` shapefile onto the upload zone |
 | 3 | 2 | Verify polygons appear as red outlines on satellite |
 | 4 | 3 | Check the class table — polygon counts per class |
-| 5 | 1 | Select **Class field**, **Year**, and **Classifiers** |
+| 5 | 1 | Select **Class field**, **Year**, **Sampling**, and **Classifiers** |
 | 6 | 1 | Click **Run Evaluation** |
 | 7 | 4 | Watch progress: status messages + results table |
 | 8 | 5 | Learning curve builds as each % completes |
@@ -239,6 +239,18 @@ Evaluate how well classifiers distinguish habitat classes using Tessera embeddin
 | **Spatial MLP (3×3)** | Neighbourhood | Uses 3×3 embedding context |
 | **Spatial MLP (5×5)** | Neighbourhood | Uses 5×5 embedding context |
 | **U-Net (GPU)** | Patch-based | Convolutional, 256×256 patches. Requires PyTorch. |
+
+### Sampling Strategy
+
+Controls how sample points are distributed across classes when evaluating large-area shapefiles.
+
+| Strategy | Description | When to use |
+|----------|-------------|-------------|
+| **Sqrt-proportional** (default) | Points proportional to √(class area), minimum 50 per class | Best all-round choice — large classes get more points but rare classes aren't starved |
+| **Proportional** | Points proportional to class area, minimum 50 per class | When you care most about accuracy on dominant classes |
+| **Equal** | Same number of points per class | When every class matters equally regardless of area |
+
+With **equal** sampling, Macro F1 and Weighted F1 are identical (all classes have the same sample size). Use sqrt-proportional or proportional to get meaningful Weighted F1 scores.
 
 ### Understanding the Learning Curve
 
@@ -366,7 +378,12 @@ Add the server to `~/.ssh/config` so you can refer to it by a short name:
 Host gpu-box
     HostName myhost.uk       # replace with your server's DNS name or IP
     User yourname            # replace with your username on the server
+    ControlMaster auto
+    ControlPath ~/.ssh/ctrl-%r@%h:%p
+    ControlPersist 10m
 ```
+
+The `Control*` lines enable connection multiplexing — you only enter your password once, and subsequent SSH connections reuse it for 10 minutes.
 
 **Step 3: Verify SSH access**
 ```bash
@@ -383,13 +400,33 @@ pip install -e "$HOME/TEE/packages/tessera-eval[server]"
 exit
 ```
 
-To update later:
+**Step 5 (optional): Install PyTorch for U-Net**
+
+U-Net requires PyTorch. If your server has a GPU with CUDA:
+```bash
+ssh gpu-box '~/TEE/venv/bin/pip install torch'
+```
+If CPU only:
+```bash
+ssh gpu-box '~/TEE/venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu'
+```
+
+**Updating later**
+
+To update later, or use the deploy script (if you have one at `scripts/deploy-daintree.sh`):
 ```bash
 ssh gpu-box
 cd ~/TEE && git pull
 source venv/bin/activate
 pip install -e packages/tessera-eval[server]
 exit
+```
+
+Or with the deploy script:
+```bash
+./scripts/deploy-daintree.sh                  # deploy + start tunnel
+./scripts/deploy-daintree.sh --install-torch  # also install/update PyTorch
+./scripts/deploy-daintree.sh --no-tunnel      # deploy only, no tunnel
 ```
 
 ---
@@ -473,7 +510,10 @@ tee-compute [OPTIONS]
 | `Address already in use` on the server | Port 8001 is taken by another service. Use a different port: `ssh -L 8001:localhost:5050 gpu-box '~/TEE/venv/bin/tee-compute --port 5050'` |
 | `Could not resolve hostname gpu-box` | Replace `gpu-box` with the name from your `~/.ssh/config`, or use the full hostname |
 | SSH asks for passphrase every time | Run `ssh-add` to cache your key, or use `ssh-agent` |
-| `OpenBLAS: too many memory regions` | Server has >128 CPU cores. Update the code on the server (`cd ~/TEE && git pull`) to get the built-in fix, or run with: `OPENBLAS_NUM_THREADS=64 ~/TEE/venv/bin/tee-compute --port 5050` |
+| `OpenBLAS: too many memory regions` | Server has >128 CPU cores. Update the code on the server (`cd ~/TEE && git pull`) to get the built-in fix, or run with: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050` |
+| Evaluation takes 6+ minutes to start | First run downloads tile data from GeoTessera (~6 min for country-scale). Results are cached — subsequent runs with the same shapefile/field/year are instant. |
+
+> **Tip:** Click the **Status** button in the viewer header to see which machines are running the backend and compute server.
 
 ---
 

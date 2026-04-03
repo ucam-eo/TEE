@@ -60,6 +60,7 @@ BACKUP_README.md
 # Private test/development scripts
 test_full_workflow.py
 cleanup_orphaned_data.py
+scripts/deploy-daintree.sh
 
 # Deprecated code
 deprecated/
