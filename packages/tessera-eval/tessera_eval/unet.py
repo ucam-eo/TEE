@@ -250,11 +250,23 @@ def train_unet_on_patches(patches, n_classes, params=None, progress_callback=Non
     base_filters = int(p.get("base_filters", 64))
     batch_size = int(p.get("batch_size", 4))
 
-    # Stack patches into tensors with augmentation (flips + 90° rotations)
-    # emb_patch: (patch_size, patch_size, dim) -> (dim, patch_size, patch_size)
+    # Filter patches to consistent shape and stack with augmentation
+    # Find the most common patch shape
+    shapes = [(p[0].shape, p[1].shape) for p in patches]
+    target_emb_shape = max(set(s[0] for s in shapes), key=lambda s: sum(1 for x in shapes if x[0] == s))
+    target_lbl_shape = target_emb_shape[:2]  # (H, W)
+    filtered = [(e, l) for e, l in patches
+                if e.shape == target_emb_shape and l.shape == target_lbl_shape]
+    if len(filtered) < len(patches):
+        logger.warning("Filtered %d/%d patches with inconsistent shapes (target %s)",
+                       len(patches) - len(filtered), len(patches), target_emb_shape)
+    if not filtered:
+        raise ValueError("No patches with consistent shapes")
+
+    # emb_patch: (H, W, dim) -> (dim, H, W), with augmentation (flips + 90° rotations)
     emb_list = []
     lbl_list = []
-    for emb_patch, lbl_patch in patches:
+    for emb_patch, lbl_patch in filtered:
         emb = emb_patch.transpose(2, 0, 1)  # (dim, H, W)
         lbl = lbl_patch.astype(np.int64)     # (H, W)
         # Original + 3 rotations + horizontal flip + 3 flipped rotations = 8x
@@ -269,7 +281,7 @@ def train_unet_on_patches(patches, n_classes, params=None, progress_callback=Non
 
     X = torch.from_numpy(np.stack(emb_list))      # (N*8, dim, H, W)
     Y = torch.from_numpy(np.stack(lbl_list))       # (N*8, H, W)
-    logger.info("U-Net training: %d patches (%d original + augmentation)", len(emb_list), len(patches))
+    logger.info("U-Net training: %d patches (%d original × 8 augmentation)", len(emb_list), len(filtered))
 
     dataset = TensorDataset(X, Y)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)

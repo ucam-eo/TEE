@@ -168,6 +168,8 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
             if emb_patch.shape != (patch_size, patch_size, tile_emb.shape[2]):
                 continue
+            if label_patch.shape != (patch_size, patch_size):
+                continue
             if (label_patch > 0).sum() < 10:
                 continue
 
