@@ -357,6 +357,7 @@ def run_large_area():
     if max_train is not None:
         max_train = int(max_train)
     sampling = body.get("sampling", "sqrt")  # equal, proportional, sqrt
+    max_patches = int(body.get("max_patches", 100))
 
     if not field_name:
         return jsonify({"error": "field is required"}), 400
@@ -650,6 +651,7 @@ def run_large_area():
                         try:
                             patch_result[0] = _extract_tile_patches(
                                 gt, gdf, field_name, year, le, n_classes,
+                                max_patches=max_patches,
                                 needs_spatial_3x3=needs_spatial_3x3,
                                 needs_spatial_5x5=needs_spatial_5x5,
                                 logger=logger,

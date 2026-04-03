@@ -1042,6 +1042,8 @@ function generateConfig() {
         "regressors": regressors,
         "years": [parseInt(document.getElementById('val-year-select').value) || 2024],
         "max_training_samples": parseInt(document.getElementById('val-max-train-large').value) || 30000,
+        "sampling": document.getElementById('val-sampling-select').value || 'sqrt',
+        "max_patches": parseInt(document.getElementById('val-max-patches').value) || 100,
         "output_dir": "./eval_output",
         "dry_run": false,
         "seed": 42,
@@ -1140,6 +1142,7 @@ async function runLargeAreaEvaluation() {
                 classifier_params: params,
                 max_training_samples: parseInt(document.getElementById('val-max-train-large').value) || 30000,
                 sampling: document.getElementById('val-sampling-select').value || 'sqrt',
+                max_patches: parseInt(document.getElementById('val-max-patches').value) || 100,
             }),
             signal: evalAbortController.signal,
         });
@@ -1513,6 +1516,18 @@ function applyConfig(config) {
     if (config.max_training_samples) {
         const input = document.getElementById('val-max-train-large');
         if (input) input.value = config.max_training_samples;
+    }
+
+    // Set sampling strategy
+    if (config.sampling) {
+        const sel = document.getElementById('val-sampling-select');
+        if (sel) sel.value = config.sampling;
+    }
+
+    // Set max patches
+    if (config.max_patches) {
+        const input = document.getElementById('val-max-patches');
+        if (input) input.value = config.max_patches;
     }
 }
 
