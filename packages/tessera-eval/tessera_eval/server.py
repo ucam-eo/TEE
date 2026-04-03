@@ -83,19 +83,22 @@ def _load_cached_result(field, year, gdf, sampling="equal"):
 def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
                           patch_size=256, max_patches=500,
                           needs_spatial_3x3=False, needs_spatial_5x5=False,
+                          sample_points_lonlat=None,
                           logger=None, progress_cb=None):
-    """Extract pixel-aligned 2D patches from real GeoTessera tiles.
+    """Extract pixel-aligned 2D patches and optionally point samples from tiles.
 
-    Fetches tiles that overlap labelled polygons, then extracts random
-    patch_size × patch_size crops where labels exist. Uses the tile's native
-    CRS and transform for pixel-perfect alignment (unlike point-grid sampling).
+    Fetches tiles once and extracts both:
+    - Random patch_size × patch_size crops for U-Net / spatial MLP
+    - Point sample embeddings (if sample_points_lonlat provided)
 
-    Returns (unet_patches, spatial_3x3, spatial_5x5).
+    Returns (unet_patches, spatial_3x3, spatial_5x5, point_vectors) where
+    point_vectors is a (N, 128) array if sample_points_lonlat was given, else None.
     """
     from tessera_eval.classify import gather_spatial_features_2d
     from tessera_eval.rasterize import rasterize_shapefile
     from rasterio.transform import array_bounds
     from shapely.geometry import box as _box
+    import rasterio.transform
 
     rng = np.random.RandomState(42)
 
@@ -106,8 +109,25 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
     # Shuffle tiles so patches come from diverse geographic regions
     tiles_to_fetch = list(tiles_to_fetch)
     rng.shuffle(tiles_to_fetch)
+
+    # Pre-group sample points by tile for efficient extraction
+    point_vectors = None
+    points_by_tile = {}
+    if sample_points_lonlat is not None and len(sample_points_lonlat) > 0:
+        point_vectors = np.full((len(sample_points_lonlat), 128), np.nan, dtype=np.float32)
+        # Group points into 0.1° tile bins
+        for pt_idx, (lon, lat) in enumerate(sample_points_lonlat):
+            # Snap to tile center (0.05 offset, 0.1 spacing)
+            tlon = round((lon - 0.05) / 0.1) * 0.1 + 0.05
+            tlat = round((lat - 0.05) / 0.1) * 0.1 + 0.05
+            key = (round(tlon, 2), round(tlat, 2))
+            if key not in points_by_tile:
+                points_by_tile[key] = []
+            points_by_tile[key].append(pt_idx)
+
     if logger:
-        logger.info("Extracting patches from %d tiles (shuffled)...", len(tiles_to_fetch))
+        pts_info = f", {len(sample_points_lonlat)} sample points" if sample_points_lonlat is not None else ""
+        logger.info("Fetching %d tiles (shuffled)%s...", len(tiles_to_fetch), pts_info)
 
     unet_patches = []
     all_spatial_3x3 = [] if needs_spatial_3x3 else None
@@ -118,21 +138,36 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
     for t_idx, (yr, tlon, tlat, tile_emb, crs, transform) in enumerate(
             gt.fetch_embeddings(tiles_to_fetch)):
-        if len(unet_patches) >= max_patches:
-            break
-
         if progress_cb:
             progress_cb(t_idx, total_tiles)
-        if logger:
-            logger.info("Tile %d/%d (%.2f, %.2f): %s, extracting patches...",
-                        t_idx + 1, total_tiles, tlon, tlat, tile_emb.shape[:2])
 
         h, w = tile_emb.shape[:2]
+        tile_emb = tile_emb.astype(np.float32)
+
+        # Extract point samples from this tile (if requested)
+        tile_key = (round(tlon, 2), round(tlat, 2))
+        if tile_key in points_by_tile:
+            from pyproj import Transformer
+            transformer = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
+            for pt_idx in points_by_tile[tile_key]:
+                lon, lat = sample_points_lonlat[pt_idx]
+                x, y = transformer.transform(lon, lat)
+                row, col = rasterio.transform.rowcol(transform, x, y)
+                if 0 <= row < h and 0 <= col < w:
+                    point_vectors[pt_idx] = tile_emb[row, col]
+
+        patches_full = len(unet_patches) >= max_patches
+        if patches_full:
+            continue  # still iterate for point samples, skip patch extraction
+
         if h < patch_size or w < patch_size:
             if logger:
                 logger.info("  Skipping tile (%d×%d) — smaller than patch size %d", h, w, patch_size)
             continue
-        tile_emb = tile_emb.astype(np.float32)
+
+        if logger:
+            logger.info("Tile %d/%d (%.2f, %.2f): %s, extracting patches...",
+                        t_idx + 1, total_tiles, tlon, tlat, tile_emb.shape[:2])
 
         # Reproject GDF to tile CRS for rasterization
         tile_gdf = gdf.to_crs(crs)
@@ -215,7 +250,7 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
         s5 = f", spatial_5x5={spatial_5x5.shape}" if spatial_5x5 is not None else ""
         logger.info("Tile patches: %d total%s%s", len(unet_patches), s3, s5)
 
-    return unet_patches, spatial_3x3, spatial_5x5
+    return unet_patches, spatial_3x3, spatial_5x5, point_vectors
 
 
 def _save_cached_result(field, year, gdf, vectors, labels, class_names, stats, sampling="equal"):
@@ -605,52 +640,106 @@ def run_large_area():
                     yield json.dumps({"event": "error", "message": "Cancelled"}) + "\n"
                     return
 
-                logger.info("Fetching embeddings for %d points...", n_points)
-                yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_points:,} points..."}) + "\n"
-
-                # Use a thread + queue so we can yield progress from the callback.
                 import queue, threading
                 progress_q = queue.Queue()
-                result_holder = [None, None]  # [vectors, error]
+                spatial_3x3 = None
+                spatial_5x5 = None
+                unet_patches = []
 
-                def _fetch():
-                    try:
-                        def _cb(current, total, status):
-                            progress_q.put((current, total, status))
-                        vecs = gt.sample_embeddings_at_points(
-                            sample_points, year=year, progress_callback=_cb)
-                        result_holder[0] = vecs
-                    except Exception as e:
-                        result_holder[1] = e
-                    finally:
-                        progress_q.put(None)  # sentinel
+                if needs_spatial_3x3 or needs_spatial_5x5 or needs_unet:
+                    # Single tile pass: fetch tiles once, extract both point samples AND patches
+                    logger.info("Fetching tiles for %d points + patches...", n_points)
+                    yield json.dumps({"event": "status", "message": f"Fetching tiles for {n_points:,} points + patches..."}) + "\n"
 
-                t = threading.Thread(target=_fetch, daemon=True)
-                t.start()
+                    def _tile_progress(current, total):
+                        progress_q.put(("tile", current, total))
 
-                last_reported = -1
-                while True:
-                    try:
-                        item = progress_q.get(timeout=10)
-                    except queue.Empty:
-                        yield json.dumps({"event": "heartbeat"}) + "\n"
-                        continue
-                    if item is None:
-                        break
-                    current, total, cb_status = item
-                    if current == last_reported:
-                        continue  # skip duplicate / status-only callbacks
-                    last_reported = current
-                    pct = int(100 * current / total) if total else 0
-                    msg = f"Fetching embeddings: {current}/{total} tiles ({pct}%)"
-                    logger.info(msg)
-                    yield json.dumps({"event": "progress", "pct": pct, "message": msg}) + "\n"
+                    tile_result = [None, None]
+                    def _fetch_all():
+                        try:
+                            tile_result[0] = _extract_tile_patches(
+                                gt, gdf, field_name, year, le, n_classes,
+                                max_patches=max_patches,
+                                needs_spatial_3x3=needs_spatial_3x3,
+                                needs_spatial_5x5=needs_spatial_5x5,
+                                sample_points_lonlat=sample_points,
+                                logger=logger,
+                                progress_cb=_tile_progress,
+                            )
+                        except Exception as e:
+                            tile_result[1] = e
+                        finally:
+                            progress_q.put(None)
 
-                t.join()
-                if result_holder[1] is not None:
-                    yield json.dumps({"event": "error", "message": f"GeoTessera sampling failed: {result_holder[1]}"}) + "\n"
-                    return
-                vectors = result_holder[0]
+                    t = threading.Thread(target=_fetch_all, daemon=True)
+                    t.start()
+
+                    while True:
+                        try:
+                            item = progress_q.get(timeout=10)
+                        except queue.Empty:
+                            yield json.dumps({"event": "heartbeat"}) + "\n"
+                            continue
+                        if item is None:
+                            break
+                        if item[0] == "tile":
+                            _, cur, tot = item
+                            pct = int(100 * cur / tot) if tot else 0
+                            msg = f"Fetching tiles: {cur}/{tot} ({pct}%)"
+                            logger.info(msg)
+                            yield json.dumps({"event": "progress", "pct": pct, "message": msg}) + "\n"
+
+                    t.join()
+                    if tile_result[1] is not None:
+                        yield json.dumps({"event": "error", "message": f"Tile fetch failed: {tile_result[1]}"}) + "\n"
+                        return
+
+                    unet_patches, spatial_3x3, spatial_5x5, vectors = tile_result[0]
+                else:
+                    # Pixel-only: use sample_embeddings_at_points (faster, no tile loading)
+                    logger.info("Fetching embeddings for %d points...", n_points)
+                    yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_points:,} points..."}) + "\n"
+
+                    result_holder = [None, None]
+                    def _fetch():
+                        try:
+                            def _cb(current, total, status):
+                                progress_q.put(("tile", current, total))
+                            vecs = gt.sample_embeddings_at_points(
+                                sample_points, year=year, progress_callback=_cb)
+                            result_holder[0] = vecs
+                        except Exception as e:
+                            result_holder[1] = e
+                        finally:
+                            progress_q.put(None)
+
+                    t = threading.Thread(target=_fetch, daemon=True)
+                    t.start()
+
+                    last_reported = -1
+                    while True:
+                        try:
+                            item = progress_q.get(timeout=10)
+                        except queue.Empty:
+                            yield json.dumps({"event": "heartbeat"}) + "\n"
+                            continue
+                        if item is None:
+                            break
+                        if item[0] == "tile":
+                            _, current, total = item
+                            if current == last_reported:
+                                continue
+                            last_reported = current
+                            pct = int(100 * current / total) if total else 0
+                            msg = f"Fetching embeddings: {current}/{total} tiles ({pct}%)"
+                            logger.info(msg)
+                            yield json.dumps({"event": "progress", "pct": pct, "message": msg}) + "\n"
+
+                    t.join()
+                    if result_holder[1] is not None:
+                        yield json.dumps({"event": "error", "message": f"GeoTessera sampling failed: {result_holder[1]}"}) + "\n"
+                        return
+                    vectors = result_holder[0]
 
                 logger.info("Processing embeddings...")
                 yield json.dumps({"event": "status", "message": "Processing embeddings..."}) + "\n"
@@ -673,7 +762,7 @@ def run_large_area():
                     yield json.dumps({"event": "error", "message": "No valid embeddings found at sample points"}) + "\n"
                     return
 
-                # Count tiles used (from GeoTessera's internal tracking)
+                # Count tiles used
                 bounds = gdf.total_bounds
                 bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
                 tiles = gt.registry.load_blocks_for_region(bbox, year)
@@ -685,61 +774,6 @@ def run_large_area():
                     "total_pixels": len(labels),
                     "n_classes": n_classes,
                 }
-
-                spatial_3x3 = None
-                spatial_5x5 = None
-                unet_patches = []
-
-                if _cancelled():
-                    yield json.dumps({"event": "error", "message": "Cancelled"}) + "\n"
-                    return
-
-                if needs_spatial_3x3 or needs_spatial_5x5 or needs_unet:
-                    logger.info("Extracting tile-aligned patches for spatial/U-Net...")
-                    yield json.dumps({"event": "status", "message": "Extracting tile-aligned patches..."}) + "\n"
-
-                    def _patch_progress(current, total):
-                        progress_q.put(("patch", current, total))
-
-                    # Run in thread so we can yield progress
-                    patch_result = [None, None]
-                    def _extract():
-                        try:
-                            patch_result[0] = _extract_tile_patches(
-                                gt, gdf, field_name, year, le, n_classes,
-                                max_patches=max_patches,
-                                needs_spatial_3x3=needs_spatial_3x3,
-                                needs_spatial_5x5=needs_spatial_5x5,
-                                logger=logger,
-                                progress_cb=_patch_progress,
-                            )
-                        except Exception as e:
-                            patch_result[1] = e
-                        finally:
-                            progress_q.put(None)
-
-                    pt = threading.Thread(target=_extract, daemon=True)
-                    pt.start()
-
-                    while True:
-                        try:
-                            item = progress_q.get(timeout=10)
-                        except queue.Empty:
-                            yield json.dumps({"event": "heartbeat"}) + "\n"
-                            continue
-                        if item is None:
-                            break
-                        if item[0] == "patch":
-                            _, cur, tot = item
-                            pct = int(100 * cur / tot) if tot else 0
-                            msg = f"Extracting patches: tile {cur}/{tot} ({pct}%)"
-                            yield json.dumps({"event": "progress", "pct": pct, "message": msg}) + "\n"
-
-                    pt.join()
-                    if patch_result[1] is not None:
-                        logger.warning("Tile patch extraction failed: %s", patch_result[1])
-                    elif patch_result[0] is not None:
-                        unet_patches, spatial_3x3, spatial_5x5 = patch_result[0]
 
                 # Cache in memory and on disk
                 _tile_cache.update({
