@@ -435,6 +435,12 @@ def run_large_area():
                 "event": "download_progress", "tile": stats.get("tile_count", 0),
                 "total": stats.get("tile_count", 0), "cached": True,
             }) + "\n"
+            # Update in-memory cache so we skip the GeoTessera fetch below
+            _tile_cache.update({
+                "key": cache_key, "vectors": vectors, "labels": labels,
+                "class_names": class_names, "stats": stats,
+                "spatial_3x3": None, "spatial_5x5": None, "unet_patches": [],
+            })
 
         if _tile_cache["key"] != cache_key:
             # Emit early so the browser knows we're working
