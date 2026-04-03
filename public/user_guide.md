@@ -473,6 +473,7 @@ tee-compute [OPTIONS]
 | `Address already in use` on the server | Port 8001 is taken by another service. Use a different port: `ssh -L 8001:localhost:5050 gpu-box '~/TEE/venv/bin/tee-compute --port 5050'` |
 | `Could not resolve hostname gpu-box` | Replace `gpu-box` with the name from your `~/.ssh/config`, or use the full hostname |
 | SSH asks for passphrase every time | Run `ssh-add` to cache your key, or use `ssh-agent` |
+| `OpenBLAS: too many memory regions` | Server has >128 CPU cores. Update the code on the server (`cd ~/TEE && git pull`) to get the built-in fix, or run with: `OPENBLAS_NUM_THREADS=64 ~/TEE/venv/bin/tee-compute --port 5050` |
 
 ---
 
