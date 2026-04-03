@@ -43,3 +43,4 @@ deprecated/
 # Documentation (not needed in container)
 *.md
 !README.md
+!public/user_guide.md
