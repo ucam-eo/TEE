@@ -475,8 +475,25 @@ def run_large_area():
                 label_ids = le.transform(valid_gdf[field_name])
                 valid_gdf["_label_id"] = label_ids
 
-                # Stratified sampling: equal points per class, up to MAX_SAMPLE_PIXELS total
-                per_class = MAX_SAMPLE_PIXELS // n_classes
+                # Proportional sampling: points per class proportional to total area,
+                # with a minimum so rare classes still get representation.
+                MIN_PER_CLASS = 50
+                # Compute area in a projected CRS for accuracy
+                area_crs = valid_gdf.estimate_utm_crs()
+                projected = valid_gdf.to_crs(area_crs)
+                projected["_area"] = projected.geometry.area
+                valid_gdf["_area"] = projected["_area"].values
+                class_areas = valid_gdf.groupby("_label_id")["_area"].sum()
+                total_area = class_areas.sum()
+                # Allocate points proportional to area, then enforce minimum
+                raw_alloc = {c: max(MIN_PER_CLASS, int(MAX_SAMPLE_PIXELS * a / total_area))
+                             for c, a in class_areas.items()}
+                # Scale down if total exceeds budget
+                alloc_total = sum(raw_alloc.values())
+                if alloc_total > MAX_SAMPLE_PIXELS:
+                    scale = MAX_SAMPLE_PIXELS / alloc_total
+                    raw_alloc = {c: max(MIN_PER_CLASS, int(n * scale)) for c, n in raw_alloc.items()}
+
                 sample_points = []
                 sample_labels = []
 
@@ -484,6 +501,7 @@ def run_large_area():
                     cls_gdf = valid_gdf[valid_gdf["_label_id"] == cls_idx]
                     if cls_gdf.empty:
                         continue
+                    per_class = raw_alloc.get(cls_idx, MIN_PER_CLASS)
                     # sample_points(size=N) generates N points PER ROW.
                     # We want per_class total, so divide by number of rows.
                     n_rows = len(cls_gdf)
