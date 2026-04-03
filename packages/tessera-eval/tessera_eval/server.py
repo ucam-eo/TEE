@@ -351,9 +351,13 @@ def upload_shapefile():
         unique_count = merged[col].nunique()
         samples = merged[col].dropna().head(10).tolist()
         samples = [s if isinstance(s, (str, int, float)) else str(s) for s in samples]
+        # Per-class polygon counts (from full GDF, not truncated GeoJSON)
+        class_counts = merged[col].dropna().value_counts().to_dict()
+        class_counts = {str(k): int(v) for k, v in class_counts.items()}
         fields.append({
             "name": col, "unique_count": int(unique_count),
             "non_null": non_null, "total": total, "samples": samples,
+            "class_counts": class_counts,
         })
 
     # Build GeoJSON for map overlay

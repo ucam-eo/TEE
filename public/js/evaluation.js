@@ -191,21 +191,11 @@ function updateClassSummary() {
         const nonNull = field.non_null !== undefined ? ` (${field.non_null}/${field.total} polygons)` : '';
         summary.textContent = `${field.unique_count} classes${nonNull} \u2014 samples: ${field.samples.slice(0, 5).join(', ')}`;
 
-        // Show class names in panel 1 table from GeoJSON (pixel counts come later from evaluation)
-        if (valGeoJsonData && valGeoJsonData.features) {
-            const classNames = [...new Set(
-                valGeoJsonData.features
-                    .map(f => f.properties[fieldName])
-                    .filter(v => v != null)
-            )].sort();
-            // Count features per class
-            const featureCounts = {};
-            valGeoJsonData.features.forEach(f => {
-                const v = f.properties[fieldName];
-                if (v != null) featureCounts[v] = (featureCounts[v] || 0) + 1;
-            });
-            const classData = classNames.map(n => ({ name: String(n), pixels: featureCounts[n] }));
-            populateValClassTable(classNames.map(String), classData, false);
+        // Show class names + polygon counts from full shapefile (not truncated GeoJSON)
+        if (field.class_counts) {
+            const classNames = Object.keys(field.class_counts).sort();
+            const classData = classNames.map(n => ({ name: n, pixels: field.class_counts[n] }));
+            populateValClassTable(classNames, classData, false);
         }
     }
     addValGeoJsonLayer();
