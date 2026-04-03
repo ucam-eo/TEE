@@ -50,9 +50,9 @@ def _get_cache_dir():
     return _tile_disk_cache_dir
 
 
-def _result_cache_path(field, year, gdf_hash):
+def _result_cache_path(field, year, gdf_hash, sampling="equal"):
     """Return the disk path for cached evaluation results (vectors + labels)."""
-    return _get_cache_dir() / f"result_{field}_{year}_{gdf_hash}.npz"
+    return _get_cache_dir() / f"result_{field}_{year}_{sampling}_{gdf_hash}.npz"
 
 
 def _gdf_hash(gdf):
@@ -66,9 +66,9 @@ def _gdf_hash(gdf):
     return h.hexdigest()[:12]
 
 
-def _load_cached_result(field, year, gdf):
+def _load_cached_result(field, year, gdf, sampling="equal"):
     """Load cached evaluation result. Returns (vectors, labels, class_names, stats) or None."""
-    path = _result_cache_path(field, year, _gdf_hash(gdf))
+    path = _result_cache_path(field, year, _gdf_hash(gdf), sampling)
     if path.exists():
         try:
             data = np.load(path, allow_pickle=True)
@@ -186,10 +186,10 @@ def _sample_2d_patches(gt, gdf, field_name, year, le, n_classes,
     return unet_patches, spatial_3x3, spatial_5x5
 
 
-def _save_cached_result(field, year, gdf, vectors, labels, class_names, stats):
+def _save_cached_result(field, year, gdf, vectors, labels, class_names, stats, sampling="equal"):
     """Save evaluation result to disk cache."""
     try:
-        path = _result_cache_path(field, year, _gdf_hash(gdf))
+        path = _result_cache_path(field, year, _gdf_hash(gdf), sampling)
         np.savez_compressed(path, vectors=vectors, labels=labels,
                             class_names=np.array(class_names),
                             stats=np.array(stats))
@@ -405,7 +405,7 @@ def run_large_area():
         t0 = time.time()
 
         # Check in-memory cache first, then disk cache
-        cache_key = (field_name, year)
+        cache_key = (field_name, year, sampling)
         vectors = labels = class_names = stats = None
         spatial_3x3 = spatial_5x5 = unet_patches = None
 
@@ -426,7 +426,7 @@ def run_large_area():
 
         if vectors is None:
             # Check disk result cache (much smaller than raw tiles)
-            cached_result = _load_cached_result(field_name, year, gdf)
+            cached_result = _load_cached_result(field_name, year, gdf, sampling)
             if cached_result and not needs_spatial_3x3 and not needs_spatial_5x5 and not needs_unet:
                 vectors, labels, class_names, stats = cached_result
                 logger.info("Disk result cache hit for %s/%s (%d pixels)", field_name, year, len(labels))
@@ -644,7 +644,7 @@ def run_large_area():
                     "spatial_3x3": None, "spatial_5x5": None,
                     "unet_patches": [],
                 })
-                _save_cached_result(field_name, year, gdf, vectors, labels, class_names, stats)
+                _save_cached_result(field_name, year, gdf, vectors, labels, class_names, stats, sampling)
 
                 logger.info("Point sampling complete: %d pixels, %.1fMB",
                             len(labels), vectors.nbytes / 1e6)
