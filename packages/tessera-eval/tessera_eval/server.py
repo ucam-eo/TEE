@@ -184,7 +184,18 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
             unet_patches.append((emb_patch, label_patch.astype(np.int32)))
 
+            # Subsample labelled pixels for spatial features to cap memory
+            # (~300MB per full 256×256 patch at 3×3, ~800MB at 5×5)
             labelled_mask = label_patch > 0
+            MAX_SPATIAL_PX = 5000  # per patch — 100 patches × 5K = 500K total
+            n_labelled = labelled_mask.sum()
+            if n_labelled > MAX_SPATIAL_PX and (needs_spatial_3x3 or needs_spatial_5x5):
+                # Randomly zero out excess pixels in the mask
+                rows, cols = np.where(labelled_mask)
+                keep = rng.choice(len(rows), size=MAX_SPATIAL_PX, replace=False)
+                labelled_mask = np.zeros_like(labelled_mask)
+                labelled_mask[rows[keep], cols[keep]] = True
+
             if needs_spatial_3x3:
                 sf = gather_spatial_features_2d(emb_patch, radius=1, mask=labelled_mask)
                 all_spatial_3x3.append(sf)
