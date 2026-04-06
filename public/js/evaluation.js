@@ -43,10 +43,16 @@ function connectComputeServer() {
             localStorage.setItem('tee_compute_url', url);
         })
         .catch(err => {
-            status.textContent = 'failed';
+            _computeServerUrl = '';
+            if (window.location.protocol === 'https:' && url.startsWith('http:')) {
+                status.textContent = 'blocked (HTTPS→HTTP)';
+                status.title = 'Browsers block HTTP requests from HTTPS pages. Use Option 1 (SSH tunnel on port 8001) or run TEE locally.';
+            } else {
+                status.textContent = 'failed';
+                status.title = 'Could not reach compute server. Is the SSH tunnel running?';
+            }
             status.style.background = '#dc3545';
             status.style.color = '#fff';
-            _computeServerUrl = '';
         });
 }
 

@@ -463,12 +463,13 @@ The script pulls the latest code, installs dependencies, and starts an SSH tunne
 
 ### Option 1: Hosted + GPU Server (recommended)
 
-Use the hosted TEE website for everything. Start an SSH tunnel to your GPU server, then connect from the validation panel. Nothing else to install or run.
+Use the hosted TEE server for the UI, tiles, and maps. Your GPU server runs ML evaluation via `tee-compute`, which proxies everything else to tee.cl.cam.ac.uk.
 
 ```
-Browser → tee.cl.cam.ac.uk (UI, tiles, maps)
-    │
-    └── Evaluation requests → localhost:8002 → SSH tunnel → gpu-box (tee-compute)
+Browser → localhost:8001 → SSH tunnel → gpu-box (tee-compute)
+                                            │
+                                            ├── /api/evaluation/* → runs ML on gpu-box
+                                            └── everything else   → proxied to tee.cl.cam.ac.uk
 ```
 
 **Step 1 — start the tunnel:**
@@ -476,15 +477,11 @@ Browser → tee.cl.cam.ac.uk (UI, tiles, maps)
 ./scripts/deploy-compute.sh gpu-box
 ```
 
-**Step 2 — connect from the browser:**
+**Step 2 — open in your browser:**
 
-1. Open **https://tee.cl.cam.ac.uk**
-2. Go to **Validation** tab → **Evaluate**
-3. In the **Compute Server** section, enter `http://localhost:8002`
-4. Click **Connect** — the status badge turns green showing the GPU hostname
-5. Upload a shapefile and run evaluation — ML runs on the GPU server
+Open **http://localhost:8001**. The UI comes from tee.cl.cam.ac.uk (via proxy), evaluation runs on the GPU server.
 
-No URL switching needed. The compute URL is saved in your browser.
+> **Why localhost instead of tee.cl.cam.ac.uk?** Browsers block HTTP requests from HTTPS pages. Since tee-compute runs on HTTP, you need to access it via `http://localhost:8001` where tee-compute proxies the hosted UI and handles evaluation locally.
 
 ---
 
