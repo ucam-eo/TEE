@@ -848,9 +848,10 @@
                             <div style="padding:10px; border:1px solid #e0e0e0; border-radius:6px; background:#f8f9ff;">
                                 <strong style="color:#667eea;">Option 1: Hosted + GPU server</strong> <span style="font-size:11px; color:#28a745; font-weight:600;">(recommended)</span>
                                 <p style="margin:4px 0 0; color:#666; font-size:11px;">
-                                    Stay on this website. Start an SSH tunnel to your GPU server, then connect from the validation panel.<br>
-                                    <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./scripts/deploy-compute.sh gpu-box</code>
-                                    &rarr; enter <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">http://localhost:8002</code> in Compute Server.
+                                    Start an SSH tunnel to your GPU server:<br>
+                                    <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./scripts/deploy-compute.sh gpu-box</code><br>
+                                    Then switch to <a href="http://localhost:8001" style="color:#667eea; font-weight:600;">http://localhost:8001</a>
+                                    — same UI, but evaluation runs on your GPU server.
                                 </p>
                             </div>
                             <div style="padding:10px; border:1px solid #e0e0e0; border-radius:6px;">
