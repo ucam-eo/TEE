@@ -438,54 +438,26 @@ The `Control*` lines enable connection multiplexing — you only enter your pass
 ssh gpu-box    # should log in without a password prompt
 ```
 
-**Step 4: Install tessera-eval on the server**
+**Step 4: Clone the repo and create a venv on the server**
 ```bash
 ssh gpu-box
-git clone -b dev https://github.com/ucam-eo/TEE.git ~/TEE   # first time only
-python3 -m venv ~/TEE/venv                                    # first time only
-source ~/TEE/venv/bin/activate
-pip install -e "$HOME/TEE/packages/tessera-eval[server]"
+git clone https://github.com/ucam-eo/TEE.git ~/TEE
+python3 -m venv ~/TEE/venv
 exit
 ```
 
-**Step 5 (optional): Install PyTorch for U-Net and spatial MLP**
+**Step 5: Deploy using the deploy script**
 
-U-Net and spatial MLP require PyTorch. First check if the server has a GPU:
-```bash
-ssh gpu-box 'nvidia-smi'
-```
-
-If it shows a GPU, note the **CUDA Version** in the top-right corner. Install a PyTorch version built for that CUDA version or lower:
-```bash
-# Example: CUDA Version 12.2 → use cu121 index
-ssh gpu-box '~/TEE/venv/bin/pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121'
-```
-
-If no GPU (or you want CPU only):
-```bash
-ssh gpu-box '~/TEE/venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu'
-```
-
-Verify CUDA works:
-```bash
-ssh gpu-box '~/TEE/venv/bin/python3 -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"CPU\")"'
-```
-
-> **Common mistake:** `pip install torch` without specifying an index URL installs the latest PyTorch which may require a newer CUDA driver than your server has. Always match the CUDA version. See [Fixing PyTorch CUDA version mismatch](#fixing-pytorch-cuda-version-mismatch) below.
-
-**Updating later**
-
-Use the deploy script (included in the repo):
+From your laptop (where you cloned TEE):
 ```bash
 ./scripts/deploy-compute.sh gpu-box                  # deploy + start tunnel
-./scripts/deploy-compute.sh gpu-box --install-torch  # also install/update PyTorch
-./scripts/deploy-compute.sh gpu-box --no-tunnel      # deploy only
+./scripts/deploy-compute.sh gpu-box --install-torch  # also install PyTorch for U-Net
+./scripts/deploy-compute.sh gpu-box --no-tunnel      # deploy only, no tunnel
 ```
 
-Or manually:
-```bash
-ssh gpu-box 'cd ~/TEE && git pull && ~/TEE/venv/bin/pip install -q -e "packages/tessera-eval[server]"'
-```
+The script pulls the latest code, installs dependencies, and starts an SSH tunnel. Use it for both initial setup and updates.
+
+> **PyTorch note:** `--install-torch` auto-detects CUDA. If it installs the wrong version, see [Fixing PyTorch CUDA version mismatch](#fixing-pytorch-cuda-version-mismatch) below.
 
 ---
 
