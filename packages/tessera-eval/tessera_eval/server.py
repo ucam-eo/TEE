@@ -201,19 +201,25 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
         h, w = tile_emb.shape[:2]
 
-        # Extract point samples from this tile
+        # Extract point samples from this tile (vectorized)
         tile_key = (round(tlon, 2), round(tlat, 2))
         n_extracted = 0
         if tile_key in points_by_tile:
             from pyproj import Transformer
+            pt_indices = np.array(points_by_tile[tile_key])
+            lons = np.array([sample_points_lonlat[i][0] for i in pt_indices])
+            lats = np.array([sample_points_lonlat[i][1] for i in pt_indices])
             transformer = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
-            for pt_idx in points_by_tile[tile_key]:
-                lon, lat = sample_points_lonlat[pt_idx]
-                x, y = transformer.transform(lon, lat)
-                row, col = rasterio.transform.rowcol(transform, x, y)
-                if 0 <= row < h and 0 <= col < w:
-                    point_vectors[pt_idx] = tile_emb[row, col]
-                    n_extracted += 1
+            xs, ys = transformer.transform(lons, lats)
+            rows, cols = rasterio.transform.rowcol(transform, xs, ys)
+            rows = np.asarray(rows)
+            cols = np.asarray(cols)
+            valid = (rows >= 0) & (rows < h) & (cols >= 0) & (cols < w)
+            valid_pt_idx = pt_indices[valid]
+            valid_rows = rows[valid]
+            valid_cols = cols[valid]
+            point_vectors[valid_pt_idx] = tile_emb[valid_rows, valid_cols]
+            n_extracted = int(valid.sum())
         if logger and t_idx < 3:  # debug first 3 tiles
             n_pts = len(points_by_tile.get(tile_key, []))
             logger.info("  tile_key=%s, %d points matched, %d extracted, tile shape=%s, crs=%s",
