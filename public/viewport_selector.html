@@ -834,43 +834,29 @@
 
                 <!-- Tab: Validation -->
                 <div id="tab-content-validation" style="display:none; padding-top:16px;">
-                    <button onclick="window.location.href='viewer.html?mode=validation'" style="padding:10px 24px; background:#667eea; color:white; border:none; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; width:100%;">
-                        Evaluate
-                    </button>
-
-                    <div style="margin-top:16px; font-size:12px; color:#555; line-height:1.6;">
+                    <div style="font-size:12px; color:#555; line-height:1.6;">
                         <p style="margin:0 0 10px; color:#888;">
                             Evaluate classifiers on ground-truth shapefiles at any scale. Your labels never leave your machine.
                         </p>
 
                         <h4 style="margin:12px 0 6px; color:#333; font-size:13px;">How to run evaluation</h4>
-                        <p style="margin:0 0 8px; color:#666;">Choose one of these three options:</p>
 
                         <div style="display:flex; flex-direction:column; gap:10px;">
                             <div style="padding:10px; border:1px solid #e0e0e0; border-radius:6px; background:#f8f9ff;">
-                                <strong style="color:#667eea;">Option 1: Hosted + GPU server</strong> <span style="font-size:11px; color:#28a745; font-weight:600;">(recommended)</span>
+                                <strong style="color:#667eea;">Option 1: GPU server</strong> <span style="font-size:11px; color:#28a745; font-weight:600;">(recommended)</span>
                                 <p style="margin:4px 0 0; color:#666; font-size:11px;">
                                     Start an SSH tunnel to your GPU server:<br>
                                     <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./scripts/deploy-compute.sh gpu-box</code><br>
-                                    Then switch to <a href="http://localhost:8001" style="color:#667eea; font-weight:600;">http://localhost:8001</a>
-                                    — same UI, but evaluation runs on your GPU server.
+                                    Then click Evaluate below.
                                 </p>
                             </div>
                             <div style="padding:10px; border:1px solid #e0e0e0; border-radius:6px;">
-                                <strong style="color:#555;">Option 2: All local</strong>
+                                <strong style="color:#555;">Option 2: Local UI + GPU server</strong>
                                 <p style="margin:4px 0 0; color:#666; font-size:11px;">
-                                    Run everything on your laptop. No GPU needed for pixel classifiers (k-NN, RF, XGBoost).<br>
-                                    <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">cd ~/TEE && ./restart.sh</code>
-                                    &rarr; open <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">http://localhost:8001</code>
-                                </p>
-                            </div>
-                            <div style="padding:10px; border:1px solid #e0e0e0; border-radius:6px;">
-                                <strong style="color:#555;">Option 3: Local UI + GPU server</strong>
-                                <p style="margin:4px 0 0; color:#666; font-size:11px;">
-                                    Run Django locally for offline labelling, tunnel evaluation to a GPU server.<br>
+                                    Run TEE locally with GPU evaluation:<br>
                                     <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">cd ~/TEE; ./restart.sh</code> then
-                                    <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./scripts/deploy-compute.sh gpu-box</code>
-                                    &rarr; open <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">http://localhost:8001</code>
+                                    <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./scripts/deploy-compute.sh gpu-box</code><br>
+                                    Then click Evaluate below.
                                 </p>
                             </div>
                         </div>
@@ -879,6 +865,10 @@
                             <a href="/user_guide.html#running-evaluation-on-your-own-machines" target="_blank" style="color:#667eea; font-size:11px;">Full setup guide &rarr;</a>
                         </p>
                     </div>
+
+                    <button onclick="window.location.href='http://localhost:8001/viewer.html?mode=validation'" style="margin-top:12px; padding:10px 24px; background:#667eea; color:white; border:none; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; width:100%;">
+                        Evaluate
+                    </button>
 
                 </div>
 
