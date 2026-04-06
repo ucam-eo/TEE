@@ -2418,7 +2418,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const [response, healthResp, computeResp] = await Promise.all([
                 fetch(`/api/viewports/${window.currentViewportName}/is-ready`),
                 fetch('/health').catch(() => null),
-                fetch('/api/evaluation/health').catch(() => null),
+                fetch(typeof evalUrl === 'function' ? evalUrl('health') : '/api/evaluation/health').catch(() => null),
             ]);
             const status = await response.json();
             const health = healthResp ? await healthResp.json().catch(() => null) : null;

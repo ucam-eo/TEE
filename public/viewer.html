@@ -857,6 +857,24 @@
             <div id="map-osm" class="map"></div>
             <!-- Validation controls (shown in validation mode, panel 1) -->
             <div id="validation-controls" class="validation-panel">
+                <div id="val-compute-section" style="margin-bottom:12px; padding:8px; border:1px solid #444; border-radius:6px; background:#1a1a2e;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                        <span style="font-size:13px; font-weight:600; color:#ccc;">Compute Server</span>
+                        <span id="val-compute-status" style="font-size:11px; padding:2px 8px; border-radius:10px; background:#dc3545; color:#fff;">not connected</span>
+                    </div>
+                    <div style="display:flex; gap:4px;">
+                        <input type="text" id="val-compute-url" placeholder="e.g. http://localhost:8002"
+                            style="flex:1; padding:5px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:12px;">
+                        <button id="val-compute-connect" onclick="connectComputeServer()"
+                            style="padding:5px 10px; border:1px solid #555; border-radius:4px; background:#333; color:#ccc; font-size:12px; cursor:pointer; white-space:nowrap;">Connect</button>
+                    </div>
+                    <div style="font-size:11px; color:#888; margin-top:4px;">
+                        ML evaluation runs on a separate compute server. Start one with:<br>
+                        <code style="color:#8f8; font-size:10px;">ssh -L 8002:localhost:5050 gpu-box 'tee-compute --port 5050'</code><br>
+                        Then enter <code style="color:#8f8;">http://localhost:8002</code> above and click Connect.
+                    </div>
+                </div>
+
                 <h3>Upload Ground Truth</h3>
                 <div id="val-drop-zone" class="validation-drop-zone">
                     Drop ESRI format .zip here (.shp, .dbf, .shx, .prj)

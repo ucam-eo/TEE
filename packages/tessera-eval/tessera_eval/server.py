@@ -26,6 +26,16 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+
+@app.after_request
+def _add_cors(response):
+    """Allow browsers on any origin to talk to tee-compute directly."""
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
+
 # ── State (single-user, one process) ──
 
 _uploaded_shapefiles = []  # list of (filename, gdf) tuples
@@ -396,26 +406,15 @@ def clear_shapefiles():
     return jsonify({"ok": True})
 
 
-@app.route("/api/evaluation/cancel", methods=["POST", "OPTIONS"])
+@app.route("/api/evaluation/cancel", methods=["POST"])
 def cancel_evaluation():
     """Cancel the running evaluation."""
-    # Handle CORS preflight for direct browser requests
-    if request.method == "OPTIONS":
-        resp = app.make_default_options_response()
-        resp.headers["Access-Control-Allow-Origin"] = "*"
-        resp.headers["Access-Control-Allow-Methods"] = "POST"
-        resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
-        return resp
-
     global _cancel_flag
     if _cancel_flag is not None:
         _cancel_flag.set()
         logger.info("Evaluation cancelled by user")
-        resp = jsonify({"ok": True, "message": "Cancellation requested"})
-    else:
-        resp = jsonify({"ok": False, "message": "No evaluation running"})
-    resp.headers["Access-Control-Allow-Origin"] = "*"
-    return resp
+        return jsonify({"ok": True, "message": "Cancellation requested"})
+    return jsonify({"ok": False, "message": "No evaluation running"})
 
 
 @app.route("/api/evaluation/finish-classifier", methods=["POST"])

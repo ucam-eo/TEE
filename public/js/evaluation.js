@@ -2,6 +2,69 @@
 // learning curve charts, confusion matrix, model download.
 // Extracted from viewer.html as an ES module.
 
+// ── Compute server ──
+
+let _computeServerUrl = '';  // empty = use Django proxy (/api/evaluation/*)
+
+function evalUrl(path) {
+    // Route evaluation requests to direct compute server or Django proxy
+    if (_computeServerUrl) {
+        return _computeServerUrl.replace(/\/+$/, '') + '/api/evaluation/' + path;
+    }
+    return '/api/evaluation/' + path;
+}
+
+function connectComputeServer() {
+    const input = document.getElementById('val-compute-url');
+    const status = document.getElementById('val-compute-status');
+    const url = input.value.trim();
+
+    if (!url) {
+        _computeServerUrl = '';
+        status.textContent = 'not connected';
+        status.style.background = '#dc3545';
+        return;
+    }
+
+    // Test connection
+    status.textContent = 'connecting...';
+    status.style.background = '#ffc107';
+    status.style.color = '#000';
+
+    fetch(url.replace(/\/+$/, '') + '/health', { mode: 'cors' })
+        .then(r => r.json())
+        .then(data => {
+            _computeServerUrl = url;
+            const host = data.compute_host || data.host || 'unknown';
+            status.textContent = host;
+            status.style.background = '#28a745';
+            status.style.color = '#fff';
+            // Save to localStorage
+            localStorage.setItem('tee_compute_url', url);
+        })
+        .catch(err => {
+            status.textContent = 'failed';
+            status.style.background = '#dc3545';
+            status.style.color = '#fff';
+            _computeServerUrl = '';
+        });
+}
+
+// Restore saved compute URL on load
+(function() {
+    const saved = localStorage.getItem('tee_compute_url');
+    if (saved) {
+        const input = document.getElementById('val-compute-url');
+        if (input) {
+            input.value = saved;
+            // Auto-connect on load
+            setTimeout(connectComputeServer, 500);
+        }
+    }
+})();
+
+window.connectComputeServer = connectComputeServer;
+
 // ── State ──
 
 let valChart = null;
@@ -130,9 +193,9 @@ async function uploadShapefile(file) {
 
     try {
         // Clear previous shapefiles before uploading
-        await fetch('/api/evaluation/clear-shapefiles', { method: 'POST' });
+        await fetch(evalUrl('clear-shapefiles'), { method: 'POST' });
 
-        const resp = await fetch('/api/evaluation/upload-shapefile', { method: 'POST', body: formData });
+        const resp = await fetch(evalUrl('upload-shapefile'), { method: 'POST', body: formData });
         const data = await resp.json();
         if (!resp.ok) {
             status.textContent = data.error || 'Upload failed';
@@ -259,7 +322,7 @@ async function fetchClassPixelCounts(fieldName) {
     table.style.display = 'none';
 
     try {
-        const resp = await fetch('/api/evaluation/class-counts', {
+        const resp = await fetch(evalUrl('class-counts'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -432,7 +495,7 @@ function showFinishButtons(classifierNames) {
         btn.textContent = 'Finish ' + (CLASSIFIER_LABELS[name] || name);
         btn.style.cssText = `padding:4px 12px;border:1px solid ${color.line};border-radius:12px;background:transparent;color:${color.line};font-size:12px;cursor:pointer;`;
         btn.onclick = () => {
-            fetch('/api/evaluation/finish-classifier', {
+            fetch(evalUrl('finish-classifier'), {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({classifier: name}),
@@ -946,7 +1009,7 @@ async function downloadModels() {
     status.style.color = '#888';
 
     try {
-        const resp = await fetch('/api/evaluation/train-models', { method: 'POST' });
+        const resp = await fetch(evalUrl('train-models'), { method: 'POST' });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             status.textContent = err.error || 'Training failed';
@@ -981,7 +1044,7 @@ async function downloadModels() {
                         // Download all ready models
                         for (const name of readyModels) {
                             const a = document.createElement('a');
-                            a.href = `/api/evaluation/download-model/${encodeURIComponent(name)}`;
+                            a.href = evalUrl(`download-model/${encodeURIComponent(name)}`);
                             const ext = name === 'unet' ? '.pt' : '.joblib';
                             a.download = `${name}_model${ext}`;
                             a.click();
@@ -1139,13 +1202,12 @@ async function runLargeAreaEvaluation() {
     cancelBtn.onclick = () => {
         userCancelled = true;
         evalAbortController.abort();
-        // Tell the compute server to stop — hit it directly to avoid proxy blocking
-        fetch('/api/evaluation/cancel', { method: 'POST' }).catch(() => {});
-        fetch('http://localhost:8002/api/evaluation/cancel', { method: 'POST' }).catch(() => {});
+        // Tell the compute server to stop
+        fetch(evalUrl('cancel'), { method: 'POST' }).catch(() => {});
     };
 
     try {
-        const resp = await fetch('/api/evaluation/run-large-area', {
+        const resp = await fetch(evalUrl('run-large-area'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
