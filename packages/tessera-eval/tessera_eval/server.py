@@ -681,7 +681,7 @@ def run_large_area():
             gt = _geotessera_instance
 
             try:
-                MAX_SAMPLE_PIXELS = 200_000  # 200K is ample for learning curves
+                MAX_SAMPLE_PIXELS = max_train if max_train else 200_000
 
                 le = LabelEncoder()
                 le.fit(gdf[field_name].dropna().unique())
