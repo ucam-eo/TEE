@@ -50,9 +50,8 @@ manual-labels-Eddington.zip
 # austria.zip is public example data — tracked in git
 
 # Private planning files
-docs/plan_tessera_tools_library.md
-docs/plan_delegated_enrolment.md
-docs/plan_viewport_manager_tabs.md
+docs/plan_*.md
+docs/video_scripts.md
 docs/video_scripts.md
 docs/label_sharing_plan.md
 CANVAS_HANDOFF_TO_SONNET.md
