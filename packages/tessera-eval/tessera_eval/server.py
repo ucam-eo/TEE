@@ -199,6 +199,7 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
         # Extract point samples from this tile
         tile_key = (round(tlon, 2), round(tlat, 2))
+        n_extracted = 0
         if tile_key in points_by_tile:
             from pyproj import Transformer
             transformer = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
@@ -208,6 +209,11 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
                 row, col = rasterio.transform.rowcol(transform, x, y)
                 if 0 <= row < h and 0 <= col < w:
                     point_vectors[pt_idx] = tile_emb[row, col]
+                    n_extracted += 1
+        if logger and t_idx < 3:  # debug first 3 tiles
+            n_pts = len(points_by_tile.get(tile_key, []))
+            logger.info("  tile_key=%s, %d points matched, %d extracted, tile shape=%s, crs=%s",
+                        tile_key, n_pts, n_extracted, tile_emb.shape, crs)
 
         patches_full = len(unet_patches) >= max_patches
         if patches_full:
