@@ -101,3 +101,11 @@ def train_models(request):
 
 def download_model(request, classifier):
     return _proxy_to_compute(request, f"api/evaluation/download-model/{classifier}")
+
+
+def create_map(request):
+    return _proxy_to_compute(request, "api/evaluation/create-map")
+
+
+def download_map(request, name):
+    return _proxy_to_compute(request, f"api/evaluation/download-map/{name}")

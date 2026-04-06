@@ -384,6 +384,9 @@
         }
         .validation-run-btn:hover { background: #5a6fd6; }
         .validation-run-btn:disabled { background: #555; cursor: not-allowed; }
+        #val-create-map-btn { background: #44bb44; color: #fff; }
+        #val-create-map-btn:hover:not(:disabled) { background: #38a838; }
+        #val-create-map-btn:disabled { background: #555 !important; color: #888 !important; }
         .validation-status {
             margin-top: 10px;
             font-size: 12px;
@@ -956,6 +959,7 @@
 
                 <div style="display:flex; gap:6px;">
                     <button id="val-run-btn" class="validation-run-btn" disabled style="flex:1;" title="Run evaluation on selected classifiers">Run Evaluation</button>
+                    <button id="val-create-map-btn" class="validation-run-btn" disabled style="flex:1;" title="Train on all labels and predict every pixel in green map areas. Requires map bounding boxes and a prior evaluation run.">Create Map</button>
                     <button id="val-cancel-btn" class="validation-run-btn" style="flex:0 0 auto; background:#dc3545; display:none;" title="Cancel running evaluation">Cancel</button>
                 </div>
                 <div id="val-status" class="validation-status"></div>

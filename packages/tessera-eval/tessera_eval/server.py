@@ -41,6 +41,7 @@ def _add_cors(response):
 _uploaded_shapefiles = []  # list of (filename, gdf) tuples
 _merged_gdf = None
 _trained_models = {}  # classifier name → temp file path
+_generated_maps = {}  # map name → temp file path (GeoTIFF)
 _finish_classifiers = set()
 _tile_cache = {"key": None, "vectors": None, "labels": None, "class_names": None,
                "stats": None, "spatial_3x3": None, "spatial_5x5": None}
@@ -1213,6 +1214,318 @@ def download_model(name):
     _bn = _re.sub(r'_v\d+$', '', name)
     ext = ".pt" if _bn == "unet" else ".joblib"
     return send_file(path, as_attachment=True, download_name=f"{name}_model{ext}")
+
+
+@app.route("/api/evaluation/create-map", methods=["POST"])
+def create_map():
+    """Train classifier on all cached data, predict every pixel in map bboxes, produce GeoTIFF.
+
+    Only pixel-based classifiers are supported (k-NN, RF, XGBoost, MLP).
+    Spatial MLP and U-Net require neighbourhood features at every pixel
+    which is prohibitively expensive for dense prediction.
+
+    Processes map bboxes in 0.1 deg geographic chunks to cap memory (~50MB/chunk).
+    """
+    try:
+        body = request.get_json()
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    classifier_name = body.get("classifier", "rf")
+    map_bboxes = body.get("map_bboxes", [])
+
+    if not map_bboxes:
+        return jsonify({"error": "No map bounding boxes provided. Draw green map areas first."}), 400
+
+    cache = _tile_cache
+    if cache.get("vectors") is None:
+        return jsonify({"error": "No evaluation data cached. Run evaluation first."}), 400
+
+    vectors = cache["vectors"]
+    labels = cache["labels"]
+    class_names = cache.get("class_names", [])
+    model_params = cache.get("_model_params", {})
+
+    import re as _re
+    base_name = _re.sub(r'_v\d+$', '', classifier_name)
+    unsupported = ("spatial_mlp", "spatial_mlp_5x5", "unet")
+    if base_name in unsupported:
+        return jsonify({
+            "error": f"'{classifier_name}' is not supported for map generation. "
+                     f"Spatial MLP and U-Net require neighbourhood features at every pixel, "
+                     f"which is too expensive for dense prediction. Use k-NN, RF, XGBoost, or MLP."
+        }), 400
+
+    def stream():
+        import threading
+        global _cancel_flag
+        _cancel_flag = threading.Event()
+
+        def _cancelled():
+            return _cancel_flag is not None and _cancel_flag.is_set()
+
+        t0 = time.time()
+
+        yield json.dumps({"event": "status", "message": f"Training {classifier_name} on all {len(vectors):,} labels..."}) + "\n"
+
+        try:
+            from tessera_eval.classify import make_classifier
+            clf = make_classifier(classifier_name, model_params.get(classifier_name, {}))
+            clf.fit(vectors, labels)
+        except Exception as e:
+            yield json.dumps({"event": "error", "message": f"Failed to train classifier: {e}"}) + "\n"
+            return
+
+        yield json.dumps({"event": "status", "message": f"Classifier trained. Predicting map areas..."}) + "\n"
+
+        if _cancelled():
+            yield json.dumps({"event": "error", "message": "Cancelled"}) + "\n"
+            return
+
+        # Prepare GeoTessera and zarr
+        from geotessera import GeoTessera
+        global _geotessera_instance, _zarr_instance
+
+        if _geotessera_instance is None:
+            tile_cache_dir = _get_cache_dir() / "tiles"
+            tile_cache_dir.mkdir(parents=True, exist_ok=True)
+            _geotessera_instance = GeoTessera(embeddings_dir=str(tile_cache_dir))
+        gt = _geotessera_instance
+
+        if _zarr_instance is None:
+            _zarr_instance = _try_zarr()
+
+        year = cache["key"][1] if cache.get("key") else 2024
+
+        # Clean up old map files
+        for old_path in _generated_maps.values():
+            try:
+                Path(old_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+        _generated_maps.clear()
+
+        for bbox_idx, bbox in enumerate(map_bboxes):
+            if _cancelled():
+                yield json.dumps({"event": "error", "message": "Cancelled"}) + "\n"
+                return
+
+            # bbox = [south, west, north, east]
+            south, west, north, east = bbox
+            yield json.dumps({
+                "event": "status",
+                "message": f"Map area {bbox_idx + 1}/{len(map_bboxes)}: ({south:.3f}, {west:.3f}) to ({north:.3f}, {east:.3f})",
+            }) + "\n"
+
+            # Split bbox into 0.1 deg chunks to manage memory
+            CHUNK_SIZE = 0.1
+            chunk_lons = []
+            lon = west
+            while lon < east:
+                chunk_lons.append((lon, min(lon + CHUNK_SIZE, east)))
+                lon += CHUNK_SIZE
+            chunk_lats = []
+            lat = south
+            while lat < north:
+                chunk_lats.append((lat, min(lat + CHUNK_SIZE, north)))
+                lat += CHUNK_SIZE
+
+            total_chunks = len(chunk_lons) * len(chunk_lats)
+            yield json.dumps({
+                "event": "status",
+                "message": f"Map area {bbox_idx + 1}: {total_chunks} chunks ({len(chunk_lons)} x {len(chunk_lats)})",
+            }) + "\n"
+
+            # Probe zarr coverage
+            use_zarr = False
+            gtz = _zarr_instance
+            if gtz is not None:
+                try:
+                    cx = (west + east) / 2
+                    cy = (south + north) / 2
+                    probe = gtz.sample_at(cx, cy, year)
+                    if not np.isnan(probe).all():
+                        use_zarr = True
+                except Exception:
+                    pass
+
+            yield json.dumps({
+                "event": "status",
+                "message": f"Using {'zarr (fast)' if use_zarr else 'NPY tiles'} for predictions",
+            }) + "\n"
+
+            # We'll collect chunk arrays and merge at the end.
+            # To build the final GeoTIFF, we need to know the CRS and resolution.
+            # We get this from the first chunk that returns data.
+            chunk_results = []  # list of (predicted_2d, transform, crs, chunk_bbox)
+            chunk_counter = 0
+
+            for lon_start, lon_end in chunk_lons:
+                for lat_start, lat_end in chunk_lats:
+                    if _cancelled():
+                        yield json.dumps({"event": "error", "message": "Cancelled"}) + "\n"
+                        return
+
+                    chunk_counter += 1
+                    yield json.dumps({
+                        "event": "map_progress",
+                        "bbox_idx": bbox_idx,
+                        "chunk": chunk_counter,
+                        "total_chunks": total_chunks,
+                        "message": f"Predicting chunk {chunk_counter}/{total_chunks}",
+                    }) + "\n"
+
+                    chunk_bbox = (lon_start, lat_start, lon_end, lat_end)
+
+                    try:
+                        if use_zarr:
+                            emb, transform, crs = gtz.read_region(chunk_bbox, year)
+                        else:
+                            # Fall back to NPY: fetch tiles overlapping this chunk
+                            tiles = gt.registry.load_blocks_for_region(chunk_bbox, year)
+                            tiles = list(tiles)
+                            if not tiles:
+                                continue
+                            tile_gen = gt.fetch_embeddings(tiles)
+                            try:
+                                _, _, _, emb, crs, transform = next(tile_gen)
+                                emb = emb.astype(np.float32)
+                            except StopIteration:
+                                continue
+
+                        if emb is None or emb.size == 0:
+                            continue
+
+                        h, w, c = emb.shape
+                        # Flatten to (N, 128), predict, reshape
+                        flat = emb.reshape(-1, c)
+
+                        # Identify valid (non-NaN) pixels
+                        nan_mask = np.isnan(flat).any(axis=1)
+                        predictions = np.zeros(flat.shape[0], dtype=np.uint8)
+
+                        if (~nan_mask).sum() > 0:
+                            valid_flat = flat[~nan_mask].astype(np.float32)
+                            preds = clf.predict(valid_flat)
+                            # Class labels are 0-based from LabelEncoder.
+                            # Store as 1-based (0 = nodata).
+                            predictions[~nan_mask] = preds.astype(np.uint8) + 1
+
+                        predicted_2d = predictions.reshape(h, w)
+                        chunk_results.append((predicted_2d, transform, crs, chunk_bbox))
+
+                    except Exception as e:
+                        logger.warning("Chunk %d failed: %s", chunk_counter, e)
+                        yield json.dumps({
+                            "event": "status",
+                            "message": f"Chunk {chunk_counter} failed: {e}",
+                        }) + "\n"
+                        continue
+
+            if not chunk_results:
+                yield json.dumps({
+                    "event": "error",
+                    "message": f"No data found in map area {bbox_idx + 1}. Check embedding coverage.",
+                }) + "\n"
+                continue
+
+            # Merge chunks into a single GeoTIFF
+            yield json.dumps({
+                "event": "status",
+                "message": f"Writing GeoTIFF for map area {bbox_idx + 1}...",
+            }) + "\n"
+
+            try:
+                import rasterio
+                from rasterio.transform import from_bounds as _from_bounds
+                from rasterio.merge import merge as _rasterio_merge
+                import rasterio.io
+
+                if len(chunk_results) == 1:
+                    # Single chunk — write directly
+                    predicted_2d, transform, crs, _ = chunk_results[0]
+                    out_arr = predicted_2d
+                    out_transform = transform
+                    out_crs = crs
+                else:
+                    # Multiple chunks — merge using rasterio in-memory datasets
+                    datasets = []
+                    for predicted_2d, transform, crs, _ in chunk_results:
+                        memfile = rasterio.io.MemoryFile()
+                        ds = memfile.open(
+                            driver="GTiff", height=predicted_2d.shape[0],
+                            width=predicted_2d.shape[1], count=1, dtype="uint8",
+                            crs=crs, transform=transform, nodata=0,
+                        )
+                        ds.write(predicted_2d, 1)
+                        datasets.append(ds)
+
+                    mosaic, out_transform = _rasterio_merge(datasets, nodata=0)
+                    out_arr = mosaic[0]
+                    out_crs = chunk_results[0][2]
+
+                    for ds in datasets:
+                        ds.close()
+
+                # Write final GeoTIFF
+                map_name = f"map_{bbox_idx + 1}"
+                tmp = tempfile.NamedTemporaryFile(
+                    suffix=".tif", prefix=f"tee_map_{bbox_idx + 1}_", delete=False,
+                )
+                with rasterio.open(
+                    tmp.name, "w", driver="GTiff",
+                    height=out_arr.shape[0], width=out_arr.shape[1],
+                    count=1, dtype="uint8", crs=out_crs,
+                    transform=out_transform, nodata=0,
+                    compress="lz4",
+                ) as dst:
+                    dst.write(out_arr, 1)
+                    # Store class names as tags
+                    tags = {f"class_{i + 1}": name for i, name in enumerate(class_names)}
+                    tags["classifier"] = classifier_name
+                    dst.update_tags(**tags)
+
+                _generated_maps[map_name] = tmp.name
+                logger.info("GeoTIFF written: %s (%d x %d)", tmp.name, out_arr.shape[1], out_arr.shape[0])
+
+                yield json.dumps({
+                    "event": "map_ready",
+                    "name": map_name,
+                    "bbox_idx": bbox_idx,
+                    "download_url": f"/api/evaluation/download-map/{map_name}",
+                    "width": out_arr.shape[1],
+                    "height": out_arr.shape[0],
+                    "n_classes": len(class_names),
+                }) + "\n"
+
+            except Exception as e:
+                logger.error("GeoTIFF write failed: %s", e, exc_info=True)
+                yield json.dumps({
+                    "event": "error",
+                    "message": f"Failed to write GeoTIFF: {e}",
+                }) + "\n"
+                continue
+
+        _cancel_flag = None
+        elapsed = time.time() - t0
+        yield json.dumps({
+            "event": "done",
+            "elapsed_seconds": round(elapsed, 1),
+            "maps_available": list(_generated_maps.keys()),
+        }) + "\n"
+
+    return Response(_padded(stream()), mimetype="application/x-ndjson",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.route("/api/evaluation/download-map/<name>", methods=["GET"])
+def download_map(name):
+    """Serve a generated GeoTIFF map file."""
+    path = _generated_maps.get(name)
+    if not path or not Path(path).exists():
+        return jsonify({"error": f"No generated map '{name}'"}), 404
+    return send_file(path, as_attachment=True, download_name=f"{name}.tif",
+                     mimetype="image/tiff")
 
 
 @app.route("/health", methods=["GET"])

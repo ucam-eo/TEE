@@ -295,7 +295,7 @@ To get a more realistic evaluation, draw separate **train** and **test** areas o
 |-----------|-------|---------|
 | **Train** | Blue | Points inside these boxes are used for training. Learning curve percentages subsample from this pool. |
 | **Test** | Yellow | Points inside these boxes are used for testing. The test set is fixed (not subsampled). |
-| **Map** | Green | Reserved for future classification map generation. |
+| **Map** | Green | Areas to predict as a GeoTIFF classification map. See [Create Map](#create-map-geotiff-generation). |
 
 **Rules:**
 - If a point falls in both train and test areas, it goes to training (train takes priority)
@@ -345,6 +345,39 @@ d = joblib.load("rf_model.joblib")
 clf = d["model"]          # the trained classifier
 names = d["class_names"]  # e.g. ["Grassland", "Urban", "Woodland"]
 predictions = clf.predict(embeddings)  # shape: (N, 128)
+```
+
+### Create Map (GeoTIFF Generation)
+
+After running an evaluation, you can generate a classification map as a GeoTIFF for any area:
+
+1. In the **Spatial split** dropdown, select **Map area (green)** and draw one or more rectangles on the satellite map covering the area you want to classify
+2. Run an evaluation to cache training data (if not already done)
+3. Click **Create Map** (green button, next to Run Evaluation)
+4. TEE trains the selected pixel-based classifier on all cached labels, then predicts every pixel in the green bounding boxes
+5. The resulting GeoTIFF downloads automatically
+
+**Output format:**
+- Single-band uint8 GeoTIFF with LZ4 compression
+- Pixel values are 1-based class IDs (0 = nodata/no coverage)
+- Class names are stored as GeoTIFF tags (`class_1`, `class_2`, etc.)
+- CRS matches the source embedding tiles (typically UTM)
+
+**Limitations:**
+- Only pixel-based classifiers are supported: **k-NN, Random Forest, XGBoost, MLP**. Spatial MLP and U-Net require neighbourhood features at every pixel, which is too expensive for dense prediction.
+- Large areas are processed in 0.1-degree geographic chunks to manage memory. Very large bounding boxes (e.g., country-scale) will take time.
+- Requires a prior evaluation run to cache training vectors and labels.
+
+**Using the GeoTIFF in Python:**
+
+```python
+import rasterio
+with rasterio.open("map_1.tif") as src:
+    data = src.read(1)         # (H, W) uint8 array
+    tags = src.tags()          # {'class_1': 'Grassland', 'class_2': 'Urban', ...}
+    nodata = src.nodata        # 0
+    crs = src.crs              # e.g., EPSG:32630
+    transform = src.transform  # affine transform for georeferencing
 ```
 
 ### Regression

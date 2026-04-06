@@ -6,7 +6,7 @@ from .views.viewports import (list_viewports, current_viewport, viewport_info,
 from .views.pipeline import operations_progress, cancel_processing
 from .views.vector_data import serve_vector_data
 from .views.config import get_config
-from .views.evaluation import upload_shapefile, clear_shapefiles, run_evaluation, cancel_evaluation, finish_classifier, train_models, download_model, compute_health
+from .views.evaluation import upload_shapefile, clear_shapefiles, run_evaluation, cancel_evaluation, finish_classifier, train_models, download_model, create_map, download_map, compute_health
 from .views.share import submit_share, list_shares, download_share
 from .views.enrolment import create_enrolled_user, list_enrolled_users, disable_enrolled_user
 
@@ -43,6 +43,8 @@ urlpatterns = [
     path('evaluation/finish-classifier', finish_classifier),
     path('evaluation/train-models', train_models),
     path('evaluation/download-model/<str:classifier>', download_model),
+    path('evaluation/create-map', create_map),
+    path('evaluation/download-map/<str:name>', download_map),
     # Label sharing
     path('share/submit', submit_share),
     path('share/list/<str:viewport_name>', list_shares),

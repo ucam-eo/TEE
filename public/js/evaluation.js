@@ -678,6 +678,7 @@ function handleStreamEvent(ev) {
         const dlBtnH = document.getElementById('val-download-btn');
         if (dlBtnH) dlBtnH.disabled = false;  // always enable — trains on click
         hideFinishButtons();
+        updateCreateMapButton();
 
 
     } else if (ev.event === 'heartbeat') {
@@ -1104,6 +1105,160 @@ async function downloadModels() {
 }
 document.getElementById('val-export-btn').addEventListener('click', exportEvalResults);
 document.getElementById('val-download-btn').addEventListener('click', downloadModels);
+
+// ── Create Map (Phase 4: GeoTIFF generation) ──
+
+document.getElementById('val-create-map-btn').addEventListener('click', createMap);
+
+function updateCreateMapButton() {
+    const btn = document.getElementById('val-create-map-btn');
+    if (!btn) return;
+    const hasMapBboxes = spatialBboxes.map.length > 0;
+    const hasEvalData = !!(lastChartData && lastChartData.classifiers);
+    btn.disabled = !(hasMapBboxes && hasEvalData);
+    if (!hasMapBboxes) {
+        btn.title = 'Draw green map bounding boxes first';
+    } else if (!hasEvalData) {
+        btn.title = 'Run evaluation first to cache training data';
+    } else {
+        btn.title = 'Train on all labels and predict every pixel in green map areas';
+    }
+}
+
+async function createMap() {
+    const mapBboxes = spatialBboxes.map.map(r => rectToBbox(r));
+    if (mapBboxes.length === 0) {
+        document.getElementById('val-status').textContent = 'Draw green map bounding boxes first';
+        document.getElementById('val-status').style.color = '#dc3545';
+        return;
+    }
+
+    // Pick the classifier: use the first checked pixel-based classifier
+    const PIXEL_CLASSIFIERS = ['nn', 'rf', 'xgboost', 'mlp'];
+    const checkboxes = document.querySelectorAll('.val-clf-header input:checked');
+    const checked = Array.from(checkboxes).map(cb => cb.value);
+    const pixelClf = checked.find(c => {
+        const base = c.replace(/_v\d+$/, '');
+        return PIXEL_CLASSIFIERS.includes(base);
+    });
+
+    if (!pixelClf) {
+        document.getElementById('val-status').textContent = 'Select a pixel-based classifier (k-NN, RF, XGBoost, or MLP) for map generation';
+        document.getElementById('val-status').style.color = '#dc3545';
+        return;
+    }
+
+    const btn = document.getElementById('val-create-map-btn');
+    const cancelBtn = document.getElementById('val-cancel-btn');
+    const status = document.getElementById('val-status');
+    btn.disabled = true;
+    btn.textContent = 'Creating Map...';
+    cancelBtn.style.display = '';
+    status.style.color = '#888';
+    status.textContent = 'Starting map generation...';
+
+    evalAbortController = new AbortController();
+    let userCancelled = false;
+
+    cancelBtn.onclick = () => {
+        userCancelled = true;
+        evalAbortController.abort();
+        fetch(evalUrl('cancel'), { method: 'POST' }).catch(() => {});
+    };
+
+    try {
+        const resp = await fetch(evalUrl('create-map'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                classifier: pixelClf,
+                map_bboxes: mapBboxes,
+            }),
+            signal: evalAbortController.signal,
+        });
+
+        if (!resp.ok) {
+            let msg = 'Map generation failed';
+            try { const data = await resp.json(); msg = data.error || msg; }
+            catch (_) { msg = `Server error (${resp.status})`; }
+            status.textContent = msg;
+            status.style.color = '#dc3545';
+            btn.disabled = false;
+            btn.textContent = 'Create Map';
+            cancelBtn.style.display = 'none';
+            return;
+        }
+
+        // Stream NDJSON progress
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        const readyMaps = [];
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    const ev = JSON.parse(line);
+                    if (ev.event === 'status') {
+                        status.textContent = ev.message;
+                        showResultsPanel(ev.message);
+                    } else if (ev.event === 'map_progress') {
+                        status.textContent = ev.message;
+                        showResultsPanel(`Map area ${ev.bbox_idx + 1}: chunk ${ev.chunk}/${ev.total_chunks}`);
+                    } else if (ev.event === 'map_ready') {
+                        readyMaps.push(ev);
+                        status.textContent = `Map area ${ev.bbox_idx + 1} ready (${ev.width}x${ev.height} pixels)`;
+                        status.style.color = '#28a745';
+                    } else if (ev.event === 'done') {
+                        // Download all ready maps
+                        for (const m of readyMaps) {
+                            const a = document.createElement('a');
+                            a.href = evalUrl(`download-map/${encodeURIComponent(m.name)}`);
+                            a.download = `${m.name}.tif`;
+                            a.click();
+                        }
+                        const elapsed = ev.elapsed_seconds || 0;
+                        status.textContent = `${readyMaps.length} map(s) generated in ${elapsed}s and downloading`;
+                        status.style.color = '#28a745';
+                    } else if (ev.event === 'error') {
+                        status.textContent = ev.message || 'Map generation error';
+                        status.style.color = '#dc3545';
+                    }
+                } catch (e) { }
+            }
+        }
+        if (buffer.trim()) {
+            try {
+                const ev = JSON.parse(buffer);
+                if (ev.event === 'error') {
+                    status.textContent = ev.message || 'Map generation error';
+                    status.style.color = '#dc3545';
+                }
+            } catch (e) { }
+        }
+
+    } catch (e) {
+        if (e.name === 'AbortError') {
+            status.textContent = userCancelled ? 'Cancelled by user' : 'Map generation timed out';
+            status.style.color = '#f0ad4e';
+        } else {
+            status.textContent = 'Map error: ' + e.message;
+            status.style.color = '#dc3545';
+        }
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Create Map';
+    cancelBtn.style.display = 'none';
+    evalAbortController = null;
+    updateCreateMapButton();
+}
 
 document.getElementById('cm-toggle-pct').addEventListener('click', function() {
     cmShowPct = !cmShowPct;
@@ -1767,6 +1922,7 @@ function updateBboxSummary() {
         el.textContent = parts.join(', ');
         el.style.color = '#ccc';
     }
+    updateCreateMapButton();
 }
 
 function ensureBboxFeatureGroup() {
