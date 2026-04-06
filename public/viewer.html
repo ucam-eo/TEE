@@ -4,6 +4,12 @@
     <meta charset="utf-8">
     <meta name="referrer" content="origin" />
     <title>TEE Viewer</title>
+    <script>
+    // Redirect validation mode to localhost when on HTTPS (evaluation needs HTTP)
+    if (window.location.protocol === 'https:' && new URLSearchParams(window.location.search).get('mode') === 'validation') {
+        window.location.href = 'http://localhost:8001/viewer.html?mode=validation';
+    }
+    </script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
