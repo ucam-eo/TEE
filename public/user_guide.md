@@ -277,6 +277,34 @@ Tiles are shuffled before extraction so patches come from diverse geographic reg
 
 > **Tip:** For pixel-only classifiers (k-NN, RF, etc.), no tiles are fetched — evaluation is much faster. Only select spatial MLP or U-Net when you need spatial context.
 
+### Spatial Train/Test Split (optional)
+
+By default, TEE uses a random train/test split — training and test pixels are randomly sampled from the entire shapefile area. This can lead to **spatial autocorrelation** where nearby pixels in train and test sets share similar features, inflating accuracy estimates.
+
+To get a more realistic evaluation, draw separate **train** and **test** areas on the satellite map:
+
+1. In the validation controls, find **Spatial split (optional)**
+2. Select **Train area (blue)** from the dropdown — drawing starts immediately
+3. Draw one or more rectangles on the satellite map covering your training region
+4. Select **Test area (purple)** and draw rectangles for your test region
+5. Click **Run Evaluation**
+
+| Area type | Color | Purpose |
+|-----------|-------|---------|
+| **Train** | Blue | Points inside these boxes are used for training. Learning curve percentages subsample from this pool. |
+| **Test** | Purple | Points inside these boxes are used for testing. The test set is fixed (not subsampled). |
+| **Map** | Green | Reserved for future classification map generation. |
+
+**Rules:**
+- If a point falls in both train and test areas, it goes to training (train takes priority)
+- Points outside all boxes are discarded
+- Click a rectangle to delete it
+- Use **Clear** to remove all rectangles
+- If no rectangles are drawn, a confirmation popup offers the default random split
+- Bounding boxes are saved in config files (Generate Config / Upload Config)
+
+> **Tip:** For valid spatial cross-validation, ensure train and test areas are geographically separated — e.g., train in the north, test in the south.
+
 ### Understanding the Learning Curve
 
 ```
