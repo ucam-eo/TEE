@@ -4,96 +4,25 @@
 
 // ── Compute server ──
 
-let _computeServerUrl = '';  // empty = use Django proxy (/api/evaluation/*)
-
 function evalUrl(path) {
-    // Route evaluation requests to direct compute server or Django proxy
-    if (_computeServerUrl) {
-        return _computeServerUrl.replace(/\/+$/, '') + '/api/evaluation/' + path;
-    }
     return '/api/evaluation/' + path;
 }
 
-function connectComputeServer() {
-    const input = document.getElementById('val-compute-url');
-    const status = document.getElementById('val-compute-status');
-    const url = input.value.trim();
-
-    if (!url) {
-        _computeServerUrl = '';
-        status.textContent = 'not connected';
-        status.style.background = '#dc3545';
-        return;
-    }
-
-    // Test connection
-    status.textContent = 'connecting...';
-    status.style.background = '#ffc107';
-    status.style.color = '#000';
-
-    fetch(url.replace(/\/+$/, '') + '/health', { mode: 'cors' })
-        .then(r => r.json())
-        .then(data => {
-            _computeServerUrl = url;
-            const host = data.compute_host || data.host || 'unknown';
-            status.textContent = host;
-            status.style.background = '#28a745';
-            status.style.color = '#fff';
-            // Save to localStorage
-            localStorage.setItem('tee_compute_url', url);
-        })
-        .catch(err => {
-            _computeServerUrl = '';
-            if (window.location.protocol === 'https:' && url.startsWith('http:')) {
-                status.textContent = 'blocked (HTTPS→HTTP)';
-                status.title = 'Browsers block HTTP requests from HTTPS pages. Use Option 1 (SSH tunnel on port 8001) or run TEE locally.';
-            } else {
-                status.textContent = 'failed';
-                status.title = 'Could not reach compute server. Is the SSH tunnel running?';
-            }
-            status.style.background = '#dc3545';
-            status.style.color = '#fff';
-        });
-}
-
-// Restore saved compute URL, or auto-detect via proxy
+// Auto-detect compute server via Django proxy
 (function() {
-    const saved = localStorage.getItem('tee_compute_url');
-    if (saved) {
-        const input = document.getElementById('val-compute-url');
-        if (input) {
-            input.value = saved;
-            setTimeout(connectComputeServer, 500);
-        }
-        return;
-    }
-
-    // No saved URL — try auto-detecting via Django proxy
     setTimeout(() => {
         fetch('/api/evaluation/health').then(r => r.json()).then(data => {
             if (data.compute_host) {
-                // Proxy works — try direct connection on common ports
-                const tryPorts = [8002, 5050];
-                for (const port of tryPorts) {
-                    fetch(`http://localhost:${port}/health`, { mode: 'cors' })
-                        .then(r => r.json())
-                        .then(d => {
-                            if (d.compute_host) {
-                                const input = document.getElementById('val-compute-url');
-                                if (input && !_computeServerUrl) {
-                                    input.value = `http://localhost:${port}`;
-                                    connectComputeServer();
-                                }
-                            }
-                        })
-                        .catch(() => {});
+                const status = document.getElementById('val-compute-status');
+                if (status) {
+                    status.textContent = data.compute_host;
+                    status.style.background = '#28a745';
+                    status.style.color = '#fff';
                 }
             }
         }).catch(() => {});
     }, 1000);
 })();
-
-window.connectComputeServer = connectComputeServer;
 
 // ── State ──
 
