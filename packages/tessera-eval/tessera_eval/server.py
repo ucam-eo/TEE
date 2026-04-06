@@ -242,8 +242,12 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
             logger.info("Tile %d/%d (%.2f, %.2f): %s, extracting patches...",
                         t_idx + 1, total_tiles, tlon, tlat, tile_emb.shape[:2])
 
-        # Reproject GDF to tile CRS for rasterization
-        tile_gdf = gdf.to_crs(crs)
+        # Filter GDF to tile area BEFORE reprojecting (avoids reprojecting 42K features)
+        tile_bbox_lonlat = _box(tlon - 0.06, tlat - 0.06, tlon + 0.06, tlat + 0.06)  # slight padding
+        tile_gdf = gdf[gdf.intersects(tile_bbox_lonlat)]
+        if tile_gdf.empty:
+            continue
+        tile_gdf = tile_gdf.to_crs(crs)
         tile_bounds = array_bounds(h, w, transform)
         tile_gdf = tile_gdf[tile_gdf.intersects(_box(*tile_bounds))]
         if tile_gdf.empty:
