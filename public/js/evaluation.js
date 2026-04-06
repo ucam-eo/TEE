@@ -50,17 +50,41 @@ function connectComputeServer() {
         });
 }
 
-// Restore saved compute URL on load
+// Restore saved compute URL, or auto-detect via proxy
 (function() {
     const saved = localStorage.getItem('tee_compute_url');
     if (saved) {
         const input = document.getElementById('val-compute-url');
         if (input) {
             input.value = saved;
-            // Auto-connect on load
             setTimeout(connectComputeServer, 500);
         }
+        return;
     }
+
+    // No saved URL — try auto-detecting via Django proxy
+    setTimeout(() => {
+        fetch('/api/evaluation/health').then(r => r.json()).then(data => {
+            if (data.compute_host) {
+                // Proxy works — try direct connection on common ports
+                const tryPorts = [8002, 5050];
+                for (const port of tryPorts) {
+                    fetch(`http://localhost:${port}/health`, { mode: 'cors' })
+                        .then(r => r.json())
+                        .then(d => {
+                            if (d.compute_host) {
+                                const input = document.getElementById('val-compute-url');
+                                if (input && !_computeServerUrl) {
+                                    input.value = `http://localhost:${port}`;
+                                    connectComputeServer();
+                                }
+                            }
+                        })
+                        .catch(() => {});
+                }
+            }
+        }).catch(() => {});
+    }, 1000);
 })();
 
 window.connectComputeServer = connectComputeServer;
