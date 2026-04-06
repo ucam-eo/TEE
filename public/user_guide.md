@@ -31,7 +31,7 @@ TEE (Tessera Embeddings Explorer) is a web-based tool for exploring, labelling, 
 
 ### Path 3: Evaluate classifiers
 
-1. In the Viewport Manager → **Validation** tab → **Open Validation**
+1. In the Viewport Manager → **Validation** tab → **Evaluate**
 2. Upload a ground-truth `.zip` shapefile → select a class field and year
 3. Check classifiers (k-NN, RF, XGBoost, MLP) → **Run Evaluation**
 4. View learning curves, confusion matrix, and download trained models
@@ -66,7 +66,7 @@ A **viewport** is a 5km × 5km area for which TEE downloads and processes Sentin
 
 ### Validation Tab
 
-Click **Open Validation** to launch the viewer in validation mode. Evaluation runs locally — no labels leave your machine. For GPU servers, see [Remote Compute Setup](#remote-compute-setup-gpu-server).
+Click **Evaluate** to launch the viewer in validation mode. Evaluation runs locally — no labels leave your machine. For GPU servers, see [Remote Compute Setup](#remote-compute-setup-gpu-server).
 
 ### Users Tab
 
@@ -220,7 +220,7 @@ Evaluate how well classifiers distinguish habitat classes using Tessera embeddin
 
 | Step | Panel | Action |
 |------|-------|--------|
-| 1 | — | In Viewport Manager → **Validation** tab → **Open Validation** |
+| 1 | — | In Viewport Manager → **Validation** tab → **Evaluate** |
 | 2 | 1 | Drag and drop a `.zip` shapefile onto the upload zone |
 | 3 | 2 | Verify polygons appear as red outlines on satellite |
 | 4 | 3 | Check the class table — polygon counts per class |
@@ -507,7 +507,7 @@ Browser → tee.cl.cam.ac.uk (UI, tiles, maps)
 **Step 2 — connect from the browser:**
 
 1. Open **https://tee.cl.cam.ac.uk**
-2. Go to **Validation** tab → **Open Validation**
+2. Go to **Validation** tab → **Evaluate**
 3. In the **Compute Server** section, enter `http://localhost:8002`
 4. Click **Connect** — the status badge turns green showing the GPU hostname
 5. Upload a shapefile and run evaluation — ML runs on the GPU server
