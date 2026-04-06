@@ -668,10 +668,12 @@
                         <a href="#" onclick="openFeedback(); return false;" style="color: #fff; text-decoration: none;">Feedback</a>
                     </div>
                 </div>
-                <div class="user-info" id="userInfo" style="display:none;">
-                    <span id="userName"></span>
-                    <button class="auth-btn" onclick="showChangePassword()">Password</button>
-                    <button class="logout-btn" onclick="doLogout()">Logout</button>
+                <div class="user-info" id="userInfo" style="display:none; flex-direction:column; align-items:flex-end; gap:2px;">
+                    <span id="userName" style="font-size:11px; opacity:0.9;"></span>
+                    <div>
+                        <button class="auth-btn" onclick="showChangePassword()">Password</button>
+                        <button class="logout-btn" onclick="doLogout()">Logout</button>
+                    </div>
                 </div>
                 <button class="login-btn" id="loginBtn" style="display:none;" onclick="window.location.href='/login.html'">Login</button>
             </div>
@@ -955,7 +957,7 @@
             if (data.logged_in && data.user) {
                 isLoggedIn = true;
                 currentUsername = data.user;
-                document.getElementById('userName').textContent = data.user;
+                document.getElementById('userName').textContent = 'User: ' + data.user;
                 document.getElementById('userInfo').style.display = '';
             }
             if (data.auth_enabled && !data.logged_in) {
@@ -2143,10 +2145,14 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
 
         function renderViewportGroup(heading, viewports, isOwner) {
             const items = viewports.map(vp => renderViewportItem(vp, isOwner)).join('');
+            const groupId = 'vg-' + heading.replace(/\W+/g, '-').toLowerCase();
             return `
                 <div style="margin-bottom: 16px;">
-                    <div style="font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; padding: 4px 0; border-bottom: 1px solid #eee; margin-bottom: 6px;">${heading}</div>
-                    ${items}
+                    <div onclick="document.getElementById('${groupId}').style.display = document.getElementById('${groupId}').style.display === 'none' ? '' : 'none'; this.querySelector('.vg-arrow').textContent = document.getElementById('${groupId}').style.display === 'none' ? '▸' : '▾';"
+                        style="font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; padding: 4px 0; border-bottom: 1px solid #eee; margin-bottom: 6px; cursor: pointer; user-select: none;">
+                        <span class="vg-arrow">▾</span> ${heading} (${viewports.length})
+                    </div>
+                    <div id="${groupId}">${items}</div>
                 </div>
             `;
         }
