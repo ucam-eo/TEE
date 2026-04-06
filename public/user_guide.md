@@ -475,7 +475,14 @@ ssh gpu-box '~/TEE/venv/bin/python3 -c "import torch; print(torch.cuda.is_availa
 
 **Updating later**
 
-SSH in and pull:
+Use the deploy script (included in the repo):
+```bash
+./scripts/deploy-compute.sh gpu-box                  # deploy + start tunnel
+./scripts/deploy-compute.sh gpu-box --install-torch  # also install/update PyTorch
+./scripts/deploy-compute.sh gpu-box --no-tunnel      # deploy only
+```
+
+Or manually:
 ```bash
 ssh gpu-box 'cd ~/TEE && git pull && ~/TEE/venv/bin/pip install -q -e "packages/tessera-eval[server]"'
 ```
@@ -503,6 +510,10 @@ cd ~/TEE
 
 Terminal 2 — replace local tee-compute with GPU tunnel:
 ```bash
+./scripts/deploy-compute.sh gpu-box
+```
+Or manually:
+```bash
 pkill -f tee-compute                    # stop the local tee-compute
 ssh -L 8002:localhost:5050 gpu-box 'OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050'
 ```
@@ -515,29 +526,50 @@ Open `http://localhost:8001`. The UI and tiles come from your laptop. When you c
 
 ---
 
-### Alternative B: Hosted UI + GPU Compute
+### Alternative B: Hosted UI + GPU Compute (recommended)
 
-The hosted TEE server (tee.cl.cam.ac.uk) provides the UI, tiles, and data. The GPU server runs ML evaluation. Nothing runs on your laptop except the browser and SSH tunnel.
+Open **tee.cl.cam.ac.uk** in your browser — no need to run Django locally. Start an SSH tunnel to your GPU server, then connect from the validation panel.
 
 ```
-Browser → localhost:8001 → SSH tunnel → gpu-box (tee-compute)
-                                            │
-                                            ├── /api/evaluation/* → runs ML on gpu-box
-                                            └── everything else   → proxied to tee.cl.cam.ac.uk
+Browser → tee.cl.cam.ac.uk (UI, tiles, maps)
+    │
+    └── Evaluation requests → localhost:8002 → SSH tunnel → gpu-box (tee-compute)
 ```
 
-**Each session — one command from your laptop:**
+**Step 1 — start the tunnel:**
 ```bash
-ssh -L 8001:localhost:5050 gpu-box 'OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050'
+./scripts/deploy-compute.sh gpu-box
+```
+Or manually:
+```bash
+ssh -L 8002:localhost:5050 gpu-box 'OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050'
 ```
 
-Open `http://localhost:8001`. The UI comes from tee.cl.cam.ac.uk (via proxy), evaluation runs on the GPU server.
+**Step 2 — connect from the browser:**
 
-> **Tip:** Add an alias to `~/.zshrc` or `~/.bashrc`:
-> ```bash
-> alias tee-gpu='ssh -L 8001:localhost:5050 gpu-box "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050"'
-> ```
-> Then just type `tee-gpu` to start a session.
+1. Open **https://tee.cl.cam.ac.uk**
+2. Go to **Validation** tab → **Open Validation**
+3. In the **Compute Server** section, enter `http://localhost:8002`
+4. Click **Connect** — the status badge turns green showing the GPU hostname
+5. Upload a shapefile and run evaluation — ML runs on the GPU server
+
+No URL switching needed. Everything stays on tee.cl.cam.ac.uk.
+
+> **Tip:** The compute URL is saved in your browser, so you only enter it once.
+
+### Alternative C: Local UI + GPU Compute
+
+If you prefer running the full TEE UI locally (e.g., for offline label editing), use this mode instead.
+
+```
+Browser → localhost:8001 → Django (your laptop)
+                               │
+                               └── /api/evaluation/* → tunnel → gpu-box (tee-compute)
+```
+
+**Each session — open two terminals on your laptop:**
+
+This is the old "Alternative A" — see above for the two-terminal setup.
 
 ### Command Reference
 
