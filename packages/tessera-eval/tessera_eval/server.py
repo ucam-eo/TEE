@@ -122,14 +122,12 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
     rng = np.random.RandomState(42)
 
-    # Try zarr for faster reads
-    global _zarr_instance
-    if _zarr_instance is None:
-        _zarr_instance = _try_zarr()
-    gtz = _zarr_instance
-    use_zarr = gtz is not None
+    # Use NPY tiles (with local caching via embeddings_dir) — zarr v2 store
+    # has incomplete coverage for some regions, returning all-NaN values.
+    # TODO: re-enable zarr when store coverage matches NPY tiles.
+    use_zarr = False
     if logger:
-        logger.info("Using %s for tile reads", "zarr (fast)" if use_zarr else "NPY downloads")
+        logger.info("Using NPY tiles with local cache")
 
     # Find tiles overlapping the shapefile
     bounds = gdf.total_bounds
