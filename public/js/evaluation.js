@@ -85,6 +85,69 @@ const REGRESSOR_LABELS = { nn_reg: 'k-NN (Reg)', rf_reg: 'Random Forest (Reg)', 
 Object.assign(CLASSIFIER_COLORS, REGRESSOR_COLORS);
 Object.assign(CLASSIFIER_LABELS, REGRESSOR_LABELS);
 
+// ── Hyperparameter variant helpers ──
+
+/**
+ * Strip variant suffix from a classifier name (e.g., "mlp_v2" -> "mlp").
+ */
+function variantBaseName(name) {
+    return name.replace(/_v\d+$/, '');
+}
+
+/**
+ * Parse variant index from a name (e.g., "mlp_v2" -> 2, "mlp" -> 0).
+ */
+function variantIndex(name) {
+    const m = name.match(/_v(\d+)$/);
+    return m ? parseInt(m[1]) : 0;
+}
+
+/**
+ * Get color for a variant name. Base classifiers use their standard color.
+ * Variants derive lighter/darker shades from the base color.
+ */
+function getVariantColor(name) {
+    // Check if there's a direct entry (base name or already registered)
+    if (CLASSIFIER_COLORS[name]) return CLASSIFIER_COLORS[name];
+
+    const base = variantBaseName(name);
+    const baseColor = CLASSIFIER_COLORS[base];
+    if (!baseColor) return { line: '#888', fill: 'rgba(136,136,136,0.15)' };
+
+    const idx = variantIndex(name);
+    // Parse base RGBA
+    const m = baseColor.line.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (!m) return baseColor;
+
+    let r = parseInt(m[1]), g = parseInt(m[2]), b = parseInt(m[3]);
+    // Shift hue by alternating lighter/darker shades
+    const shift = (idx % 2 === 0) ? 40 * Math.ceil(idx / 2) : -40 * Math.ceil(idx / 2);
+    r = Math.max(0, Math.min(255, r + shift));
+    g = Math.max(0, Math.min(255, g + shift));
+    b = Math.max(0, Math.min(255, b + shift));
+
+    const color = { line: `rgba(${r}, ${g}, ${b}, 1)`, fill: `rgba(${r}, ${g}, ${b}, 0.15)` };
+    // Cache for future lookups
+    CLASSIFIER_COLORS[name] = color;
+    return color;
+}
+
+/**
+ * Get a human-readable label for a variant name.
+ * E.g., "mlp_v2" -> "MLP (v2)", "rf" -> "Random Forest".
+ */
+function getVariantLabel(name) {
+    if (CLASSIFIER_LABELS[name]) return CLASSIFIER_LABELS[name];
+
+    const base = variantBaseName(name);
+    const idx = variantIndex(name);
+    const baseLabel = CLASSIFIER_LABELS[base] || base;
+    const label = idx > 0 ? `${baseLabel} (v${idx})` : baseLabel;
+    // Cache for future lookups
+    CLASSIFIER_LABELS[name] = label;
+    return label;
+}
+
 // ── Helper functions ──
 
 function buildClassColorMap(geojson, fieldName) {
@@ -377,12 +440,12 @@ function createStreamChart(classifierNames) {
     const datasets = [];
     streamDatasetMap = {};
     classifierNames.forEach(name => {
-        const color = CLASSIFIER_COLORS[name] || { line: '#888', fill: 'rgba(136,136,136,0.15)' };
+        const color = getVariantColor(name);
         const baseIdx = datasets.length;
         streamDatasetMap[name] = baseIdx;
 
         datasets.push({
-            label: CLASSIFIER_LABELS[name] || name,
+            label: getVariantLabel(name),
             data: [],
             borderColor: color.line,
             backgroundColor: 'transparent',
@@ -459,10 +522,10 @@ function showFinishButtons(classifierNames) {
     container.innerHTML = '';
     container.style.display = 'flex';
     classifierNames.forEach(name => {
-        const color = CLASSIFIER_COLORS[name] || { line: '#888' };
+        const color = getVariantColor(name);
         const btn = document.createElement('button');
         btn.id = 'finish-' + name;
-        btn.textContent = 'Finish ' + (CLASSIFIER_LABELS[name] || name);
+        btn.textContent = 'Finish ' + getVariantLabel(name);
         btn.style.cssText = `padding:4px 12px;border:1px solid ${color.line};border-radius:12px;background:transparent;color:${color.line};font-size:12px;cursor:pointer;`;
         btn.onclick = () => {
             fetch(evalUrl('finish-classifier'), {
@@ -717,11 +780,11 @@ function renderChart(data, metric) {
     const datasets = [];
     streamDatasetMap = {};
     for (const [name, values] of Object.entries(data.classifiers)) {
-        const color = CLASSIFIER_COLORS[name] || { line: '#888', fill: 'rgba(136,136,136,0.15)' };
+        const color = getVariantColor(name);
         streamDatasetMap[name] = datasets.length;
 
         datasets.push({
-            label: CLASSIFIER_LABELS[name] || name,
+            label: getVariantLabel(name),
             data: data.training_pcts.map((x, i) => ({ x, y: values[meanKey][i] })),
             borderColor: color.line,
             backgroundColor: 'transparent',
@@ -833,7 +896,7 @@ function renderConfusionMatrix(data) {
     names2.forEach(n => {
         const opt = document.createElement('option');
         opt.value = n;
-        opt.textContent = CLASSIFIER_LABELS[n] || n;
+        opt.textContent = getVariantLabel(n);
         sel.appendChild(opt);
     });
     sel.style.display = names2.length > 1 ? '' : 'none';
@@ -908,7 +971,7 @@ function openCMPopup(classifierName, data) {
     }
 
     const tableHTML = buildCMTableHTML(cm, labels, cmShowPct, true);
-    const classifierLabel = CLASSIFIER_LABELS[classifierName] || classifierName;
+    const classifierLabel = getVariantLabel(classifierName);
 
     overlay.innerHTML = `
         <div style="background:#1a1a2e; border-radius:8px; padding:20px; max-width:90vw; max-height:90vh; overflow:auto; position:relative;">
@@ -928,7 +991,7 @@ function openCMPopup(classifierName, data) {
     Object.keys(data.confusion_matrices).forEach(n => {
         const opt = document.createElement('option');
         opt.value = n;
-        opt.textContent = CLASSIFIER_LABELS[n] || n;
+        opt.textContent = getVariantLabel(n);
         if (n === classifierName) opt.selected = true;
         sel.appendChild(opt);
     });
@@ -1065,18 +1128,25 @@ function generateConfig() {
         const name = cb.value;
         // Skip spatial classifiers for large-area mode
         if (name === 'spatial_mlp' || name === 'spatial_mlp_5x5' || name === 'unet') return;
-        const params = {};
+        // Collect params grouped by variant index
+        const variantSets = {};
         document.querySelectorAll(`.val-params input[data-clf="${name}"], .val-params select[data-clf="${name}"]`).forEach(el => {
+            const variantIdx = parseInt(el.dataset.variant || '0');
+            if (!variantSets[variantIdx]) variantSets[variantIdx] = {};
             const val = el.value.trim();
             if (val === '') return;
             const num = Number(val);
-            params[el.dataset.param] = isNaN(num) ? val : num;
+            variantSets[variantIdx][el.dataset.param] = isNaN(num) ? val : num;
         });
+        const indices = Object.keys(variantSets).map(Number).sort();
+        const paramValue = indices.length <= 1
+            ? (variantSets[indices[0]] || {})
+            : indices.map(i => variantSets[i] || {});
         // Guess: if name ends with _reg it's a regressor, otherwise classifier
         if (name.endsWith('_reg')) {
-            regressors[name] = params;
+            regressors[name] = paramValue;
         } else {
-            classifiers[name] = params;
+            classifiers[name] = paramValue;
         }
     });
 
@@ -1140,17 +1210,33 @@ async function runLargeAreaEvaluation() {
     }
 
     const params = {};
+    // Collect params per classifier, grouping by variant index.
+    // Elements with data-variant="N" (N >= 1) belong to variant N.
+    // Elements without data-variant (or data-variant="0") are the base set.
+    const variantSets = {}; // clf -> { variantIdx -> {param: value} }
     document.querySelectorAll('.val-params input, .val-params select').forEach(el => {
         const clf = el.dataset.clf;
         const param = el.dataset.param;
         if (!clf || !param) return;
         if (!classifiers.includes(clf)) return;
-        if (!params[clf]) params[clf] = {};
+        const variantIdx = parseInt(el.dataset.variant || '0');
+        if (!variantSets[clf]) variantSets[clf] = {};
+        if (!variantSets[clf][variantIdx]) variantSets[clf][variantIdx] = {};
         const val = el.value.trim();
         if (val === '') return;
         const num = Number(val);
-        params[clf][param] = isNaN(num) ? val : num;
+        variantSets[clf][variantIdx][param] = isNaN(num) ? val : num;
     });
+    // Convert to server format: single object or list of objects
+    for (const clf of classifiers) {
+        const sets = variantSets[clf] || { 0: {} };
+        const indices = Object.keys(sets).map(Number).sort();
+        if (indices.length <= 1) {
+            params[clf] = sets[indices[0]] || {};
+        } else {
+            params[clf] = indices.map(i => sets[i] || {});
+        }
+    }
 
     const btn = document.getElementById('val-run-btn');
     const cancelBtn = document.getElementById('val-cancel-btn');
@@ -1298,7 +1384,7 @@ function initResultsTable(modelNames, task) {
     const metric = task === 'regression' ? 'R²' : 'F1';
     thead.innerHTML = '<th style="text-align:left; padding:6px;">Training labels</th>'
         + modelNames.map(n =>
-            `<th style="text-align:right; padding:6px;">${CLASSIFIER_LABELS[n] || n} (${metric})</th>`
+            `<th style="text-align:right; padding:6px;">${getVariantLabel(n)} (${metric})</th>`
         ).join('');
     tbody.innerHTML = '';
 }
@@ -1339,9 +1425,9 @@ function renderRegressionResults(aggregate) {
     for (const [name, metrics] of Object.entries(aggregate)) {
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #333';
-        const color = CLASSIFIER_COLORS[name] || { line: '#888' };
+        const color = getVariantColor(name);
         tr.innerHTML = `
-            <td style="padding:6px;"><span style="color:${color.line}">\u25cf</span> ${CLASSIFIER_LABELS[name] || name}</td>
+            <td style="padding:6px;"><span style="color:${color.line}">\u25cf</span> ${getVariantLabel(name)}</td>
             <td style="text-align:right; padding:6px;">${metrics.mean_r2.toFixed(4)} \u00b1 ${metrics.std_r2.toFixed(4)}</td>
             <td style="text-align:right; padding:6px;">${metrics.mean_rmse.toFixed(4)} \u00b1 ${metrics.std_rmse.toFixed(4)}</td>
             <td style="text-align:right; padding:6px;">${metrics.mean_mae.toFixed(4)} \u00b1 ${metrics.std_mae.toFixed(4)}</td>
@@ -1396,12 +1482,12 @@ function renderRegressionBarChart(aggregate) {
     const modelNames = Object.keys(aggregate);
     const r2Values = modelNames.map(n => aggregate[n].mean_r2);
     const r2Std = modelNames.map(n => aggregate[n].std_r2);
-    const colors = modelNames.map(n => (CLASSIFIER_COLORS[n] || { line: '#888' }).line);
+    const colors = modelNames.map(n => getVariantColor(n).line);
 
     valChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: modelNames.map(n => CLASSIFIER_LABELS[n] || n),
+            labels: modelNames.map(n => getVariantLabel(n)),
             datasets: [{
                 label: 'R\u00b2',
                 data: r2Values,
@@ -1447,12 +1533,12 @@ function renderClassificationBarChart(aggregate) {
     const modelNames = Object.keys(aggregate);
     const f1Values = modelNames.map(n => aggregate[n].mean_f1);
     const f1Std = modelNames.map(n => aggregate[n].std_f1);
-    const colors = modelNames.map(n => (CLASSIFIER_COLORS[n] || { line: '#888' }).line);
+    const colors = modelNames.map(n => getVariantColor(n).line);
 
     valChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: modelNames.map(n => CLASSIFIER_LABELS[n] || n),
+            labels: modelNames.map(n => getVariantLabel(n)),
             datasets: [{
                 label: 'Macro F1',
                 data: f1Values,
@@ -1585,12 +1671,24 @@ function applyConfig(config) {
         if (cb) cb.checked = true;
     }
 
-    // Set classifier params
+    // Set classifier params (supports both object and list-of-objects format)
     const allParams = { ...(config.classifiers || {}), ...(config.regressors || {}) };
-    for (const [clf, params] of Object.entries(allParams)) {
-        for (const [param, value] of Object.entries(params)) {
-            const el = document.querySelector(`.val-params [data-clf="${clf}"][data-param="${param}"]`);
-            if (el) el.value = value;
+    for (const [clf, paramValue] of Object.entries(allParams)) {
+        if (Array.isArray(paramValue)) {
+            // Multiple variants: first remove existing variant rows, then create them
+            removeAllVariants(clf);
+            paramValue.forEach((variantParams, i) => {
+                if (i > 0) addVariant(clf);
+                for (const [param, value] of Object.entries(variantParams)) {
+                    const el = document.querySelector(`.val-params [data-clf="${clf}"][data-param="${param}"][data-variant="${i}"]`);
+                    if (el) el.value = value;
+                }
+            });
+        } else {
+            for (const [param, value] of Object.entries(paramValue)) {
+                const el = document.querySelector(`.val-params [data-clf="${clf}"][data-param="${param}"]`);
+                if (el) el.value = value;
+            }
         }
     }
 
@@ -1869,6 +1967,130 @@ function restoreValidationState() {
     updateMaxTrainPctHint();
 }
 window.restoreValidationState = restoreValidationState;
+
+// ── Hyperparameter variant UI ──
+
+/**
+ * Add a variant parameter set to a classifier's params block.
+ * Duplicates the base (variant 0) parameter inputs with a new variant index.
+ */
+function addVariant(clfName) {
+    const block = document.querySelector(`.val-clf-block input[value="${clfName}"]`);
+    if (!block) return;
+    const paramsDiv = block.closest('.val-clf-block').querySelector('.val-params');
+    if (!paramsDiv) return;
+
+    // Find current max variant index
+    const existing = paramsDiv.querySelectorAll(`[data-clf="${clfName}"]`);
+    let maxVariant = 0;
+    existing.forEach(el => {
+        const v = parseInt(el.dataset.variant || '0');
+        if (v > maxVariant) maxVariant = v;
+    });
+    const newIdx = maxVariant + 1;
+
+    // Find all base (variant 0) inputs to clone
+    const baseInputs = paramsDiv.querySelectorAll(`[data-clf="${clfName}"][data-variant="0"], [data-clf="${clfName}"]:not([data-variant])`);
+    if (baseInputs.length === 0) return;
+
+    // Create a separator + label
+    const sep = document.createElement('div');
+    sep.className = 'val-variant-sep';
+    sep.dataset.variant = newIdx;
+    sep.dataset.clf = clfName;
+    sep.style.cssText = 'width:100%; border-top:1px dashed #555; margin:6px 0 2px 0; padding-top:2px; display:flex; align-items:center; justify-content:space-between; font-size:11px; color:#999;';
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = `v${newIdx}`;
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.textContent = '\u2212';
+    removeBtn.title = 'Remove this variant';
+    removeBtn.style.cssText = 'background:none; border:1px solid #666; color:#f66; font-size:14px; line-height:1; width:20px; height:20px; border-radius:50%; cursor:pointer; padding:0;';
+    removeBtn.onclick = () => removeVariant(clfName, newIdx);
+    sep.appendChild(labelSpan);
+    sep.appendChild(removeBtn);
+    paramsDiv.appendChild(sep);
+
+    // Clone each base input
+    baseInputs.forEach(el => {
+        const label = el.closest('label');
+        if (!label) return;
+        const newLabel = label.cloneNode(true);
+        const newInput = newLabel.querySelector('input, select');
+        if (newInput) {
+            newInput.dataset.variant = String(newIdx);
+            // Reset to default value
+            if (newInput.tagName === 'SELECT') {
+                newInput.selectedIndex = 0;
+            }
+        }
+        newLabel.dataset.variant = newIdx;
+        paramsDiv.appendChild(newLabel);
+    });
+
+    // Ensure the "+" button is visible (it should already be)
+    updateVariantButtonState(clfName);
+}
+
+/**
+ * Remove a variant parameter set.
+ */
+function removeVariant(clfName, variantIdx) {
+    const block = document.querySelector(`.val-clf-block input[value="${clfName}"]`);
+    if (!block) return;
+    const paramsDiv = block.closest('.val-clf-block').querySelector('.val-params');
+    if (!paramsDiv) return;
+
+    // Remove separator
+    const sep = paramsDiv.querySelector(`.val-variant-sep[data-clf="${clfName}"][data-variant="${variantIdx}"]`);
+    if (sep) sep.remove();
+
+    // Remove all inputs for this variant
+    paramsDiv.querySelectorAll(`[data-variant="${variantIdx}"]`).forEach(el => {
+        const label = el.closest('label');
+        if (label && label.dataset.variant == variantIdx) {
+            label.remove();
+        } else if (el.classList && el.classList.contains('val-variant-sep')) {
+            el.remove();
+        }
+    });
+
+    updateVariantButtonState(clfName);
+}
+
+/**
+ * Remove all variant parameter sets (keep only base variant 0).
+ */
+function removeAllVariants(clfName) {
+    const block = document.querySelector(`.val-clf-block input[value="${clfName}"]`);
+    if (!block) return;
+    const paramsDiv = block.closest('.val-clf-block').querySelector('.val-params');
+    if (!paramsDiv) return;
+
+    // Remove all variant separators and variant-labelled inputs
+    paramsDiv.querySelectorAll('.val-variant-sep').forEach(el => {
+        if (el.dataset.clf === clfName) el.remove();
+    });
+    paramsDiv.querySelectorAll('[data-variant]').forEach(el => {
+        const v = parseInt(el.dataset.variant);
+        if (v > 0) {
+            const label = el.closest('label');
+            if (label && parseInt(label.dataset.variant) > 0) {
+                label.remove();
+            }
+        }
+    });
+}
+
+/**
+ * Update the "+" button visibility for a classifier.
+ */
+function updateVariantButtonState(clfName) {
+    // No-op for now; the button is always visible
+}
+
+window.addVariant = addVariant;
+window.removeVariant = removeVariant;
 
 window.uploadShapefile = uploadShapefile;
 window.runEvaluation = runEvaluation;
