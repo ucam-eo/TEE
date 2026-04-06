@@ -1718,9 +1718,8 @@ function clearAllBboxes() {
     }
     spatialBboxes = { train: [], test: [], map: [] };
     updateBboxSummary();
-    // Re-enable map dragging
     const map = window.maps && window.maps.rgb;
-    if (map) map.dragging.enable();
+    if (map) { map.dragging.enable(); map.getContainer().style.cursor = ''; }
     // Reset dropdown to placeholder
     const typeSel = document.getElementById('val-bbox-type');
     if (typeSel) typeSel.selectedIndex = 0;
@@ -1751,7 +1750,7 @@ function toggleBboxDraw() {
     if (bboxDrawHandler) {
         bboxDrawHandler.disable();
         bboxDrawHandler = null;
-        if (map) map.dragging.enable();
+        if (map) { map.dragging.enable(); map.getContainer().style.cursor = ''; }
         return;
     }
     if (!map || typeof L.Draw === 'undefined') return;
@@ -1765,6 +1764,7 @@ function toggleBboxDraw() {
         shapeOptions: { ...style },
     });
     map.dragging.disable();
+    map.getContainer().style.cursor = 'crosshair';
     bboxDrawHandler.enable();
 }
 
@@ -1788,7 +1788,7 @@ document.getElementById('val-bbox-type').addEventListener('change', function() {
     const map = window.maps && window.maps.rgb;
     if (!this.value) {
         // Placeholder selected — stop drawing, re-enable pan
-        if (map) map.dragging.enable();
+        if (map) { map.dragging.enable(); map.getContainer().style.cursor = ''; }
         return;
     }
     currentBboxType = this.value;
