@@ -593,6 +593,7 @@ def run_large_area():
         all_sample_points = None  # (lon, lat) coordinates of all sample points
         all_valid_mask = None     # boolean mask: True for points with valid embeddings
 
+        has_spatial_bboxes = bool(train_bboxes or test_bboxes)
         if _tile_cache["key"] == cache_key and _tile_cache["vectors"] is not None:
             vectors = _tile_cache["vectors"]
             labels = _tile_cache["labels"]
@@ -610,10 +611,14 @@ def run_large_area():
                 logger.info("Spatial features needed but not cached — reloading tiles")
                 vectors = None  # force reload
 
+            # If spatial bboxes but no sample point coordinates cached, must reload
+            if has_spatial_bboxes and all_sample_points is None:
+                logger.info("Spatial split needs point coordinates — reloading tiles")
+                vectors = None  # force reload
+
         if vectors is None:
             # Check disk result cache (much smaller than raw tiles)
             cached_result = _load_cached_result(field_name, year, gdf, sampling)
-            has_spatial_bboxes = bool(train_bboxes or test_bboxes)
             if cached_result and not needs_spatial_3x3 and not needs_spatial_5x5 and not needs_unet and not has_spatial_bboxes:
                 vectors, labels, class_names, stats = cached_result
                 logger.info("Disk result cache hit for %s/%s (%d pixels)", field_name, year, len(labels))
