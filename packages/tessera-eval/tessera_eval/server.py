@@ -982,6 +982,9 @@ def run_large_area():
             if n_test == 0:
                 yield json.dumps({"event": "error", "message": "No sample points in test bounding boxes"}) + "\n"
                 return
+            if n_test < 100:
+                logger.warning("Very small test set (%d pixels) — results may be unreliable", n_test)
+                yield json.dumps({"event": "status", "message": f"Warning: only {int(n_test)} test pixels — results may be unreliable. Consider enlarging test area."}) + "\n"
 
             spatial_train_vectors = vectors[train_mask]
             spatial_train_labels = labels[train_mask]
