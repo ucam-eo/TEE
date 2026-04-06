@@ -835,12 +835,48 @@
                     <button onclick="window.location.href='viewer.html?mode=validation'" style="padding:10px 24px; background:#667eea; color:white; border:none; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; width:100%;">
                         Open Validation
                     </button>
-                    <p style="font-size:12px; color:#888; margin-top:12px; line-height:1.5;">
-                        Evaluate classifiers on ground-truth shapefiles at any scale.
-                        Runs locally (no labels leave your desktop) or on a
-                        <a href="/user_guide.html#remote-compute-setup-gpu-server" target="_blank" style="color:#667eea;">compute server</a>.
-                    </p>
-                    <div style="margin-top:16px; border:1px solid #e0e0e0; border-radius:8px; overflow:hidden; height:400px;">
+
+                    <div style="margin-top:16px; font-size:12px; color:#555; line-height:1.6;">
+                        <p style="margin:0 0 10px; color:#888;">
+                            Evaluate classifiers on ground-truth shapefiles at any scale. Your labels never leave your machine.
+                        </p>
+
+                        <h4 style="margin:12px 0 6px; color:#333; font-size:13px;">How to run evaluation</h4>
+                        <p style="margin:0 0 8px; color:#666;">Choose one of these three options:</p>
+
+                        <div style="display:flex; flex-direction:column; gap:10px;">
+                            <div style="padding:10px; border:1px solid #e0e0e0; border-radius:6px; background:#f8f9ff;">
+                                <strong style="color:#667eea;">Option 1: Hosted + GPU server</strong> <span style="font-size:11px; color:#28a745; font-weight:600;">(recommended)</span>
+                                <p style="margin:4px 0 0; color:#666; font-size:11px;">
+                                    Stay on this website. Start an SSH tunnel to your GPU server, then connect from the validation panel.<br>
+                                    <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./scripts/deploy-compute.sh gpu-box</code>
+                                    &rarr; enter <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">http://localhost:8002</code> in Compute Server.
+                                </p>
+                            </div>
+                            <div style="padding:10px; border:1px solid #e0e0e0; border-radius:6px;">
+                                <strong style="color:#555;">Option 2: All local</strong>
+                                <p style="margin:4px 0 0; color:#666; font-size:11px;">
+                                    Run everything on your laptop. No GPU needed for pixel classifiers (k-NN, RF, XGBoost).<br>
+                                    <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">cd ~/TEE && ./restart.sh</code>
+                                    &rarr; open <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">http://localhost:8001</code>
+                                </p>
+                            </div>
+                            <div style="padding:10px; border:1px solid #e0e0e0; border-radius:6px;">
+                                <strong style="color:#555;">Option 3: Local UI + GPU server</strong>
+                                <p style="margin:4px 0 0; color:#666; font-size:11px;">
+                                    Run Django locally for offline labelling, tunnel evaluation to a GPU server.<br>
+                                    <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./restart.sh</code> then
+                                    <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./scripts/deploy-compute.sh gpu-box</code>
+                                </p>
+                            </div>
+                        </div>
+
+                        <p style="margin:10px 0 0;">
+                            <a href="/user_guide.html#running-evaluation-on-your-own-machines" target="_blank" style="color:#667eea; font-size:11px;">Full setup guide &rarr;</a>
+                        </p>
+                    </div>
+
+                    <div style="margin-top:16px; border:1px solid #e0e0e0; border-radius:8px; overflow:hidden; height:350px;">
                         <iframe src="https://geotessera.org/coverage/"
                             style="width:100%; height:100%; border:none;"
                             title="GeoTessera embedding coverage map"></iframe>

@@ -489,46 +489,9 @@ ssh gpu-box 'cd ~/TEE && git pull && ~/TEE/venv/bin/pip install -q -e "packages/
 
 ---
 
-### Alternative A: Local UI + GPU Compute
+### Option 1: Hosted + GPU Server (recommended)
 
-Your laptop runs the TEE UI, tiles, and data. The GPU server runs only ML evaluation.
-
-```
-Browser → localhost:8001 → Django (your laptop)
-                               │
-                               └── /api/evaluation/* → tunnel → gpu-box (tee-compute)
-```
-
-**Each session — open two terminals on your laptop:**
-
-Terminal 1 — start Django:
-```bash
-cd ~/TEE
-./restart.sh
-# This starts Django on :8001 and local tee-compute on :8002
-```
-
-Terminal 2 — replace local tee-compute with GPU tunnel:
-```bash
-./scripts/deploy-compute.sh gpu-box
-```
-Or manually:
-```bash
-pkill -f tee-compute                    # stop the local tee-compute
-ssh -L 8002:localhost:5050 gpu-box 'OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050'
-```
-
-Open `http://localhost:8001`. The UI and tiles come from your laptop. When you click Run Evaluation, the ML runs on the GPU server. Click **Status** in the header to confirm — it should show the GPU server hostname under "Compute".
-
-> **Why port 5050?** Port 8001 may already be in use on the GPU server. The tunnel maps your local port 8002 to the server's port 5050. Django automatically proxies evaluation requests to localhost:8002.
->
-> **Why OPENBLAS_NUM_THREADS=1?** Servers with >128 CPU cores crash OpenBLAS if threads aren't limited. Setting to 1 lets sklearn's joblib handle parallelism instead.
-
----
-
-### Alternative B: Hosted UI + GPU Compute (recommended)
-
-Open **tee.cl.cam.ac.uk** in your browser — no need to run Django locally. Start an SSH tunnel to your GPU server, then connect from the validation panel.
+Use the hosted TEE website for everything. Start an SSH tunnel to your GPU server, then connect from the validation panel. Nothing else to install or run.
 
 ```
 Browser → tee.cl.cam.ac.uk (UI, tiles, maps)
@@ -540,10 +503,6 @@ Browser → tee.cl.cam.ac.uk (UI, tiles, maps)
 ```bash
 ./scripts/deploy-compute.sh gpu-box
 ```
-Or manually:
-```bash
-ssh -L 8002:localhost:5050 gpu-box 'OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050'
-```
 
 **Step 2 — connect from the browser:**
 
@@ -553,13 +512,30 @@ ssh -L 8002:localhost:5050 gpu-box 'OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/T
 4. Click **Connect** — the status badge turns green showing the GPU hostname
 5. Upload a shapefile and run evaluation — ML runs on the GPU server
 
-No URL switching needed. Everything stays on tee.cl.cam.ac.uk.
+No URL switching needed. The compute URL is saved in your browser.
 
-> **Tip:** The compute URL is saved in your browser, so you only enter it once.
+---
 
-### Alternative C: Local UI + GPU Compute
+### Option 2: All Local
 
-If you prefer running the full TEE UI locally (e.g., for offline label editing), use this mode instead.
+Run everything on your laptop. No GPU needed for pixel classifiers (k-NN, RF, XGBoost, MLP). Good for small shapefiles and offline use.
+
+```
+Browser → localhost:8001 → Django + tee-compute (your laptop)
+```
+
+```bash
+cd ~/TEE
+./restart.sh
+```
+
+Open `http://localhost:8001`. Both the UI and ML evaluation run on your laptop.
+
+---
+
+### Option 3: Local UI + GPU Server
+
+Run Django locally (for offline labelling and data privacy), but offload ML to a GPU server.
 
 ```
 Browser → localhost:8001 → Django (your laptop)
@@ -567,9 +543,23 @@ Browser → localhost:8001 → Django (your laptop)
                                └── /api/evaluation/* → tunnel → gpu-box (tee-compute)
 ```
 
-**Each session — open two terminals on your laptop:**
+**Two terminals on your laptop:**
 
-This is the old "Alternative A" — see above for the two-terminal setup.
+Terminal 1 — start Django:
+```bash
+cd ~/TEE && ./restart.sh
+```
+
+Terminal 2 — connect GPU server:
+```bash
+./scripts/deploy-compute.sh gpu-box
+```
+
+Open `http://localhost:8001`. The UI comes from your laptop, ML runs on the GPU server. Click **Status** to confirm.
+
+> **Why port 5050?** Port 8001 may already be in use on the GPU server. The tunnel maps your local port 8002 to the server's port 5050. Django proxies evaluation requests to localhost:8002.
+>
+> **Why OPENBLAS_NUM_THREADS=1?** Servers with >128 CPU cores crash OpenBLAS if threads aren't limited. The deploy script sets this automatically.
 
 ### Command Reference
 
