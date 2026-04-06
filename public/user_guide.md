@@ -1,5 +1,7 @@
 # TEE User Guide
 
+> **Latest version:** This guide is also available on [GitHub](https://github.com/ucam-eo/TEE/blob/main/public/user_guide.md), which may be more up to date than the version bundled with the hosted server.
+
 ## What is TEE?
 
 TEE (Tessera Embeddings Explorer) is a web-based tool for exploring, labelling, and evaluating Sentinel-2 satellite embeddings. With TEE you can:
@@ -422,7 +424,9 @@ All ML evaluation runs on a compute server (`tee-compute`). The hosted TEE serve
 
 ### Setting Up a GPU Server
 
-Before using either alternative below, set up the GPU server once:
+You don't need Docker — just the git repo and a Python virtual environment on your server. The deploy script handles everything else (pulling code, installing dependencies, starting the tunnel).
+
+Set up the GPU server once:
 
 **Step 0: Open a terminal**
 
