@@ -21,12 +21,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-geotessera = ["geotessera>=0.7.5"]
+geotessera = ["geotessera>=0.8.0"]
 xgboost = ["xgboost>=1.7"]
 torch = ["torch>=2.0"]
 plot = ["matplotlib>=3.5"]
-server = ["flask>=3.0", "waitress>=2.1", "requests>=2.28", "geotessera>=0.7.5"]
-all = ["geotessera>=0.7.5", "xgboost>=1.7", "matplotlib>=3.5"]
+server = ["flask>=3.0", "waitress>=2.1", "requests>=2.28", "geotessera>=0.8.0"]
+all = ["geotessera>=0.8.0", "xgboost>=1.7", "matplotlib>=3.5"]
 
 [project.scripts]
 tee-compute = "tessera_eval.server:main"

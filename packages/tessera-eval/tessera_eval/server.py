@@ -90,6 +90,17 @@ def _load_cached_result(field, year, gdf, sampling="equal"):
     return None
 
 
+def _try_zarr():
+    """Try to create a GeoTesseraZarr instance. Returns None if unavailable."""
+    try:
+        from geotessera.store import GeoTesseraZarr
+        return GeoTesseraZarr()
+    except Exception:
+        return None
+
+_zarr_instance = None  # cached
+
+
 def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
                           patch_size=256, max_patches=500,
                           needs_spatial_3x3=False, needs_spatial_5x5=False,
@@ -97,9 +108,8 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
                           logger=None, progress_cb=None, cancel_flag=None):
     """Extract pixel-aligned 2D patches and optionally point samples from tiles.
 
-    Fetches tiles once and extracts both:
-    - Random patch_size × patch_size crops for U-Net / spatial MLP
-    - Point sample embeddings (if sample_points_lonlat provided)
+    Uses zarr read_region() when available (~0.2s/patch vs ~15s/tile via NPY).
+    Falls back to gt.fetch_embeddings() for NPY tile downloads.
 
     Returns (unet_patches, spatial_3x3, spatial_5x5, point_vectors) where
     point_vectors is a (N, 128) array if sample_points_lonlat was given, else None.
@@ -112,11 +122,19 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
     rng = np.random.RandomState(42)
 
+    # Try zarr for faster reads
+    global _zarr_instance
+    if _zarr_instance is None:
+        _zarr_instance = _try_zarr()
+    gtz = _zarr_instance
+    use_zarr = gtz is not None
+    if logger:
+        logger.info("Using %s for tile reads", "zarr (fast)" if use_zarr else "NPY downloads")
+
     # Find tiles overlapping the shapefile
     bounds = gdf.total_bounds
     bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
-    tiles_to_fetch = gt.registry.load_blocks_for_region(bbox, year)  # returns [(year, lon, lat), ...]
-    # Shuffle tiles so patches come from diverse geographic regions
+    tiles_to_fetch = gt.registry.load_blocks_for_region(bbox, year)
     tiles_to_fetch = list(tiles_to_fetch)
     rng.shuffle(tiles_to_fetch)
 
@@ -125,9 +143,7 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
     points_by_tile = {}
     if sample_points_lonlat is not None and len(sample_points_lonlat) > 0:
         point_vectors = np.full((len(sample_points_lonlat), 128), np.nan, dtype=np.float32)
-        # Group points into 0.1° tile bins
         for pt_idx, (lon, lat) in enumerate(sample_points_lonlat):
-            # Snap to tile center (0.05 offset, 0.1 spacing)
             tlon = round((lon - 0.05) / 0.1) * 0.1 + 0.05
             tlat = round((lat - 0.05) / 0.1) * 0.1 + 0.05
             key = (round(tlon, 2), round(tlat, 2))
@@ -137,17 +153,30 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
     if logger:
         pts_info = f", {len(sample_points_lonlat)} sample points" if sample_points_lonlat is not None else ""
-        logger.info("Fetching %d tiles (shuffled)%s...", len(tiles_to_fetch), pts_info)
+        logger.info("Processing %d tiles (shuffled)%s...", len(tiles_to_fetch), pts_info)
 
     unet_patches = []
     all_spatial_3x3 = [] if needs_spatial_3x3 else None
     all_spatial_5x5 = [] if needs_spatial_5x5 else None
 
-    patches_per_tile = 5  # cap per tile to ensure geographic diversity
+    patches_per_tile = 5
     total_tiles = len(tiles_to_fetch)
 
-    for t_idx, (yr, tlon, tlat, tile_emb, crs, transform) in enumerate(
-            gt.fetch_embeddings(tiles_to_fetch)):
+    def _load_tile_zarr(tlon, tlat):
+        """Read a tile region via zarr read_region."""
+        tile_bbox = (tlon - 0.05, tlat - 0.05, tlon + 0.05, tlat + 0.05)
+        mosaic, transform, tile_crs = gtz.read_region(tile_bbox, year)
+        return mosaic, tile_crs, transform
+
+    def _load_tile_npy(t_idx, tiles_gen):
+        """Read next tile from NPY generator."""
+        yr, tlon, tlat, tile_emb, crs, transform = next(tiles_gen)
+        return tile_emb.astype(np.float32), crs, transform, tlon, tlat
+
+    # For NPY fallback, create the generator
+    tiles_gen = gt.fetch_embeddings(tiles_to_fetch) if not use_zarr else None
+
+    for t_idx, (yr_t, tlon, tlat) in enumerate(tiles_to_fetch):
         if cancel_flag and cancel_flag.is_set():
             if logger:
                 logger.info("Tile extraction cancelled")
@@ -155,10 +184,20 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
         if progress_cb:
             progress_cb(t_idx, total_tiles)
 
-        h, w = tile_emb.shape[:2]
-        tile_emb = tile_emb.astype(np.float32)
+        try:
+            if use_zarr:
+                tile_emb, crs, transform = _load_tile_zarr(tlon, tlat)
+            else:
+                _, _, _, tile_emb, crs, transform = next(tiles_gen)
+                tile_emb = tile_emb.astype(np.float32)
+        except Exception as e:
+            if logger:
+                logger.warning("Failed to load tile (%.2f, %.2f): %s", tlon, tlat, e)
+            continue
 
-        # Extract point samples from this tile (if requested)
+        h, w = tile_emb.shape[:2]
+
+        # Extract point samples from this tile
         tile_key = (round(tlon, 2), round(tlat, 2))
         if tile_key in points_by_tile:
             from pyproj import Transformer
