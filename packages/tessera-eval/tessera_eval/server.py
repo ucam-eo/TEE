@@ -722,10 +722,8 @@ def run_large_area():
 
                 if needs_spatial_3x3 or needs_spatial_5x5 or needs_unet:
                     # Single tile pass: fetch tiles once, extract both point samples AND patches
-                    _zarr_avail = _zarr_instance is not None or _try_zarr() is not None
-                    mode = "zarr" if _zarr_avail else "NPY"
-                    logger.info("Loading embeddings (%s) for %d points + patches...", mode, n_points)
-                    yield json.dumps({"event": "status", "message": f"Loading embeddings ({mode}) for {n_points:,} points + patches..."}) + "\n"
+                    logger.info("Loading embeddings for %d points + patches...", n_points)
+                    yield json.dumps({"event": "status", "message": f"Loading embeddings for {n_points:,} points + patches..."}) + "\n"
 
                     def _tile_progress(current, total):
                         progress_q.put(("tile", current, total))
