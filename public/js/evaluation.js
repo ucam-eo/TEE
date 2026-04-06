@@ -64,7 +64,7 @@ let valTotalLabelledPixels = 0; // set by start event, used for % hint
 // ── Spatial bounding boxes (Phase 1) ──
 const BBOX_COLORS = {
     train: { color: '#3388ff', fillColor: '#3388ff', fillOpacity: 0.15, weight: 2 },
-    test:  { color: '#ff4444', fillColor: '#ff4444', fillOpacity: 0.15, weight: 2 },
+    test:  { color: '#9933ff', fillColor: '#9933ff', fillOpacity: 0.15, weight: 2 },
     map:   { color: '#44bb44', fillColor: '#44bb44', fillOpacity: 0.15, weight: 2 },
 };
 let spatialBboxes = { train: [], test: [], map: [] };
@@ -1766,13 +1766,14 @@ function getSpatialBboxData() {
     };
 }
 
-// Cancel active draw when bbox type changes, so next draw uses new color
+// Auto-start drawing when bbox type changes
 document.getElementById('val-bbox-type').addEventListener('change', function() {
     if (bboxDrawHandler) {
-        // Cancel and restart with new type
-        toggleBboxDraw();
-        toggleBboxDraw();
+        bboxDrawHandler.disable();
+        bboxDrawHandler = null;
     }
+    // Start drawing immediately with new type
+    toggleBboxDraw();
 });
 
 // Deferred init — called after maps are ready

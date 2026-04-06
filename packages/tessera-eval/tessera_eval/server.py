@@ -613,7 +613,8 @@ def run_large_area():
         if vectors is None:
             # Check disk result cache (much smaller than raw tiles)
             cached_result = _load_cached_result(field_name, year, gdf, sampling)
-            if cached_result and not needs_spatial_3x3 and not needs_spatial_5x5 and not needs_unet:
+            has_spatial_bboxes = bool(train_bboxes or test_bboxes)
+            if cached_result and not needs_spatial_3x3 and not needs_spatial_5x5 and not needs_unet and not has_spatial_bboxes:
                 vectors, labels, class_names, stats = cached_result
                 logger.info("Disk result cache hit for %s/%s (%d pixels)", field_name, year, len(labels))
 
