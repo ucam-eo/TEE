@@ -767,6 +767,11 @@ def run_large_area():
                         return
 
                     unet_patches, spatial_3x3, spatial_5x5, vectors = tile_result[0]
+                    if vectors is not None:
+                        n_valid = (~np.isnan(vectors).any(axis=1)).sum()
+                        logger.info("Point vectors from tiles: %d/%d valid", n_valid, len(vectors))
+                    else:
+                        logger.warning("No point vectors returned from tile extraction")
                 else:
                     # Pixel-only: use sample_embeddings_at_points (faster, no tile loading)
                     logger.info("Fetching embeddings for %d points...", n_points)
