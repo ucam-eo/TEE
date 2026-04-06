@@ -171,18 +171,7 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
     patches_per_tile = 5
     total_tiles = len(tiles_to_fetch)
 
-    def _load_tile_zarr(tlon, tlat):
-        """Read a tile region via zarr read_region."""
-        tile_bbox = (tlon - 0.05, tlat - 0.05, tlon + 0.05, tlat + 0.05)
-        mosaic, transform, tile_crs = gtz.read_region(tile_bbox, year)
-        return mosaic, tile_crs, transform
-
-    def _load_tile_npy(t_idx, tiles_gen):
-        """Read next tile from NPY generator."""
-        yr, tlon, tlat, tile_emb, crs, transform = next(tiles_gen)
-        return tile_emb.astype(np.float32), crs, transform, tlon, tlat
-
-    # For NPY fallback, create the generator
+    # For NPY fallback, create the tile generator (lazy, one tile at a time)
     tiles_gen = gt.fetch_embeddings(tiles_to_fetch) if not use_zarr else None
 
     for t_idx, (yr_t, tlon, tlat) in enumerate(tiles_to_fetch):
@@ -195,7 +184,8 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
         try:
             if use_zarr:
-                tile_emb, crs, transform = _load_tile_zarr(tlon, tlat)
+                tile_bbox = (tlon - 0.05, tlat - 0.05, tlon + 0.05, tlat + 0.05)
+                tile_emb, transform, crs = gtz.read_region(tile_bbox, year)
             else:
                 _, _, _, tile_emb, crs, transform = next(tiles_gen)
                 tile_emb = tile_emb.astype(np.float32)
