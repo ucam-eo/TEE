@@ -1709,11 +1709,21 @@ function addBboxFromCoords(type, bbox) {
 }
 
 function clearAllBboxes() {
+    if (bboxDrawHandler) {
+        bboxDrawHandler.disable();
+        bboxDrawHandler = null;
+    }
     if (bboxFeatureGroup) {
         bboxFeatureGroup.clearLayers();
     }
     spatialBboxes = { train: [], test: [], map: [] };
     updateBboxSummary();
+    // Re-enable map dragging
+    const map = window.maps && window.maps.rgb;
+    if (map) map.dragging.enable();
+    // Reset dropdown to placeholder
+    const typeSel = document.getElementById('val-bbox-type');
+    if (typeSel) typeSel.selectedIndex = 0;
 }
 
 function initBboxDrawing() {
@@ -1737,21 +1747,24 @@ function initBboxDrawing() {
 }
 
 function toggleBboxDraw() {
+    const map = window.maps && window.maps.rgb;
     if (bboxDrawHandler) {
         bboxDrawHandler.disable();
         bboxDrawHandler = null;
+        if (map) map.dragging.enable();
         return;
     }
-    if (!window.maps || !window.maps.rgb || typeof L.Draw === 'undefined') return;
+    if (!map || typeof L.Draw === 'undefined') return;
     ensureBboxFeatureGroup();
 
     const typeSel = document.getElementById('val-bbox-type');
     if (typeSel && typeSel.value) currentBboxType = typeSel.value;
 
     const style = BBOX_COLORS[currentBboxType] || BBOX_COLORS.train;
-    bboxDrawHandler = new L.Draw.Rectangle(window.maps.rgb, {
+    bboxDrawHandler = new L.Draw.Rectangle(map, {
         shapeOptions: { ...style },
     });
+    map.dragging.disable();
     bboxDrawHandler.enable();
 }
 
@@ -1772,7 +1785,12 @@ document.getElementById('val-bbox-type').addEventListener('change', function() {
         bboxDrawHandler.disable();
         bboxDrawHandler = null;
     }
-    if (!this.value) return;  // placeholder selected
+    const map = window.maps && window.maps.rgb;
+    if (!this.value) {
+        // Placeholder selected — stop drawing, re-enable pan
+        if (map) map.dragging.enable();
+        return;
+    }
     currentBboxType = this.value;
     toggleBboxDraw();
 });
