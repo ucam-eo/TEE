@@ -172,6 +172,9 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
     total_tiles = len(tiles_to_fetch)
 
     # For NPY fallback, create the tile generator (lazy, one tile at a time)
+    # Note: fetch_embeddings downloads a landmask per tile for CRS/transform,
+    # even when embedding files are cached. This is a GeoTessera issue —
+    # landmask CRS should be cached per UTM zone.
     tiles_gen = gt.fetch_embeddings(tiles_to_fetch) if not use_zarr else None
 
     for t_idx, (yr_t, tlon, tlat) in enumerate(tiles_to_fetch):
