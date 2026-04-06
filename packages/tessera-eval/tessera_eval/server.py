@@ -570,7 +570,9 @@ def run_large_area():
             logger.info("Initializing GeoTessera...")
             yield json.dumps({"event": "status", "message": "Initializing GeoTessera..."}) + "\n"
             if _geotessera_instance is None:
-                _geotessera_instance = GeoTessera()
+                tile_cache_dir = _get_cache_dir() / "tiles"
+                tile_cache_dir.mkdir(parents=True, exist_ok=True)
+                _geotessera_instance = GeoTessera(embeddings_dir=str(tile_cache_dir))
             gt = _geotessera_instance
 
             try:
