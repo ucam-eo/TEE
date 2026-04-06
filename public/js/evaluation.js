@@ -1727,9 +1727,11 @@ function initBboxDrawing() {
         const style = BBOX_COLORS[currentBboxType] || BBOX_COLORS.train;
         rect.setStyle(style);
         addBboxRectangle(currentBboxType, rect);
-        // Re-enable drawing for the same type (user can keep drawing)
-        if (bboxDrawHandler) {
-            bboxDrawHandler.enable();
+        // Create a fresh handler so user can keep drawing more rectangles
+        bboxDrawHandler = null;
+        const typeSel = document.getElementById('val-bbox-type');
+        if (typeSel && typeSel.value) {
+            toggleBboxDraw();
         }
     });
 }
