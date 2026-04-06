@@ -122,6 +122,9 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
     rng = np.random.RandomState(42)
 
+    # Find tiles overlapping the shapefile
+    bounds = gdf.total_bounds
+
     # Try zarr — but verify coverage with a single-pixel probe first,
     # since the zarr store only has 2025 for some regions.
     global _zarr_instance
@@ -139,9 +142,6 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
             pass
     if logger:
         logger.info("Using %s for tile reads", "zarr (fast)" if use_zarr else "NPY tiles with local cache")
-
-    # Find tiles overlapping the shapefile
-    bounds = gdf.total_bounds
     bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
     tiles_to_fetch = gt.registry.load_blocks_for_region(bbox, year)
     tiles_to_fetch = list(tiles_to_fetch)
