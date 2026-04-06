@@ -152,10 +152,14 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
     points_by_tile = {}
     if sample_points_lonlat is not None and len(sample_points_lonlat) > 0:
         point_vectors = np.full((len(sample_points_lonlat), 128), np.nan, dtype=np.float32)
-        for pt_idx, (lon, lat) in enumerate(sample_points_lonlat):
-            tlon = round((lon - 0.05) / 0.1) * 0.1 + 0.05
-            tlat = round((lat - 0.05) / 0.1) * 0.1 + 0.05
-            key = (round(tlon, 2), round(tlat, 2))
+        # Vectorized tile grouping
+        pts_arr = np.array(sample_points_lonlat)  # (N, 2)
+        tile_lons = np.round((pts_arr[:, 0] - 0.05) / 0.1) * 0.1 + 0.05
+        tile_lats = np.round((pts_arr[:, 1] - 0.05) / 0.1) * 0.1 + 0.05
+        tile_lons = np.round(tile_lons, 2)
+        tile_lats = np.round(tile_lats, 2)
+        for pt_idx in range(len(pts_arr)):
+            key = (tile_lons[pt_idx], tile_lats[pt_idx])
             if key not in points_by_tile:
                 points_by_tile[key] = []
             points_by_tile[key].append(pt_idx)
@@ -693,17 +697,12 @@ def run_large_area():
                         with warnings.catch_warnings():
                             warnings.simplefilter("ignore", UserWarning)
                             pts = cls_gdf.sample_points(size=pts_per_row)
-                        # sample_points returns a GeoSeries of MultiPoint or Point
-                        for mp in pts:
-                            if mp is not None and not mp.is_empty:
-                                if hasattr(mp, 'geoms'):
-                                    for pt in mp.geoms:
-                                        sample_points.append((pt.x, pt.y))
-                                        sample_labels.append(cls_idx)
-                                else:
-                                    # Single Point (not MultiPoint) — single-polygon class
-                                    sample_points.append((mp.x, mp.y))
-                                    sample_labels.append(cls_idx)
+                        # Extract coordinates from MultiPoint/Point geometries (vectorized)
+                        pts_exploded = pts[~pts.is_empty].explode(index_parts=False)
+                        coords = np.array([(p.x, p.y) for p in pts_exploded])
+                        if len(coords) > 0:
+                            sample_points.extend(coords.tolist())
+                            sample_labels.extend([cls_idx] * len(coords))
                     except Exception as e:
                         logger.warning("sample_points failed for class %d: %s", cls_idx, e)
 
