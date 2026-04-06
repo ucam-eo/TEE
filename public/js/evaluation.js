@@ -61,6 +61,17 @@ let currentLargeAreaTask = null; // 'classification' or 'regression'
 let valUploadedFiles = []; // list of uploaded filenames
 let valTotalLabelledPixels = 0; // set by start event, used for % hint
 
+// ── Spatial bounding boxes (Phase 1) ──
+const BBOX_COLORS = {
+    train: { color: '#3388ff', fillColor: '#3388ff', fillOpacity: 0.15, weight: 2 },
+    test:  { color: '#ff4444', fillColor: '#ff4444', fillOpacity: 0.15, weight: 2 },
+    map:   { color: '#44bb44', fillColor: '#44bb44', fillOpacity: 0.15, weight: 2 },
+};
+let spatialBboxes = { train: [], test: [], map: [] };
+let bboxFeatureGroup = null;
+let currentBboxType = 'train';
+let bboxDrawHandler = null;
+
 // Regressor labels/colors (extend the classifier palette)
 const REGRESSOR_COLORS = {
     nn_reg:      { line: 'rgba(255, 159, 64, 1)',  fill: 'rgba(255, 159, 64, 0.15)' },
@@ -508,6 +519,12 @@ function handleStreamEvent(ev) {
             setResultsStatus(
                 `${pixels.toLocaleString()} labelled pixels from ${stats.tiles_with_data || '?'}/${stats.tile_count || '?'} tiles. Running learning curve...`
             );
+        }
+
+        if (ev.spatial_split) {
+            lastChartData.spatial_split = true;
+            lastChartData.train_count = ev.train_count;
+            lastChartData.test_count = ev.test_count;
         }
 
         if (ev.classes) {
@@ -1085,6 +1102,15 @@ function generateConfig() {
         "seed": 42,
     };
 
+    // Spatial bounding boxes (if any)
+    if (hasSpatialBboxes() || spatialBboxes.map.length > 0) {
+        config.spatial_bboxes = {
+            train: spatialBboxes.train.map(r => rectToBbox(r)),
+            test: spatialBboxes.test.map(r => rectToBbox(r)),
+            map: spatialBboxes.map.map(r => rectToBbox(r)),
+        };
+    }
+
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1097,6 +1123,13 @@ function generateConfig() {
 async function runLargeAreaEvaluation() {
     const field = document.getElementById('val-field-select').value;
     if (!field) return;
+
+    // Spatial split confirmation: if no bboxes drawn, confirm random split
+    if (!hasSpatialBboxes()) {
+        if (!confirm('No spatial bounding boxes drawn.\nRun with random train/test split?')) {
+            return;
+        }
+    }
 
     const checkboxes = document.querySelectorAll('.val-clf-header input:checked');
     const classifiers = Array.from(checkboxes).map(cb => cb.value);
@@ -1184,6 +1217,7 @@ async function runLargeAreaEvaluation() {
                 max_training_samples: parseInt(document.getElementById('val-max-train-large').value) || 200000,
                 sampling: document.getElementById('val-sampling-select').value || 'sqrt',
                 max_patches: parseInt(document.getElementById('val-max-patches').value) || 500,
+                ...(hasSpatialBboxes() ? getSpatialBboxData() : {}),
             }),
             signal: evalAbortController.signal,
         });
@@ -1577,6 +1611,19 @@ function applyConfig(config) {
         const input = document.getElementById('val-max-patches');
         if (input) input.value = config.max_patches;
     }
+
+    // Restore spatial bounding boxes
+    if (config.spatial_bboxes) {
+        clearAllBboxes();
+        for (const [type, bboxes] of Object.entries(config.spatial_bboxes)) {
+            if (!Array.isArray(bboxes)) continue;
+            for (const bbox of bboxes) {
+                if (Array.isArray(bbox) && bbox.length === 4) {
+                    addBboxFromCoords(type, bbox);
+                }
+            }
+        }
+    }
 }
 
 document.getElementById('val-config-file').addEventListener('change', loadConfigFile);
@@ -1597,6 +1644,147 @@ function updateMaxTrainPctHint() {
     }
 }
 document.getElementById('val-max-train-large').addEventListener('input', updateMaxTrainPctHint);
+
+// ── Spatial bounding box drawing (Phase 1) ──
+
+function rectToBbox(rect) {
+    const b = rect.getBounds();
+    return [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()];
+}
+
+function updateBboxSummary() {
+    const el = document.getElementById('val-bbox-summary');
+    if (!el) return;
+    const t = spatialBboxes.train.length;
+    const te = spatialBboxes.test.length;
+    const m = spatialBboxes.map.length;
+    if (t + te + m === 0) {
+        el.textContent = 'No rectangles drawn';
+        el.style.color = '#888';
+    } else {
+        const parts = [];
+        if (t > 0) parts.push(`Train: ${t}`);
+        if (te > 0) parts.push(`Test: ${te}`);
+        if (m > 0) parts.push(`Map: ${m}`);
+        el.textContent = parts.join(', ');
+        el.style.color = '#ccc';
+    }
+}
+
+function ensureBboxFeatureGroup() {
+    if (!bboxFeatureGroup) {
+        bboxFeatureGroup = new L.FeatureGroup();
+    }
+    if (window.maps && window.maps.rgb && !window.maps.rgb.hasLayer(bboxFeatureGroup)) {
+        window.maps.rgb.addLayer(bboxFeatureGroup);
+    }
+}
+
+function addBboxRectangle(type, rect) {
+    rect._bboxType = type;
+    spatialBboxes[type].push(rect);
+    ensureBboxFeatureGroup();
+    bboxFeatureGroup.addLayer(rect);
+
+    const label = type.charAt(0).toUpperCase() + type.slice(1);
+    rect.bindTooltip(label, { permanent: false, direction: 'center' });
+
+    rect.on('click', function() {
+        if (confirm(`Delete this ${label} rectangle?`)) {
+            bboxFeatureGroup.removeLayer(rect);
+            spatialBboxes[type] = spatialBboxes[type].filter(r => r !== rect);
+            updateBboxSummary();
+        }
+    });
+
+    updateBboxSummary();
+}
+
+function addBboxFromCoords(type, bbox) {
+    // bbox = [south, west, north, east]
+    const bounds = [[bbox[0], bbox[1]], [bbox[2], bbox[3]]];
+    const style = BBOX_COLORS[type] || BBOX_COLORS.train;
+    const rect = L.rectangle(bounds, style);
+    addBboxRectangle(type, rect);
+}
+
+function clearAllBboxes() {
+    if (bboxFeatureGroup) {
+        bboxFeatureGroup.clearLayers();
+    }
+    spatialBboxes = { train: [], test: [], map: [] };
+    updateBboxSummary();
+}
+
+function initBboxDrawing() {
+    if (!window.maps || !window.maps.rgb || typeof L.Draw === 'undefined') return;
+    ensureBboxFeatureGroup();
+
+    window.maps.rgb.on(L.Draw.Event.CREATED, function(e) {
+        if (e.layerType !== 'rectangle') return;
+        if (window.currentPanelMode !== 'validation') return;
+        const rect = e.layer;
+        const style = BBOX_COLORS[currentBboxType] || BBOX_COLORS.train;
+        rect.setStyle(style);
+        addBboxRectangle(currentBboxType, rect);
+        bboxDrawHandler = null;
+        const btn = document.getElementById('val-bbox-draw-btn');
+        if (btn) btn.textContent = 'Draw Rectangle';
+    });
+}
+
+function toggleBboxDraw() {
+    const btn = document.getElementById('val-bbox-draw-btn');
+    if (bboxDrawHandler) {
+        bboxDrawHandler.disable();
+        bboxDrawHandler = null;
+        if (btn) btn.textContent = 'Draw Rectangle';
+        return;
+    }
+    if (!window.maps || !window.maps.rgb || typeof L.Draw === 'undefined') return;
+    ensureBboxFeatureGroup();
+
+    const typeSel = document.getElementById('val-bbox-type');
+    if (typeSel) currentBboxType = typeSel.value;
+
+    const style = BBOX_COLORS[currentBboxType] || BBOX_COLORS.train;
+    bboxDrawHandler = new L.Draw.Rectangle(window.maps.rgb, {
+        shapeOptions: { ...style },
+    });
+    bboxDrawHandler.enable();
+    if (btn) btn.textContent = 'Cancel Drawing';
+}
+
+function hasSpatialBboxes() {
+    return spatialBboxes.train.length > 0 || spatialBboxes.test.length > 0;
+}
+
+function getSpatialBboxData() {
+    return {
+        train_bboxes: spatialBboxes.train.map(r => rectToBbox(r)),
+        test_bboxes: spatialBboxes.test.map(r => rectToBbox(r)),
+    };
+}
+
+// Cancel active draw when bbox type changes, so next draw uses new color
+document.getElementById('val-bbox-type').addEventListener('change', function() {
+    if (bboxDrawHandler) {
+        // Cancel and restart with new type
+        toggleBboxDraw();
+        toggleBboxDraw();
+    }
+});
+
+// Deferred init — called after maps are ready
+function tryInitBboxDrawing() {
+    if (window.maps && window.maps.rgb) {
+        initBboxDrawing();
+    } else {
+        // Retry after maps are created
+        setTimeout(tryInitBboxDrawing, 500);
+    }
+}
+tryInitBboxDrawing();
 
 // ── Expose on window for onclick handlers and test assertions ──
 
@@ -1643,6 +1831,10 @@ function restoreValidationState() {
         addValGeoJsonLayer();
     }
 
+    // Restore spatial bboxes on the map
+    ensureBboxFeatureGroup();
+    updateBboxSummary();
+
     // Re-render chart
     if (lastChartData && lastChartData.training_pcts && lastChartData.training_pcts.length > 0) {
         renderChart(lastChartData);
@@ -1671,6 +1863,8 @@ window.openCMPopup = openCMPopup;
 window.generateConfig = generateConfig;
 window.loadConfigFile = loadConfigFile;
 window.loadResultsFile = loadResultsFile;
+window.toggleBboxDraw = toggleBboxDraw;
+window.clearAllBboxes = clearAllBboxes;
 Object.defineProperty(window, 'lastEvalData', {
     get: () => lastEvalData,
     set: (v) => { lastEvalData = v; },

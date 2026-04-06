@@ -19,7 +19,9 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                        repeats=5, classifier_params=None, spatial_vectors=None,
                        spatial_vectors_5x5=None, spatial_labels=None,
                        finish_classifiers=None,
-                       unet_patches=None, **kwargs):
+                       unet_patches=None,
+                       test_vectors=None, test_labels=None,
+                       **kwargs):
     """Generator that yields progress events after each training percentage.
 
     Runs stratified sampling at each training percentage, computing F1 scores
@@ -37,6 +39,8 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
         spatial_vectors_5x5: Optional float32 array for spatial_mlp_5x5 (5x5 features)
         finish_classifiers: Optional set of classifier names to skip
         unet_patches: Optional list of (emb_patch, label_patch) tuples for U-Net
+        test_vectors: Optional fixed test set vectors (spatial split mode)
+        test_labels: Optional fixed test set labels (spatial split mode)
         **kwargs: Extra arguments accepted for compatibility.
 
     Yields:
@@ -52,8 +56,13 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
     if finish_classifiers is None:
         finish_classifiers = set()
 
+    # Spatial split mode: test_vectors/test_labels are a fixed, separate test set.
+    # In this mode, vectors/labels are the train-only pool.
+    spatial_split = test_vectors is not None and test_labels is not None
+
     n_samples = len(labels)
-    n_classes = len(np.unique(labels))
+    all_labels = np.concatenate([labels, test_labels]) if spatial_split else labels
+    n_classes = len(np.unique(all_labels))
 
     # Separate pixel-based and U-Net classifiers
     pixel_classifiers = [n for n in classifier_names if n != 'unet']
@@ -74,9 +83,20 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
 
     MAX_TEST = 200_000  # subsample test set for speed (negligible accuracy loss)
 
+    # Pre-subsample the fixed test set if too large (spatial split mode)
+    if spatial_split and len(test_labels) > MAX_TEST:
+        rng_test = np.random.RandomState(42)
+        test_subsample = rng_test.choice(len(test_labels), size=MAX_TEST, replace=False)
+        test_vectors = test_vectors[test_subsample]
+        test_labels = test_labels[test_subsample]
+
     import time as _time
-    logger.info("Learning curve: %d pixels, %d classes, %d classifiers, pcts=%s",
-                n_samples, n_classes, len(classifier_names), training_pcts)
+    if spatial_split:
+        logger.info("Learning curve (spatial split): %d train, %d test pixels, %d classes, %d classifiers, pcts=%s",
+                    n_samples, len(test_labels), n_classes, len(classifier_names), training_pcts)
+    else:
+        logger.info("Learning curve: %d pixels, %d classes, %d classifiers, pcts=%s",
+                    n_samples, n_classes, len(classifier_names), training_pcts)
 
     for pct_idx, pct in enumerate(training_pcts):
         pct_t0 = _time.time()
@@ -107,26 +127,35 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                 cls_indices = precomputed_cls_indices[cls]
                 if len(cls_indices) == 0:
                     continue
-                n_take = min(per_class, int(0.8 * len(cls_indices)))
+                if spatial_split:
+                    # In spatial split mode, all of vectors/labels are train pool
+                    n_take = min(per_class, len(cls_indices))
+                else:
+                    n_take = min(per_class, int(0.8 * len(cls_indices)))
                 n_take = max(1, n_take)
                 chosen = rng.choice(cls_indices, size=n_take, replace=False)
                 train_idx.extend(chosen)
             train_idx = np.array(train_idx)
 
-            # Boolean mask for test set (O(N) instead of O(N log N) setdiff1d)
-            test_mask = np.ones(n_samples, dtype=bool)
-            test_mask[train_idx] = False
-            test_idx = np.where(test_mask)[0]
+            if spatial_split:
+                # Fixed test set from spatial bounding boxes
+                X_train, y_train = vectors[train_idx], labels[train_idx]
+                X_test, y_test = test_vectors, test_labels
+            else:
+                # Random split: remaining samples become test set
+                test_mask = np.ones(n_samples, dtype=bool)
+                test_mask[train_idx] = False
+                test_idx = np.where(test_mask)[0]
 
-            if len(test_idx) == 0:
-                continue
+                if len(test_idx) == 0:
+                    continue
 
-            # Subsample test set if too large (saves huge time on KNN/predict)
-            if len(test_idx) > MAX_TEST:
-                test_idx = rng.choice(test_idx, size=MAX_TEST, replace=False)
+                # Subsample test set if too large (saves huge time on KNN/predict)
+                if len(test_idx) > MAX_TEST:
+                    test_idx = rng.choice(test_idx, size=MAX_TEST, replace=False)
 
-            X_train, y_train = vectors[train_idx], labels[train_idx]
-            X_test, y_test = vectors[test_idx], labels[test_idx]
+                X_train, y_train = vectors[train_idx], labels[train_idx]
+                X_test, y_test = vectors[test_idx], labels[test_idx]
 
             # Pixel-based classifiers
             for clf_idx, name in enumerate(active_pixel):
@@ -145,6 +174,11 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                         X_tr, X_te = spatial_vectors[sp_train_idx], spatial_vectors[sp_test_idx]
                         y_train_sp, y_test = spatial_labels[sp_train_idx], spatial_labels[sp_test_idx]
                         X_tr, y_tr_aug = augment_spatial(X_tr, y_train_sp, window=3, dim=vectors.shape[1])
+                    elif spatial_split:
+                        # Spatial split: no test_idx, use fixed test set
+                        X_tr, X_te = spatial_vectors[train_idx], X_test
+                        X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=3, dim=vectors.shape[1])
+                        y_test = test_labels
                     else:
                         X_tr, X_te = spatial_vectors[train_idx], spatial_vectors[test_idx]
                         X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=3, dim=vectors.shape[1])
@@ -162,6 +196,10 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                         X_tr, X_te = sp_vecs[sp_train_idx], sp_vecs[sp_test_idx]
                         y_train_sp, y_test = sp_lbls[sp_train_idx], sp_lbls[sp_test_idx]
                         X_tr, y_tr_aug = augment_spatial(X_tr, y_train_sp, window=5, dim=vectors.shape[1])
+                    elif spatial_split:
+                        X_tr, X_te = sp_vecs[train_idx], X_test
+                        X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=5, dim=vectors.shape[1])
+                        y_test = test_labels
                     else:
                         X_tr, X_te = sp_vecs[train_idx], sp_vecs[test_idx]
                         X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=5, dim=vectors.shape[1])
@@ -169,7 +207,10 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                 else:
                     X_tr, X_te = X_train, X_test
                     y_tr_aug = y_train
-                    y_test = labels[test_idx]
+                    if spatial_split:
+                        y_test = test_labels
+                    else:
+                        y_test = labels[test_idx]
 
                 clf = make_classifier(name, (classifier_params or {}).get(name, {}))
                 try:

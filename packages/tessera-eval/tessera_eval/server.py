@@ -519,6 +519,8 @@ def run_large_area():
         max_train = int(max_train)
     sampling = body.get("sampling", "sqrt")  # equal, proportional, sqrt
     max_patches = int(body.get("max_patches", 500))
+    train_bboxes = body.get("train_bboxes", [])
+    test_bboxes = body.get("test_bboxes", [])
 
     if not field_name:
         return jsonify({"error": "field is required"}), 400
@@ -588,6 +590,8 @@ def run_large_area():
         cache_key = (field_name, year, sampling)
         vectors = labels = class_names = stats = None
         spatial_3x3 = spatial_5x5 = unet_patches = None
+        all_sample_points = None  # (lon, lat) coordinates of all sample points
+        all_valid_mask = None     # boolean mask: True for points with valid embeddings
 
         if _tile_cache["key"] == cache_key and _tile_cache["vectors"] is not None:
             vectors = _tile_cache["vectors"]
@@ -597,6 +601,8 @@ def run_large_area():
             spatial_3x3 = _tile_cache.get("spatial_3x3")
             spatial_5x5 = _tile_cache.get("spatial_5x5")
             unet_patches = _tile_cache.get("unet_patches", [])
+            all_sample_points = _tile_cache.get("sample_points")
+            all_valid_mask = _tile_cache.get("valid_mask")
             logger.info("In-memory cache hit for %s/%s (%d pixels)", field_name, year, len(labels))
 
             # If spatial features needed but not cached, must reload
@@ -879,8 +885,13 @@ def run_large_area():
                     "class_names": class_names, "stats": stats,
                     "spatial_3x3": None, "spatial_5x5": None,
                     "unet_patches": [],
+                    "sample_points": sample_points,
+                    "valid_mask": valid_mask,
                 })
                 _save_cached_result(field_name, year, gdf, vectors, labels, class_names, stats, sampling)
+
+                all_sample_points = sample_points
+                all_valid_mask = valid_mask
 
                 logger.info("Point sampling complete: %d pixels, %.1fMB",
                             len(labels), vectors.nbytes / 1e6)
@@ -894,6 +905,61 @@ def run_large_area():
             unet_patches = _tile_cache.get("unet_patches", [])
 
         total_labelled = len(vectors)
+
+        # ── Spatial split: partition points into train/test pools ──
+        spatial_train_vectors = spatial_test_vectors = None
+        spatial_train_labels = spatial_test_labels = None
+        has_spatial_split = bool(train_bboxes or test_bboxes)
+
+        if has_spatial_split:
+            def _point_in_bboxes(lon, lat, bboxes):
+                """Check if (lon, lat) falls inside any bbox [south, west, north, east]."""
+                for south, west, north, east in bboxes:
+                    if west <= lon <= east and south <= lat <= north:
+                        return True
+                return False
+
+            if all_sample_points is None:
+                yield json.dumps({"event": "error", "message": "Spatial split requires sample point coordinates (not available from cache)"}) + "\n"
+                return
+
+            # Apply valid_mask to match the filtered vectors/labels
+            sp = np.array(all_sample_points)
+            if all_valid_mask is not None and all_valid_mask.sum() < len(sp):
+                sp = sp[all_valid_mask]
+
+            train_mask = np.zeros(len(sp), dtype=bool)
+            test_mask_sp = np.zeros(len(sp), dtype=bool)
+            for i in range(len(sp)):
+                lon, lat = sp[i]
+                if train_bboxes and _point_in_bboxes(lon, lat, train_bboxes):
+                    train_mask[i] = True
+                elif test_bboxes and _point_in_bboxes(lon, lat, test_bboxes):
+                    test_mask_sp[i] = True
+                # Points in neither are discarded
+
+            n_train = train_mask.sum()
+            n_test = test_mask_sp.sum()
+            n_discard = len(sp) - n_train - n_test
+            logger.info("Spatial split: %d train, %d test, %d discarded", n_train, n_test, n_discard)
+            yield json.dumps({"event": "status", "message": f"Spatial split: {int(n_train):,} train, {int(n_test):,} test, {int(n_discard):,} discarded"}) + "\n"
+
+            if n_train == 0:
+                yield json.dumps({"event": "error", "message": "No sample points in train bounding boxes"}) + "\n"
+                return
+            if n_test == 0:
+                yield json.dumps({"event": "error", "message": "No sample points in test bounding boxes"}) + "\n"
+                return
+
+            spatial_train_vectors = vectors[train_mask]
+            spatial_train_labels = labels[train_mask]
+            spatial_test_vectors = vectors[test_mask_sp]
+            spatial_test_labels = labels[test_mask_sp]
+
+            # For the learning curve, vectors/labels = train pool
+            vectors = spatial_train_vectors
+            labels = spatial_train_labels
+            total_labelled = len(vectors)
 
         # Training percentages (% of labelled area)
         training_pcts = [1, 3, 5, 10, 20, 30, 50, 80]
@@ -931,7 +997,7 @@ def run_large_area():
                     continue
             active_models.append(name)
 
-        yield json.dumps({
+        start_event = {
             "event": "start",
             "classifiers": active_models,
             "classes": class_info if is_classification else [],
@@ -939,16 +1005,28 @@ def run_large_area():
             "confusion_matrix_labels": class_names if is_classification else [],
             "training_pcts": training_pcts,
             "stats": stats,
-        }) + "\n"
+        }
+        if has_spatial_split:
+            start_event["spatial_split"] = True
+            start_event["train_count"] = int(len(spatial_train_labels))
+            start_event["test_count"] = int(len(spatial_test_labels))
+        yield json.dumps(start_event) + "\n"
 
         # Run learning curve (all classifiers including U-Net)
-        for event in run_learning_curve(
-            vectors, labels, active_models, training_pcts,
+        lc_kwargs = dict(
             repeats=5, classifier_params=model_params,
             spatial_vectors=spatial_3x3, spatial_vectors_5x5=spatial_5x5,
             spatial_labels=spatial_labels_3x3 if spatial_labels_3x3 is not None else spatial_labels_5x5,
             finish_classifiers=_finish_classifiers,
             unet_patches=unet_patches,
+        )
+        if has_spatial_split:
+            lc_kwargs["test_vectors"] = spatial_test_vectors
+            lc_kwargs["test_labels"] = spatial_test_labels
+
+        for event in run_learning_curve(
+            vectors, labels, active_models, training_pcts,
+            **lc_kwargs,
         ):
             if _cancelled():
                 logger.info("Evaluation cancelled during learning curve")
