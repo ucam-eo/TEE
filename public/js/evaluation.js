@@ -64,7 +64,7 @@ let valTotalLabelledPixels = 0; // set by start event, used for % hint
 // ── Spatial bounding boxes (Phase 1) ──
 const BBOX_COLORS = {
     train: { color: '#3388ff', fillColor: '#3388ff', fillOpacity: 0.15, weight: 2 },
-    test:  { color: '#9933ff', fillColor: '#9933ff', fillOpacity: 0.15, weight: 2 },
+    test:  { color: '#ffcc00', fillColor: '#ffcc00', fillOpacity: 0.15, weight: 2 },
     map:   { color: '#44bb44', fillColor: '#44bb44', fillOpacity: 0.15, weight: 2 },
 };
 let spatialBboxes = { train: [], test: [], map: [] };
@@ -1727,9 +1727,10 @@ function initBboxDrawing() {
         const style = BBOX_COLORS[currentBboxType] || BBOX_COLORS.train;
         rect.setStyle(style);
         addBboxRectangle(currentBboxType, rect);
-        bboxDrawHandler = null;
-        const btn = document.getElementById('val-bbox-draw-btn');
-        if (btn) btn.textContent = 'Draw Rectangle';
+        // Re-enable drawing for the same type (user can keep drawing)
+        if (bboxDrawHandler) {
+            bboxDrawHandler.enable();
+        }
     });
 }
 

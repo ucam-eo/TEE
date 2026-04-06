@@ -286,13 +286,13 @@ To get a more realistic evaluation, draw separate **train** and **test** areas o
 1. In the validation controls, find **Spatial split (optional)**
 2. Select **Train area (blue)** from the dropdown — drawing starts immediately
 3. Draw one or more rectangles on the satellite map covering your training region
-4. Select **Test area (purple)** and draw rectangles for your test region
+4. Select **Test area (yellow)** and draw rectangles for your test region
 5. Click **Run Evaluation**
 
 | Area type | Color | Purpose |
 |-----------|-------|---------|
 | **Train** | Blue | Points inside these boxes are used for training. Learning curve percentages subsample from this pool. |
-| **Test** | Purple | Points inside these boxes are used for testing. The test set is fixed (not subsampled). |
+| **Test** | Yellow | Points inside these boxes are used for testing. The test set is fixed (not subsampled). |
 | **Map** | Green | Reserved for future classification map generation. |
 
 **Rules:**
