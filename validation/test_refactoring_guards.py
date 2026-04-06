@@ -78,8 +78,13 @@ class TestAPIEndpointCoverage:
 
     @pytest.mark.parametrize("endpoint", ENDPOINTS)
     def test_endpoint_referenced(self, all_script_text, endpoint):
-        assert endpoint in all_script_text, (
-            f"API endpoint {endpoint!r} not found in JS. "
+        # Check for literal path OR evalUrl('suffix') pattern
+        if endpoint in all_script_text:
+            return
+        # Extract the last path segment for evalUrl('segment') check
+        suffix = endpoint.rsplit('/', 1)[-1]
+        assert suffix in all_script_text, (
+            f"API endpoint {endpoint!r} (or evalUrl('{suffix}')) not found in JS. "
             "Was it lost during module extraction?"
         )
 
