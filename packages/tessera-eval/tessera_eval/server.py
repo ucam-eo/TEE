@@ -167,6 +167,8 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
     unet_patches = []
     all_spatial_3x3 = [] if needs_spatial_3x3 else None
     all_spatial_5x5 = [] if needs_spatial_5x5 else None
+    all_spatial_labels_3x3 = [] if needs_spatial_3x3 else None
+    all_spatial_labels_5x5 = [] if needs_spatial_5x5 else None
 
     patches_per_tile = 5
     total_tiles = len(tiles_to_fetch)
@@ -296,22 +298,26 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
             if needs_spatial_3x3:
                 sf = gather_spatial_features_2d(emb_patch, radius=1, mask=labelled_mask)
                 all_spatial_3x3.append(sf)
+                all_spatial_labels_3x3.append(label_patch[labelled_mask] - 1)  # 1-based → 0-based
             if needs_spatial_5x5:
                 sf = gather_spatial_features_2d(emb_patch, radius=2, mask=labelled_mask)
                 all_spatial_5x5.append(sf)
+                all_spatial_labels_5x5.append(label_patch[labelled_mask] - 1)
 
         if logger:
             logger.info("  %d patches so far (%d from this tile)", len(unet_patches), n_pick)
 
     spatial_3x3 = np.concatenate(all_spatial_3x3, axis=0).astype(np.float32) if all_spatial_3x3 else None
     spatial_5x5 = np.concatenate(all_spatial_5x5, axis=0).astype(np.float32) if all_spatial_5x5 else None
+    spatial_labels_3x3 = np.concatenate(all_spatial_labels_3x3).astype(np.int32) if all_spatial_labels_3x3 else None
+    spatial_labels_5x5 = np.concatenate(all_spatial_labels_5x5).astype(np.int32) if all_spatial_labels_5x5 else None
 
     if logger:
         s3 = f", spatial_3x3={spatial_3x3.shape}" if spatial_3x3 is not None else ""
         s5 = f", spatial_5x5={spatial_5x5.shape}" if spatial_5x5 is not None else ""
         logger.info("Tile patches: %d total%s%s", len(unet_patches), s3, s5)
 
-    return unet_patches, spatial_3x3, spatial_5x5, point_vectors
+    return unet_patches, spatial_3x3, spatial_5x5, point_vectors, spatial_labels_3x3, spatial_labels_5x5
 
 
 def _save_cached_result(field, year, gdf, vectors, labels, class_names, stats, sampling="equal"):
@@ -711,6 +717,8 @@ def run_large_area():
                 progress_q = queue.Queue()
                 spatial_3x3 = None
                 spatial_5x5 = None
+                spatial_labels_3x3 = None
+                spatial_labels_5x5 = None
                 unet_patches = []
 
                 if needs_spatial_3x3 or needs_spatial_5x5 or needs_unet:
@@ -766,7 +774,7 @@ def run_large_area():
                         yield json.dumps({"event": "error", "message": f"Tile fetch failed: {tile_result[1]}"}) + "\n"
                         return
 
-                    unet_patches, spatial_3x3, spatial_5x5, vectors = tile_result[0]
+                    unet_patches, spatial_3x3, spatial_5x5, vectors, spatial_labels_3x3, spatial_labels_5x5 = tile_result[0]
                     if vectors is not None:
                         n_valid = (~np.isnan(vectors).any(axis=1)).sum()
                         logger.info("Point vectors from tiles: %d/%d valid", n_valid, len(vectors))
@@ -929,6 +937,7 @@ def run_large_area():
             vectors, labels, active_models, training_pcts,
             repeats=5, classifier_params=model_params,
             spatial_vectors=spatial_3x3, spatial_vectors_5x5=spatial_5x5,
+            spatial_labels=spatial_labels_3x3 if spatial_labels_3x3 is not None else spatial_labels_5x5,
             finish_classifiers=_finish_classifiers,
             unet_patches=unet_patches,
         ):

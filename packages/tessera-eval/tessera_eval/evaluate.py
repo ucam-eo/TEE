@@ -17,7 +17,8 @@ from tessera_eval.classify import make_classifier, make_regressor, augment_spati
 
 def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                        repeats=5, classifier_params=None, spatial_vectors=None,
-                       spatial_vectors_5x5=None, finish_classifiers=None,
+                       spatial_vectors_5x5=None, spatial_labels=None,
+                       finish_classifiers=None,
                        unet_patches=None, **kwargs):
     """Generator that yields progress events after each training percentage.
 
@@ -133,14 +134,42 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                     yield {"type": "classifier_status",
                            "message": f"Pct {pct}%: training {name} (repeat {seed+1}/{n_repeats})..."}
                 if name == "spatial_mlp" and spatial_vectors is not None:
-                    X_tr, X_te = spatial_vectors[train_idx], spatial_vectors[test_idx]
-                    X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=3, dim=vectors.shape[1])
+                    if spatial_labels is not None:
+                        # Spatial vectors have their own labels (from patches, different size from pixel vectors)
+                        n_sp = len(spatial_vectors)
+                        sp_size = max(1, int(n_sp * pct / 100.0))
+                        sp_train_idx = rng.choice(n_sp, size=min(sp_size, int(n_sp * 0.8)), replace=False)
+                        sp_test_mask = np.ones(n_sp, dtype=bool)
+                        sp_test_mask[sp_train_idx] = False
+                        sp_test_idx = np.where(sp_test_mask)[0]
+                        X_tr, X_te = spatial_vectors[sp_train_idx], spatial_vectors[sp_test_idx]
+                        y_train_sp, y_test = spatial_labels[sp_train_idx], spatial_labels[sp_test_idx]
+                        X_tr, y_tr_aug = augment_spatial(X_tr, y_train_sp, window=3, dim=vectors.shape[1])
+                    else:
+                        X_tr, X_te = spatial_vectors[train_idx], spatial_vectors[test_idx]
+                        X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=3, dim=vectors.shape[1])
+                        y_test = labels[test_idx]
                 elif name == "spatial_mlp_5x5" and spatial_vectors_5x5 is not None:
-                    X_tr, X_te = spatial_vectors_5x5[train_idx], spatial_vectors_5x5[test_idx]
-                    X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=5, dim=vectors.shape[1])
+                    sp_vecs = spatial_vectors_5x5
+                    sp_lbls = spatial_labels  # same labels for 3x3 and 5x5 (from same patches)
+                    if sp_lbls is not None:
+                        n_sp = len(sp_vecs)
+                        sp_size = max(1, int(n_sp * pct / 100.0))
+                        sp_train_idx = rng.choice(n_sp, size=min(sp_size, int(n_sp * 0.8)), replace=False)
+                        sp_test_mask = np.ones(n_sp, dtype=bool)
+                        sp_test_mask[sp_train_idx] = False
+                        sp_test_idx = np.where(sp_test_mask)[0]
+                        X_tr, X_te = sp_vecs[sp_train_idx], sp_vecs[sp_test_idx]
+                        y_train_sp, y_test = sp_lbls[sp_train_idx], sp_lbls[sp_test_idx]
+                        X_tr, y_tr_aug = augment_spatial(X_tr, y_train_sp, window=5, dim=vectors.shape[1])
+                    else:
+                        X_tr, X_te = sp_vecs[train_idx], sp_vecs[test_idx]
+                        X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=5, dim=vectors.shape[1])
+                        y_test = labels[test_idx]
                 else:
                     X_tr, X_te = X_train, X_test
                     y_tr_aug = y_train
+                    y_test = labels[test_idx]
 
                 clf = make_classifier(name, (classifier_params or {}).get(name, {}))
                 try:
