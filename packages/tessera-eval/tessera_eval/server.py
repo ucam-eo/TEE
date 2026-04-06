@@ -616,6 +616,7 @@ def run_large_area():
         cache_key = (field_name, year, sampling)
         vectors = labels = class_names = stats = None
         spatial_3x3 = spatial_5x5 = unet_patches = None
+        spatial_labels_3x3 = spatial_labels_5x5 = None
         all_sample_points = None  # (lon, lat) coordinates of all sample points
         all_valid_mask = None     # boolean mask: True for points with valid embeddings
 
