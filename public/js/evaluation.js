@@ -1734,25 +1734,22 @@ function initBboxDrawing() {
 }
 
 function toggleBboxDraw() {
-    const btn = document.getElementById('val-bbox-draw-btn');
     if (bboxDrawHandler) {
         bboxDrawHandler.disable();
         bboxDrawHandler = null;
-        if (btn) btn.textContent = 'Draw Rectangle';
         return;
     }
     if (!window.maps || !window.maps.rgb || typeof L.Draw === 'undefined') return;
     ensureBboxFeatureGroup();
 
     const typeSel = document.getElementById('val-bbox-type');
-    if (typeSel) currentBboxType = typeSel.value;
+    if (typeSel && typeSel.value) currentBboxType = typeSel.value;
 
     const style = BBOX_COLORS[currentBboxType] || BBOX_COLORS.train;
     bboxDrawHandler = new L.Draw.Rectangle(window.maps.rgb, {
         shapeOptions: { ...style },
     });
     bboxDrawHandler.enable();
-    if (btn) btn.textContent = 'Cancel Drawing';
 }
 
 function hasSpatialBboxes() {
@@ -1766,13 +1763,14 @@ function getSpatialBboxData() {
     };
 }
 
-// Auto-start drawing when bbox type changes
+// Selecting an area type starts drawing immediately
 document.getElementById('val-bbox-type').addEventListener('change', function() {
     if (bboxDrawHandler) {
         bboxDrawHandler.disable();
         bboxDrawHandler = null;
     }
-    // Start drawing immediately with new type
+    if (!this.value) return;  // placeholder selected
+    currentBboxType = this.value;
     toggleBboxDraw();
 });
 

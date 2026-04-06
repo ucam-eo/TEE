@@ -57,8 +57,8 @@ if [[ "$*" == *"--install-torch"* ]]; then
 fi
 
 echo "--- Killing old tee-compute on $REMOTE ---"
-ssh "$REMOTE" "kill \$(pgrep -f 'python.*tee-compute') 2>/dev/null || true"
-sleep 1
+ssh "$REMOTE" "kill -9 \$(pgrep -f 'python.*tee-compute') 2>/dev/null || true; kill -9 \$(lsof -t -i :$REMOTE_PORT) 2>/dev/null || true; sleep 1"
+sleep 2
 
 if [[ "$*" == *"--no-tunnel"* ]]; then
     echo "=== Done (no tunnel requested) ==="
