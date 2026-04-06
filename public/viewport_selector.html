@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="referrer" content="origin" />
-    <title>TEE Viewport Manager</title>
+    <title>Tessera Embeddings Explorer</title>
 
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
@@ -659,7 +659,7 @@
         <div class="sidebar">
             <div class="sidebar-header">
                 <div>
-                    <h1>TEE Viewport Manager <span id="teeVersion" style="font-size: 12px; font-weight: normal; opacity: 0.7;"></span></h1>
+                    <h1>Tessera Embeddings Explorer <span id="teeVersion" style="font-size: 12px; font-weight: normal; opacity: 0.7;"></span></h1>
                     <div style="font-size: 11px; opacity: 0.85;">
                         <a href="https://www.youtube.com/watch?v=JKYTEBuNbi8" target="_blank" rel="noopener" style="color: #fff; text-decoration: none;">Video Introduction</a>
                         &middot;
@@ -876,14 +876,6 @@
                         </p>
                     </div>
 
-                    <div style="margin-top:16px; border:1px solid #e0e0e0; border-radius:8px; overflow:hidden; height:350px;">
-                        <iframe src="https://geotessera.org/coverage/"
-                            style="width:100%; height:100%; border:none;"
-                            title="GeoTessera embedding coverage map"></iframe>
-                    </div>
-                    <p style="font-size:11px; color:#999; margin-top:6px;">
-                        Embedding coverage — evaluation requires coverage for your region and year.
-                    </p>
                 </div>
 
                 <!-- Tab: Users (admin only) -->
@@ -893,8 +885,18 @@
             </div>
         </div>
 
-        <!-- Map Container -->
-        <div class="map-container">
+        <!-- Coverage Map (validation tab) -->
+        <div id="coverage-container" class="map-container" style="display:none;">
+            <iframe src="https://geotessera.org/coverage/"
+                style="width:100%; height:100%; border:none;"
+                title="GeoTessera embedding coverage map"></iframe>
+            <div style="position:absolute; bottom:10px; left:10px; background:rgba(255,255,255,0.9); padding:6px 12px; border-radius:4px; font-size:11px; color:#666;">
+                Embedding coverage — evaluation requires coverage for your region and year
+            </div>
+        </div>
+
+        <!-- Map Container (viewports tab) -->
+        <div class="map-container" id="map-container">
             <div id="map"></div>
             <!-- Basemap Selector -->
             <div id="basemap-selector" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(255,255,255,0.95); padding: 8px 12px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
@@ -934,9 +936,11 @@
             document.querySelectorAll('[id^="tab-content-"]').forEach(div => div.style.display = 'none');
             const content = document.getElementById('tab-content-' + tab);
             if (content) content.style.display = '';
-            // Show map only for viewports tab
-            const mapContainer = document.querySelector('.map-container');
-            if (mapContainer) mapContainer.style.display = tab === 'viewports' ? '' : 'none';
+            // Show map for viewports tab, coverage for validation tab
+            const mapEl = document.getElementById('map-container');
+            const coverageEl = document.getElementById('coverage-container');
+            if (mapEl) mapEl.style.display = tab === 'viewports' ? '' : 'none';
+            if (coverageEl) coverageEl.style.display = tab === 'validation' ? '' : 'none';
         }
 
         // Auth check: set demo mode for unauthenticated users
@@ -2444,7 +2448,7 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             }
 
             // Add overlay message
-            const mapContainer = document.querySelector('.map-container');
+            const mapContainer = document.getElementById('map-container');
             if (mapContainer && !document.getElementById('downloadOverlay')) {
                 const overlay = document.createElement('div');
                 overlay.id = 'downloadOverlay';
