@@ -153,7 +153,7 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
     if logger:
         pts_info = f", {len(sample_points_lonlat)} sample points" if sample_points_lonlat is not None else ""
-        logger.info("Processing %d tiles (shuffled)%s...", len(tiles_to_fetch), pts_info)
+        logger.info("Reading %d tiles (shuffled)%s...", len(tiles_to_fetch), pts_info)
 
     unet_patches = []
     all_spatial_3x3 = [] if needs_spatial_3x3 else None
@@ -707,8 +707,9 @@ def run_large_area():
 
                 if needs_spatial_3x3 or needs_spatial_5x5 or needs_unet:
                     # Single tile pass: fetch tiles once, extract both point samples AND patches
-                    logger.info("Fetching tiles for %d points + patches...", n_points)
-                    yield json.dumps({"event": "status", "message": f"Fetching tiles for {n_points:,} points + patches..."}) + "\n"
+                    mode = "zarr" if use_zarr else "NPY"
+                    logger.info("Loading embeddings (%s) for %d points + patches...", mode, n_points)
+                    yield json.dumps({"event": "status", "message": f"Loading embeddings ({mode}) for {n_points:,} points + patches..."}) + "\n"
 
                     def _tile_progress(current, total):
                         progress_q.put(("tile", current, total))
@@ -749,7 +750,7 @@ def run_large_area():
                         if item[0] == "tile":
                             _, cur, tot = item
                             pct = int(100 * cur / tot) if tot else 0
-                            msg = f"Fetching tiles: {cur}/{tot} ({pct}%)"
+                            msg = f"Loading tile {cur}/{tot} ({pct}%)"
                             logger.info(msg)
                             yield json.dumps({"event": "progress", "pct": pct, "message": msg}) + "\n"
 
