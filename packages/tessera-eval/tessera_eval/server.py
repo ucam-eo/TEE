@@ -540,23 +540,49 @@ def run_large_area():
 
     is_classification = (task == "classification")
     _CLF_TO_REG = {"nn": "nn_reg", "rf": "rf_reg", "mlp": "mlp_reg", "xgboost": "xgboost_reg"}
+    # Expand hyperparameter variants: if classifier_params[name] is a list,
+    # each element becomes a separate variant (e.g., "mlp_v1", "mlp_v2").
+    import re as _re
+
+    def _expand_variants(names, params):
+        """Expand classifier list for multi-variant hyperparameter sweeps.
+
+        If params[name] is a list, each element becomes a named variant
+        (name_v1, name_v2, ...). Single-object params are unchanged.
+        """
+        expanded_names = []
+        expanded_params = {}
+        for name in names:
+            p = params.get(name, {})
+            if isinstance(p, list):
+                for i, variant_p in enumerate(p):
+                    variant_name = f"{name}_v{i+1}"
+                    expanded_names.append(variant_name)
+                    expanded_params[variant_name] = variant_p
+            else:
+                expanded_names.append(name)
+                expanded_params[name] = p
+        return expanded_names, expanded_params
+
     if is_classification:
-        model_names = classifiers
-        model_params = classifier_params
+        model_names, model_params = _expand_variants(classifiers, classifier_params)
     else:
         regressors = body.get("regressors", [])
         regressor_params = body.get("regressor_params", {})
         if regressors:
-            model_names = regressors
-            model_params = regressor_params
+            model_names, model_params = _expand_variants(regressors, regressor_params)
         else:
-            model_names = [_CLF_TO_REG.get(c, c) for c in classifiers]
-            model_params = {_CLF_TO_REG.get(c, c): v for c, v in classifier_params.items()}
+            reg_names = [_CLF_TO_REG.get(c, c) for c in classifiers]
+            reg_params = {_CLF_TO_REG.get(c, c): v for c, v in classifier_params.items()}
+            model_names, model_params = _expand_variants(reg_names, reg_params)
 
-    # Determine which spatial features are needed
-    needs_spatial_3x3 = "spatial_mlp" in model_names
-    needs_spatial_5x5 = "spatial_mlp_5x5" in model_names
-    needs_unet = "unet" in model_names
+    def _base_name(name):
+        return _re.sub(r'_v\d+$', '', name)
+
+    # Determine which spatial features are needed (check base names)
+    needs_spatial_3x3 = any(_base_name(n) == "spatial_mlp" for n in model_names)
+    needs_spatial_5x5 = any(_base_name(n) == "spatial_mlp_5x5" for n in model_names)
+    needs_unet = any(_base_name(n) == "unet" for n in model_names)
 
     def stream():
         import threading
@@ -985,20 +1011,21 @@ def run_large_area():
         # Filter classifiers that the user hasn't installed deps for
         active_models = []
         for name in model_names:
-            if name == "unet":
+            bn = _base_name(name)
+            if bn == "unet":
                 try:
                     from tessera_eval.unet import _HAS_TORCH
                     if not _HAS_TORCH:
                         logger.warning("Skipping U-Net: PyTorch not installed")
-                        yield json.dumps({"event": "status", "message": "U-Net skipped — PyTorch not installed"}) + "\n"
+                        yield json.dumps({"event": "status", "message": f"{name} skipped — PyTorch not installed"}) + "\n"
                         continue
                 except ImportError:
                     continue
                 if not unet_patches:
-                    yield json.dumps({"event": "status", "message": "U-Net skipped — no labelled patches found"}) + "\n"
+                    yield json.dumps({"event": "status", "message": f"{name} skipped — no labelled patches found"}) + "\n"
                     continue
-            if name in ("spatial_mlp", "spatial_mlp_5x5"):
-                if (name == "spatial_mlp" and spatial_3x3 is None) or (name == "spatial_mlp_5x5" and spatial_5x5 is None):
+            if bn in ("spatial_mlp", "spatial_mlp_5x5"):
+                if (bn == "spatial_mlp" and spatial_3x3 is None) or (bn == "spatial_mlp_5x5" and spatial_5x5 is None):
                     yield json.dumps({"event": "status", "message": f"{name} skipped — no spatial features"}) + "\n"
                     continue
             active_models.append(name)
@@ -1117,7 +1144,9 @@ def train_models():
             logger.info("Training %s...", name)
             yield json.dumps({"event": "status", "message": f"Training {name}..."}) + "\n"
             try:
-                if name == "unet":
+                import re as _re
+                _bn = _re.sub(r'_v\d+$', '', name)
+                if _bn == "unet":
                     from tessera_eval.unet import train_unet_on_patches, _HAS_TORCH
                     import torch as _torch
                     if _HAS_TORCH and unet_patches:
@@ -1126,7 +1155,7 @@ def train_models():
                         def _unet_cb(epoch, total, loss):
                             _unet_progress.append((epoch, total, loss))
                         model = train_unet_on_patches(
-                            unet_patches, n_cls, model_params.get("unet", {}),
+                            unet_patches, n_cls, model_params.get(name, {}),
                             progress_callback=_unet_cb)
                         for ep, tot, loss in _unet_progress:
                             yield json.dumps({"event": "status", "message": f"U-Net epoch {ep}/{tot} loss={loss:.4f}"}) + "\n"
@@ -1134,9 +1163,9 @@ def train_models():
                         _torch.save({"model_state": model.state_dict(), "class_names": valid_class_names}, tmp.name)
                         _trained_models[name] = tmp.name
                     else:
-                        yield json.dumps({"event": "status", "message": "U-Net skipped — no patches or PyTorch"}) + "\n"
+                        yield json.dumps({"event": "status", "message": f"{name} skipped — no patches or PyTorch"}) + "\n"
                         continue
-                elif name == "spatial_mlp" and spatial_3x3 is not None:
+                elif _bn == "spatial_mlp" and spatial_3x3 is not None:
                     from tessera_eval.classify import augment_spatial
                     X_aug, y_aug = augment_spatial(spatial_3x3, labels, window=3, dim=vectors.shape[1])
                     clf = make_classifier(name, model_params.get(name, {}))
@@ -1144,7 +1173,7 @@ def train_models():
                     tmp = tempfile.NamedTemporaryFile(suffix=".joblib", prefix=f"{name}_model_", delete=False)
                     joblib.dump({"model": clf, "class_names": valid_class_names}, tmp.name)
                     _trained_models[name] = tmp.name
-                elif name == "spatial_mlp_5x5" and spatial_5x5 is not None:
+                elif _bn == "spatial_mlp_5x5" and spatial_5x5 is not None:
                     from tessera_eval.classify import augment_spatial
                     X_aug, y_aug = augment_spatial(spatial_5x5, labels, window=5, dim=vectors.shape[1])
                     clf = make_classifier(name, model_params.get(name, {}))
@@ -1176,7 +1205,9 @@ def download_model(name):
     path = _trained_models.get(name)
     if not path or not Path(path).exists():
         return jsonify({"error": f"No trained model for '{name}'"}), 404
-    ext = ".pt" if name == "unet" else ".joblib"
+    import re as _re
+    _bn = _re.sub(r'_v\d+$', '', name)
+    ext = ".pt" if _bn == "unet" else ".joblib"
     return send_file(path, as_attachment=True, download_name=f"{name}_model{ext}")
 
 

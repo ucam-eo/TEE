@@ -12,7 +12,9 @@ from sklearn.metrics import (
 from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 
-from tessera_eval.classify import make_classifier, make_regressor, augment_spatial
+from tessera_eval.classify import (
+    make_classifier, make_regressor, augment_spatial, _strip_variant_suffix,
+)
 
 
 def run_learning_curve(vectors, labels, classifier_names, training_pcts,
@@ -64,9 +66,9 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
     all_labels = np.concatenate([labels, test_labels]) if spatial_split else labels
     n_classes = len(np.unique(all_labels))
 
-    # Separate pixel-based and U-Net classifiers
-    pixel_classifiers = [n for n in classifier_names if n != 'unet']
-    has_unet = 'unet' in classifier_names and unet_patches and len(unet_patches) > 0
+    # Separate pixel-based and U-Net classifiers (use base name for type checks)
+    pixel_classifiers = [n for n in classifier_names if _strip_variant_suffix(n) != 'unet']
+    has_unet = any(_strip_variant_suffix(n) == 'unet' for n in classifier_names) and unet_patches and len(unet_patches) > 0
 
     # Count total labelled pixels across all patches (for unified x-axis)
     # Computed even without U-Net — spatial MLP uses patches too
@@ -101,7 +103,7 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
     for pct_idx, pct in enumerate(training_pcts):
         pct_t0 = _time.time()
         active = [n for n in classifier_names if n not in finish_classifiers]
-        active_pixel = [n for n in active if n != 'unet']
+        active_pixel = [n for n in active if _strip_variant_suffix(n) != 'unet']
         f1_scores = {name: [] for name in active}
         f1w_scores = {name: [] for name in active}
         is_largest = (pct == training_pcts[-1])
@@ -162,7 +164,8 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                 if seed == 0:
                     yield {"type": "classifier_status",
                            "message": f"Pct {pct}%: training {name} (repeat {seed+1}/{n_repeats})..."}
-                if name == "spatial_mlp" and spatial_vectors is not None:
+                base_clf_name = _strip_variant_suffix(name)
+                if base_clf_name == "spatial_mlp" and spatial_vectors is not None:
                     if spatial_labels is not None:
                         # Spatial vectors have their own labels (from patches, different size from pixel vectors)
                         n_sp = len(spatial_vectors)
@@ -183,7 +186,7 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                         X_tr, X_te = spatial_vectors[train_idx], spatial_vectors[test_idx]
                         X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=3, dim=vectors.shape[1])
                         y_test = labels[test_idx]
-                elif name == "spatial_mlp_5x5" and spatial_vectors_5x5 is not None:
+                elif base_clf_name == "spatial_mlp_5x5" and spatial_vectors_5x5 is not None:
                     sp_vecs = spatial_vectors_5x5
                     sp_lbls = spatial_labels  # same labels for 3x3 and 5x5 (from same patches)
                     if sp_lbls is not None:
@@ -230,62 +233,64 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
 
             # U-Net: patch-based train/test split
             # Only run 1 repeat for U-Net (training is expensive, variance is dominated by SGD noise)
-            if has_unet and 'unet' in active and seed == 0:
+            unet_active = [n for n in active if _strip_variant_suffix(n) == 'unet']
+            if has_unet and unet_active and seed == 0:
                 yield {"type": "classifier_status",
                        "message": f"Pct {pct}%: training U-Net..."}
-                try:
-                    from tessera_eval.unet import train_unet_on_patches, predict_unet_tile, _HAS_TORCH
-                    if _HAS_TORCH:
-                        n_patches = len(unet_patches)
-                        n_train = max(1, int(n_patches * pct / 100.0))
-                        n_train = min(n_train, n_patches - 1)  # keep at least 1 for test
-                        n_train = min(n_train, 20)  # cap training patches for speed
-                        patch_idx = rng.permutation(n_patches)
-                        train_patches = [unet_patches[i] for i in patch_idx[:n_train]]
-                        test_patches = [unet_patches[i] for i in patch_idx[n_train:n_train + 10]]  # cap test too
+                for unet_name in unet_active:
+                    try:
+                        from tessera_eval.unet import train_unet_on_patches, predict_unet_tile, _HAS_TORCH
+                        if _HAS_TORCH:
+                            n_patches = len(unet_patches)
+                            n_train = max(1, int(n_patches * pct / 100.0))
+                            n_train = min(n_train, n_patches - 1)  # keep at least 1 for test
+                            n_train = min(n_train, 20)  # cap training patches for speed
+                            patch_idx = rng.permutation(n_patches)
+                            train_patches = [unet_patches[i] for i in patch_idx[:n_train]]
+                            test_patches = [unet_patches[i] for i in patch_idx[n_train:n_train + 10]]  # cap test too
 
-                        if train_patches and test_patches:
-                            # Use fewer epochs for learning curve (full epochs only for final model)
-                            unet_params = dict((classifier_params or {}).get('unet', {}))
-                            unet_params.setdefault('epochs', 15)
-                            model = train_unet_on_patches(
-                                train_patches, n_classes, unet_params)
+                            if train_patches and test_patches:
+                                # Use fewer epochs for learning curve (full epochs only for final model)
+                                unet_params = dict((classifier_params or {}).get(unet_name, {}))
+                                unet_params.setdefault('epochs', 15)
+                                model = train_unet_on_patches(
+                                    train_patches, n_classes, unet_params)
 
-                            # Evaluate on test patches
-                            all_true, all_pred = [], []
-                            for emb_patch, lbl_patch in test_patches:
-                                pred = predict_unet_tile(model, emb_patch,
-                                                         patch_size=emb_patch.shape[0])
-                                # Ensure pred and lbl_patch have matching shapes
-                                ph = min(pred.shape[0], lbl_patch.shape[0])
-                                pw = min(pred.shape[1], lbl_patch.shape[1])
-                                pred = pred[:ph, :pw]
-                                lbl = lbl_patch[:ph, :pw]
-                                mask = lbl > 0
-                                if mask.any():
-                                    all_true.append(lbl[mask] - 1)  # 1-based → 0-based
-                                    all_pred.append(pred[mask] - 1)
+                                # Evaluate on test patches
+                                all_true, all_pred = [], []
+                                for emb_patch, lbl_patch in test_patches:
+                                    pred = predict_unet_tile(model, emb_patch,
+                                                             patch_size=emb_patch.shape[0])
+                                    # Ensure pred and lbl_patch have matching shapes
+                                    ph = min(pred.shape[0], lbl_patch.shape[0])
+                                    pw = min(pred.shape[1], lbl_patch.shape[1])
+                                    pred = pred[:ph, :pw]
+                                    lbl = lbl_patch[:ph, :pw]
+                                    mask = lbl > 0
+                                    if mask.any():
+                                        all_true.append(lbl[mask] - 1)  # 1-based → 0-based
+                                        all_pred.append(pred[mask] - 1)
 
-                            if all_true:
-                                y_true = np.concatenate(all_true)
-                                y_pred = np.concatenate(all_pred)
-                                f1 = f1_score(y_true, y_pred, average="macro", zero_division=0)
-                                f1w = f1_score(y_true, y_pred, average="weighted", zero_division=0)
-                                f1_scores['unet'].append(float(f1))
-                                f1w_scores['unet'].append(float(f1w))
-                                if is_largest:
-                                    cm = confusion_matrix(y_true, y_pred, labels=np.arange(n_classes))
-                                    cm_accum['unet'] += cm
+                                if all_true:
+                                    y_true = np.concatenate(all_true)
+                                    y_pred = np.concatenate(all_pred)
+                                    f1 = f1_score(y_true, y_pred, average="macro", zero_division=0)
+                                    f1w = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+                                    f1_scores[unet_name].append(float(f1))
+                                    f1w_scores[unet_name].append(float(f1w))
+                                    if is_largest:
+                                        cm = confusion_matrix(y_true, y_pred, labels=np.arange(n_classes))
+                                        cm_accum[unet_name] += cm
+                                else:
+                                    f1_scores[unet_name].append(0.0)
+                                    f1w_scores[unet_name].append(0.0)
                             else:
-                                f1_scores['unet'].append(0.0)
-                                f1w_scores['unet'].append(0.0)
-                        else:
-                            f1_scores['unet'].append(0.0)
-                            f1w_scores['unet'].append(0.0)
-                except Exception as exc:
-                    logger.warning("U-Net failed at pct %.1f seed %d: %s", pct, seed, exc)
-                    f1_scores.setdefault('unet', []).append(0.0)
-                    f1w_scores.setdefault('unet', []).append(0.0)
+                                f1_scores[unet_name].append(0.0)
+                                f1w_scores[unet_name].append(0.0)
+                    except Exception as exc:
+                        logger.warning("U-Net %s failed at pct %.1f seed %d: %s", unet_name, pct, seed, exc)
+                        f1_scores.setdefault(unet_name, []).append(0.0)
+                        f1w_scores.setdefault(unet_name, []).append(0.0)
 
         pct_results = {}
         for name in active:
@@ -301,7 +306,7 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
         # Compute actual training pixel counts for unified x-axis
         pixel_train_count = len(train_idx)  # from last repeat (representative)
         unet_train_count = 0
-        if has_unet and 'unet' in active:
+        if has_unet and any(_strip_variant_suffix(n) == 'unet' for n in active):
             n_train_patches = max(1, int(len(unet_patches) * pct / 100.0))
             n_train_patches = min(n_train_patches, len(unet_patches) - 1)
             n_train_patches = min(n_train_patches, 20)
