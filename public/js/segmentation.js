@@ -526,7 +526,8 @@ function saveClusterAsLabel(clusterId) {
         lon: cluster.sourcePixel ? cluster.sourcePixel.lon : 0,
         embedding: centroid ? Array.from(centroid) : null,
         threshold: clusterRadius,
-        matchCount: pixels.length
+        matchCount: pixels.length,
+        pixel_coords: pixel_coords,  // compact [x0,y0,x1,y1,...] for exact cluster pixels
     });
 
     // Build overlay directly from exact seg pixels (not via similarity search)

@@ -427,12 +427,39 @@ function rebuildClassOverlay(className) {
         }
     }
 
-    // Run similarity search with all class embeddings (union)
-    if (window.localVectors && threshold > 0) {
+    // Use stored cluster pixels if available (exact K-means assignments),
+    // otherwise fall back to similarity search (which finds a broader set).
+    let usedStoredPixels = false;
+    if (window.localVectors) {
+        const gt = window.localVectors.metadata.geotransform;
+        for (const label of classLabels) {
+            if (!label.visible) continue;
+            if (label.pixel_coords && label.pixel_coords.length > 0) {
+                // Reconstruct pixel matches from stored compact coords
+                const pc = label.pixel_coords;
+                const storedPixels = [];
+                for (let i = 0; i < pc.length; i += 2) {
+                    storedPixels.push({
+                        lat: gt.f + pc[i + 1] * gt.e,
+                        lon: gt.c + pc[i] * gt.a,
+                    });
+                }
+                if (storedPixels.length > 0) {
+                    const canvasLayer = new window.DirectCanvasLayer(storedPixels, window.maps.rgb, color);
+                    layerGroup.addLayer(canvasLayer);
+                    totalMatchCount += storedPixels.length;
+                    for (const m of storedPixels) cachedCoords.push({ lat: m.lat, lon: m.lon });
+                    usedStoredPixels = true;
+                }
+            }
+        }
+    }
+
+    // Fall back to similarity search if no stored pixels
+    if (!usedStoredPixels && window.localVectors && threshold > 0) {
         const embeddings = [];
         for (const label of classLabels) {
             if (!label.visible) continue;
-            // Union-mode polygon: use all stored individual embeddings
             if (label.embeddings && label.embeddings.length > 0) {
                 for (const e of label.embeddings) embeddings.push(new Float32Array(e));
             } else if (label.embedding) {
