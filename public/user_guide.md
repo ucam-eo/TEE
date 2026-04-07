@@ -227,14 +227,18 @@ Evaluate how well classifiers distinguish habitat classes using Tessera embeddin
 | Step | Panel | Action |
 |------|-------|--------|
 | 1 | — | In Viewport Manager → **Validation** tab → **Evaluate** |
-| 2 | 1 | Drag and drop a `.zip` shapefile onto the upload zone |
+| 2 | 1 | Drag and drop one or more `.zip` shapefiles onto the upload zone (click **Clear** to remove) |
 | 3 | 2 | Verify polygons appear as red outlines on satellite |
 | 4 | 3 | Check the class table — polygon counts per class |
-| 5 | 1 | Select **Class field**, **Year**, **Sampling**, **Patches**, and **Classifiers** |
-| 6 | 1 | Click **Run Evaluation** |
-| 7 | 4 | Watch progress log: tile fetching, patch extraction, classifier training |
-| 8 | 5 | Learning curve builds as each % completes |
-| 9 | 6 | Confusion matrix appears at the end |
+| 5 | 1 | Select **Class field** and **Year** |
+| 6 | 1 | Check **Classifiers** — click **...** to tune parameters, click **+** to add variants |
+| 7 | 1 | Set **Max pixel samples**, **Sampling** strategy, and **Max patches** (for spatial/U-Net) |
+| 8 | 1 | *(Optional)* Draw **Spatial split** rectangles: select Train/Test/Map from dropdown, draw on satellite map |
+| 9 | 1 | *(Optional)* **Generate Config** to save settings, or **Upload Config** to restore them |
+| 10 | 1 | Click **Run Evaluation** (or **Create Map** to generate a GeoTIFF after a prior run) |
+| 11 | 4 | Watch progress log: tile fetching, patch extraction, classifier training |
+| 12 | 5 | Learning curve builds as each % completes |
+| 13 | 6 | Confusion matrix appears at the end — use dropdown to switch classifiers, **%** to toggle counts/percentages, **View** for full size |
 
 ### Available Classifiers
 
