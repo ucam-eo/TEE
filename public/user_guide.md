@@ -319,7 +319,7 @@ SSH is how your laptop connects securely to the remote server. First, check if y
 ```bash
 cat ~/.ssh/id_rsa.pub
 ```
-If you see "No such file", generate one (just press Enter at every prompt — no need to set a passphrase):
+If you see "No such file", generate one (you'll be asked for a passphrase — choose something memorable, or press Enter to skip):
 ```bash
 ssh-keygen
 ```
