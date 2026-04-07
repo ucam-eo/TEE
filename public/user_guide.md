@@ -287,12 +287,12 @@ The hosted TEE website only serves map tiles and satellite imagery — it does n
 
 There are several ways to run the compute server, depending on your situation:
 
-| Mode | What you run | Where ML happens | Best for |
-|------|-------------|-----------------|----------|
-| **Hosted only** | Nothing — just use the website | No ML available | Exploring and labelling (no evaluation) |
-| **Local compute** | `tee-compute` on your laptop | Your laptop | Small datasets, quick tests |
-| **Remote GPU** | `tee-compute` on a GPU server via SSH tunnel | GPU server | Large datasets, faster training |
-| **All local** | Django + tee-compute on your laptop | Your laptop | Fully offline use |
+| Mode | What you run | UI comes from | ML runs on | Best for |
+|------|-------------|--------------|-----------|----------|
+| **Hosted only** | Nothing — just use the website | tee.cl.cam.ac.uk | No ML available | Exploring and labelling (no evaluation) |
+| **Remote GPU** | SSH tunnel to a GPU server | tee.cl.cam.ac.uk (proxied) | GPU server | Large datasets, fast training |
+| **Local + GPU** | Django on laptop + SSH tunnel | Your laptop | GPU server | Local viewports + GPU evaluation |
+| **All local** | Django + tee-compute on laptop | Your laptop | Your laptop | Fully offline, small datasets |
 
 | What the component does | Hosted server | Your compute server |
 |------------------------|:------------:|:------------------:|
@@ -379,12 +379,12 @@ Then open **http://localhost:8001** in your browser.
 
 All modes use a single script: `./scripts/deploy-compute.sh`
 
-| Command | What it does | When to use |
-|---------|-------------|-------------|
-| `deploy-compute.sh gpu-box` | Runs compute on GPU server, tunnels UI through localhost | Most common — evaluation with GPU acceleration |
-| `deploy-compute.sh --local gpu-box` | Runs Django locally + compute on GPU server | When you need local viewports AND GPU evaluation |
-| `deploy-compute.sh --local` | Runs everything on your laptop | Offline use, small datasets |
-| `deploy-compute.sh gpu-box --no-tunnel` | Just deploys code to the server (no tunnel) | Updating server code without starting evaluation |
+| Command | Mode | When to use |
+|---------|------|-------------|
+| `deploy-compute.sh gpu-box` | Remote GPU | Most common — GPU evaluation, UI proxied from tee.cl |
+| `deploy-compute.sh --local gpu-box` | Local + GPU | Local viewports and labelling + GPU evaluation |
+| `deploy-compute.sh --local` | All local | Fully offline, everything on your laptop |
+| `deploy-compute.sh gpu-box --no-tunnel` | Deploy only | Update code on server without starting evaluation |
 
 In all cases, open **http://localhost:8001** in your browser after running the command.
 
