@@ -4,15 +4,17 @@
 
 ## What is TEE?
 
-TEE (Tessera Embeddings Explorer) is a web-based tool for exploring, labelling, and evaluating Sentinel-2 satellite embeddings. With TEE you can:
+TEE (Tessera Embeddings Explorer) is a web-based tool for exploring and classifying land cover from satellite imagery. It uses **Tessera embeddings** — compact numerical summaries that capture what each 10m × 10m pixel of land "looks like" to a machine learning model trained on Sentinel-2 satellite data. Pixels with similar embeddings tend to be the same type of land cover (grassland, woodland, arable, urban, etc.), even if they are far apart geographically.
 
-- **Explore** any 5km × 5km area on Earth using 128-dimensional Tessera embeddings (2018–2025)
-- **Find similar pixels** instantly — double-click anywhere to highlight similar locations across the viewport
-- **Label habitats** using K-means clustering, manual pins, or polygon drawing
-- **Evaluate classifiers** on ground-truth shapefiles at any scale — from a single viewport to an entire country
+With TEE you can:
+
+- **Explore** any 5km × 5km area on Earth, for any year from 2018 to 2025
+- **Find similar pixels** instantly — double-click anywhere to highlight all similar locations across your area
+- **Label habitats** using automatic clustering, manual pins, or polygon drawing
+- **Evaluate classifiers** on your own ground-truth data at any scale — from a single field to an entire country
 - **Compare years** side by side to detect land-use change
 
-> **Privacy by design:** Similarity searches and labelling run entirely in your browser. ML evaluation runs on your own machine. Ground-truth data never leaves your desktop. The hosted server only serves map tiles and satellite imagery.
+> **Privacy by design:** Similarity searches and labelling run entirely in your browser — no data is sent to the server. ML evaluation runs on your own machine. Ground-truth shapefiles never leave your computer. The hosted server only serves map tiles and satellite imagery.
 
 ---
 
@@ -20,23 +22,25 @@ TEE (Tessera Embeddings Explorer) is a web-based tool for exploring, labelling, 
 
 ### Path 1: Explore a location
 
-1. Open TEE → **Viewports** tab → **Create New Viewport**
-2. Search for a place or click the map → select years → **Create**
-3. When processing completes, click **Open** → double-click any pixel to find similar locations
+1. Open TEE — you'll see the **Viewport Manager** with a map
+2. Click **Create New Viewport**, search for a place (or click on the map), choose which years to process, and click **Create**
+3. Processing takes a few minutes. When it finishes, click **Open**
+4. **Double-click** any pixel on the map — TEE will instantly highlight every similar location in the area, coloured by how similar they are
 
 ### Path 2: Label habitats
 
-1. Open a viewport → switch to **Labelling** mode (header dropdown)
-2. Click **Segment** to run K-means → review clusters → **Promote** good ones to labels
-3. Fine-tune with manual pins (Ctrl+click) and polygons (Ctrl+double-click)
-4. **Export** as Shapefile for use in GIS or as ground truth for validation
+1. Open a viewport, then switch to **Labelling** mode using the dropdown in the top-left header bar
+2. In the bottom-right panel, click **Segment** — TEE will automatically group the pixels into clusters of similar land cover
+3. Review the clusters. Give meaningful names to the ones you want to keep (e.g., "Grassland", "Arable"), then click **Promote** to turn them into saved labels
+4. Fine-tune by adding manual pins (Ctrl+click on the map) or drawing polygons (Ctrl+double-click to start drawing)
+5. Click **Export** to save your labels as a Shapefile you can open in QGIS, or use as ground truth for validation
 
 ### Path 3: Evaluate classifiers
 
-1. In the Viewport Manager → **Validation** tab → **Evaluate**
-2. Upload a ground-truth `.zip` shapefile → select a class field and year
-3. Check classifiers (k-NN, RF, XGBoost, MLP) → **Run Evaluation**
-4. View learning curves, confusion matrix, and download trained models
+1. In the Viewport Manager, go to the **Validation** tab and click **Evaluate**
+2. Drag and drop a ground-truth `.zip` shapefile (e.g., habitat survey polygons) onto the upload area
+3. Choose a class field (the column in your shapefile that contains the habitat names), select a year, and tick the classifiers you want to test
+4. Click **Run Evaluation** — TEE will train each classifier and show you learning curves and a confusion matrix so you can see how well the embeddings distinguish your habitat classes
 
 > **Try it:** The repository includes `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). Upload it, select field **"Crop"**, year **2024**, and click Run.
 
@@ -44,264 +48,284 @@ TEE (Tessera Embeddings Explorer) is a web-based tool for exploring, labelling, 
 
 ## The Viewport Manager
 
-The **Viewport Manager** is the home page. It has three tabs:
+The **Viewport Manager** is the home page you see when you open TEE. It has two main tabs (plus a Users tab for administrators):
 
 | Tab | Purpose |
 |-----|---------|
 | **Viewports** | Create, manage, and open viewports |
 | **Validation** | Evaluate classifiers on ground-truth shapefiles |
-| **Users** | Manage user accounts (admin only) |
+| **Users** | Create and manage user accounts (administrators and enrollers only) |
 
 ![Viewport Manager — tabs, viewport list, and map](images/viewport.png)
 
 ### Viewports Tab
 
-A **viewport** is a 5km × 5km area for which TEE downloads and processes Sentinel-2 embeddings. The tab shows:
+A **viewport** is a 5km × 5km area of the Earth's surface for which TEE downloads and processes Sentinel-2 satellite embeddings. Think of it as a "study site" — you create one for each area you want to investigate.
 
-1. **Search** — filter viewports by name
-2. **Active viewport** — the currently selected viewport
-3. **Create New Viewport** — click to expand the creation form
-4. **Export / Import** — bulk operations on your viewports
-5. **Viewport list** — grouped by creator; your viewports show all actions (Open, +Year, Export, Delete); others' viewports show only Open
+The tab shows:
 
-> **Note:** Only the creator of a viewport can delete it. Years without GeoTessera coverage for your area are greyed out in the year selector. Check **Private** when creating a viewport to hide it from other users.
+1. **Search** — type to filter your viewports by name
+2. **Active viewport** — the viewport you currently have selected
+3. **Create New Viewport** — search for a place name or paste coordinates (e.g., `52.2053, 0.1218`), then select which years to process. You can also click directly on the map to choose a location.
+4. **Export / Import** — save all your viewports to a file, or restore them from a backup
+5. **Viewport list** — grouped by who created them. Your own viewports show all actions (Open, +Year, Export, Delete); other people's viewports show only Open.
+
+> **Note:** Only the person who created a viewport can delete it. Years without satellite coverage for your area are greyed out in the year selector. Check **Private** when creating a viewport to hide it from other users.
 
 ### Validation Tab
 
-Click **Evaluate** to launch the viewer in validation mode. Evaluation runs locally — no labels leave your machine. For GPU servers, see [Remote Compute Setup](#remote-compute-setup-gpu-server).
+Click **Evaluate** to open the viewer in validation mode, where you can upload ground-truth shapefiles and test how well different classifiers can distinguish your habitat classes. You will need a compute server running first — see [Compute Server Setup](#compute-server-setup) below.
 
 ### Users Tab
 
-Visible to administrators only. Create accounts, set quotas, and manage enrolled users.
+Visible to administrators and enrollers. Here you can create new user accounts (with username, email, and password), set disk quotas, and enable or disable users.
 
 ---
 
 ## The Viewer
 
-The viewer uses a **6-panel synchronized grid** — panning or zooming one panel pans/zooms all. Three modes are available from the **layout dropdown** in the header. **Validation** mode is accessed from the Viewport Manager's Validation tab.
+When you open a viewport, you enter the **Viewer** — a screen divided into six synchronized panels arranged in a 2×3 grid. All six panels show the same geographic area. When you pan or zoom in one panel, all the others follow.
 
 ![Viewer in Explore mode — 6-panel synchronized grid](images/explore.png)
+
+The header bar at the top lets you switch between different **modes**, each of which shows different information in the six panels:
 
 ### Panel Layout by Mode
 
 ```
 ┌──────────────┬──────────────┬──────────────┐
 │   Panel 1    │   Panel 2    │   Panel 3    │
-│              │              │              │
+│  (top-left)  │  (top-mid)   │ (top-right)  │
 ├──────────────┼──────────────┼──────────────┤
 │   Panel 4    │   Panel 5    │   Panel 6    │
-│              │              │              │
+│  (bot-left)  │  (bot-mid)   │ (bot-right)  │
 └──────────────┴──────────────┴──────────────┘
 ```
 
 | Panel | Explore | Change Detection | Labelling | Validation |
 |:-----:|---------|-----------------|-----------|------------|
 | 1 | OpenStreetMap | OpenStreetMap | OpenStreetMap | **Controls** |
-| 2 | Satellite | Satellite | Satellite + labels | Satellite + polygons |
-| 3 | Embeddings | Embeddings (Y1) | Embeddings | **Ground Truth classes** |
-| 4 | PCA / UMAP | Change Distribution | PCA / UMAP | **Progress / results** |
-| 5 | — | Change Heatmap | Classification | **Learning Curves** |
-| 6 | — | Embeddings (Y2) | Label management | **Confusion Matrix** |
+| 2 | Satellite imagery | Satellite imagery | Satellite + labels | Satellite + polygons |
+| 3 | Embedding colours | Embeddings (Year 1) | Embedding colours | **Ground Truth classes** |
+| 4 | Dimensionality reduction (PCA/UMAP) | Change distribution | Dimensionality reduction | **Progress log** |
+| 5 | — | Change heatmap | Classification overlay | **Learning curves** |
+| 6 | — | Embeddings (Year 2) | Label management | **Confusion matrix** |
+
+**What are the embedding colour panels?** Each pixel's 128-dimensional embedding is compressed down to 3 numbers and displayed as a colour (red, green, blue). Pixels with similar colours have similar embeddings, which usually means similar land cover. This gives you a quick visual overview of the landscape structure.
+
+**What is dimensionality reduction?** Panel 4 shows PCA or UMAP — two different ways to visualise high-dimensional data in 2D. Each dot represents one pixel, and pixels that are close together in this view have similar embeddings. Clusters of dots often correspond to distinct land cover types.
 
 ### Switching Modes
 
-Use the **layout dropdown** in the header for Explore, Change Detection, and Labelling. Validation is accessed from the Viewport Manager's **Validation** tab.
+Use the **layout dropdown** in the top-left of the header bar to switch between Explore, Change Detection, and Labelling. Validation mode is accessed from the Viewport Manager's **Validation** tab (not the dropdown).
 
 ### Switching Years
 
-Use the **year dropdown** above the embedding panels. In Change Detection mode, Y1 and Y2 can be set independently.
+Use the **year dropdown** above the embedding panels to change which year's satellite data you're viewing. In Change Detection mode, Year 1 and Year 2 can be set independently to compare any two years.
 
 ### Satellite Imagery Source
 
-Use the **satellite source dropdown** in Panel 2 to switch between imagery providers (Esri, Google). The acquisition date of the current imagery is shown below the selector when available.
+Use the **satellite source dropdown** in Panel 2 to switch between different imagery providers (Esri World Imagery, Google). The acquisition date of the currently displayed imagery is shown below the dropdown when available — this is useful for understanding what the satellite saw on a specific date.
 
 ---
 
 ## Similarity Search
 
-**Double-click** anywhere on any panel to find similar pixels across the viewport. TEE extracts the 128-dimensional embedding at that pixel and computes distances to all other pixels — entirely in your browser.
+This is TEE's core feature. **Double-click** anywhere on any panel to find every pixel in the viewport that looks similar to the one you clicked. TEE compares the clicked pixel's embedding to all other pixels and highlights the matches — all within your browser, with no data sent to any server.
 
-| Step | Action |
-|------|--------|
-| 1 | **Double-click** any pixel |
-| 2 | Adjust the **similarity slider** — lower = stricter matching |
-| 3 | Click **Save as Label** to keep the results |
+| Step | What to do |
+|------|------------|
+| 1 | **Double-click** any pixel on the map |
+| 2 | Coloured dots appear across all panels showing similar locations. Adjust the **similarity slider** in the header bar — drag left for stricter matching (fewer, more similar results), drag right for looser matching (more results, less similar). |
+| 3 | Happy with the results? Click **Save as Label** to keep them as a named label. |
 
-> **First search** downloads vector data (~20–50MB) and caches it in your browser. Subsequent searches are instant.
+> **First search takes a moment:** The first time you search in a viewport, TEE downloads the embedding data for all pixels (~20–50MB) and caches it in your browser. After that, all searches are instant.
 
-A **single click** (without double) places a synchronized marker across all panels — useful for cross-referencing locations without triggering a search.
+**Single click** (without double-clicking) places a crosshair marker across all panels — useful for cross-referencing a location between the satellite view, the map, and the embedding panels without triggering a full similarity search.
 
 ---
 
 ## Labels
 
-Labels are named, colored collections of similar pixels.
+A **label** is a named group of pixels that you've identified as belonging to the same land cover type (e.g., "Grassland", "Woodland", "Arable"). Labels are the building blocks for both manual habitat mapping and machine-learning evaluation.
 
-| Action | How |
-|--------|-----|
-| Save | After a search, click **Save as Label** |
-| Show/hide | Click a label name |
-| Delete | Click the **×** next to a label |
-| Timeline | Click the **clock icon** — see coverage across all years |
-| Import | Click **Import** → select a JSON file |
-| Export | See [Export Options](#export-options) |
+| What you can do | How |
+|-----------------|-----|
+| **Create** a label | After a similarity search, click **Save as Label** and give it a name |
+| **Show or hide** a label on the map | Click the eye icon next to the label name |
+| **Delete** a label | Click the **trash** icon or **×** next to it |
+| **See coverage across years** | Click the **clock icon** next to a label — it shows how many similar pixels exist in each year |
+| **Import** labels from a file | Click **Import** and select a JSON or Shapefile |
+| **Export** labels | See [Export Options](#export-options) below |
 
-Labels persist across page reloads (stored in browser localStorage) and are portable across viewports.
+Labels are saved in your browser's local storage, so they persist across page reloads. They are tied to the viewport name — if you open the same viewport again, your labels reappear automatically.
 
 ---
 
 ## Manual Labelling
 
-Build label classes by hand — placing pins, drawing polygons, or combining both.
+Manual labelling lets you build habitat classes by hand — placing individual pins, drawing polygons around areas, or expanding from a seed point using similarity search. This is useful when automatic clustering doesn't capture the classes you need, or when you have specific expert knowledge about what's on the ground.
 
 ### Getting Started
 
-1. Switch to **Labelling** mode (header dropdown)
-2. In Panel 6, select **Manual Label** from the sub-mode dropdown
-3. Type a **label name**, pick a **color**, click **Set**
+1. Switch to **Labelling** mode using the layout dropdown in the header bar
+2. In Panel 6 (bottom-right), select **Manual Label** from the sub-mode dropdown
+3. Type a **label name** (e.g., "Improved grassland"), optionally pick a **colour**, and click **Set**
+4. Now you're ready to place labels on the map
 
-> **Tip:** Click **Schema** in the header to load a classification scheme (UKHab v2, EUNIS, HOTW, or custom). The schema browser is a draggable floating window with a search box — type to filter entries, click any entry to set it as the active label with its code and colour.
+> **Tip:** Click **Schema** in the header bar to load a habitat classification scheme (UKHab v2, EUNIS, Habitats of the World, or upload your own custom scheme). The schema browser opens as a floating window — use the search box to find a habitat type, then click it to set it as the active label with its standard code and colour.
 
 ### Placing Labels
 
-| Method | Action | Best for |
-|--------|--------|----------|
-| **Pin** | Ctrl+click (Cmd+click on Mac) | Scattered features, point samples |
-| **Polygon** | Ctrl+double-click → click vertices → close | Large homogeneous areas |
-| **Similarity slider** | Drag slider on any label entry (0–500) | Expanding coverage from a seed |
+| Method | How | Best for |
+|--------|-----|----------|
+| **Pin** | Hold Ctrl and click on the map (Cmd+click on Mac) | Identifying specific locations — a single field, a patch of woodland |
+| **Polygon** | Hold Ctrl and double-click to start drawing, then click to add corners, and close the shape | Drawing around a large area of known habitat |
+| **Similarity slider** | After placing a pin or polygon, drag the similarity slider on the label entry to expand coverage | Finding more of the same habitat type beyond the area you drew |
 
 ### Polygon Search Mode
 
-When drawing a polygon, choose how its embedding is stored:
+When you draw a polygon, TEE needs to decide how to represent the land cover inside it as a single "signature" for similarity search. There are two options, selectable before you start drawing:
 
-- **Mean** (default) — average of all pixel embeddings inside (best for homogeneous areas)
-- **Union** — every individual pixel embedding (best for heterogeneous areas)
+- **Mean** (default) — averages all the pixel embeddings inside the polygon into one representative value. Works well when the polygon contains a single, fairly uniform habitat type.
+- **Union** — keeps every individual pixel embedding separately. Better when the polygon contains a mix of sub-types (e.g., a field with both long and short grass) and you want to find all of them.
 
-### Classification
+### Classification Overlay
 
-Click **Classify** in Panel 5 to generate a full-viewport classification — each pixel is assigned to the nearest label class based on embedding distance.
+Once you have two or more label classes defined, click **Classify** in Panel 5 to generate a full-viewport classification. TEE assigns every pixel to whichever label class it most closely resembles based on embedding distance. This gives you a quick preview of what a habitat map based on your labels would look like.
 
 ---
 
-## Auto-Labelling (K-Means)
+## Auto-Labelling (K-Means Clustering)
 
 ![Labelling mode — K-means clusters promoted to labels, classification overlay](images/labelling.png)
 
-TEE segments the viewport into clusters using K-means on the embedding space. Clusters are **temporary previews** until promoted to saved labels.
+Instead of labelling every habitat type by hand, you can ask TEE to automatically group the pixels in your viewport into clusters of similar land cover. This uses an algorithm called **K-means**, which divides all the pixels into a set number of groups (you choose how many) based on how similar their embeddings are.
 
-| Step | Action |
-|------|--------|
-| 1 | Set **k** (2–20) using the slider |
-| 2 | Click **Segment** |
-| 3 | Review the cluster list (color, pixel count, %) |
-| 4 | **Promote** individual clusters (↗) or all at once |
+The clusters are **temporary previews** — you review them, name the ones that correspond to real habitat types, and "promote" them to saved labels. Clusters you don't want can simply be ignored.
 
-> **Tip:** Name clusters before promoting. Two clusters with the same name are merged automatically.
+| Step | What to do |
+|------|------------|
+| 1 | In Panel 6, set **k** (the number of clusters) using the slider — start with 5–10 |
+| 2 | Click **Segment** — TEE runs K-means and colours each cluster on the map |
+| 3 | Review the cluster list: each entry shows a colour swatch, pixel count, and percentage of the viewport |
+| 4 | Name the clusters you want to keep, then click the **Promote** arrow (↗) next to each one. Or click **Promote All** to promote everything at once. |
+
+> **Tip:** If two clusters represent the same habitat type, give them the same name before promoting — they will be merged into a single label automatically.
 
 ### Suggested Workflow
 
+This workflow combines automatic clustering with manual refinement to build a good set of habitat labels efficiently:
+
 ```
-1. Auto-label (K-means, k=5+)
+1. Run Auto-label (K-means with k=5 or more)
    ↓
-2. Review clusters on heatmap + embedding panels
+2. Review clusters — compare the coloured map overlay
+   with the satellite imagery and embedding panels
    ↓
-3. Promote good clusters → merge duplicates by giving same name
+3. Promote the good clusters — give them meaningful names,
+   merge duplicates by assigning the same name
    ↓
-4. Fine-tune with manual pins + similarity sliders
+4. Fine-tune with manual pins and similarity sliders
+   to fill gaps or correct misclassifications
    ↓
-5. Export as Shapefile for validation or GIS
+5. Export as Shapefile for use in GIS or as
+   ground truth for validation
 ```
 
 ---
 
 ## Compute Server Setup
 
-All ML evaluation runs on a compute server (`tee-compute`). The hosted TEE server does not run ML. You must set up a compute server before using the Validation features below.
+Before you can use the validation features (evaluating classifiers, creating maps), you need a **compute server** running. This is a separate process called `tee-compute` that handles all the machine-learning work. It can run on your own laptop, or on a remote server with a GPU for faster processing.
+
+The hosted TEE website only serves map tiles and satellite imagery — it does not run any machine learning. This design keeps your ground-truth data private.
 
 ### How It Works
 
 ```
 ┌─────────────┐     ┌──────────────────────┐     ┌─────────────────┐
-│   Browser    │────▶│  Django (port 8001)  │     │   tee-compute   │
-│             │     │  Serves UI, tiles,   │────▶│   (port 8002)   │
-│             │     │  proxies /eval/*     │     │  ML evaluation  │
-└─────────────┘     └──────────────────────┘     └────────┬────────┘
+│  Your        │     │  Django (port 8001)  │     │   tee-compute   │
+│  browser    │────▶│  Serves the UI and   │────▶│   Runs ML       │
+│             │     │  forwards evaluation │     │   evaluation    │
+└─────────────┘     │  requests            │     │                 │
+                    └──────────────────────┘     └────────┬────────┘
                                                           │
                                                  ┌────────▼────────┐
                                                  │   GeoTessera    │
-                                                 │ dl2.geotessera  │
+                                                 │   Tile server   │
                                                  └─────────────────┘
 ```
 
 ### Deployment Modes
 
-| Mode | What you run | ML runs on |
-|------|-------------|-----------|
-| **Hosted** | Nothing — open the website | — (no ML) |
-| **Local compute** | `tee-compute` on your laptop | Your laptop |
-| **Remote compute** | `tee-compute` on GPU box + SSH tunnel | GPU server |
-| **All local** | Django + tee-compute via `restart.sh` | Your laptop |
+There are several ways to run the compute server, depending on your situation:
 
-| Component | Hosted server | Local compute | GPU server |
-|-----------|:------------:|:------------:|:----------:|
-| Map tiles, satellite imagery | ✓ | | |
-| Embedding tile images | ✓ | | |
-| Label sharing | ✓ | | |
-| Viewport management | ✓ | | |
-| Shapefile upload | | ✓ | ✓ |
-| Embedding sampling | | ✓ | ✓ |
-| ML training + evaluation | | ✓ | ✓ |
-| Model download | | ✓ | ✓ |
+| Mode | What you run | Where ML happens | Best for |
+|------|-------------|-----------------|----------|
+| **Hosted only** | Nothing — just use the website | No ML available | Exploring and labelling (no evaluation) |
+| **Local compute** | `tee-compute` on your laptop | Your laptop | Small datasets, quick tests |
+| **Remote GPU** | `tee-compute` on a GPU server via SSH tunnel | GPU server | Large datasets, faster training |
+| **All local** | Django + tee-compute on your laptop | Your laptop | Fully offline use |
+
+| What the component does | Hosted server | Your compute server |
+|------------------------|:------------:|:------------------:|
+| Map tiles and satellite imagery | ✓ | |
+| Embedding tile visualisations | ✓ | |
+| Label sharing between users | ✓ | |
+| Viewport creation and management | ✓ | |
+| Shapefile upload and processing | | ✓ |
+| Embedding data sampling | | ✓ |
+| Classifier training and evaluation | | ✓ |
+| Trained model download | | ✓ |
 
 ### Setting Up a GPU Server
 
-You don't need Docker — just the git repo and a Python virtual environment on your server. The deploy script handles everything else (pulling code, installing dependencies, starting the tunnel).
+You don't need Docker — just the Git repository and a Python virtual environment on your server. The deploy script handles everything else (pulling code, installing dependencies, creating an SSH tunnel).
 
-Set up the GPU server once:
-
-**Step 0: Open a terminal**
+**Step 0: Open a terminal on your laptop**
 
 - **Mac**: press Cmd+Space, type "Terminal", press Enter
 - **Windows**: press Win+X, select "Windows PowerShell", or install [Windows Terminal](https://learn.microsoft.com/en-us/windows/terminal/install)
 
-For a full guide, see [How to open a terminal](https://tutorials.codebar.io/command-line/introduction/tutorial.html).
+If you've never used a terminal before, see [How to open a terminal](https://tutorials.codebar.io/command-line/introduction/tutorial.html) for a beginner-friendly guide.
 
-**Step 1: Get SSH access**
+**Step 1: Get SSH access to the server**
 
-Check if you already have an SSH key:
+SSH is how your laptop connects securely to the remote server. First, check if you already have an SSH key:
 ```bash
 cat ~/.ssh/id_rsa.pub
 ```
-If you see "No such file", generate one (press Enter at every prompt):
+If you see "No such file", generate one (just press Enter at every prompt — no need to set a passphrase):
 ```bash
 ssh-keygen
 ```
-Send the public key to your server admin:
+Then send your public key to the server administrator:
 ```bash
 cat ~/.ssh/id_rsa.pub
 ```
-Ask them to append it to `~/.ssh/authorized_keys` in your home directory on the server.
+Ask them to add it to `~/.ssh/authorized_keys` on the server so you can log in without a password.
 
-**Step 2: Configure SSH**
+**Step 2: Configure SSH for easy access**
 
-Add the server to `~/.ssh/config` so you can refer to it by a short name:
+Add the server to your SSH config file (`~/.ssh/config`) so you can refer to it by a short nickname instead of typing the full address every time:
 ```
 Host gpu-box
-    HostName myhost.uk       # replace with your server's DNS name or IP
+    HostName myhost.uk       # replace with your server's address
     User yourname            # replace with your username on the server
     ControlMaster auto
     ControlPath ~/.ssh/ctrl-%r@%h:%p
     ControlPersist 10m
 ```
 
-The `Control*` lines enable connection multiplexing — you only enter your password once, and subsequent SSH connections reuse it for 10 minutes.
+The `Control*` lines are optional but helpful — they mean you only need to enter your password once, and subsequent connections reuse it for 10 minutes.
 
-**Step 3: Verify SSH access**
+**Step 3: Test the connection**
 ```bash
-ssh gpu-box    # should log in without a password prompt
+ssh gpu-box    # should log in without asking for a password
 ```
 
-**Step 4: Clone the repo and create a venv on the server**
+**Step 4: Set up the code on the server**
 ```bash
 ssh gpu-box
 git clone https://github.com/ucam-eo/TEE.git ~/TEE
@@ -309,11 +333,19 @@ python3 -m venv ~/TEE/venv
 exit
 ```
 
-**Step 5: Deploy using the deploy script**
+**Step 5: Deploy and start**
 
-The `deploy-compute.sh` script handles everything: pulls code, installs dependencies, starts the tunnel. Use it for both initial setup and updates.
+Run the deploy script from your laptop. It will connect to the server, pull the latest code, install dependencies, and start the compute server with an SSH tunnel back to your laptop:
 
-> **PyTorch note:** `--install-torch` auto-detects CUDA. If it installs the wrong version, see [Fixing PyTorch CUDA version mismatch](#fixing-pytorch-cuda-version-mismatch) below.
+```bash
+./scripts/deploy-compute.sh gpu-box
+```
+
+Then open **http://localhost:8001** in your browser.
+
+> **Why localhost?** Web browsers block mixed HTTP/HTTPS requests for security. The deploy script creates a local proxy on your laptop that serves the TEE interface over plain HTTP, so evaluation requests can reach the compute server without being blocked.
+
+> **PyTorch note:** If you want to use the U-Net classifier (which benefits from a GPU), add `--install-torch` the first time. The script auto-detects your GPU's CUDA version. If it installs the wrong version, see [Fixing PyTorch CUDA version mismatch](#fixing-pytorch-cuda-version-mismatch) at the end of this section.
 
 ---
 
@@ -321,244 +353,190 @@ The `deploy-compute.sh` script handles everything: pulls code, installs dependen
 
 All modes use a single script: `./scripts/deploy-compute.sh`
 
-| Command | UI served by | Compute runs on | Use when |
-|---------|-------------|----------------|----------|
-| `deploy-compute.sh gpu-box` | tee.cl.cam.ac.uk (proxied) | GPU server | Evaluation only, no local data needed |
-| `deploy-compute.sh --local gpu-box` | Your laptop (Django) | GPU server | Local viewports + GPU evaluation |
-| `deploy-compute.sh --local` | Your laptop (Django) | Your laptop | Offline use, small datasets |
-| `deploy-compute.sh gpu-box --no-tunnel` | — | — | Just deploy code to server |
+| Command | What it does | When to use |
+|---------|-------------|-------------|
+| `deploy-compute.sh gpu-box` | Runs compute on GPU server, tunnels UI through localhost | Most common — evaluation with GPU acceleration |
+| `deploy-compute.sh --local gpu-box` | Runs Django locally + compute on GPU server | When you need local viewports AND GPU evaluation |
+| `deploy-compute.sh --local` | Runs everything on your laptop | Offline use, small datasets |
+| `deploy-compute.sh gpu-box --no-tunnel` | Just deploys code to the server (no tunnel) | Updating server code without starting evaluation |
+
+In all cases, open **http://localhost:8001** in your browser after running the command.
 
 ---
-
-### Option 1: GPU Server (recommended)
-
-The UI comes from tee.cl.cam.ac.uk, evaluation runs on your GPU server. Nothing runs on your laptop except the SSH tunnel.
-
-```bash
-./scripts/deploy-compute.sh gpu-box
-```
-
-Open **http://localhost:8001**.
-
-> **Why localhost?** Browsers block HTTP requests from HTTPS pages. tee-compute proxies the hosted UI via HTTP so evaluation requests work.
-
----
-
-### Option 2: All Local
-
-Everything runs on your laptop. Good for offline use and small datasets.
-
-```bash
-./scripts/deploy-compute.sh --local
-```
-
-Open **http://localhost:8001**.
-
----
-
-### Option 3: Local UI + GPU Server
-
-Local Django serves your viewports and labels. Evaluation offloads to a GPU server.
-
-```bash
-./scripts/deploy-compute.sh --local gpu-box
-```
-
-Open **http://localhost:8001**.
-
-### Command Reference
-
-```
-tee-compute [OPTIONS]
-
-  --hosted URL    Hosted server URL (default: https://tee.cl.cam.ac.uk)
-  --port PORT     Local port (default: 8001)
-  --host HOST     Bind address (default: 127.0.0.1)
-  --debug         Flask debug mode
-```
 
 ### Troubleshooting
 
-| Problem | Solution |
-|---------|----------|
-| `Connection refused` | Is `tee-compute` running? |
-| `Cannot reach hosted server` | Check internet: `curl https://tee.cl.cam.ac.uk/health` |
-| `No GeoTessera tiles found` | Try year 2025 (wider coverage) |
-| `ModuleNotFoundError` | `pip install -e "$HOME/TEE/packages/tessera-eval[server]"` |
-| SSH disconnects | Add `-o ServerAliveInterval=60` |
-| `Address already in use` on the server | Port 8001 is taken by another service. Use a different port: `ssh -L 8001:localhost:5050 gpu-box '~/TEE/venv/bin/tee-compute --port 5050'` |
-| `Could not resolve hostname gpu-box` | Replace `gpu-box` with the name from your `~/.ssh/config`, or use the full hostname |
-| SSH asks for passphrase every time | Run `ssh-add` to cache your key, or use `ssh-agent` |
-| `OpenBLAS: too many memory regions` | Server has >128 CPU cores. Update the code on the server (`cd ~/TEE && git pull`) to get the built-in fix, or run with: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050` |
-| Evaluation takes 6+ minutes to start | First run downloads tile data from GeoTessera (~6 min for country-scale). Results are cached — subsequent runs with the same shapefile/field/year are instant. |
-| `Skipping U-Net: PyTorch not installed` | Install PyTorch — see [Step 5](#step-5-optional-install-pytorch-for-u-net) above |
-| U-Net runs but `torch.cuda.is_available()` is False | CUDA driver mismatch — see below |
+| Problem | What to do |
+|---------|------------|
+| `Connection refused` | The compute server isn't running. Re-run the deploy script. |
+| `Cannot reach hosted server` | Check your internet connection: `curl https://tee.cl.cam.ac.uk/health` |
+| `No GeoTessera tiles found` | Not all years have coverage everywhere. Try year **2025** (the widest coverage). |
+| `ModuleNotFoundError` | Dependencies aren't installed. Run: `pip install -e "$HOME/TEE/packages/tessera-eval[server]"` |
+| SSH keeps disconnecting | Add `-o ServerAliveInterval=60` to your SSH config to send keep-alive signals. |
+| `Address already in use` on the server | Another process is using the port. Try a different one: `ssh -L 8001:localhost:5050 gpu-box '~/TEE/venv/bin/tee-compute --port 5050'` |
+| `Could not resolve hostname gpu-box` | Make sure you've added the server to your `~/.ssh/config` file (Step 2 above). |
+| SSH asks for passphrase every time | Run `ssh-add` once to cache your key for the session. |
+| Evaluation takes several minutes to start | The first run for each shapefile downloads embedding tiles from GeoTessera. This is normal for large areas (e.g., country-scale). The data is cached, so the next run with the same shapefile, field, and year will start much faster. |
+| `Skipping U-Net: PyTorch not installed` | Install PyTorch with `--install-torch` flag. |
+| U-Net runs but doesn't use the GPU | CUDA version mismatch — see below. |
 
-> **Tip:** Click the **Status** button in the viewer header to see which machines are running the backend and compute server.
+> **Tip:** Click the **Status** button in the viewer header bar to see which machines are running the backend and compute server.
 
 #### Fixing PyTorch CUDA version mismatch
 
-If U-Net ignores the GPU and falls back to CPU, the installed PyTorch was built for a newer CUDA than your driver supports. To diagnose:
+If U-Net ignores the GPU and falls back to CPU, the installed PyTorch may have been built for a different CUDA version than your GPU driver supports. To check:
 
 ```bash
-# Run these on the GPU server (ssh gpu-box first)
+# On the GPU server (ssh gpu-box first):
 
-# Check your driver's CUDA version (look for "CUDA Version: XX.Y" in the top-right)
+# 1. Check your driver's CUDA version (top-right corner of the output)
 nvidia-smi
 
-# Check if PyTorch can see the GPU (use the venv python, not system python)
+# 2. Check if PyTorch can see the GPU
 ~/TEE/venv/bin/python3 -c "import torch; print(torch.cuda.is_available())"
 ```
 
-If `nvidia-smi` shows a GPU but `torch.cuda.is_available()` returns False, you need a PyTorch version that matches your driver. The driver's CUDA version is the **maximum** it supports — install a PyTorch built for that version or lower.
+If `nvidia-smi` shows a GPU but `torch.cuda.is_available()` returns False, install the correct PyTorch version:
 
 ```bash
-# Example: driver reports CUDA 12.2 → install PyTorch for CUDA 12.1
+# Example: your driver reports CUDA 12.2 → install PyTorch for CUDA 12.1
 ~/TEE/venv/bin/pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
-
-# Verify
-~/TEE/venv/bin/python3 -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
 
-Common CUDA index URLs:
-| Driver CUDA version | PyTorch index URL |
-|---------------------|-------------------|
-| 11.8+ | `https://download.pytorch.org/whl/cu118` |
-| 12.1+ | `https://download.pytorch.org/whl/cu121` |
+| Your driver's CUDA version | PyTorch install URL |
+|----------------------------|---------------------|
+| 11.8 or newer | `https://download.pytorch.org/whl/cu118` |
+| 12.1 or newer | `https://download.pytorch.org/whl/cu121` |
 | No GPU / CPU only | `https://download.pytorch.org/whl/cpu` |
 
 ---
 
-## Validation (Learning Curves)
+## Validation (Evaluating Classifiers)
 
-Evaluate how well classifiers distinguish habitat classes using Tessera embeddings and expert ground-truth polygons. Works at any scale — from a single viewport to an entire country.
+Validation answers the question: **"How well can machine learning distinguish my habitat classes using satellite embeddings?"** You upload a ground-truth shapefile (polygons with habitat labels from a field survey, for example), and TEE trains several classifiers on increasing amounts of your data. The result is a **learning curve** showing how accuracy improves as more training data is added, plus a **confusion matrix** showing which classes get mixed up.
 
 ![Validation — learning curves, confusion matrix, and ground truth overlay](images/validation.png)
 
-> All ML evaluation runs on your **compute server** (`tee-compute`), not on the hosted server. See [Running Evaluation on Your Own Machine](#running-evaluation-on-your-own-machine).
+> All evaluation runs on your **compute server**, not on the hosted TEE website. Your ground-truth data stays on your machine. See [Compute Server Setup](#compute-server-setup) above if you haven't set this up yet.
 
 ### Step-by-Step
 
-| Step | Panel | Action |
-|------|-------|--------|
-| 1 | — | In Viewport Manager → **Validation** tab → **Evaluate** |
-| 2 | 1 | Drag and drop one or more `.zip` shapefiles onto the upload zone (click **Clear** to remove) |
-| 3 | 2 | Verify polygons appear as red outlines on satellite |
-| 4 | 3 | Check the class table — polygon counts per class |
-| 5 | 1 | Select **Class field** and **Year** |
-| 6 | 1 | Check **Classifiers** — click **...** to tune parameters, click **+** to add variants |
-| 7 | 1 | Set **Max pixel samples**, **Sampling** strategy, and **Max patches** (for spatial/U-Net) |
-| 8 | 1 | *(Optional)* Draw **Spatial split** rectangles: select Train/Test/Map from dropdown, draw on satellite map |
-| 9 | 1 | *(Optional)* **Generate Config** to save settings, or **Upload Config** to restore them |
-| 10 | 1 | Click **Run Evaluation** (or **Create Map** to generate a GeoTIFF after a prior run) |
-| 11 | 4 | Watch progress log: tile fetching, patch extraction, classifier training |
-| 12 | 5 | Learning curve builds as each % completes |
-| 13 | 6 | Confusion matrix appears at the end — use dropdown to switch classifiers, **%** to toggle counts/percentages, **View** for full size |
+| Step | Panel | What to do |
+|------|-------|------------|
+| 1 | — | In the Viewport Manager, go to the **Validation** tab and click **Evaluate** |
+| 2 | 1 | Drag and drop one or more `.zip` shapefiles onto the upload area. (You can upload multiple files; click **Clear** to start over.) |
+| 3 | 2 | Check the satellite panel — your polygons should appear as red outlines on the map |
+| 4 | 3 | Review the class table — it shows each habitat class and how many polygons/pixels it contains |
+| 5 | 1 | Select the **Class field** (the column in your shapefile that contains habitat names) and the **Year** of satellite data to use |
+| 6 | 1 | Tick the **Classifiers** you want to test. Click the **...** button next to each one to see and adjust its parameters. Click **+** to add a variant with different settings (see [Hyperparameter Variants](#hyperparameter-variants)). |
+| 7 | 1 | Adjust **Max pixel samples** (how many random points to sample from your polygons), **Sampling** strategy (how to distribute points across classes), and **Max patches** (for spatial classifiers) |
+| 8 | 1 | *(Optional)* Set up a **Spatial split** — draw separate train and test regions on the map to avoid spatial autocorrelation (see [Spatial Train/Test Split](#spatial-traintest-split-optional)) |
+| 9 | 1 | *(Optional)* Click **Generate Config** to save your current settings as a JSON file for later, or **Upload Config** to restore previously saved settings |
+| 10 | 1 | Click **Run Evaluation**. (Or click **Create Map** to generate a classification GeoTIFF — this requires a prior evaluation run.) |
+| 11 | 4 | Watch the progress log — it shows tile fetching, point extraction, and classifier training in real time. You can click **Cancel** to stop at any time. |
+| 12 | 5 | The learning curve builds up as each training percentage completes — you'll see lines for each classifier showing how accuracy improves with more data |
+| 13 | 6 | When training finishes, a confusion matrix appears showing which classes the classifier got right and which it confused. Use the dropdown to switch between classifiers, **%** to toggle between counts and percentages, and **View** to open a full-size version. |
 
 ### Available Classifiers
 
-| Classifier | Type | Notes |
-|-----------|------|-------|
-| **k-NN** | Pixel | Fast, good baseline. Uses point-sampled embeddings. |
-| **Random Forest** | Pixel | Strong at all training sizes. Uses point-sampled embeddings. |
-| **XGBoost** | Pixel | Often best accuracy. Uses point-sampled embeddings. |
-| **MLP** | Pixel | Needs more data to converge. Uses point-sampled embeddings. |
-| **Spatial MLP (3×3)** | Neighbourhood | Uses 3×3 embedding context from real tile patches. |
-| **Spatial MLP (5×5)** | Neighbourhood | Uses 5×5 embedding context from real tile patches. |
-| **U-Net** | Patch-based | Convolutional, 256×256 patches from real tiles. Requires PyTorch + GPU recommended. |
+TEE offers several classifiers with different strengths. If you're not sure which to use, start with **Random Forest** and **k-NN** — they're fast and work well in most situations.
 
-**Pixel classifiers** (k-NN, RF, XGBoost, MLP) use point-sampled embeddings — fast and memory-efficient for any scale.
+| Classifier | Type | When to use |
+|-----------|------|-------------|
+| **k-NN** | Pixel | Fast, simple baseline. Good for a quick first look. |
+| **Random Forest** | Pixel | Reliable workhorse — strong performance at all training sizes. |
+| **XGBoost** | Pixel | Often the most accurate pixel classifier. Slightly slower to train. |
+| **MLP** | Pixel | Neural network — needs more data to converge but can capture complex patterns. |
+| **Spatial MLP (3×3)** | Neighbourhood | Like MLP but uses a 3×3 pixel neighbourhood, capturing local spatial context. |
+| **Spatial MLP (5×5)** | Neighbourhood | Uses a wider 5×5 neighbourhood for more spatial context. |
+| **U-Net** | Patch-based | Deep learning model that processes 256×256 image patches. Best accuracy for spatially complex habitats. Requires PyTorch; benefits greatly from a GPU. |
 
-**Spatial classifiers** (Spatial MLP, U-Net) fetch real GeoTessera tiles and extract pixel-aligned 256×256 crops. This gives them true spatial structure at the tile's native 10m resolution, which is critical for learning convolutional features. The number of patches can be set in the controls (default 500, minimum 100).
+**Pixel classifiers** (k-NN, Random Forest, XGBoost, MLP) look at each pixel independently. They're fast and memory-efficient, even for country-scale datasets.
+
+**Spatial classifiers** (Spatial MLP, U-Net) consider each pixel together with its neighbours, so they can learn patterns like "grassland next to woodland edge". They need to download actual satellite embedding tiles from GeoTessera, which takes longer, but can achieve higher accuracy for classes where spatial context matters.
 
 ### Classifier Parameters
 
-Each classifier has tuneable parameters accessible via the controls panel:
+Each classifier has adjustable parameters. Click the **...** button next to a classifier name in the controls panel to expand the parameter inputs. The defaults work well for most cases, but you can tune them if needed:
 
-| Classifier | Parameter | Default | Notes |
-|-----------|-----------|---------|-------|
-| k-NN | Neighbors | 5 | Number of nearest neighbours |
-| k-NN | Weights | uniform | `uniform` or `distance` |
-| Random Forest | Trees | 100 | Number of estimators |
-| Random Forest | Max depth | None | Tree depth limit (None = unlimited) |
-| XGBoost | Rounds | 100 | Boosting rounds |
-| XGBoost | Learning rate | 0.1 | Step size shrinkage |
-| XGBoost | Max depth | 6 | Tree depth limit |
-| MLP | Hidden layers | 128,64 | Comma-separated layer sizes |
-| MLP | Max iterations | 200 | Training epochs |
-| Spatial MLP | Hidden layers | 128,64 | Comma-separated layer sizes |
-| Spatial MLP | Max iterations | 200 | Training epochs |
-| U-Net | Epochs | 20 | Training epochs |
-| U-Net | Learning rate | 0.001 | Adam optimizer LR |
-| U-Net | Depth | 3 | Encoder/decoder depth |
-| U-Net | Base filters | 32 | Filters in first layer (doubles each level) |
+| Classifier | Parameter | Default | What it controls |
+|-----------|-----------|---------|-----------------|
+| k-NN | Neighbors | 5 | How many nearby training points to consider for each prediction. Higher values smooth the decision boundary. |
+| k-NN | Weights | uniform | Whether closer neighbours count more (`distance`) or all count equally (`uniform`). |
+| Random Forest | Trees | 100 | More trees = more robust but slower. 100 is usually plenty. |
+| Random Forest | Max depth | None | How deep each decision tree can grow. `None` means unlimited — the tree grows until it perfectly fits the data. |
+| XGBoost | Rounds | 100 | Number of boosting iterations. More rounds = more complex model. |
+| XGBoost | Learning rate | 0.1 | How much each round adjusts the model. Smaller values are more cautious but may need more rounds. |
+| XGBoost | Max depth | 6 | Maximum depth of each tree. Deeper trees can capture more complex patterns but risk overfitting. |
+| MLP | Hidden layers | 128, 64 | Size of the neural network's hidden layers. Larger = more capacity but slower. |
+| MLP | Max iterations | 200 | Maximum training iterations (epochs). |
+| Spatial MLP | Hidden layers | 128, 64 | Same as MLP but for the spatial variant. |
+| Spatial MLP | Max iterations | 200 | Same as MLP. |
+| U-Net | Epochs | 20 | Number of training passes over the data. |
+| U-Net | Learning rate | 0.001 | Step size for the neural network optimiser. |
+| U-Net | Depth | 3 | Number of encoder/decoder levels. Deeper = captures larger-scale patterns. |
+| U-Net | Base filters | 32 | Number of feature channels in the first layer. Doubles at each level. |
 
 ### Hyperparameter Variants
 
-Click the **+** button next to any classifier to add a variant with different parameters. Each variant runs as a separate curve on the learning chart, labelled with a suffix (v1, v2, etc.). This lets you compare parameter settings in a single evaluation run — for example, Random Forest with 50 vs 200 trees, or MLP with different layer sizes.
+Want to compare the same classifier with different settings — for example, Random Forest with 50 trees vs 200 trees? Click the **+** button next to a classifier to add a **variant**. Each variant runs as a separate line on the learning curve, labelled with a suffix (v1, v2, etc.). This lets you compare settings side-by-side in a single evaluation run without having to re-upload your data.
 
 Click **×** on a variant row to remove it.
 
 ### Sampling Strategy
 
-Controls how sample points are distributed across classes when evaluating large-area shapefiles.
+When your shapefile covers a large area, TEE samples random points from within the polygons rather than using every single pixel (which could be millions). The **Sampling** dropdown controls how those points are distributed across your classes:
 
-| Strategy | Description | When to use |
+| Strategy | What it does | When to use |
 |----------|-------------|-------------|
-| **Sqrt-proportional** (default) | Points proportional to √(class area), minimum 50 per class | Best all-round choice — large classes get more points but rare classes aren't starved |
-| **Proportional** | Points proportional to class area, minimum 50 per class | When you care most about accuracy on dominant classes |
-| **Equal** | Same number of points per class | When every class matters equally regardless of area |
+| **Sqrt-proportional** (default) | Points proportional to the square root of each class's area. Rare classes get a minimum of 50 points. | Best all-round choice — large classes still get more points, but rare classes aren't starved of training data. |
+| **Proportional** | Points directly proportional to each class's area. Minimum 50 per class. | When you care most about accuracy on the dominant classes and are less concerned about rare ones. |
+| **Equal** | Every class gets the same number of points, regardless of area. | When every class matters equally, even very rare ones. |
 
-With **equal** sampling, Macro F1 and Weighted F1 are identical (all classes have the same sample size). Use sqrt-proportional or proportional to get meaningful Weighted F1 scores.
+> **Note on F1 scores:** With **equal** sampling, Macro F1 and Weighted F1 are identical because all classes have the same sample size. Use sqrt-proportional or proportional if you want a meaningful distinction between Macro and Weighted F1.
 
 ### Spatial/U-Net Patches
 
-When spatial MLP or U-Net is selected, TEE fetches real GeoTessera tiles and extracts random 256×256 pixel-aligned crops where labels exist. Controls:
+When you select Spatial MLP or U-Net, TEE needs to download actual embedding tiles from GeoTessera and cut out 256×256 pixel patches (each covering about 2.5km × 2.5km at 10m resolution) from areas where your habitat labels exist.
 
-| Setting | Default | Notes |
-|---------|---------|-------|
-| **Spatial/U-Net patches** | 500 | Number of 256×256 crops to extract from tiles (minimum 100). More patches = better U-Net accuracy but slower tile fetching. |
+| Setting | Default | What it controls |
+|---------|---------|-----------------|
+| **Max spatial/U-Net patches** | 500 | How many patches to extract. More patches = better accuracy but longer download and training time. Minimum 100. |
 
-Tiles are shuffled before extraction so patches come from diverse geographic regions (max 5 per tile). Each patch is augmented 8× (4 rotations × 2 flips) during U-Net training. At 10% training with 500 patches, U-Net trains on 50 original × 8 augmented = 400 training images.
+Tiles are sampled from across the shapefile area so patches come from diverse geographic regions (maximum 5 patches per tile). During U-Net training, each patch is augmented 16× (4 rotations × 2 flips × 2 noise levels) to increase the effective training set size.
 
-**Learning curve x-axis:** The "% of sampled pixels" axis shows what fraction of the sampled data is used for training. For pixel classifiers (k-NN, RF, etc.), this is a percentage of the ~200K sampled points. For U-Net, it's a percentage of the extracted patches. Note that even 100% of sampled data is a small fraction of the total labelled area — sampling is designed to be representative, not exhaustive.
-
-**How spatial MLP and U-Net use patches differently:**
-
-- **U-Net** receives the full 256×256 patch (embeddings + labels) — no subsampling. It needs complete spatial context to learn convolutional features.
-- **Spatial MLP** extracts 3×3 or 5×5 neighbourhood feature vectors from each patch. To cap memory, labelled pixels are subsampled to 5000 per patch (~500K total across 100 patches, ~2.3GB of features). This does not affect U-Net.
-
-> **Tip:** For pixel-only classifiers (k-NN, RF, etc.), no tiles are fetched — evaluation is much faster. Only select spatial MLP or U-Net when you need spatial context.
+> **Tip:** If you only want to test pixel classifiers (k-NN, Random Forest, etc.), you don't need spatial patches at all — uncheck Spatial MLP and U-Net, and the evaluation will be much faster since no tiles need to be downloaded.
 
 ### Spatial Train/Test Split (optional)
 
-By default, TEE uses a random train/test split — training and test pixels are randomly sampled from the entire shapefile area. This can lead to **spatial autocorrelation** where nearby pixels in train and test sets share similar features, inflating accuracy estimates.
+By default, TEE randomly splits your data into training and testing sets. This is fine for a quick check, but it can give **overly optimistic results** because nearby pixels tend to look similar — if a pixel in the training set is right next to a pixel in the test set, the classifier can "cheat" by relying on geographic proximity rather than actually learning what the habitat looks like. Ecologists call this **spatial autocorrelation**.
 
-To get a more realistic evaluation, draw separate **train** and **test** areas on the satellite map:
+To get a more honest evaluation, you can draw **separate geographic regions** for training and testing:
 
 1. In the validation controls, find **Spatial split (optional)**
-2. Select **Train area (blue)** from the dropdown — drawing starts immediately
-3. Draw one or more rectangles on the satellite map covering your training region
-4. Select **Test area (yellow)** and draw rectangles for your test region
-5. Click **Run Evaluation**
+2. Select **Train area (blue)** from the dropdown — your cursor changes to a crosshair
+3. Draw one or more rectangles on the satellite map covering your training region (e.g., the northern half of your study area)
+4. Switch to **Test area (yellow)** and draw rectangles for your test region (e.g., the southern half)
+5. Click **Run Evaluation** — the classifier will only train on data inside the blue boxes and only test on data inside the yellow boxes
 
-| Area type | Color | Purpose |
-|-----------|-------|---------|
-| **Train** | Blue | Points inside these boxes are used for training. Learning curve percentages subsample from this pool. |
-| **Test** | Yellow | Points inside these boxes are used for testing. The test set is fixed (not subsampled). |
-| **Map** | Green | Areas to predict as a GeoTIFF classification map. See [Create Map](#create-map-geotiff-generation). |
+| Area type | Colour | Purpose |
+|-----------|--------|---------|
+| **Train** | Blue | Training data is drawn from inside these rectangles. The learning curve shows what happens as you use more of this training pool. |
+| **Test** | Yellow | Test data comes from these rectangles. The test set stays fixed — it's not subsampled at different training percentages. |
+| **Map** | Green | Areas where you want to generate a classification GeoTIFF (see [Create Map](#create-map-geotiff-generation) below). |
 
-**Rules:**
-- If a point falls in both train and test areas, it goes to training (train takes priority)
-- Points outside all boxes are discarded
-- Click a rectangle to delete it
-- Use **Clear** to remove all rectangles
-- If no rectangles are drawn, a confirmation popup offers the default random split
-- Bounding boxes are saved in config files (Generate Config / Upload Config)
+**How the spatial split works:**
+- If a polygon falls in both a train and a test rectangle, it goes to the training set (training takes priority)
+- Polygons outside all rectangles are ignored
+- Click any rectangle on the map to delete it; click **Clear** to remove all rectangles
+- If you don't draw any rectangles and click Run, TEE will ask if you want to proceed with a random split
+- Your bounding boxes are saved when you use Generate Config / Upload Config
 
-> **Tip:** For valid spatial cross-validation, ensure train and test areas are geographically separated — e.g., train in the north, test in the south.
+> **Tip:** For a meaningful spatial cross-validation, make sure the train and test regions are geographically separated — for example, train on the north and test on the south, or train on lowland and test on upland areas.
 
 ### Understanding the Learning Curve
+
+The learning curve is the main output of an evaluation. It shows how well each classifier performs as it gets access to more training data:
 
 ```
    F1 ↑
@@ -573,96 +551,90 @@ To get a more realistic evaluation, draw separate **train** and **test** areas o
        1%  5%  10%  30%  80%
 ```
 
-- **X axis**: % of labelled area used for training (remainder used for testing)
-- **Y axis**: F1 score (0–1), with shaded ±1 std bands
-- **Steeper curves** = embeddings separate classes well with few labels
-- Toggle **Macro F1** / **Weighted F1** with the dropdown
+- **X axis**: percentage of the training data used (from 1% up to 80%)
+- **Y axis**: F1 score — a measure of accuracy from 0 (worst) to 1 (perfect). The shaded band around each line shows ±1 standard deviation across repeated runs.
+- **Steeper curves** mean the embeddings separate your classes well even with very little training data — a good sign
+- **Flat curves at low F1** suggest the classes are hard to distinguish, or you may need different training features
+- Use the dropdown to toggle between **Macro F1** (average across all classes equally) and **Weighted F1** (weighted by class size)
 
 ### Confusion Matrix
 
-- Rows = true class, columns = predicted class
-- **Green diagonal** = correct, **red off-diagonal** = errors
-- **%** button toggles counts vs percentages
-- **View** button opens a full-size modal for large matrices
-- **Classifier dropdown** switches between classifiers
+The confusion matrix shows, for each true habitat class, how the classifier predicted it. It appears in Panel 6 after the evaluation finishes.
+
+- **Rows** = the true class (what the habitat actually is)
+- **Columns** = the predicted class (what the classifier thought it was)
+- **Green cells on the diagonal** = correct predictions
+- **Red cells off the diagonal** = mistakes — e.g., the classifier confused "Improved grassland" with "Arable"
+- Click **%** to switch between raw counts and percentages
+- Click **View** to open a full-screen version (useful when you have many classes)
+- Use the **Classifier dropdown** to see the confusion matrix for different classifiers
 
 ### Downloading Trained Models
 
-Click **Download Models** in the header bar. This trains each classifier on the full dataset (deferred from the evaluation for speed), then downloads `.joblib` files.
+After an evaluation, click **Download Models** in the header bar. TEE trains each classifier on the full dataset (during the evaluation, it only trains on subsets for the learning curve), then downloads a `.joblib` file for each one. You can use these in your own Python scripts:
 
 ```python
 import joblib
 d = joblib.load("rf_model.joblib")
 clf = d["model"]          # the trained classifier
 names = d["class_names"]  # e.g. ["Grassland", "Urban", "Woodland"]
-predictions = clf.predict(embeddings)  # shape: (N, 128)
+predictions = clf.predict(embeddings)  # embeddings shape: (N, 128)
 ```
 
 ### Create Map (GeoTIFF Generation)
 
-After running an evaluation, you can generate a classification map as a GeoTIFF for any area:
+After running an evaluation, you can generate a **classification map** — a GeoTIFF file where every pixel is labelled with a predicted habitat class. You can open this in QGIS or any other GIS software.
 
-1. In the **Spatial split** dropdown, select **Map area (green)** and draw one or more rectangles on the satellite map covering the area you want to classify
-2. Run an evaluation to cache training data (if not already done)
-3. Click **Create Map** (green button, next to Run Evaluation)
-4. TEE trains the selected pixel-based classifier on all cached labels, then predicts every pixel in the green bounding boxes
-5. The resulting GeoTIFF downloads automatically
+1. In the **Spatial split** dropdown, select **Map area (green)** and draw one or more rectangles covering the area you want to classify
+2. Make sure you've already run an evaluation (so the training data is cached)
+3. Click **Create Map** (the green button next to Run Evaluation)
+4. TEE trains the selected classifier on all available labels, then predicts every pixel inside the green rectangles
+5. The resulting GeoTIFF downloads automatically to your computer
 
-**Output format:**
-- Single-band uint8 GeoTIFF with LZ4 compression
-- Pixel values are 1-based class IDs (0 = nodata/no coverage)
-- Class names are stored as GeoTIFF tags (`class_1`, `class_2`, etc.)
-- CRS matches the source embedding tiles (typically UTM)
+**What you get:**
+- A single-band GeoTIFF file (one pixel = one habitat class)
+- Pixel values are class IDs (1, 2, 3, ...) with 0 meaning "no data"
+- Class names are stored as metadata tags in the file (`class_1`, `class_2`, etc.)
+- The coordinate system matches the source satellite tiles (typically UTM)
+- Compressed with LZ4 for small file sizes
 
 **Limitations:**
-- Only pixel-based classifiers are supported: **k-NN, Random Forest, XGBoost, MLP**. Spatial MLP and U-Net require neighbourhood features at every pixel, which is too expensive for dense prediction.
-- Large areas are processed in 0.1-degree geographic chunks to manage memory. Very large bounding boxes (e.g., country-scale) will take time.
-- Requires a prior evaluation run to cache training vectors and labels.
+- Only pixel-based classifiers are supported for map generation (k-NN, Random Forest, XGBoost, MLP). The spatial classifiers need neighbourhood features at every pixel, which would be prohibitively slow for dense prediction.
+- Very large areas are processed in chunks, so country-scale maps will take some time.
+- You must have run an evaluation first, so TEE has cached training vectors and labels.
 
-**Using the GeoTIFF in Python:**
+**Opening the GeoTIFF in Python:**
 
 ```python
 import rasterio
 with rasterio.open("map_1.tif") as src:
-    data = src.read(1)         # (H, W) uint8 array
+    data = src.read(1)         # (H, W) array of class IDs
     tags = src.tags()          # {'class_1': 'Grassland', 'class_2': 'Urban', ...}
     nodata = src.nodata        # 0
     crs = src.crs              # e.g., EPSG:32630
-    transform = src.transform  # affine transform for georeferencing
+    transform = src.transform  # affine geotransform for georeferencing
 ```
 
 ### Regression
 
-When the selected field is numeric with >20 unique values, TEE auto-switches to regression — showing R², RMSE, and MAE instead of F1 and confusion matrices.
+If the field you select contains continuous numeric values (e.g., biomass, carbon, canopy height) rather than class names, TEE automatically switches to **regression mode**. Instead of F1 scores and confusion matrices, it shows **R²** (how much variance is explained), **RMSE** (root mean squared error), and **MAE** (mean absolute error).
 
 ### Config Files
 
-Click **Generate Config** to download a JSON config matching your current UI settings. Click **Upload Config** to restore settings from a saved config. Example config:
+You can save and restore your evaluation settings using config files:
 
-```json
-{
-  "shapefile": "/path/to/ground_truth.zip",
-  "fields": [{"name": "Habitat", "type": "auto"}],
-  "classifiers": {"nn": {}, "rf": {}, "spatial_mlp": {}},
-  "years": [2024],
-  "max_training_samples": 200000,
-  "sampling": "sqrt",
-  "max_patches": 100,
-  "output_dir": "./eval_output"
-}
-```
+- **Generate Config** — downloads a JSON file capturing your current settings (classifiers, parameters, year, sampling, bounding boxes)
+- **Upload Config** — loads a previously saved config file and fills in all the controls
 
-| Field | Description |
-|-------|-------------|
-| `sampling` | `"equal"`, `"sqrt"`, or `"proportional"` |
-| `max_patches` | Number of 256×256 tile patches for spatial MLP / U-Net |
-| `max_training_samples` | Max random points sampled from labelled polygons (pixel classifiers draw training + test from this pool) |
+This is useful for reproducibility (re-running the same evaluation later) or for running evaluations from the command line.
 
 ### CLI for Headless Evaluation
 
+For batch processing or automation, you can run evaluations from the command line without opening a browser:
+
 ```bash
 python scripts/tee_evaluate.py --config eval_config.json
-python scripts/tee_evaluate.py --config eval_config.json --dry-run  # stats only
+python scripts/tee_evaluate.py --config eval_config.json --dry-run  # preview without running
 ```
 
 ---
@@ -671,53 +643,53 @@ python scripts/tee_evaluate.py --config eval_config.json --dry-run  # stats only
 
 ### From Explore / Auto-label modes
 
-| Format | Use case |
-|--------|----------|
-| **Labels (JSON)** | Re-import into TEE |
+| Format | What it's for |
+|--------|---------------|
+| **Labels (JSON)** | Re-import into TEE later |
 | **Labels (GeoJSON)** | Open in QGIS or other GIS tools |
-| **Map (JPG)** | Presentation — satellite with label overlays |
+| **Map (JPG)** | A screenshot of the satellite view with label overlays — good for presentations |
 
 ### From Manual Labelling mode
 
-| Format | Use case |
-|--------|----------|
-| **JSON** | Re-import into TEE (includes embeddings) |
-| **GeoJSON** | GIS-compatible polygons (vectorized from pixel labels) |
-| **ESRI Shapefile (ZIP)** | Standard GIS interchange — can be used as validation ground truth |
+| Format | What it's for |
+|--------|---------------|
+| **JSON** | Re-import into TEE (includes embeddings and all metadata) |
+| **GeoJSON** | GIS-compatible polygons |
+| **ESRI Shapefile (ZIP)** | Standard GIS interchange format — can be opened in QGIS, ArcGIS, etc. Can also be used as ground truth for validation. |
 
-> **Vectorized export:** Pixel labels (from auto-labelling or similarity search) are automatically converted to polygon boundaries using marching squares. This keeps exports compact — a label with 50,000 pixels becomes a few polygons, not 50,000 individual points. On import, polygons are rasterized back to pixels.
+> **How export works:** When you export pixel labels (from auto-labelling or similarity search), TEE automatically converts them from a raster (grid of coloured pixels) to vector polygons (outlines). This keeps the exported files compact — a label covering 50,000 pixels becomes a few polygon shapes rather than 50,000 individual points. When you import the file back into TEE, the polygons are converted back to pixels.
 
 ---
 
 ## Sharing Labels
 
-Two modes via the **Share** button:
+You can share your labels with other TEE users via the **Share** button in the header bar. There are two options:
 
-| Mode | What's shared | Who sees it |
-|------|--------------|------------|
-| **Private** | Embedding vectors only (no coordinates) | Nobody — contributes to Tessera's global model |
-| **Public** | Full ESRI Shapefile with locations | Other users on the same server |
+| Mode | What gets shared | Who can see it |
+|------|-----------------|---------------|
+| **Private** | Embedding vectors only (no geographic coordinates) | Nobody else — this contributes anonymised data to Tessera's global habitat model |
+| **Public** | Full ESRI Shapefile including locations | Other users viewing the same viewport on the same server |
 
-Check **Hide label locations** when sharing publicly to strip geographic coordinates from the export (shares class names and embeddings only).
+Check **Hide label locations** when sharing publicly to strip geographic coordinates from the export — this shares class names and embeddings but not where on Earth they are.
 
 ### Importing Shared Labels
 
-Click **Import** → **Shared Labels** to browse labels shared by other users on the same viewport. A notification badge appears when new shared labels are available. Click a shared label set to import it into your workspace.
+Click **Import** → **Shared Labels** to see labels that other users have shared on the same viewport. A notification badge appears on the Import button when new shared labels are available. Click any shared label set to add it to your workspace.
 
 ---
 
 ## Data Privacy
 
-| What | Where it runs | What the server sees |
-|------|--------------|---------------------|
-| Similarity search | Your browser | Nothing |
-| Labelling | Your browser | Nothing |
-| ML evaluation | Your compute server | Nothing |
+| Activity | Where it runs | What the hosted server sees |
+|----------|--------------|---------------------------|
+| Similarity search | Your browser | Nothing — all computation is local |
+| Labelling (manual and auto) | Your browser | Nothing |
+| ML evaluation | Your compute server | Nothing — shapefiles stay on your machine |
 | Trained models | Your compute server | Nothing |
-| Label sharing | Hosted server | Only when you click Share |
-| Map tiles | Hosted server | Standard tile requests |
+| Label sharing | Hosted server | Only the data you explicitly choose to share |
+| Map tiles and satellite imagery | Hosted server | Standard tile requests (location + zoom level) |
 
-> Ground-truth shapefiles and evaluation results **never** leave your machine.
+> **Your ground-truth shapefiles and evaluation results never leave your machine.** The hosted server has no access to your field survey data, trained models, or evaluation outputs.
 
 ---
 
@@ -725,30 +697,31 @@ Click **Import** → **Shared Labels** to browse labels shared by other users on
 
 ### Mouse Controls
 
-| Action | Control |
-|--------|---------|
-| Pan | Click and drag |
-| Zoom | Scroll wheel or +/- buttons |
-| Place marker | Single-click |
-| Similarity search | Double-click |
-| Drop pin (labelling) | Ctrl+click |
-| Draw polygon (labelling) | Ctrl+double-click → click vertices |
-| Cancel polygon | Escape |
-| Rotate PCA/UMAP | Right-click drag |
+| Action | How |
+|--------|-----|
+| Pan the map | Click and drag |
+| Zoom in/out | Scroll wheel, or click the +/- buttons |
+| Place a crosshair marker | Single-click on the map |
+| Find similar pixels | Double-click on the map |
+| Drop a label pin (Labelling mode) | Ctrl+click (Cmd+click on Mac) |
+| Start drawing a polygon (Labelling mode) | Ctrl+double-click, then click to place vertices |
+| Cancel polygon drawing | Press Escape |
+| Rotate the PCA/UMAP plot | Right-click and drag |
 
 ### Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
-| Escape | Cancel polygon drawing |
-| Ctrl+click | Drop a pin in manual label mode |
-| Ctrl+double-click | Start polygon drawing |
+| Escape | Cancel the current polygon drawing |
+| Ctrl+click | Drop a pin at the clicked location (Labelling mode) |
+| Ctrl+double-click | Begin drawing a polygon (Labelling mode) |
 
 ### Tips
 
-- Viewport processing takes a few minutes per year — years are processed sequentially
-- Each viewport uses ~50–200MB of storage per year on the server
-- Similarity search and labelling run entirely in your browser — no data leaves your machine
-- Evaluation runs on your compute server — ground-truth shapefiles are not sent to the hosted server
-- Exported labels are vectorized as polygons — compact and re-importable
-- First evaluation run for a shapefile downloads tiles from GeoTessera (can take minutes for large areas); subsequent runs use cached tiles
+- **Viewport processing** takes a few minutes per year. You'll see a progress indicator while it runs.
+- **Storage**: each viewport uses about 50–200MB of server storage per year, depending on the area.
+- **Privacy**: similarity search and labelling run entirely in your browser. Evaluation runs on your compute server. Neither sends your data to the hosted TEE server.
+- **Exported labels** are automatically vectorised as polygons — compact files that can be re-imported or opened in QGIS.
+- **First evaluation run** for a new shapefile downloads embedding tiles from GeoTessera, which can take several minutes for large areas. The tiles are cached, so subsequent runs with the same shapefile, field, and year start much faster.
+- **Year coverage**: not all years have satellite coverage everywhere. If you get "no tiles found" errors, try year **2025** which has the widest coverage.
+- **Community**: join the TEE discussion channel at [eeg.zulipchat.com](https://eeg.zulipchat.com) for help, feedback, and announcements.
