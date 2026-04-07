@@ -166,7 +166,7 @@ Once you have labels, you can:
 | **Import** labels from a file | Click **Import** and select a JSON, GeoJSON, or ESRI Shapefile (.zip) |
 | **Export** labels | See [Export Options](#export-options) below |
 
-Labels are saved in your browser's local storage, so they persist across page reloads. They are tied to the viewport name — if you open the same viewport again, your labels reappear automatically.
+Labels are saved in your browser's local storage, so they persist across page reloads and are tied to the viewport name. However, **local storage is volatile** — it can be cleared by browser updates, clearing browsing data, or switching browsers. Always save your work by exporting regularly. The **Export** button turns red when you have unsaved changes as a reminder.
 
 ---
 
