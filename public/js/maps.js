@@ -842,7 +842,7 @@ function setPanelLayout(mode) {
             { content: null,                    title: 'Tessera Embeddings' },
             { content: null,                    title: 'PCA (Embedding Space)' },
             { content: null,                    title: 'Classification results' },
-            { content: 'panel6-label-view',     title: 'Auto-label' },
+            { content: 'panel6-label-view',     title: '', header: false },
         ],
         'validation': [
             { content: 'validation-controls',   title: 'Controls',         header: false, flow: true },
