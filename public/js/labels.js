@@ -1120,40 +1120,95 @@ function rasterizePolygon(pixelVertices) {
     return matches;
 }
 
-// Expand a label to all its pixel points as GeoJSON Point features.
-// - pixel_coords labels (promoted clusters): one point per stored pixel
-// - polygon labels: rasterize interior, one point per pixel
-// - point/similarity without pixel_coords: single centroid point
-function expandLabelToPoints(label) {
+// Vectorize pixel coordinates into GeoJSON Polygon features using d3-contour
+// (marching squares with correct hole/disconnected-region handling).
+let _d3ContourLoaded = false;
+async function ensureD3Contour() {
+    if (_d3ContourLoaded) return;
+    // d3-contour depends on d3-array; both extend the global d3 namespace
+    async function loadScript(url) {
+        await new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = url;
+            s.onload = resolve;
+            s.onerror = reject;
+            document.head.appendChild(s);
+        });
+    }
+    if (typeof d3 === 'undefined' || !d3.thresholdSturges) {
+        await loadScript('https://cdn.jsdelivr.net/npm/d3-array@3/dist/d3-array.min.js');
+    }
+    await loadScript('https://cdn.jsdelivr.net/npm/d3-contour@4/dist/d3-contour.min.js');
+    _d3ContourLoaded = true;
+}
+
+// Synchronous vectorization — call ensureD3Contour() before first use.
+function vectorizePixelCoords(pixelCoords, gt) {
+    const pc = pixelCoords;
+    // Find bounding box of pixels
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < pc.length; i += 2) {
+        const x = pc[i], y = pc[i + 1];
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+    }
+    // Build binary mask with 1-pixel border (so contours close at edges)
+    const w = maxX - minX + 3, h = maxY - minY + 3;
+    const mask = new Float64Array(w * h); // all zeros
+    for (let i = 0; i < pc.length; i += 2) {
+        const lx = pc[i] - minX + 1, ly = pc[i + 1] - minY + 1;
+        mask[ly * w + lx] = 1;
+    }
+
+    // d3.contours returns GeoJSON MultiPolygon in local grid coords
+    const result = d3.contours().size([w, h]).thresholds([0.5]).smooth(false)(mask);
+    if (!result || result.length === 0) return [];
+
+    const multiPoly = result[0]; // the 0.5 threshold contour
+    // Convert local grid coords → pixel coords → geo coords
+    // local (lx, ly) → pixel (lx + minX - 1, ly + minY - 1) → geo
+    const ox = minX - 1, oy = minY - 1;
+    const features = [];
+    for (const polygon of multiPoly.coordinates) {
+        const geoRings = polygon.map(ring =>
+            ring.map(([lx, ly]) => [
+                gt.c + (lx + ox) * gt.a,
+                gt.f + (ly + oy) * gt.e
+            ])
+        );
+        features.push({
+            type: 'Feature',
+            geometry: { type: 'Polygon', coordinates: geoRings },
+            properties: null // filled by caller
+        });
+    }
+    return features;
+}
+
+// Expand a label to GeoJSON Polygon features via vectorization.
+// - pixel_coords labels (promoted clusters): vectorize pixels into polygons
+// - polygon labels: export original polygon vertices
+// - point labels without pixel_coords: single Point fallback
+function expandLabelToFeatures(label) {
     const props = { name: label.name, color: label.color, code: label.code || '', type: label.type };
     const gt = window.localVectors ? window.localVectors.metadata.geotransform : null;
 
-    // Promoted cluster with stored pixel coords
-    if (label.pixel_coords && label.pixel_coords.length > 0 && gt) {
-        const pc = label.pixel_coords;
-        const features = [];
-        for (let i = 0; i < pc.length; i += 2) {
-            const lon = gt.c + pc[i] * gt.a;
-            const lat = gt.f + pc[i + 1] * gt.e;
-            features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: props });
+    // Labels with pixel coords: vectorize into polygons
+    if (label.pixel_coords && label.pixel_coords.length > 0 && gt && typeof d3 !== 'undefined' && d3.contours) {
+        const polys = vectorizePixelCoords(label.pixel_coords, gt);
+        if (polys.length > 0) {
+            for (const f of polys) f.properties = props;
+            return polys;
         }
-        return features;
     }
 
-    // Polygon label: rasterize to get interior pixels
-    if (label.type === 'polygon' && label.vertices && gt) {
-        const pixVerts = label.vertices.map(v => [
-            Math.round((v[1] - gt.c) / gt.a),
-            Math.round((v[0] - gt.f) / gt.e)
-        ]);
-        const matches = rasterizePolygon(pixVerts);
-        if (matches.length > 0) {
-            return matches.map(m => ({
-                type: 'Feature',
-                geometry: { type: 'Point', coordinates: [m.lon, m.lat] },
-                properties: props
-            }));
-        }
+    // Polygon label: export original polygon vertices
+    if (label.type === 'polygon' && label.vertices) {
+        const ring = label.vertices.map(v => [v[1], v[0]]); // [lon, lat]
+        ring.push(ring[0]); // close
+        return [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: props }];
     }
 
     // Fallback: single point at label centroid
@@ -1190,7 +1245,7 @@ function exportManualLabels() {
     btn.parentElement.appendChild(menu);
 }
 
-function doExportManualLabels(format) {
+async function doExportManualLabels(format) {
     const menu = document.getElementById('labelling-export-menu');
     if (menu) menu.style.display = 'none';
     markExportClean();
@@ -1218,8 +1273,8 @@ function doExportManualLabels(format) {
         };
         downloadFile(JSON.stringify(data, null, 2), `manual-labels-${window.currentViewportName || 'export'}.json`, 'application/json');
     } else if (format === 'geojson') {
-        // Expand each label to all its pixel points
-        const features = manualLabels.flatMap(l => expandLabelToPoints(l));
+        await ensureD3Contour();
+        const features = manualLabels.flatMap(l => expandLabelToFeatures(l));
         const geojson = { type: 'FeatureCollection', features };
         downloadFile(JSON.stringify(geojson, null, 2), `manual-labels-${window.currentViewportName || 'export'}.geojson`, 'application/geo+json');
     } else if (format === 'shapefile') {
@@ -1242,6 +1297,7 @@ function downloadFile(content, filename, mimeType) {
 async function exportManualLabelsShapefile() {
     // Use shp-write for ESRI Shapefile export
     try {
+        await ensureD3Contour();
         if (typeof shpwrite === 'undefined') {
             // Dynamically load shp-write
             await new Promise((resolve, reject) => {
@@ -1253,8 +1309,8 @@ async function exportManualLabelsShapefile() {
             });
         }
 
-        // Expand each label to all its pixel points for maximum training data
-        const features = manualLabels.flatMap(l => expandLabelToPoints(l));
+        // Vectorize pixel labels into polygons for compact export
+        const features = manualLabels.flatMap(l => expandLabelToFeatures(l));
 
         const gj = { type: 'FeatureCollection', features };
 
@@ -2685,6 +2741,7 @@ function collectPrivateShareData() {
 }
 
 async function buildShapefileZip() {
+    await ensureD3Contour();
     // Dynamically load shp-write if needed
     if (typeof shpwrite === 'undefined') {
         await new Promise((resolve, reject) => {
@@ -2697,7 +2754,7 @@ async function buildShapefileZip() {
     }
 
     // Expand each label to all its pixel points
-    const features = manualLabels.flatMap(l => expandLabelToPoints(l));
+    const features = manualLabels.flatMap(l => expandLabelToFeatures(l));
 
     // Include savedLabels as points
     for (const l of savedLabels) {
