@@ -25,7 +25,7 @@ A web-based tool for exploring and classifying land cover from Sentinel-2 satell
 
 ### Hosted version
 
-Open [tee.cl.cam.ac.uk](https://tee.cl.cam.ac.uk), create a viewport, and start exploring. No installation needed for exploration and labelling.
+Open [tee.cl.cam.ac.uk](https://tee.cl.cam.ac.uk) to explore existing viewports without an account. To create your own viewports, ask a TEE enroller for an account.
 
 ### Docker (self-hosted)
 
