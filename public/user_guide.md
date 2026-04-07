@@ -27,7 +27,7 @@ With TEE you can:
 - [Manual Labelling](#manual-labelling) — pins, polygons, similarity expansion
 - [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
 - [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
-- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, confusion matrix, spatial splits, Create Map
+- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, confusion matrix, spatial splits, Create Map, CLI
 - [Data Privacy](#data-privacy)
 - [Reference](#reference) — mouse controls, keyboard shortcuts, tips
 
@@ -660,12 +660,17 @@ This is useful for reproducibility (re-running the same evaluation later) or for
 
 ### CLI for Headless Evaluation
 
-For batch processing or automation, you can run evaluations from the command line without opening a browser:
+If you want to run evaluations without opening a browser — for example, on a remote server over SSH, or as part of a batch processing pipeline — you can use the command-line interface. This requires a config file (which you can generate from the web UI using **Generate Config**, or write by hand).
 
 ```bash
+# Run a full evaluation from a config file
 python scripts/tee_evaluate.py --config eval_config.json
-python scripts/tee_evaluate.py --config eval_config.json --dry-run  # preview without running
+
+# Preview what would happen without actually running (shows dataset stats, class counts, etc.)
+python scripts/tee_evaluate.py --config eval_config.json --dry-run
 ```
+
+The CLI produces the same NDJSON output as the web UI, so you can pipe it to a file or process it with other tools. Results are printed to stdout; progress messages go to stderr.
 
 ---
 
