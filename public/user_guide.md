@@ -569,31 +569,30 @@ Open `http://localhost:8001`. Both the UI and ML evaluation run on your laptop.
 
 ### Option 3: Local UI + GPU Server
 
-Run Django locally (for offline labelling and data privacy), but offload ML to a GPU server.
+Run TEE locally for offline labelling, but offload ML evaluation to a GPU server. The deploy script connects the tunnel on port 8001, so start Django on a different port:
 
 ```
-Browser → localhost:8001 → Django (your laptop)
+Browser → localhost:9001 → Django (your laptop)
                                │
-                               └── /api/evaluation/* → tunnel → gpu-box (tee-compute)
+                               └── /api/evaluation/* → localhost:8001 → tunnel → gpu-box
 ```
 
 **Two terminals on your laptop:**
 
-Terminal 1 — start Django:
-```bash
-cd ~/TEE && ./restart.sh
-```
-
-Terminal 2 — connect GPU server:
+Terminal 1 — start the GPU tunnel (port 8001):
 ```bash
 ./scripts/deploy-compute.sh gpu-box
 ```
 
-Open `http://localhost:8001`. The UI comes from your laptop, ML runs on the GPU server. Click **Status** to confirm.
+Terminal 2 — start Django on a different port:
+```bash
+cd ~/TEE
+TEE_COMPUTE_URL=http://localhost:8001 python3 -m waitress --host=127.0.0.1 --port=9001 --threads=16 --channel-timeout=7200 tee_project.wsgi:application
+```
 
-> **Why port 5050?** Port 8001 may already be in use on the GPU server. The tunnel maps your local port 8002 to the server's port 5050. Django proxies evaluation requests to localhost:8002.
->
-> **Why OPENBLAS_NUM_THREADS=1?** Servers with >128 CPU cores crash OpenBLAS if threads aren't limited. The deploy script sets this automatically.
+Open `http://localhost:9001` for local labelling. Open `http://localhost:8001` for evaluation.
+
+> Most users should use **Option 1** instead — it's simpler and doesn't require Django locally.
 
 ### Command Reference
 

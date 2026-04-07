@@ -841,24 +841,12 @@
 
                         <h4 style="margin:12px 0 6px; color:#333; font-size:13px;">How to run evaluation</h4>
 
-                        <div style="display:flex; flex-direction:column; gap:10px;">
-                            <div style="padding:10px; border:1px solid #e0e0e0; border-radius:6px; background:#f8f9ff;">
-                                <strong style="color:#667eea;">Option 1: GPU server</strong> <span style="font-size:11px; color:#28a745; font-weight:600;">(recommended)</span>
-                                <p style="margin:4px 0 0; color:#666; font-size:11px;">
-                                    Start an SSH tunnel to your GPU server:<br>
-                                    <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./scripts/deploy-compute.sh gpu-box</code><br>
-                                    Then click Evaluate below.
-                                </p>
-                            </div>
-                            <div style="padding:10px; border:1px solid #e0e0e0; border-radius:6px;">
-                                <strong style="color:#555;">Option 2: Local UI + GPU server</strong>
-                                <p style="margin:4px 0 0; color:#666; font-size:11px;">
-                                    Run TEE locally with GPU evaluation:<br>
-                                    <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">cd ~/TEE; ./restart.sh</code> then
-                                    <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./scripts/deploy-compute.sh gpu-box</code><br>
-                                    Then click Evaluate below.
-                                </p>
-                            </div>
+                        <div style="padding:10px; border:1px solid #e0e0e0; border-radius:6px; background:#f8f9ff;">
+                            <p style="margin:0; color:#666; font-size:11px;">
+                                Start an SSH tunnel to your compute server:<br>
+                                <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./scripts/deploy-compute.sh gpu-box</code><br>
+                                Then click Evaluate below.
+                            </p>
                         </div>
 
                         <p style="margin:10px 0 0;">

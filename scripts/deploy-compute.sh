@@ -28,17 +28,16 @@ fi
 shift  # consume server name, remaining args are flags
 
 REMOTE_PORT=5050
-LOCAL_PORT=8002
+LOCAL_PORT=8001
 REMOTE_DIR=TEE
 VENV="\$HOME/$REMOTE_DIR/venv"
 
 echo "=== Deploying tee-compute to $REMOTE ==="
 
-echo "--- Killing local tee-compute on port $LOCAL_PORT (if any) ---"
-pkill -f "tee-compute.*$LOCAL_PORT" 2>/dev/null && echo "  killed" || echo "  none running"
-
-echo "--- Killing existing SSH tunnel to $REMOTE (if any) ---"
-pkill -f "ssh.*-L $LOCAL_PORT.*$REMOTE" 2>/dev/null && echo "  killed" || echo "  none running"
+echo "--- Killing local processes on port $LOCAL_PORT (if any) ---"
+pkill -f "tee-compute.*$LOCAL_PORT" 2>/dev/null && echo "  killed tee-compute" || true
+pkill -f "waitress.*$LOCAL_PORT\|waitress.*tee_project" 2>/dev/null && echo "  killed Django" || true
+pkill -f "ssh.*-L $LOCAL_PORT.*$REMOTE" 2>/dev/null && echo "  killed tunnel" || true
 
 echo "--- Pulling latest code and installing on $REMOTE ---"
 ssh "$REMOTE" "cd ~/$REMOTE_DIR && git pull && $VENV/bin/pip install -q --upgrade geotessera && $VENV/bin/pip install -q -e 'packages/tessera-eval[server]' 2>&1 || true"
@@ -68,7 +67,6 @@ fi
 echo "=== Starting SSH tunnel: localhost:$LOCAL_PORT -> $REMOTE:$REMOTE_PORT ==="
 echo "    Ctrl+C to stop"
 echo ""
-echo "    Open http://localhost:8001 or connect from tee.cl.cam.ac.uk"
-echo "    with Compute Server: http://localhost:$LOCAL_PORT"
+echo "    Open http://localhost:$LOCAL_PORT"
 echo ""
 ssh -L "$LOCAL_PORT:localhost:$REMOTE_PORT" "$REMOTE" "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 $VENV/bin/tee-compute --port $REMOTE_PORT"
