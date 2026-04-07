@@ -36,11 +36,7 @@ docker run -d --name tee --restart unless-stopped \
     sk818/tee:stable
 ```
 
-Open http://localhost:8001. Manage users with:
-```bash
-docker cp tee:/app/scripts/manage.sh ~/manage.sh && chmod +x ~/manage.sh
-sudo ./manage.sh
-```
+Open http://localhost:8001. Authentication is off by default — everyone has full access. To enable user accounts, see the [User Guide](public/user_guide.md).
 
 ### ML Evaluation
 
