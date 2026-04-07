@@ -663,14 +663,29 @@ This is useful for reproducibility (re-running the same evaluation later) or for
 If you want to run evaluations without opening a browser — for example, on a remote server over SSH, or as part of a batch processing pipeline — you can use the command-line interface. This requires a config file (which you can generate from the web UI using **Generate Config**, or write by hand).
 
 ```bash
-# Run a full evaluation from a config file
-python scripts/tee_evaluate.py --config eval_config.json
+# Run a full evaluation and save results to a file
+python scripts/tee_evaluate.py --config eval_config.json > results.json
 
-# Preview what would happen without actually running (shows dataset stats, class counts, etc.)
+# Preview what would happen without actually running
+# (shows dataset stats, class counts, estimated size)
 python scripts/tee_evaluate.py --config eval_config.json --dry-run
 ```
 
-The CLI produces the same NDJSON output as the web UI, so you can pipe it to a file or process it with other tools. Results are printed to stdout; progress messages go to stderr.
+The output file (`results.json`) contains one JSON object per line — each line is a progress event or a result. You can open it in a text editor, or load it in Python:
+
+```python
+import json
+
+# Read all results
+with open("results.json") as f:
+    events = [json.loads(line) for line in f]
+
+# Find the final aggregate result
+aggregate = [e for e in events if e.get("type") == "aggregate"]
+print(aggregate)
+```
+
+Progress messages (like "downloading tile 3 of 40") are printed separately and won't appear in your results file.
 
 ---
 
