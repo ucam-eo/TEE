@@ -225,9 +225,6 @@ async function uploadShapefile(file) {
     formData.append('file', file);
 
     try {
-        // Clear previous shapefiles before uploading
-        await fetch(evalUrl('clear-shapefiles'), { method: 'POST' });
-
         const resp = await fetch(evalUrl('upload-shapefile'), { method: 'POST', body: formData });
         const data = await resp.json();
         if (!resp.ok) {
@@ -238,7 +235,8 @@ async function uploadShapefile(file) {
 
         valFieldData = data.fields;
         valUploadedFilename = file.name;
-        dropZone.textContent = file.name;
+        const fileList = data.files || [file.name];
+        dropZone.textContent = fileList.length > 1 ? `${fileList.length} files: ${fileList.join(', ')}` : file.name;
         dropZone.classList.add('uploaded');
 
         const sel = document.getElementById('val-field-select');
@@ -2248,6 +2246,29 @@ function updateVariantButtonState(clfName) {
 window.addVariant = addVariant;
 window.removeVariant = removeVariant;
 
+async function clearShapefiles() {
+    await fetch(evalUrl('clear-shapefiles'), { method: 'POST' });
+    valFieldData = null;
+    valUploadedFilename = null;
+    valEstimatedLabelledPixels = 0;
+    const dropZone = document.getElementById('val-drop-zone');
+    if (dropZone) {
+        dropZone.textContent = 'Drop .zip shapefiles here (multiple allowed)';
+        dropZone.classList.remove('uploaded');
+    }
+    const sel = document.getElementById('val-field-select');
+    if (sel) { sel.innerHTML = '<option value="">-- upload shapefile first --</option>'; sel.disabled = true; }
+    document.getElementById('val-run-btn').disabled = true;
+    document.getElementById('val-status').textContent = 'Shapefiles cleared';
+    // Remove GeoJSON overlay
+    if (valGeoJsonLayer && window.maps && window.maps.rgb) {
+        window.maps.rgb.removeLayer(valGeoJsonLayer);
+        valGeoJsonLayer = null;
+    }
+    valGeoJsonData = null;
+}
+
+window.clearShapefiles = clearShapefiles;
 window.uploadShapefile = uploadShapefile;
 window.runEvaluation = runEvaluation;
 window.renderConfusionMatrix = renderConfusionMatrix;
