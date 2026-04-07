@@ -1985,6 +1985,10 @@
 
                 if (data.success) {
                     console.log(`✓ Deleted viewport: ${name}`);
+
+                    // Clear labels and cached data for deleted viewport
+                    localStorage.removeItem('tee_labels_' + name);
+
                     loadViewports();
 
                     // If deleted viewport was active, reload current
