@@ -368,7 +368,7 @@ Then open **http://localhost:8001** in your browser.
 
 > **Why localhost?** Web browsers block mixed HTTP/HTTPS requests for security. The deploy script creates a local proxy on your laptop that serves the TEE interface over plain HTTP, so evaluation requests can reach the compute server without being blocked.
 
-> **PyTorch note:** If you want to use the U-Net classifier (which benefits from a GPU), add `--install-torch` the first time. The script auto-detects your GPU's CUDA version. If it installs the wrong version, see [Fixing PyTorch CUDA version mismatch](#fixing-pytorch-cuda-version-mismatch) at the end of this section.
+> **PyTorch note:** If you want to use the U-Net classifier (which benefits from a GPU), add `--install-torch` to the deploy command the first time, e.g. `./scripts/deploy-compute.sh --install-torch gpu-box`. The script auto-detects your GPU's CUDA version. If it installs the wrong version, see [Fixing PyTorch CUDA version mismatch](#fixing-pytorch-cuda-version-mismatch) at the end of this section.
 
 ---
 
