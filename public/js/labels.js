@@ -1107,7 +1107,9 @@ function rasterizePolygon(pixelVertices) {
 
     for (let py = minPy; py <= maxPy; py++) {
         for (let px = minPx; px <= maxPx; px++) {
-            if (pointInPolygon(px, py, pixelVertices)) {
+            // Test at pixel centre (px+0.5, py+0.5) so boundary-aligned
+            // polygons (e.g. from d3-contour export) rasterize correctly
+            if (pointInPolygon(px + 0.5, py + 0.5, pixelVertices)) {
                 const gridIdx = window.gridLookupIndex(grid, px, py);
                 if (gridIdx >= 0) {
                     const lon = gt.c + px * gt.a;

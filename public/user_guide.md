@@ -131,13 +131,15 @@ Use the **satellite source dropdown** in Panel 2 to switch between different ima
 
 ## Similarity Search
 
-This is TEE's core feature. **Double-click** anywhere on any panel to find every pixel in the viewport that looks similar to the one you clicked. TEE compares the clicked pixel's embedding to all other pixels and highlights the matches — all within your browser, with no data sent to any server.
+This is TEE's core exploration feature, available in **Explore** mode. **Double-click** anywhere on any panel to find every pixel in the viewport that looks similar to the one you clicked. TEE compares the clicked pixel's embedding to all other pixels and highlights the matches — all within your browser, with no data sent to any server.
 
 | Step | What to do |
 |------|------------|
 | 1 | **Double-click** any pixel on the map |
 | 2 | Coloured dots appear across all panels showing similar locations. Adjust the **similarity slider** in the header bar — drag left for stricter matching (fewer, more similar results), drag right for looser matching (more results, less similar). |
-| 3 | Happy with the results? Click **Save as Label** to keep them as a named label. |
+| 3 | To keep the results, click **Save as Label** — this creates a named label that you can view, hide, or export later. |
+
+This is a quick way to explore what the embeddings "see" at any location. For building up a full set of habitat labels, see [Auto-Labelling](#auto-labelling-k-means-clustering) (which groups pixels into clusters you can review and promote) and [Manual Labelling](#manual-labelling) (which lets you place individual pins and draw polygons).
 
 > **First search takes a moment:** The first time you search in a viewport, TEE downloads the embedding data for all pixels (~20–50MB) and caches it in your browser. After that, all searches are instant.
 
