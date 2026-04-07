@@ -1117,6 +1117,46 @@ function rasterizePolygon(pixelVertices) {
     return matches;
 }
 
+// Expand a label to all its pixel points as GeoJSON Point features.
+// - pixel_coords labels (promoted clusters): one point per stored pixel
+// - polygon labels: rasterize interior, one point per pixel
+// - point/similarity without pixel_coords: single centroid point
+function expandLabelToPoints(label) {
+    const props = { name: label.name, color: label.color, code: label.code || '', type: label.type };
+    const gt = window.localVectors ? window.localVectors.metadata.geotransform : null;
+
+    // Promoted cluster with stored pixel coords
+    if (label.pixel_coords && label.pixel_coords.length > 0 && gt) {
+        const pc = label.pixel_coords;
+        const features = [];
+        for (let i = 0; i < pc.length; i += 2) {
+            const lon = gt.c + pc[i] * gt.a;
+            const lat = gt.f + pc[i + 1] * gt.e;
+            features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: props });
+        }
+        return features;
+    }
+
+    // Polygon label: rasterize to get interior pixels
+    if (label.type === 'polygon' && label.vertices && gt) {
+        const pixVerts = label.vertices.map(v => [
+            Math.round((v[1] - gt.c) / gt.a),
+            Math.round((v[0] - gt.f) / gt.e)
+        ]);
+        const matches = rasterizePolygon(pixVerts);
+        if (matches.length > 0) {
+            return matches.map(m => ({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [m.lon, m.lat] },
+                properties: props
+            }));
+        }
+    }
+
+    // Fallback: single point at label centroid
+    return [{ type: 'Feature', geometry: { type: 'Point', coordinates: [label.lon, label.lat] }, properties: props }];
+}
+
 // ===== EXPORT / IMPORT (Phase 3) =====
 
 function exportManualLabels() {
@@ -1175,24 +1215,8 @@ function doExportManualLabels(format) {
         };
         downloadFile(JSON.stringify(data, null, 2), `manual-labels-${window.currentViewportName || 'export'}.json`, 'application/json');
     } else if (format === 'geojson') {
-        const features = manualLabels.map(l => {
-            if (l.type === 'polygon' && l.vertices) {
-                // GeoJSON polygon: [[[lng, lat], ...]]
-                const ring = l.vertices.map(v => [v[1], v[0]]);
-                ring.push(ring[0]); // close ring
-                return {
-                    type: 'Feature',
-                    geometry: { type: 'Polygon', coordinates: [ring] },
-                    properties: { name: l.name, color: l.color, code: l.code || '', type: l.type, matchCount: l.matchCount }
-                };
-            } else {
-                return {
-                    type: 'Feature',
-                    geometry: { type: 'Point', coordinates: [l.lon, l.lat] },
-                    properties: { name: l.name, color: l.color, code: l.code || '', type: l.type, threshold: l.threshold, matchCount: l.matchCount }
-                };
-            }
-        });
+        // Expand each label to all its pixel points
+        const features = manualLabels.flatMap(l => expandLabelToPoints(l));
         const geojson = { type: 'FeatureCollection', features };
         downloadFile(JSON.stringify(geojson, null, 2), `manual-labels-${window.currentViewportName || 'export'}.geojson`, 'application/geo+json');
     } else if (format === 'shapefile') {
@@ -1226,25 +1250,10 @@ async function exportManualLabelsShapefile() {
             });
         }
 
-        const points = [];
-        const polygons = [];
+        // Expand each label to all its pixel points for maximum training data
+        const features = manualLabels.flatMap(l => expandLabelToPoints(l));
 
-        for (const l of manualLabels) {
-            const props = { name: l.name, color: l.color, code: l.code || '', type: l.type };
-            if (l.type === 'polygon' && l.vertices) {
-                const ring = l.vertices.map(v => [v[1], v[0]]);
-                ring.push(ring[0]);
-                polygons.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: props });
-            } else {
-                points.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [l.lon, l.lat] }, properties: props });
-            }
-        }
-
-        // Export as GeoJSON-based ZIP (shp-write generates .shp, .shx, .dbf, .prj)
-        const gj = {
-            type: 'FeatureCollection',
-            features: [...points, ...polygons]
-        };
+        const gj = { type: 'FeatureCollection', features };
 
         if (typeof shpwrite !== 'undefined' && shpwrite.zip) {
             const content = await shpwrite.zip(gj, {outputType: 'blob'});
@@ -2586,28 +2595,18 @@ async function buildShapefileZip() {
         });
     }
 
-    const points = [];
-    const polygons = [];
+    // Expand each label to all its pixel points
+    const features = manualLabels.flatMap(l => expandLabelToPoints(l));
 
-    for (const l of manualLabels) {
-        const props = { name: l.name, color: l.color, code: l.code || '', type: l.type };
-        if (l.type === 'polygon' && l.vertices) {
-            const ring = l.vertices.map(v => [v[1], v[0]]);
-            ring.push(ring[0]);
-            polygons.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: props });
-        } else {
-            points.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [l.lon, l.lat] }, properties: props });
-        }
-    }
     // Include savedLabels as points
     for (const l of savedLabels) {
         if (l.source_pixel) {
             const props = { name: l.name, color: l.color, code: '', type: 'similarity' };
-            points.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [l.source_pixel.lon, l.source_pixel.lat] }, properties: props });
+            features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [l.source_pixel.lon, l.source_pixel.lat] }, properties: props });
         }
     }
 
-    const gj = { type: 'FeatureCollection', features: [...points, ...polygons] };
+    const gj = { type: 'FeatureCollection', features };
 
     if (typeof shpwrite !== 'undefined' && shpwrite.zip) {
         return await shpwrite.zip(gj, {outputType: 'blob'});
