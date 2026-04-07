@@ -25,6 +25,8 @@ Thumbs.db
 
 # Screenshots/debugging images
 *.png
+# But keep user guide screenshots
+!public/images/*.png
 
 # Project specific
 *.log
