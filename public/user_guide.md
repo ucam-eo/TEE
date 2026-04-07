@@ -178,10 +178,24 @@ Manual labelling lets you build habitat classes by hand — placing individual p
 
 1. Switch to **Labelling** mode using the layout dropdown in the header bar
 2. In Panel 6 (bottom-right), select **Manual Label** from the sub-mode dropdown
-3. Type a **label name** (e.g., "Improved grassland"), optionally pick a **colour**, and click **Set**
-4. Now you're ready to place labels on the map
+3. Set an active label — either type a name and pick a colour manually, or use a **classification schema** (see below)
+4. Click **Set**, then you're ready to place labels on the map
 
-> **Tip:** Click **Schema** in the header bar to load a habitat classification scheme (UKHab v2, EUNIS, Habitats of the World, or upload your own custom scheme). The schema browser opens as a floating window — use the search box to find a habitat type, then click it to set it as the active label with its standard code and colour.
+### Classification Schemas
+
+Rather than inventing label names and colours from scratch, you can load a standard habitat classification scheme. Click **Schema** in the header bar to open the schema browser — a draggable floating window with a search box.
+
+TEE includes three built-in schemas:
+
+| Schema | Description |
+|--------|-------------|
+| **UKHab v2** | UK Habitat Classification — the standard for UK habitat surveys (e.g., "g1a Improved grassland", "w1f Wet woodland") |
+| **EUNIS** | European Nature Information System — a pan-European classification with 6 top-level groups and ~280 habitat types |
+| **Habitats of the World (HOTW)** | A global classification scheme |
+
+You can also upload a **custom schema** as a JSON file if your project uses a different classification.
+
+To use a schema: open the browser, type to filter (e.g., "grassland"), and click an entry. TEE sets it as the active label with the standard code, name, and colour. This ensures consistent naming across your team and makes labels directly comparable with other datasets using the same scheme.
 
 ### Placing Labels
 
