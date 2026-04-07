@@ -1,0 +1,500 @@
+{
+  "name": "EUNIS Habitats (Terrestrial) 2021",
+  "version": "2021/2022",
+  "date": "2021",
+  "source": "https://eunis.eea.europa.eu/habitats-code-browser-revised.jsp",
+  "tree": [
+    {
+      "code": "N",
+      "name": "Coastal habitats",
+      "children": [
+        {
+          "code": "N1",
+          "name": "Coastal dunes and sandy shores",
+          "children": [
+            { "code": "N11", "name": "Atlantic, Baltic and Arctic sand beach", "children": [] },
+            { "code": "N12", "name": "Mediterranean and Black Sea sand beach", "children": [] },
+            { "code": "N13", "name": "Atlantic and Baltic shifting coastal dune", "children": [] },
+            { "code": "N14", "name": "Mediterranean, Macaronesian and Black Sea shifting coastal dune", "children": [] },
+            { "code": "N15", "name": "Atlantic and Baltic coastal dune grassland (grey dune)", "children": [] },
+            { "code": "N16", "name": "Mediterranean and Macaronesian coastal dune grassland (grey dune)", "children": [] },
+            { "code": "N17", "name": "Black Sea coastal dune grassland (grey dune)", "children": [] },
+            { "code": "N18", "name": "Atlantic and Baltic coastal Empetrum heath", "children": [] },
+            { "code": "N19", "name": "Atlantic coastal Calluna and Ulex heath", "children": [] },
+            { "code": "N1A", "name": "Atlantic and Baltic coastal dune scrub", "children": [] },
+            { "code": "N1B", "name": "Mediterranean and Black Sea coastal dune scrub", "children": [] },
+            { "code": "N1C", "name": "Macaronesian coastal dune scrub", "children": [] },
+            { "code": "N1D", "name": "Atlantic and Baltic broad-leaved coastal dune forest", "children": [] },
+            { "code": "N1E", "name": "Black Sea broad-leaved coastal dune forest", "children": [] },
+            { "code": "N1F", "name": "Baltic coniferous coastal dune forest", "children": [] },
+            { "code": "N1G", "name": "Mediterranean coniferous coastal dune forest", "children": [] },
+            { "code": "N1H", "name": "Atlantic and Baltic moist and wet dune slack", "children": [] },
+            { "code": "N1J", "name": "Mediterranean and Black Sea moist and wet dune slack", "children": [] }
+          ]
+        },
+        {
+          "code": "N2",
+          "name": "Coastal shingle",
+          "children": [
+            { "code": "N21", "name": "Atlantic, Baltic and Arctic coastal shingle beach", "children": [] },
+            { "code": "N22", "name": "Mediterranean and Black Sea coastal shingle beach", "children": [] }
+          ]
+        },
+        {
+          "code": "N3",
+          "name": "Rock cliffs, ledges and shores, including the supralittoral",
+          "children": [
+            { "code": "N31", "name": "Atlantic and Baltic rocky sea cliff and shore", "children": [] },
+            { "code": "N32", "name": "Mediterranean and Black Sea rocky sea cliff and shore", "children": [] },
+            { "code": "N33", "name": "Macaronesian rocky sea cliff and shore", "children": [] },
+            { "code": "N34", "name": "Atlantic and Baltic soft sea cliff", "children": [] },
+            { "code": "N35", "name": "Mediterranean and Black Sea soft sea cliff", "children": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "R",
+      "name": "Grasslands and lands dominated by forbs, mosses or lichens",
+      "children": [
+        {
+          "code": "R1",
+          "name": "Dry grasslands",
+          "children": [
+            { "code": "R11", "name": "Pannonian and Pontic sandy steppe", "children": [] },
+            { "code": "R12", "name": "Cryptogam- and annual-dominated vegetation on siliceous rock outcrops", "children": [] },
+            { "code": "R13", "name": "Cryptogam- and annual-dominated vegetation on calcareous and ultramafic rock outcrops", "children": [] },
+            { "code": "R14", "name": "Perennial rocky grassland of the Italian Peninsula", "children": [] },
+            { "code": "R15", "name": "Continental dry rocky steppic grassland and dwarf scrub on chalk outcrops", "children": [] },
+            { "code": "R16", "name": "Perennial rocky grassland of Central and South-Eastern Europe", "children": [] },
+            { "code": "R17", "name": "Heavy-metal dry grassland of the Balkans", "children": [] },
+            { "code": "R18", "name": "Perennial rocky calcareous grassland of subatlantic-submediterranean Europe", "children": [] },
+            { "code": "R19", "name": "Dry steppic submediterranean pasture of the Amphi-Adriatic region", "children": [] },
+            { "code": "R1A", "name": "Semi-dry perennial calcareous grassland (meadow steppe)", "children": [] },
+            { "code": "R1B", "name": "Continental dry grassland (true steppe)", "children": [] },
+            { "code": "R1C", "name": "Desert steppe", "children": [] },
+            { "code": "R1D", "name": "Mediterranean closely grazed dry grassland", "children": [] },
+            { "code": "R1E", "name": "Mediterranean tall perennial dry grassland", "children": [] },
+            { "code": "R1F", "name": "Mediterranean annual-rich dry grassland", "children": [] },
+            { "code": "R1G", "name": "Iberian oromediterranean siliceous dry grassland", "children": [] },
+            { "code": "R1H", "name": "Iberian oromediterranean basiphilous dry grassland", "children": [] },
+            { "code": "R1J", "name": "Cyrno-Sardean oromediterranean siliceous dry grassland", "children": [] },
+            { "code": "R1K", "name": "Balkan and Anatolian oromediterranean dry grassland", "children": [] },
+            { "code": "R1L", "name": "Madeiran oromediterranean siliceous dry grassland", "children": [] },
+            { "code": "R1M", "name": "Lowland to montane, dry to mesic grassland usually dominated by Nardus stricta", "children": [] },
+            { "code": "R1N", "name": "Open Iberian supramediterranean dry acid and neutral grassland", "children": [] },
+            { "code": "R1P", "name": "Oceanic to subcontinental inland sand grassland on dry acid and neutral soils", "children": [] },
+            { "code": "R1Q", "name": "Inland sanddrift and dune with siliceous grassland", "children": [] },
+            { "code": "R1R", "name": "Mediterranean to Atlantic open, dry, acid and neutral grassland", "children": [] },
+            { "code": "R1S", "name": "Heavy-metal grassland in Western and Central Europe", "children": [] },
+            { "code": "R1T", "name": "Azorean open, dry, acid to neutral grassland", "children": [] }
+          ]
+        },
+        {
+          "code": "R2",
+          "name": "Mesic grasslands",
+          "children": [
+            { "code": "R21", "name": "Mesic permanent pasture of lowlands and mountains", "children": [] },
+            { "code": "R22", "name": "Low and medium altitude hay meadow", "children": [] },
+            { "code": "R23", "name": "Mountain hay meadow", "children": [] },
+            { "code": "R24", "name": "Iberian summer pasture (vallicar)", "children": [] }
+          ]
+        },
+        {
+          "code": "R3",
+          "name": "Seasonally wet and wet grasslands",
+          "children": [
+            { "code": "R31", "name": "Mediterranean tall humid inland grassland", "children": [] },
+            { "code": "R32", "name": "Mediterranean short moist grassland of lowlands", "children": [] },
+            { "code": "R33", "name": "Mediterranean short moist grassland of mountains", "children": [] },
+            { "code": "R34", "name": "Submediterranean moist meadow", "children": [] },
+            { "code": "R35", "name": "Moist or wet mesotrophic to eutrophic hay meadow", "children": [] },
+            { "code": "R36", "name": "Moist or wet mesotrophic to eutrophic pasture", "children": [] },
+            { "code": "R37", "name": "Temperate and boreal moist or wet oligotrophic grassland", "children": [] }
+          ]
+        },
+        {
+          "code": "R4",
+          "name": "Alpine and subalpine grasslands",
+          "children": [
+            { "code": "R41", "name": "Snow-bed vegetation", "children": [] },
+            { "code": "R42", "name": "Boreal and arctic acidophilous alpine grassland", "children": [] },
+            { "code": "R43", "name": "Temperate acidophilous alpine grassland", "children": [] },
+            { "code": "R44", "name": "Arctic-alpine calcareous grassland", "children": [] },
+            { "code": "R45", "name": "Alpine and subalpine calcareous grassland of the Balkans and Apennines", "children": [] }
+          ]
+        },
+        {
+          "code": "R5",
+          "name": "Forest fringes and clearings and tall forb stands",
+          "children": [
+            { "code": "R51", "name": "Thermophilous forest fringe of base-rich soils", "children": [] },
+            { "code": "R52", "name": "Forest fringe of acidic nutrient-poor soils", "children": [] },
+            { "code": "R53", "name": "Macaronesian thermophilous forest fringe", "children": [] },
+            { "code": "R54", "name": "Pteridium aquilinum vegetation", "children": [] },
+            { "code": "R55", "name": "Lowland moist or wet tall-herb and fern fringe", "children": [] },
+            { "code": "R56", "name": "Montane to subalpine moist or wet tall-herb and fern fringe", "children": [] },
+            { "code": "R57", "name": "Herbaceous forest clearing vegetation", "children": [] }
+          ]
+        },
+        {
+          "code": "R6",
+          "name": "Inland salt steppes and salt marshes",
+          "children": [
+            { "code": "R61", "name": "Mediterranean inland salt steppe", "children": [] },
+            { "code": "R62", "name": "Continental inland salt steppe", "children": [] },
+            { "code": "R63", "name": "Temperate inland salt marsh", "children": [] },
+            { "code": "R64", "name": "Semi-desert salt pan", "children": [] },
+            { "code": "R65", "name": "Continental subsaline alluvial pasture and meadow", "children": [] }
+          ]
+        },
+        {
+          "code": "R7",
+          "name": "Sparsely wooded grasslands",
+          "children": [
+            { "code": "R71", "name": "Temperate wooded pasture and meadow", "children": [] },
+            { "code": "R72", "name": "Hemiboreal and boreal wooded pasture and meadow", "children": [] },
+            { "code": "R73", "name": "Mediterranean wooded pasture and meadow", "children": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "S",
+      "name": "Heathland, scrub and tundra",
+      "children": [
+        {
+          "code": "S1",
+          "name": "Tundra",
+          "children": [
+            { "code": "S11", "name": "Shrub tundra", "children": [] },
+            { "code": "S12", "name": "Moss and lichen tundra", "children": [] }
+          ]
+        },
+        {
+          "code": "S2",
+          "name": "Arctic, alpine and subalpine scrub",
+          "children": [
+            { "code": "S21", "name": "Subarctic and alpine dwarf Salix scrub", "children": [] },
+            { "code": "S22", "name": "Alpine and subalpine ericoid heath", "children": [] },
+            { "code": "S23", "name": "Alpine and subalpine Juniperus scrub", "children": [] },
+            { "code": "S24", "name": "Subalpine genistoid scrub of the Amphi-Adriatic region", "children": [] },
+            { "code": "S25", "name": "Subalpine and subarctic deciduous scrub", "children": [] },
+            { "code": "S26", "name": "Subalpine Pinus mugo scrub", "children": [] },
+            { "code": "S27", "name": "Krummholz with conifers other than Pinus mugo", "children": [] }
+          ]
+        },
+        {
+          "code": "S3",
+          "name": "Temperate and mediterranean-montane scrub",
+          "children": [
+            { "code": "S31", "name": "Lowland to montane temperate and submediterranean Juniperus scrub", "children": [] },
+            { "code": "S32", "name": "Temperate Rubus scrub", "children": [] },
+            { "code": "S33", "name": "Lowland to montane temperate and submediterranean genistoid scrub", "children": [] },
+            { "code": "S34", "name": "Balkan-Anatolian submontane genistoid scrub", "children": [] },
+            { "code": "S35", "name": "Temperate and submediterranean thorn scrub", "children": [] },
+            { "code": "S36", "name": "Low steppic scrub", "children": [] },
+            { "code": "S37", "name": "Corylus avellana scrub", "children": [] },
+            { "code": "S38", "name": "Temperate forest clearing scrub", "children": [] }
+          ]
+        },
+        {
+          "code": "S4",
+          "name": "Temperate shrub heathland",
+          "children": [
+            { "code": "S41", "name": "Wet heath", "children": [] },
+            { "code": "S42", "name": "Dry heath", "children": [] },
+            { "code": "S43", "name": "Macaronesian heath", "children": [] }
+          ]
+        },
+        {
+          "code": "S5",
+          "name": "Maquis, arborescent matorral and thermo-Mediterranean scrub",
+          "children": [
+            { "code": "S51", "name": "Mediterranean maquis and arborescent matorral", "children": [] },
+            { "code": "S52", "name": "Submediterranean pseudomaquis", "children": [] },
+            { "code": "S53", "name": "Spartium junceum scrub", "children": [] },
+            { "code": "S54", "name": "Thermomediterranean arid scrub", "children": [] }
+          ]
+        },
+        {
+          "code": "S6",
+          "name": "Garrigue",
+          "children": [
+            { "code": "S61", "name": "Western basiphilous garrigue", "children": [] },
+            { "code": "S62", "name": "Western acidophilous garrigue", "children": [] },
+            { "code": "S63", "name": "Eastern garrigue", "children": [] },
+            { "code": "S64", "name": "Macaronesian garrigue", "children": [] },
+            { "code": "S65", "name": "Mediterranean gypsum scrub", "children": [] },
+            { "code": "S66", "name": "Mediterranean halo-nitrophilous scrub", "children": [] },
+            { "code": "S67", "name": "Aralo-Caspian semi-desert", "children": [] },
+            { "code": "S68", "name": "Semi-desert sand dune with sparse scrub", "children": [] }
+          ]
+        },
+        {
+          "code": "S7",
+          "name": "Spiny Mediterranean heaths (phrygana, hedgehog-heaths and related coastal cliff vegetation)",
+          "children": [
+            { "code": "S71", "name": "Western Mediterranean spiny heath", "children": [] },
+            { "code": "S72", "name": "Eastern Mediterranean spiny heath (phrygana)", "children": [] },
+            { "code": "S73", "name": "Western Mediterranean mountain hedgehog-heath", "children": [] },
+            { "code": "S74", "name": "Central Mediterranean mountain hedgehog-heath", "children": [] },
+            { "code": "S75", "name": "Eastern Mediterranean mountain hedgehog-heath", "children": [] },
+            { "code": "S76", "name": "Canarian mountain hedgehog-heath", "children": [] }
+          ]
+        },
+        {
+          "code": "S8",
+          "name": "Thermo-Atlantic xerophytic scrub",
+          "children": [
+            { "code": "S81", "name": "Canarian xerophytic scrub", "children": [] },
+            { "code": "S82", "name": "Madeiran xerophytic scrub", "children": [] }
+          ]
+        },
+        {
+          "code": "S9",
+          "name": "Riverine and fen scrubs",
+          "children": [
+            { "code": "S91", "name": "Temperate riparian scrub", "children": [] },
+            { "code": "S92", "name": "Salix fen scrub", "children": [] },
+            { "code": "S93", "name": "Mediterranean riparian scrub", "children": [] },
+            { "code": "S94", "name": "Semi-desert riparian scrub", "children": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "T",
+      "name": "Forest and other wooded land",
+      "children": [
+        {
+          "code": "T1",
+          "name": "Deciduous broadleaved forest",
+          "children": [
+            { "code": "T11", "name": "Temperate Salix and Populus riparian forest", "children": [] },
+            { "code": "T12", "name": "Alnus glutinosa - Alnus incana forest on riparian and mineral soils", "children": [] },
+            { "code": "T13", "name": "Temperate hardwood riparian forest", "children": [] },
+            { "code": "T14", "name": "Mediterranean and Macaronesian riparian forest", "children": [] },
+            { "code": "T15", "name": "Broadleaved swamp forest on non-acid peat", "children": [] },
+            { "code": "T16", "name": "Broadleaved mire forest on acid peat", "children": [] },
+            { "code": "T17", "name": "Fagus forest on non-acid soils", "children": [] },
+            { "code": "T18", "name": "Fagus forest on acid soils", "children": [] },
+            { "code": "T19", "name": "Temperate and submediterranean thermophilous deciduous forest", "children": [] },
+            { "code": "T1A", "name": "Mediterranean thermophilous deciduous forest", "children": [] },
+            { "code": "T1B", "name": "Acidophilous Quercus forest", "children": [] },
+            { "code": "T1C", "name": "Temperate and boreal mountain Betula and Populus tremula forest on mineral soils", "children": [] },
+            { "code": "T1D", "name": "Southern European mountain Betula and Populus tremula forest on mineral soils", "children": [] },
+            { "code": "T1E", "name": "Carpinus and Quercus mesic deciduous forest", "children": [] },
+            { "code": "T1F", "name": "Ravine forest", "children": [] },
+            { "code": "T1G", "name": "Alnus cordata forest", "children": [] },
+            { "code": "T1H", "name": "Broadleaved deciduous plantation of non site-native trees", "children": [] },
+            { "code": "T1J", "name": "Deciduous self sown forest of non site-native trees", "children": [] },
+            { "code": "T1K", "name": "Broadleaved deciduous plantation of site-native trees", "children": [] }
+          ]
+        },
+        {
+          "code": "T2",
+          "name": "Broadleaved evergreen forest",
+          "children": [
+            { "code": "T21", "name": "Mediterranean evergreen Quercus forest", "children": [] },
+            { "code": "T22", "name": "Mainland laurophyllous forest", "children": [] },
+            { "code": "T23", "name": "Macaronesian laurophyllous forest", "children": [] },
+            { "code": "T24", "name": "Olea europaea - Ceratonia siliqua forest", "children": [] },
+            { "code": "T25", "name": "Phoenix theophrasti vegetation", "children": [] },
+            { "code": "T26", "name": "Phoenix canariensis vegetation", "children": [] },
+            { "code": "T27", "name": "Ilex aquifolium forest", "children": [] },
+            { "code": "T28", "name": "Macaronesian heathy forest", "children": [] },
+            { "code": "T29", "name": "Broadleaved evergreen plantation of non site-native trees", "children": [] },
+            { "code": "T2A", "name": "Broadleaved evergreen plantation of site-native trees", "children": [] }
+          ]
+        },
+        {
+          "code": "T3",
+          "name": "Coniferous forest",
+          "children": [
+            { "code": "T31", "name": "Temperate mountain Picea forest", "children": [] },
+            { "code": "T32", "name": "Temperate mountain Abies forest", "children": [] },
+            { "code": "T33", "name": "Mediterranean mountain Abies forest", "children": [] },
+            { "code": "T34", "name": "Temperate subalpine Larix, Pinus cembra and Pinus uncinata forest", "children": [] },
+            { "code": "T35", "name": "Temperate continental Pinus sylvestris forest", "children": [] },
+            { "code": "T36", "name": "Temperate and submediterranean montane Pinus sylvestris - Pinus nigra forest", "children": [] },
+            { "code": "T37", "name": "Mediterranean montane Pinus sylvestris - Pinus nigra forest", "children": [] },
+            { "code": "T38", "name": "Mediterranean montane Cedrus forest", "children": [] },
+            { "code": "T39", "name": "Mediterranean and Balkan subalpine Pinus heldreichii - Pinus peuce forest", "children": [] },
+            { "code": "T3A", "name": "Mediterranean lowland to submontane Pinus forest", "children": [] },
+            { "code": "T3B", "name": "Pinus canariensis forest", "children": [] },
+            { "code": "T3C", "name": "Taxus baccata forest", "children": [] },
+            { "code": "T3D", "name": "Mediterranean Cupressaceae forest", "children": [] },
+            { "code": "T3E", "name": "Macaronesian Juniperus forest", "children": [] },
+            { "code": "T3F", "name": "Dark taiga", "children": [] },
+            { "code": "T3G", "name": "Pinus sylvestris light taiga", "children": [] },
+            { "code": "T3H", "name": "Larix light taiga", "children": [] },
+            { "code": "T3J", "name": "Pinus and Larix mire forest", "children": [] },
+            { "code": "T3K", "name": "Picea mire forest", "children": [] },
+            { "code": "T3L", "name": "Coniferous self sown forest of non site-native trees", "children": [] },
+            { "code": "T3M", "name": "Coniferous plantation of non site-native trees", "children": [] },
+            { "code": "T3N", "name": "Coniferous plantation of site-native trees", "children": [] }
+          ]
+        },
+        {
+          "code": "T4",
+          "name": "Lines of trees, small anthropogenic forests, recently felled forest, early-stage forest and coppice",
+          "children": [
+            { "code": "T41", "name": "Early-stage natural and semi-natural forest and regrowth", "children": [] },
+            { "code": "T42", "name": "Coppice and early stage plantations", "children": [] },
+            { "code": "T43", "name": "Recently felled areas", "children": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "U",
+      "name": "Inland habitats with no or little soil and mostly with sparse vegetation",
+      "children": [
+        {
+          "code": "U1",
+          "name": "Terrestrial underground caves, cave systems, passages and waterbodies",
+          "children": [
+            { "code": "U11", "name": "Cave", "children": [] },
+            { "code": "U12", "name": "Disused underground mines and tunnels", "children": [] }
+          ]
+        },
+        {
+          "code": "U2",
+          "name": "Screes",
+          "children": [
+            { "code": "U21", "name": "Boreal and arctic siliceous scree and block field", "children": [] },
+            { "code": "U22", "name": "Temperate high-mountain siliceous scree", "children": [] },
+            { "code": "U23", "name": "Temperate, lowland to montane siliceous scree", "children": [] },
+            { "code": "U24", "name": "Mediterranean siliceous scree", "children": [] },
+            { "code": "U25", "name": "Boreal and arctic base-rich scree and block field", "children": [] },
+            { "code": "U26", "name": "Temperate high-mountain base-rich scree and moraine", "children": [] },
+            { "code": "U27", "name": "Temperate, lowland to montane base-rich scree", "children": [] },
+            { "code": "U28", "name": "Western Mediterranean base-rich scree", "children": [] },
+            { "code": "U29", "name": "Eastern Mediterranean base-rich scree", "children": [] },
+            { "code": "U2A", "name": "Crimean base-rich screes", "children": [] }
+          ]
+        },
+        {
+          "code": "U3",
+          "name": "Inland cliffs, rock pavements and outcrops",
+          "children": [
+            { "code": "U31", "name": "Boreal and arctic siliceous inland cliff", "children": [] },
+            { "code": "U32", "name": "Temperate high-mountain siliceous inland cliff", "children": [] },
+            { "code": "U33", "name": "Temperate, lowland to montane siliceous inland cliff", "children": [] },
+            { "code": "U34", "name": "Mediterranean siliceous inland cliff", "children": [] },
+            { "code": "U35", "name": "Boreal and arctic base-rich inland cliff", "children": [] },
+            { "code": "U36", "name": "Temperate high-mountain base-rich inland cliff", "children": [] },
+            { "code": "U37", "name": "Temperate, lowland to montane base-rich inland cliff", "children": [] },
+            { "code": "U38", "name": "Mediterranean base-rich inland cliff", "children": [] },
+            { "code": "U39", "name": "Boreal ultramafic inland cliff", "children": [] },
+            { "code": "U3A", "name": "Temperate ultramafic inland cliff", "children": [] },
+            { "code": "U3B", "name": "Mediterranean ultramafic inland cliff", "children": [] },
+            { "code": "U3C", "name": "Macaronesian inland cliff", "children": [] },
+            { "code": "U3D", "name": "Wet inland cliff", "children": [] },
+            { "code": "U3E", "name": "Limestone pavement", "children": [] }
+          ]
+        },
+        {
+          "code": "U4",
+          "name": "Snow or ice-dominated habitats",
+          "children": [
+            { "code": "U41", "name": "Snow pack", "children": [] },
+            { "code": "U42", "name": "Ice cap and glacier", "children": [] },
+            { "code": "U43", "name": "Rock glacier and unvegetated ice-dominated moraine", "children": [] }
+          ]
+        },
+        {
+          "code": "U5",
+          "name": "Miscellaneous inland habitats usually with very sparse or no vegetation",
+          "children": [
+            { "code": "U51", "name": "Fjell field", "children": [] },
+            { "code": "U52", "name": "Polar desert", "children": [] },
+            { "code": "U53", "name": "Glacial moraines with very sparse or no vegetation", "children": [] }
+          ]
+        },
+        {
+          "code": "U6",
+          "name": "Recent volcanic features",
+          "children": [
+            { "code": "U61", "name": "Subarctic volcanic field", "children": [] },
+            { "code": "U62", "name": "Mediterranean, Macaronesian and temperate volcanic field", "children": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "V",
+      "name": "Vegetated man-made habitats",
+      "children": [
+        {
+          "code": "V1",
+          "name": "Arable land and market gardens",
+          "children": [
+            { "code": "V11", "name": "Intensive unmixed crops", "children": [] },
+            { "code": "V12", "name": "Mixed crops of market gardens and horticulture", "children": [] },
+            { "code": "V13", "name": "Arable land with unmixed crops grown by low-intensity agricultural methods", "children": [] },
+            { "code": "V14", "name": "Inundated or inundatable croplands, including rice fields", "children": [] },
+            { "code": "V15", "name": "Bare tilled, fallow or recently abandoned arable land", "children": [] }
+          ]
+        },
+        {
+          "code": "V2",
+          "name": "Cultivated areas of gardens and parks",
+          "children": [
+            { "code": "V21", "name": "Large-scale ornamental garden areas", "children": [] },
+            { "code": "V22", "name": "Small-scale ornamental and domestic garden areas", "children": [] },
+            { "code": "V23", "name": "Recently abandoned garden areas", "children": [] }
+          ]
+        },
+        {
+          "code": "V3",
+          "name": "Artificial grasslands and herb dominated habitats",
+          "children": [
+            { "code": "V31", "name": "Agriculturally-improved, re-seeded and heavily fertilised grassland, including sports fields and grass lawns", "children": [] },
+            { "code": "V32", "name": "Mediterranean subnitrophilous annual grasslands", "children": [] },
+            { "code": "V33", "name": "Dry mediterranean lands with unpalatable non-vernal herbaceous vegetation", "children": [] },
+            { "code": "V34", "name": "Trampled xeric grasslands with annuals", "children": [] },
+            { "code": "V35", "name": "Trampled mesophilous grasslands with annuals", "children": [] },
+            { "code": "V36", "name": "Alpine and subalpine enriched grassland", "children": [] },
+            { "code": "V37", "name": "Annual anthropogenic herbaceous vegetation", "children": [] },
+            { "code": "V38", "name": "Dry perennial anthropogenic herbaceous vegetation", "children": [] },
+            { "code": "V39", "name": "Mesic perennial anthropogenic herbaceous vegetation", "children": [] }
+          ]
+        },
+        {
+          "code": "V4",
+          "name": "Hedgerows",
+          "children": [
+            { "code": "V41", "name": "Hedgerows of non-native species", "children": [] },
+            { "code": "V42", "name": "Highly-managed hedgerows of native species", "children": [] },
+            { "code": "V43", "name": "Species-rich hedgerows of native species", "children": [] },
+            { "code": "V44", "name": "Species-poor hedgerows of native species", "children": [] }
+          ]
+        },
+        {
+          "code": "V5",
+          "name": "Shrub plantations",
+          "children": [
+            { "code": "V51", "name": "Shrub plantations for whole-plant harvesting", "children": [] },
+            { "code": "V52", "name": "Shrub plantations for leaf or branch harvest", "children": [] },
+            { "code": "V53", "name": "Shrub plantations for ornamental purposes or for fruit, other than vineyards", "children": [] },
+            { "code": "V54", "name": "Vineyards", "children": [] }
+          ]
+        },
+        {
+          "code": "V6",
+          "name": "Tree dominated man-made habitats",
+          "children": [
+            { "code": "V61", "name": "Broadleaved fruit and nut tree orchards", "children": [] },
+            { "code": "V62", "name": "Evergreen orchards and groves", "children": [] },
+            { "code": "V63", "name": "Lines of planted trees", "children": [] },
+            { "code": "V64", "name": "Small deciduous broadleaved planted other wooded land", "children": [] },
+            { "code": "V65", "name": "Small evergreen broadleaved planted other wooded land", "children": [] },
+            { "code": "V66", "name": "Small coniferous planted other wooded land", "children": [] }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -69,6 +69,7 @@ async function loadSchema(mode) {
     const builtinSchemas = {
         ukhab: { url: '/schemas/ukhab-v2.json', label: 'UKHab' },
         hotw:  { url: '/schemas/hotw.json',      label: 'HOTW' },
+        eunis: { url: '/schemas/eunis.json',     label: 'EUNIS' },
     };
 
     if (builtinSchemas[mode]) {
