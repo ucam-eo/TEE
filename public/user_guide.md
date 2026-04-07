@@ -16,6 +16,21 @@ With TEE you can:
 
 > **Privacy by design:** Similarity searches and labelling run entirely in your browser — no data is sent to the server. ML evaluation runs on your own machine. Ground-truth shapefiles never leave your computer. The hosted server only serves map tiles and satellite imagery.
 
+## Contents
+
+- [Quick Start](#quick-start)
+- [The Viewport Manager](#the-viewport-manager)
+- [The Viewer](#the-viewer)
+- [Similarity Search](#similarity-search)
+- [Labels](#labels) — exporting, sharing, importing
+- [Classification Schemas](#classification-schemas) — UKHab, EUNIS, HOTW
+- [Manual Labelling](#manual-labelling) — pins, polygons, similarity expansion
+- [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
+- [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
+- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, confusion matrix, spatial splits, Create Map
+- [Data Privacy](#data-privacy)
+- [Reference](#reference) — mouse controls, keyboard shortcuts, tips
+
 ---
 
 ## Quick Start
