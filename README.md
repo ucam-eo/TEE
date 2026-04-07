@@ -44,10 +44,13 @@ sudo ./manage.sh
 
 ### ML Evaluation
 
-Evaluation requires a compute server (`tee-compute`). See the [Compute Server Setup](public/user_guide.md#compute-server-setup) section of the User Guide for full instructions. The quickest option:
+Evaluation requires a compute server (`tee-compute`). See the [Compute Server Setup](public/user_guide.md#compute-server-setup) section of the User Guide for full instructions.
 
 ```bash
-# On your laptop — runs compute on a GPU server via SSH tunnel
+# Everything on your laptop (no GPU server needed)
+./scripts/deploy-compute.sh --local
+
+# Or offload ML to a GPU server via SSH tunnel
 ./scripts/deploy-compute.sh gpu-box
 ```
 
