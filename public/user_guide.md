@@ -214,6 +214,221 @@ TEE segments the viewport into clusters using K-means on the embedding space. Cl
 
 ---
 
+## Compute Server Setup
+
+All ML evaluation runs on a compute server (`tee-compute`). The hosted TEE server does not run ML. You must set up a compute server before using the Validation features below.
+
+### How It Works
+
+```
+┌─────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+│   Browser    │────▶│  Django (port 8001)  │     │   tee-compute   │
+│             │     │  Serves UI, tiles,   │────▶│   (port 8002)   │
+│             │     │  proxies /eval/*     │     │  ML evaluation  │
+└─────────────┘     └──────────────────────┘     └────────┬────────┘
+                                                          │
+                                                 ┌────────▼────────┐
+                                                 │   GeoTessera    │
+                                                 │ dl2.geotessera  │
+                                                 └─────────────────┘
+```
+
+### Deployment Modes
+
+| Mode | What you run | ML runs on |
+|------|-------------|-----------|
+| **Hosted** | Nothing — open the website | — (no ML) |
+| **Local compute** | `tee-compute` on your laptop | Your laptop |
+| **Remote compute** | `tee-compute` on GPU box + SSH tunnel | GPU server |
+| **All local** | Django + tee-compute via `restart.sh` | Your laptop |
+
+| Component | Hosted server | Local compute | GPU server |
+|-----------|:------------:|:------------:|:----------:|
+| Map tiles, satellite imagery | ✓ | | |
+| Embedding tile images | ✓ | | |
+| Label sharing | ✓ | | |
+| Viewport management | ✓ | | |
+| Shapefile upload | | ✓ | ✓ |
+| Embedding sampling | | ✓ | ✓ |
+| ML training + evaluation | | ✓ | ✓ |
+| Model download | | ✓ | ✓ |
+
+### Setting Up a GPU Server
+
+You don't need Docker — just the git repo and a Python virtual environment on your server. The deploy script handles everything else (pulling code, installing dependencies, starting the tunnel).
+
+Set up the GPU server once:
+
+**Step 0: Open a terminal**
+
+- **Mac**: press Cmd+Space, type "Terminal", press Enter
+- **Windows**: press Win+X, select "Windows PowerShell", or install [Windows Terminal](https://learn.microsoft.com/en-us/windows/terminal/install)
+
+For a full guide, see [How to open a terminal](https://tutorials.codebar.io/command-line/introduction/tutorial.html).
+
+**Step 1: Get SSH access**
+
+Check if you already have an SSH key:
+```bash
+cat ~/.ssh/id_rsa.pub
+```
+If you see "No such file", generate one (press Enter at every prompt):
+```bash
+ssh-keygen
+```
+Send the public key to your server admin:
+```bash
+cat ~/.ssh/id_rsa.pub
+```
+Ask them to append it to `~/.ssh/authorized_keys` in your home directory on the server.
+
+**Step 2: Configure SSH**
+
+Add the server to `~/.ssh/config` so you can refer to it by a short name:
+```
+Host gpu-box
+    HostName myhost.uk       # replace with your server's DNS name or IP
+    User yourname            # replace with your username on the server
+    ControlMaster auto
+    ControlPath ~/.ssh/ctrl-%r@%h:%p
+    ControlPersist 10m
+```
+
+The `Control*` lines enable connection multiplexing — you only enter your password once, and subsequent SSH connections reuse it for 10 minutes.
+
+**Step 3: Verify SSH access**
+```bash
+ssh gpu-box    # should log in without a password prompt
+```
+
+**Step 4: Clone the repo and create a venv on the server**
+```bash
+ssh gpu-box
+git clone https://github.com/ucam-eo/TEE.git ~/TEE
+python3 -m venv ~/TEE/venv
+exit
+```
+
+**Step 5: Deploy using the deploy script**
+
+The `deploy-compute.sh` script handles everything: pulls code, installs dependencies, starts the tunnel. Use it for both initial setup and updates.
+
+> **PyTorch note:** `--install-torch` auto-detects CUDA. If it installs the wrong version, see [Fixing PyTorch CUDA version mismatch](#fixing-pytorch-cuda-version-mismatch) below.
+
+---
+
+### Deploy Commands
+
+All modes use a single script: `./scripts/deploy-compute.sh`
+
+| Command | UI served by | Compute runs on | Use when |
+|---------|-------------|----------------|----------|
+| `deploy-compute.sh gpu-box` | tee.cl.cam.ac.uk (proxied) | GPU server | Evaluation only, no local data needed |
+| `deploy-compute.sh --local gpu-box` | Your laptop (Django) | GPU server | Local viewports + GPU evaluation |
+| `deploy-compute.sh --local` | Your laptop (Django) | Your laptop | Offline use, small datasets |
+| `deploy-compute.sh gpu-box --no-tunnel` | — | — | Just deploy code to server |
+
+---
+
+### Option 1: GPU Server (recommended)
+
+The UI comes from tee.cl.cam.ac.uk, evaluation runs on your GPU server. Nothing runs on your laptop except the SSH tunnel.
+
+```bash
+./scripts/deploy-compute.sh gpu-box
+```
+
+Open **http://localhost:8001**.
+
+> **Why localhost?** Browsers block HTTP requests from HTTPS pages. tee-compute proxies the hosted UI via HTTP so evaluation requests work.
+
+---
+
+### Option 2: All Local
+
+Everything runs on your laptop. Good for offline use and small datasets.
+
+```bash
+./scripts/deploy-compute.sh --local
+```
+
+Open **http://localhost:8001**.
+
+---
+
+### Option 3: Local UI + GPU Server
+
+Local Django serves your viewports and labels. Evaluation offloads to a GPU server.
+
+```bash
+./scripts/deploy-compute.sh --local gpu-box
+```
+
+Open **http://localhost:8001**.
+
+### Command Reference
+
+```
+tee-compute [OPTIONS]
+
+  --hosted URL    Hosted server URL (default: https://tee.cl.cam.ac.uk)
+  --port PORT     Local port (default: 8001)
+  --host HOST     Bind address (default: 127.0.0.1)
+  --debug         Flask debug mode
+```
+
+### Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `Connection refused` | Is `tee-compute` running? |
+| `Cannot reach hosted server` | Check internet: `curl https://tee.cl.cam.ac.uk/health` |
+| `No GeoTessera tiles found` | Try year 2025 (wider coverage) |
+| `ModuleNotFoundError` | `pip install -e "$HOME/TEE/packages/tessera-eval[server]"` |
+| SSH disconnects | Add `-o ServerAliveInterval=60` |
+| `Address already in use` on the server | Port 8001 is taken by another service. Use a different port: `ssh -L 8001:localhost:5050 gpu-box '~/TEE/venv/bin/tee-compute --port 5050'` |
+| `Could not resolve hostname gpu-box` | Replace `gpu-box` with the name from your `~/.ssh/config`, or use the full hostname |
+| SSH asks for passphrase every time | Run `ssh-add` to cache your key, or use `ssh-agent` |
+| `OpenBLAS: too many memory regions` | Server has >128 CPU cores. Update the code on the server (`cd ~/TEE && git pull`) to get the built-in fix, or run with: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050` |
+| Evaluation takes 6+ minutes to start | First run downloads tile data from GeoTessera (~6 min for country-scale). Results are cached — subsequent runs with the same shapefile/field/year are instant. |
+| `Skipping U-Net: PyTorch not installed` | Install PyTorch — see [Step 5](#step-5-optional-install-pytorch-for-u-net) above |
+| U-Net runs but `torch.cuda.is_available()` is False | CUDA driver mismatch — see below |
+
+> **Tip:** Click the **Status** button in the viewer header to see which machines are running the backend and compute server.
+
+#### Fixing PyTorch CUDA version mismatch
+
+If U-Net ignores the GPU and falls back to CPU, the installed PyTorch was built for a newer CUDA than your driver supports. To diagnose:
+
+```bash
+# Run these on the GPU server (ssh gpu-box first)
+
+# Check your driver's CUDA version (look for "CUDA Version: XX.Y" in the top-right)
+nvidia-smi
+
+# Check if PyTorch can see the GPU (use the venv python, not system python)
+~/TEE/venv/bin/python3 -c "import torch; print(torch.cuda.is_available())"
+```
+
+If `nvidia-smi` shows a GPU but `torch.cuda.is_available()` returns False, you need a PyTorch version that matches your driver. The driver's CUDA version is the **maximum** it supports — install a PyTorch built for that version or lower.
+
+```bash
+# Example: driver reports CUDA 12.2 → install PyTorch for CUDA 12.1
+~/TEE/venv/bin/pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+
+# Verify
+~/TEE/venv/bin/python3 -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```
+
+Common CUDA index URLs:
+| Driver CUDA version | PyTorch index URL |
+|---------------------|-------------------|
+| 11.8+ | `https://download.pytorch.org/whl/cu118` |
+| 12.1+ | `https://download.pytorch.org/whl/cu121` |
+| No GPU / CPU only | `https://download.pytorch.org/whl/cpu` |
+
+---
+
 ## Validation (Learning Curves)
 
 Evaluate how well classifiers distinguish habitat classes using Tessera embeddings and expert ground-truth polygons. Works at any scale — from a single viewport to an entire country.
@@ -452,221 +667,6 @@ python scripts/tee_evaluate.py --config eval_config.json --dry-run  # stats only
 
 ---
 
-## Running Evaluation on Your Own Machines
-
-All ML evaluation runs on a compute server (`tee-compute`). The hosted TEE server does not run ML.
-
-### How It Works
-
-```
-┌─────────────┐     ┌──────────────────────┐     ┌─────────────────┐
-│   Browser    │────▶│  Django (port 8001)  │     │   tee-compute   │
-│             │     │  Serves UI, tiles,   │────▶│   (port 8002)   │
-│             │     │  proxies /eval/*     │     │  ML evaluation  │
-└─────────────┘     └──────────────────────┘     └────────┬────────┘
-                                                          │
-                                                 ┌────────▼────────┐
-                                                 │   GeoTessera    │
-                                                 │ dl2.geotessera  │
-                                                 └─────────────────┘
-```
-
-### Deployment Modes
-
-| Mode | What you run | ML runs on |
-|------|-------------|-----------|
-| **Hosted** | Nothing — open the website | — (no ML) |
-| **Local compute** | `tee-compute` on your laptop | Your laptop |
-| **Remote compute** | `tee-compute` on GPU box + SSH tunnel | GPU server |
-| **All local** | Django + tee-compute via `restart.sh` | Your laptop |
-
-| Component | Hosted server | Local compute | GPU server |
-|-----------|:------------:|:------------:|:----------:|
-| Map tiles, satellite imagery | ✓ | | |
-| Embedding tile images | ✓ | | |
-| Label sharing | ✓ | | |
-| Viewport management | ✓ | | |
-| Shapefile upload | | ✓ | ✓ |
-| Embedding sampling | | ✓ | ✓ |
-| ML training + evaluation | | ✓ | ✓ |
-| Model download | | ✓ | ✓ |
-
-### Setting Up a GPU Server
-
-You don't need Docker — just the git repo and a Python virtual environment on your server. The deploy script handles everything else (pulling code, installing dependencies, starting the tunnel).
-
-Set up the GPU server once:
-
-**Step 0: Open a terminal**
-
-- **Mac**: press Cmd+Space, type "Terminal", press Enter
-- **Windows**: press Win+X, select "Windows PowerShell", or install [Windows Terminal](https://learn.microsoft.com/en-us/windows/terminal/install)
-
-For a full guide, see [How to open a terminal](https://tutorials.codebar.io/command-line/introduction/tutorial.html).
-
-**Step 1: Get SSH access**
-
-Check if you already have an SSH key:
-```bash
-cat ~/.ssh/id_rsa.pub
-```
-If you see "No such file", generate one (press Enter at every prompt):
-```bash
-ssh-keygen
-```
-Send the public key to your server admin:
-```bash
-cat ~/.ssh/id_rsa.pub
-```
-Ask them to append it to `~/.ssh/authorized_keys` in your home directory on the server.
-
-**Step 2: Configure SSH**
-
-Add the server to `~/.ssh/config` so you can refer to it by a short name:
-```
-Host gpu-box
-    HostName myhost.uk       # replace with your server's DNS name or IP
-    User yourname            # replace with your username on the server
-    ControlMaster auto
-    ControlPath ~/.ssh/ctrl-%r@%h:%p
-    ControlPersist 10m
-```
-
-The `Control*` lines enable connection multiplexing — you only enter your password once, and subsequent SSH connections reuse it for 10 minutes.
-
-**Step 3: Verify SSH access**
-```bash
-ssh gpu-box    # should log in without a password prompt
-```
-
-**Step 4: Clone the repo and create a venv on the server**
-```bash
-ssh gpu-box
-git clone https://github.com/ucam-eo/TEE.git ~/TEE
-python3 -m venv ~/TEE/venv
-exit
-```
-
-**Step 5: Deploy using the deploy script**
-
-The `deploy-compute.sh` script handles everything: pulls code, installs dependencies, starts the tunnel. Use it for both initial setup and updates.
-
-> **PyTorch note:** `--install-torch` auto-detects CUDA. If it installs the wrong version, see [Fixing PyTorch CUDA version mismatch](#fixing-pytorch-cuda-version-mismatch) below.
-
----
-
-### Deployment Modes
-
-All modes use a single script: `./scripts/deploy-compute.sh`
-
-| Command | UI served by | Compute runs on | Use when |
-|---------|-------------|----------------|----------|
-| `deploy-compute.sh gpu-box` | tee.cl.cam.ac.uk (proxied) | GPU server | Evaluation only, no local data needed |
-| `deploy-compute.sh --local gpu-box` | Your laptop (Django) | GPU server | Local viewports + GPU evaluation |
-| `deploy-compute.sh --local` | Your laptop (Django) | Your laptop | Offline use, small datasets |
-| `deploy-compute.sh gpu-box --no-tunnel` | — | — | Just deploy code to server |
-
----
-
-### Option 1: GPU Server (recommended)
-
-The UI comes from tee.cl.cam.ac.uk, evaluation runs on your GPU server. Nothing runs on your laptop except the SSH tunnel.
-
-```bash
-./scripts/deploy-compute.sh gpu-box
-```
-
-Open **http://localhost:8001**.
-
-> **Why localhost?** Browsers block HTTP requests from HTTPS pages. tee-compute proxies the hosted UI via HTTP so evaluation requests work.
-
----
-
-### Option 2: All Local
-
-Everything runs on your laptop. Good for offline use and small datasets.
-
-```bash
-./scripts/deploy-compute.sh --local
-```
-
-Open **http://localhost:8001**.
-
----
-
-### Option 3: Local UI + GPU Server
-
-Local Django serves your viewports and labels. Evaluation offloads to a GPU server.
-
-```bash
-./scripts/deploy-compute.sh --local gpu-box
-```
-
-Open **http://localhost:8001**.
-
-### Command Reference
-
-```
-tee-compute [OPTIONS]
-
-  --hosted URL    Hosted server URL (default: https://tee.cl.cam.ac.uk)
-  --port PORT     Local port (default: 8001)
-  --host HOST     Bind address (default: 127.0.0.1)
-  --debug         Flask debug mode
-```
-
-### Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| `Connection refused` | Is `tee-compute` running? |
-| `Cannot reach hosted server` | Check internet: `curl https://tee.cl.cam.ac.uk/health` |
-| `No GeoTessera tiles found` | Try year 2025 (wider coverage) |
-| `ModuleNotFoundError` | `pip install -e "$HOME/TEE/packages/tessera-eval[server]"` |
-| SSH disconnects | Add `-o ServerAliveInterval=60` |
-| `Address already in use` on the server | Port 8001 is taken by another service. Use a different port: `ssh -L 8001:localhost:5050 gpu-box '~/TEE/venv/bin/tee-compute --port 5050'` |
-| `Could not resolve hostname gpu-box` | Replace `gpu-box` with the name from your `~/.ssh/config`, or use the full hostname |
-| SSH asks for passphrase every time | Run `ssh-add` to cache your key, or use `ssh-agent` |
-| `OpenBLAS: too many memory regions` | Server has >128 CPU cores. Update the code on the server (`cd ~/TEE && git pull`) to get the built-in fix, or run with: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/TEE/venv/bin/tee-compute --port 5050` |
-| Evaluation takes 6+ minutes to start | First run downloads tile data from GeoTessera (~6 min for country-scale). Results are cached — subsequent runs with the same shapefile/field/year are instant. |
-| `Skipping U-Net: PyTorch not installed` | Install PyTorch — see [Step 5](#step-5-optional-install-pytorch-for-u-net) above |
-| U-Net runs but `torch.cuda.is_available()` is False | CUDA driver mismatch — see below |
-
-> **Tip:** Click the **Status** button in the viewer header to see which machines are running the backend and compute server.
-
-#### Fixing PyTorch CUDA version mismatch
-
-If U-Net ignores the GPU and falls back to CPU, the installed PyTorch was built for a newer CUDA than your driver supports. To diagnose:
-
-```bash
-# Run these on the GPU server (ssh gpu-box first)
-
-# Check your driver's CUDA version (look for "CUDA Version: XX.Y" in the top-right)
-nvidia-smi
-
-# Check if PyTorch can see the GPU (use the venv python, not system python)
-~/TEE/venv/bin/python3 -c "import torch; print(torch.cuda.is_available())"
-```
-
-If `nvidia-smi` shows a GPU but `torch.cuda.is_available()` returns False, you need a PyTorch version that matches your driver. The driver's CUDA version is the **maximum** it supports — install a PyTorch built for that version or lower.
-
-```bash
-# Example: driver reports CUDA 12.2 → install PyTorch for CUDA 12.1
-~/TEE/venv/bin/pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
-
-# Verify
-~/TEE/venv/bin/python3 -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
-```
-
-Common CUDA index URLs:
-| Driver CUDA version | PyTorch index URL |
-|---------------------|-------------------|
-| 11.8+ | `https://download.pytorch.org/whl/cu118` |
-| 12.1+ | `https://download.pytorch.org/whl/cu121` |
-| No GPU / CPU only | `https://download.pytorch.org/whl/cpu` |
-
----
-
 ## Export Options
 
 ### From Explore / Auto-label modes
@@ -746,8 +746,9 @@ Click **Import** → **Shared Labels** to browse labels shared by other users on
 
 ### Tips
 
-- Processing time is roughly the same for 1 year or 8 — all download in parallel
-- Features appear incrementally — the viewer is usable as soon as pyramids are built
-- Each viewport uses ~5GB of storage depending on years processed
-- Similarity search and labelling are completely private — they run in your browser
-- Evaluation is private too — it runs on your compute server, not the hosted server
+- Viewport processing takes a few minutes per year — years are processed sequentially
+- Each viewport uses ~50–200MB of storage per year on the server
+- Similarity search and labelling run entirely in your browser — no data leaves your machine
+- Evaluation runs on your compute server — ground-truth shapefiles are not sent to the hosted server
+- Exported labels are vectorized as polygons — compact and re-importable
+- First evaluation run for a shapefile downloads tiles from GeoTessera (can take minutes for large areas); subsequent runs use cached tiles
