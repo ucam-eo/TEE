@@ -304,7 +304,7 @@ There are several ways to run the compute server, depending on your situation:
 
 ### Setting Up a GPU Server
 
-You don't need Docker — just the Git repository and a Python virtual environment on your server. The deploy script handles everything else (pulling code, installing dependencies, creating an SSH tunnel).
+All you need on the server is the Git repository and a Python virtual environment. The deploy script handles the rest — pulling code, installing dependencies, and creating an SSH tunnel back to your laptop.
 
 **Step 0: Open a terminal on your laptop**
 
