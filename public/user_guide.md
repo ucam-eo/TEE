@@ -92,15 +92,7 @@ The header bar at the top lets you switch between different **modes**, each of w
 
 ### Panel Layout by Mode
 
-```
-┌──────────────┬──────────────┬──────────────┐
-│   Panel 1    │   Panel 2    │   Panel 3    │
-│  (top-left)  │  (top-mid)   │ (top-right)  │
-├──────────────┼──────────────┼──────────────┤
-│   Panel 4    │   Panel 5    │   Panel 6    │
-│  (bot-left)  │  (bot-mid)   │ (bot-right)  │
-└──────────────┴──────────────┴──────────────┘
-```
+![Panel layout — 2×3 synchronized grid](images/panel_layout.png)
 
 | Panel | Explore | Change Detection | Labelling | Validation |
 |:-----:|---------|-----------------|-----------|------------|
@@ -277,21 +269,7 @@ The clusters are **temporary previews** — you review them, name the ones that 
 
 This workflow combines automatic clustering with manual refinement to build a good set of habitat labels efficiently:
 
-```
-1. Run Auto-label (K-means with k=5 or more)
-   ↓
-2. Review clusters — compare the coloured map overlay
-   with the satellite imagery and embedding panels
-   ↓
-3. Promote the good clusters — give them meaningful names,
-   merge duplicates by assigning the same name
-   ↓
-4. Fine-tune with manual pins and similarity sliders
-   to fill gaps or correct misclassifications
-   ↓
-5. Export as Shapefile for use in GIS or as
-   ground truth for validation
-```
+![Suggested labelling workflow](images/workflow.png)
 
 ---
 
@@ -303,19 +281,7 @@ The hosted TEE website only serves map tiles and satellite imagery — it does n
 
 ### How It Works
 
-```
-┌─────────────┐     ┌──────────────────────┐     ┌─────────────────┐
-│  Your        │     │  Django (port 8001)  │     │   tee-compute   │
-│  browser    │────▶│  Serves the UI and   │────▶│   Runs ML       │
-│             │     │  forwards evaluation │     │   evaluation    │
-└─────────────┘     │  requests            │     │                 │
-                    └──────────────────────┘     └────────┬────────┘
-                                                          │
-                                                 ┌────────▼────────┐
-                                                 │   GeoTessera    │
-                                                 │   Tile server   │
-                                                 └─────────────────┘
-```
+![Architecture — browser, Django, tee-compute, GeoTessera](images/architecture.png)
 
 ### Deployment Modes
 
@@ -598,18 +564,7 @@ To get a more honest evaluation, you can draw **separate geographic regions** fo
 
 The learning curve is the main output of an evaluation. It shows how well each classifier performs as it gets access to more training data:
 
-```
-   F1 ↑
-  1.0 ┤
-      │         ╭───── RF
-  0.7 ┤     ╭──╯
-      │   ╭─╯──────── k-NN
-  0.4 ┤  ╯
-      │╭╯
-  0.1 ┤
-      └──────────────────→ % labels
-       1%  5%  10%  30%  80%
-```
+![Example learning curve](images/learning_curve.png)
 
 - **X axis**: percentage of the training data used (from 1% up to 80%)
 - **Y axis**: F1 score — a measure of accuracy from 0 (worst) to 1 (perfect). The shaded band around each line shows ±1 standard deviation across repeated runs.
