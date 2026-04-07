@@ -52,7 +52,7 @@ The **Viewport Manager** is the home page. It has three tabs:
 | **Validation** | Evaluate classifiers on ground-truth shapefiles |
 | **Users** | Manage user accounts (admin only) |
 
-<!-- Screenshot: viewport_manager.png — Viewport Manager showing the three tabs, viewport list grouped by creator, and the map -->
+![Viewport Manager — tabs, viewport list, and map](images/viewport.png)
 
 ### Viewports Tab
 
@@ -80,7 +80,7 @@ Visible to administrators only. Create accounts, set quotas, and manage enrolled
 
 The viewer uses a **6-panel synchronized grid** — panning or zooming one panel pans/zooms all. Three modes are available from the **layout dropdown** in the header. **Validation** mode is accessed from the Viewport Manager's Validation tab.
 
-<!-- Screenshot: viewer_explore.png — Viewer in Explore mode showing all 6 panels -->
+![Viewer in Explore mode — 6-panel synchronized grid](images/explore.png)
 
 ### Panel Layout by Mode
 
@@ -118,8 +118,6 @@ Use the **satellite source dropdown** in Panel 2 to switch between imagery provi
 ---
 
 ## Similarity Search
-
-<!-- Screenshot: similarity_search.png — Showing colored dots across panels after a double-click search -->
 
 **Double-click** anywhere on any panel to find similar pixels across the viewport. TEE extracts the 128-dimensional embedding at that pixel and computes distances to all other pixels — entirely in your browser.
 
@@ -186,6 +184,8 @@ Click **Classify** in Panel 5 to generate a full-viewport classification — eac
 ---
 
 ## Auto-Labelling (K-Means)
+
+![Labelling mode — K-means clusters promoted to labels, classification overlay](images/labelling.png)
 
 TEE segments the viewport into clusters using K-means on the embedding space. Clusters are **temporary previews** until promoted to saved labels.
 
@@ -433,7 +433,7 @@ Common CUDA index URLs:
 
 Evaluate how well classifiers distinguish habitat classes using Tessera embeddings and expert ground-truth polygons. Works at any scale — from a single viewport to an entire country.
 
-<!-- Screenshot: validation_results.png — Showing learning curves in Panel 5, confusion matrix in Panel 6 -->
+![Validation — learning curves, confusion matrix, and ground truth overlay](images/validation.png)
 
 > All ML evaluation runs on your **compute server** (`tee-compute`), not on the hosted server. See [Running Evaluation on Your Own Machine](#running-evaluation-on-your-own-machine).
 
