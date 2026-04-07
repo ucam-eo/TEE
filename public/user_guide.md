@@ -183,20 +183,6 @@ When drawing a polygon, choose how its embedding is stored:
 
 Click **Classify** in Panel 5 to generate a full-viewport classification — each pixel is assigned to the nearest label class based on embedding distance.
 
-### Suggested Workflow
-
-```
-1. Auto-label (K-means, k=5+)
-   ↓
-2. Review clusters on heatmap + embedding panels
-   ↓
-3. Promote good clusters → merge duplicates by giving same name
-   ↓
-4. Fine-tune with manual pins + similarity sliders
-   ↓
-5. Export as Shapefile for validation or GIS
-```
-
 ---
 
 ## Auto-Labelling (K-Means)
@@ -211,6 +197,20 @@ TEE segments the viewport into clusters using K-means on the embedding space. Cl
 | 4 | **Promote** individual clusters (↗) or all at once |
 
 > **Tip:** Name clusters before promoting. Two clusters with the same name are merged automatically.
+
+### Suggested Workflow
+
+```
+1. Auto-label (K-means, k=5+)
+   ↓
+2. Review clusters on heatmap + embedding panels
+   ↓
+3. Promote good clusters → merge duplicates by giving same name
+   ↓
+4. Fine-tune with manual pins + similarity sliders
+   ↓
+5. Export as Shapefile for validation or GIS
+```
 
 ---
 
