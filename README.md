@@ -36,7 +36,7 @@ docker run -d --name tee --restart unless-stopped \
     sk818/tee:stable
 ```
 
-Open http://localhost:8001. Authentication is off by default — everyone has full access. To enable user accounts, see the [User Guide](public/user_guide.md).
+Open http://localhost:8001.
 
 ### ML Evaluation
 
