@@ -158,7 +158,7 @@ Build label classes by hand — placing pins, drawing polygons, or combining bot
 2. In Panel 6, select **Manual Label** from the sub-mode dropdown
 3. Type a **label name**, pick a **color**, click **Set**
 
-> **Tip:** Click **Schema** in the header to load a classification scheme (UKHab v2, HOTW, or custom) — click any entry to set it as the active label.
+> **Tip:** Click **Schema** in the header to load a classification scheme (UKHab v2, EUNIS, HOTW, or custom) — click any entry to set it as the active label.
 
 ### Placing Labels
 
@@ -646,8 +646,10 @@ Common CUDA index URLs:
 | Format | Use case |
 |--------|----------|
 | **JSON** | Re-import into TEE (includes embeddings) |
-| **GeoJSON** | GIS-compatible points and polygons |
+| **GeoJSON** | GIS-compatible polygons (vectorized from pixel labels) |
 | **ESRI Shapefile (ZIP)** | Standard GIS interchange — can be used as validation ground truth |
+
+> **Vectorized export:** Pixel labels (from auto-labelling or similarity search) are automatically converted to polygon boundaries using marching squares. This keeps exports compact — a label with 50,000 pixels becomes a few polygons, not 50,000 individual points. On import, polygons are rasterized back to pixels.
 
 ---
 
