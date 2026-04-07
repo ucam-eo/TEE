@@ -163,9 +163,46 @@ Once you have labels, you can:
 | **Delete** a label | Click the **trash** icon or **×** next to it |
 | **See coverage across years** | Click the **clock icon** next to a label — it shows how many similar pixels exist in each year |
 | **Import** labels from a file | Click **Import** and select a JSON, GeoJSON, or ESRI Shapefile (.zip) |
-| **Export** labels | See [Export Options](#export-options) below |
+| **Export** labels | Click **Export** — see formats below |
 
 Labels are saved in your browser's local storage, so they persist across page reloads and are tied to the viewport name. However, **local storage is volatile** — it can be cleared by browser updates, clearing browsing data, or switching browsers. Always save your work by exporting regularly. The **Export** button turns red when you have unsaved changes as a reminder.
+
+### Exporting Labels
+
+The export menu offers different formats depending on which mode you're in:
+
+**From Explore / Auto-label modes:**
+
+| Format | What it's for |
+|--------|---------------|
+| **Labels (JSON)** | Re-import into TEE later |
+| **Labels (GeoJSON)** | Open in QGIS or other GIS tools |
+| **Map (JPG)** | A screenshot of the satellite view with label overlays — good for presentations |
+
+**From Manual Labelling mode:**
+
+| Format | What it's for |
+|--------|---------------|
+| **JSON** | Re-import into TEE (includes embeddings and all metadata) |
+| **GeoJSON** | GIS-compatible polygons |
+| **ESRI Shapefile (ZIP)** | Standard GIS interchange format — can be opened in QGIS, ArcGIS, etc. Can also be used as ground truth for validation. |
+
+> **How export works:** When you export pixel labels (from auto-labelling or similarity search), TEE automatically converts them from a raster (grid of coloured pixels) to vector polygons (outlines). This keeps the exported files compact — a label covering 50,000 pixels becomes a few polygon shapes rather than 50,000 individual points. When you import the file back into TEE, the polygons are converted back to pixels.
+
+### Sharing Labels
+
+You can share your labels with other TEE users via the **Share** button in the header bar. There are two options:
+
+| Mode | What gets shared | Who can see it |
+|------|-----------------|---------------|
+| **Private** | Embedding vectors only (no geographic coordinates) | Nobody else — this contributes anonymised data to Tessera's global habitat model |
+| **Public** | Full ESRI Shapefile including locations | Other users viewing the same viewport on the same server |
+
+Check **Hide label locations** when sharing publicly to strip geographic coordinates from the export — this shares class names and embeddings but not where on Earth they are.
+
+### Importing Shared Labels
+
+Click **Import** → **Shared Labels** to see labels that other users have shared on the same viewport. A notification badge appears on the Import button when new shared labels are available. Click any shared label set to add it to your workspace.
 
 ---
 
@@ -659,45 +696,6 @@ For batch processing or automation, you can run evaluations from the command lin
 python scripts/tee_evaluate.py --config eval_config.json
 python scripts/tee_evaluate.py --config eval_config.json --dry-run  # preview without running
 ```
-
----
-
-## Export Options
-
-### From Explore / Auto-label modes
-
-| Format | What it's for |
-|--------|---------------|
-| **Labels (JSON)** | Re-import into TEE later |
-| **Labels (GeoJSON)** | Open in QGIS or other GIS tools |
-| **Map (JPG)** | A screenshot of the satellite view with label overlays — good for presentations |
-
-### From Manual Labelling mode
-
-| Format | What it's for |
-|--------|---------------|
-| **JSON** | Re-import into TEE (includes embeddings and all metadata) |
-| **GeoJSON** | GIS-compatible polygons |
-| **ESRI Shapefile (ZIP)** | Standard GIS interchange format — can be opened in QGIS, ArcGIS, etc. Can also be used as ground truth for validation. |
-
-> **How export works:** When you export pixel labels (from auto-labelling or similarity search), TEE automatically converts them from a raster (grid of coloured pixels) to vector polygons (outlines). This keeps the exported files compact — a label covering 50,000 pixels becomes a few polygon shapes rather than 50,000 individual points. When you import the file back into TEE, the polygons are converted back to pixels.
-
----
-
-## Sharing Labels
-
-You can share your labels with other TEE users via the **Share** button in the header bar. There are two options:
-
-| Mode | What gets shared | Who can see it |
-|------|-----------------|---------------|
-| **Private** | Embedding vectors only (no geographic coordinates) | Nobody else — this contributes anonymised data to Tessera's global habitat model |
-| **Public** | Full ESRI Shapefile including locations | Other users viewing the same viewport on the same server |
-
-Check **Hide label locations** when sharing publicly to strip geographic coordinates from the export — this shares class names and embeddings but not where on Earth they are.
-
-### Importing Shared Labels
-
-Click **Import** → **Shared Labels** to see labels that other users have shared on the same viewport. A notification badge appears on the Import button when new shared labels are available. Click any shared label set to add it to your workspace.
 
 ---
 
