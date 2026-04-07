@@ -169,20 +169,9 @@ Labels are saved in your browser's local storage, so they persist across page re
 
 ---
 
-## Manual Labelling
+## Classification Schemas
 
-Manual labelling lets you build habitat classes by hand — placing individual pins, drawing polygons around areas, or expanding from a seed point using similarity search. This is useful when automatic clustering doesn't capture the classes you need, or when you have specific expert knowledge about what's on the ground.
-
-### Getting Started
-
-1. Switch to **Labelling** mode using the layout dropdown in the header bar
-2. In Panel 6 (bottom-right), select **Manual Label** from the sub-mode dropdown
-3. Set an active label — either type a name and pick a colour manually, or use a **classification schema** (see below)
-4. Click **Set**, then you're ready to place labels on the map
-
-### Classification Schemas
-
-Rather than inventing label names and colours from scratch, you can load a standard habitat classification scheme. Click **Schema** in the header bar to open the schema browser — a draggable floating window with a search box.
+When labelling habitats (either manually or via auto-labelling), you can use a standard habitat classification scheme rather than inventing label names and colours from scratch. Click **Schema** in the header bar to open the schema browser — a draggable floating window with a search box.
 
 TEE includes three built-in schemas:
 
@@ -195,6 +184,19 @@ TEE includes three built-in schemas:
 You can also upload a **custom schema** as a JSON file if your project uses a different classification.
 
 To use a schema: open the browser, type to filter (e.g., "grassland"), and click an entry. TEE sets it as the active label with the standard code, name, and colour. This ensures consistent naming across your team and makes labels directly comparable with other datasets using the same scheme.
+
+---
+
+## Manual Labelling
+
+Manual labelling lets you build habitat classes by hand — placing individual pins, drawing polygons around areas, or expanding from a seed point using similarity search. This is useful when automatic clustering doesn't capture the classes you need, or when you have specific expert knowledge about what's on the ground.
+
+### Getting Started
+
+1. Switch to **Labelling** mode using the layout dropdown in the header bar
+2. In Panel 6 (bottom-right), select **Manual Label** from the sub-mode dropdown
+3. Set an active label — either type a name and pick a colour manually, or select one from a [classification schema](#classification-schemas)
+4. Click **Set**, then you're ready to place labels on the map
 
 ### Placing Labels
 
