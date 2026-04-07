@@ -304,7 +304,7 @@ There are several ways to run the compute server, depending on your situation:
 
 ### Setting Up a GPU Server
 
-All you need is Python installed on the server. The deploy script handles the rest — cloning the code, installing dependencies, and creating an SSH tunnel back to your laptop.
+You need Python installed on the GPU server (and on your laptop too, if you plan to use the `--local` modes). The deploy script handles the rest — cloning the code, installing dependencies, and creating an SSH tunnel back to your laptop.
 
 **Step 0: Open a terminal on your laptop**
 
