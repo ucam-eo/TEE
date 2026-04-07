@@ -163,7 +163,7 @@ Once you have labels, you can:
 | **Show or hide** a label on the map | Click the eye icon next to the label name |
 | **Delete** a label | Click the **trash** icon or **×** next to it |
 | **See coverage across years** | Click the **clock icon** next to a label — it shows how many similar pixels exist in each year |
-| **Import** labels from a file | Click **Import** and select a JSON or Shapefile |
+| **Import** labels from a file | Click **Import** and select a JSON, GeoJSON, or ESRI Shapefile (.zip) |
 | **Export** labels | See [Export Options](#export-options) below |
 
 Labels are saved in your browser's local storage, so they persist across page reloads. They are tied to the viewport name — if you open the same viewport again, your labels reappear automatically.
