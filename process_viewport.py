@@ -56,9 +56,6 @@ NUM_ZOOM_LEVELS = 6
 # ---------- Module-level caches ----------
 
 _tessera_instance = None  # cached GeoTessera (avoids 28s registry download per call)
-_zarr_instance = None     # cached GeoTesseraZarr (or False if unavailable)
-
-
 def _get_tessera():
     """Return a cached GeoTessera instance, creating it on first call."""
     global _tessera_instance
@@ -69,120 +66,11 @@ def _get_tessera():
     return _tessera_instance
 
 
-def _get_zarr():
-    """Return a cached GeoTesseraZarr instance, or None if unavailable.
-
-    Only attempts the import once; caches the result (including failure).
-    """
-    global _zarr_instance
-    if _zarr_instance is None:
-        try:
-            from geotessera.store import GeoTesseraZarr
-            _zarr_instance = GeoTesseraZarr()
-            logger.info("GeoTesseraZarr available")
-        except Exception:
-            _zarr_instance = False  # sentinel: tried and failed
-            logger.info("GeoTesseraZarr not available, will use NPY path")
-    return _zarr_instance if _zarr_instance is not False else None
+# Zarr utilities shared with tessera_eval.server
+from tessera_eval.zarr_utils import get_zarr, probe_zarr_coverage, read_region_chunked
 
 
 # ---------- Zarr / NPY mosaic fetching ----------
-
-# Threshold for chunking: regions wider or taller than this (in degrees) get split
-_CHUNK_THRESHOLD = 0.2
-_CHUNK_SIZE = 0.1
-
-
-def _probe_zarr_coverage(gtz, bounds, year):
-    """Probe zarr store for coverage at the centre of bounds.
-
-    Returns True if zarr has non-NaN data for (year, centre-of-bounds).
-    """
-    try:
-        cx = (bounds[0] + bounds[2]) / 2
-        cy = (bounds[1] + bounds[3]) / 2
-        probe = gtz.sample_at(cx, cy, year)
-        return not np.isnan(probe).all()
-    except Exception:
-        return False
-
-
-def _fetch_mosaic_zarr(gtz, bounds, year):
-    """Fetch a mosaic via zarr read_region(), chunking if the region is large.
-
-    Returns (mosaic, transform, crs) with mosaic shape (H, W, 128), same as
-    GeoTessera.fetch_mosaic_for_region().
-    """
-    lon_span = bounds[2] - bounds[0]
-    lat_span = bounds[3] - bounds[1]
-
-    # Small region — single read
-    if lon_span <= _CHUNK_THRESHOLD and lat_span <= _CHUNK_THRESHOLD:
-        mosaic, transform, crs = gtz.read_region(bounds, year)
-        return mosaic, transform, crs
-
-    # Large region — split into chunks and merge
-    chunk_lons = []
-    lon = bounds[0]
-    while lon < bounds[2]:
-        chunk_lons.append((lon, min(lon + _CHUNK_SIZE, bounds[2])))
-        lon += _CHUNK_SIZE
-    chunk_lats = []
-    lat = bounds[1]
-    while lat < bounds[3]:
-        chunk_lats.append((lat, min(lat + _CHUNK_SIZE, bounds[3])))
-        lat += _CHUNK_SIZE
-
-    total_chunks = len(chunk_lons) * len(chunk_lats)
-    logger.info("Splitting into %d chunks (%d x %d) for zarr fetch",
-                total_chunks, len(chunk_lons), len(chunk_lats))
-
-    chunks = []  # (mosaic_chunk, transform, crs, col_offset, row_offset)
-    first_transform = None
-    first_crs = None
-
-    for lat_start, lat_end in chunk_lats:
-        for lon_start, lon_end in chunk_lons:
-            chunk_bbox = (lon_start, lat_start, lon_end, lat_end)
-            try:
-                emb, tfm, crs = gtz.read_region(chunk_bbox, year)
-            except Exception as e:
-                logger.warning("Zarr chunk (%.3f,%.3f)-(%.3f,%.3f) failed: %s",
-                               lon_start, lat_start, lon_end, lat_end, e)
-                continue
-            if emb is None or emb.size == 0:
-                continue
-            if first_transform is None:
-                first_transform = tfm
-                first_crs = crs
-            chunks.append((emb, tfm))
-
-    if not chunks:
-        raise RuntimeError("All zarr chunks returned empty data")
-
-    # Merge chunks into a single mosaic.
-    # Compute the global pixel grid from the first transform's resolution.
-    res_x = first_transform.a   # pixel width in degrees (positive)
-    res_y = first_transform.e   # pixel height in degrees (negative)
-    total_cols = int(round((bounds[2] - bounds[0]) / res_x))
-    total_rows = int(round((bounds[1] - bounds[3]) / res_y))  # res_y is negative
-
-    merged = np.full((total_rows, total_cols, EMBEDDING_DIM), np.nan, dtype=np.float32)
-
-    for emb, tfm in chunks:
-        # Determine where this chunk sits in the merged grid
-        col_off = int(round((tfm.c - bounds[0]) / res_x))
-        row_off = int(round((tfm.f - bounds[3]) / res_y))
-        h, w = emb.shape[:2]
-        # Clip to bounds
-        r0, r1 = max(0, row_off), min(total_rows, row_off + h)
-        c0, c1 = max(0, col_off), min(total_cols, col_off + w)
-        sr0, sc0 = r0 - row_off, c0 - col_off
-        merged[r0:r1, c0:c1, :] = emb[sr0:sr0 + (r1 - r0), sc0:sc0 + (c1 - c0), :]
-
-    # Build the canonical transform for the merged mosaic
-    merged_transform = Affine(res_x, 0, bounds[0], 0, res_y, bounds[3])
-    return merged, merged_transform, first_crs
 
 
 def _fetch_mosaic_npy(tessera, bounds, year, progress_fn=None):
@@ -476,10 +364,10 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
     t0 = _time.monotonic()
 
     # Decide whether to use zarr for this year
-    gtz = _get_zarr()
+    gtz = get_zarr()
     use_zarr = False
     if gtz is not None:
-        use_zarr = _probe_zarr_coverage(gtz, bounds, year)
+        use_zarr = probe_zarr_coverage(gtz, bounds, year)
         if use_zarr:
             print(f"  [{year}] Using zarr (fast path)")
         else:
@@ -496,7 +384,7 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         try:
             if use_zarr:
                 _progress(5, f"[{year}] Reading from zarr...")
-                mosaic, transform, crs = _fetch_mosaic_zarr(gtz, bounds, year)
+                mosaic, transform, crs = read_region_chunked(gtz, bounds, year)
             else:
                 def _npy_progress(pct, msg):
                     _progress(pct, f"[{year}] {msg}")
@@ -672,7 +560,7 @@ def main():
     print(f"  GeoTessera ready ({init_secs:.1f}s)")
 
     # Pre-warm zarr instance (non-blocking; logged inside _get_zarr)
-    _get_zarr()
+    get_zarr()
 
     progress.update("processing", f"Processing {len(years_to_process)} year(s)...", percent=3)
 

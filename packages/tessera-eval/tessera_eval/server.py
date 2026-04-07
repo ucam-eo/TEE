@@ -91,15 +91,7 @@ def _load_cached_result(field, year, gdf, sampling="equal"):
     return None
 
 
-def _try_zarr():
-    """Try to create a GeoTesseraZarr instance. Returns None if unavailable."""
-    try:
-        from geotessera.store import GeoTesseraZarr
-        return GeoTesseraZarr()
-    except Exception:
-        return None
-
-_zarr_instance = None  # cached
+from tessera_eval.zarr_utils import get_zarr, probe_zarr_coverage, read_region_chunked
 
 
 def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
@@ -128,19 +120,8 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
     # Try zarr — but verify coverage with a single-pixel probe first,
     # since the zarr store only has 2025 for some regions.
-    global _zarr_instance
-    if _zarr_instance is None:
-        _zarr_instance = _try_zarr()
-    gtz = _zarr_instance
-    use_zarr = False
-    if gtz is not None:
-        try:
-            cx, cy = (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2
-            probe = gtz.sample_at(cx, cy, year)
-            if not np.isnan(probe).all():
-                use_zarr = True
-        except Exception:
-            pass
+    gtz = get_zarr()
+    use_zarr = gtz is not None and probe_zarr_coverage(gtz, bounds, year)
     if logger:
         logger.info("Using %s for tile reads", "zarr (fast)" if use_zarr else "NPY tiles with local cache")
     bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
@@ -1284,16 +1265,13 @@ def create_map():
 
         # Prepare GeoTessera and zarr
         from geotessera import GeoTessera
-        global _geotessera_instance, _zarr_instance
+        global _geotessera_instance
 
         if _geotessera_instance is None:
             tile_cache_dir = _get_cache_dir() / "tiles"
             tile_cache_dir.mkdir(parents=True, exist_ok=True)
             _geotessera_instance = GeoTessera(embeddings_dir=str(tile_cache_dir))
         gt = _geotessera_instance
-
-        if _zarr_instance is None:
-            _zarr_instance = _try_zarr()
 
         year = cache["key"][1] if cache.get("key") else 2024
 
@@ -1337,17 +1315,8 @@ def create_map():
             }) + "\n"
 
             # Probe zarr coverage
-            use_zarr = False
-            gtz = _zarr_instance
-            if gtz is not None:
-                try:
-                    cx = (west + east) / 2
-                    cy = (south + north) / 2
-                    probe = gtz.sample_at(cx, cy, year)
-                    if not np.isnan(probe).all():
-                        use_zarr = True
-                except Exception:
-                    pass
+            gtz = get_zarr()
+            use_zarr = gtz is not None and probe_zarr_coverage(gtz, (west, south, east, north), year)
 
             yield json.dumps({
                 "event": "status",
