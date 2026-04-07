@@ -15,11 +15,13 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('username', type=str)
         parser.add_argument('--admin', action='store_true', help='Make user a superuser/staff')
+        parser.add_argument('--email', type=str, default='', help='User email address')
         parser.add_argument('--quota', type=int, default=2048, help='Disk quota in MB (default 2048)')
 
     def handle(self, *args, **options):
         username = options['username']
         is_admin = options['admin']
+        email = options['email']
         quota_mb = options['quota']
 
         # Read password from $PASSWORD env var (for manage.sh), or prompt
@@ -35,11 +37,13 @@ class Command(BaseCommand):
 
         user, created = User.objects.get_or_create(
             username=username,
-            defaults={'is_superuser': is_admin, 'is_staff': is_admin},
+            defaults={'is_superuser': is_admin, 'is_staff': is_admin, 'email': email},
         )
         if not created:
             user.is_superuser = is_admin
             user.is_staff = is_admin
+        if email:
+            user.email = email
         user.set_password(password)
         user.save()
 

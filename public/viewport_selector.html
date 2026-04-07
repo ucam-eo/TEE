@@ -860,8 +860,24 @@
 
                 </div>
 
-                <!-- Tab: Users (admin only) -->
+                <!-- Tab: Users (admin/enroller only) -->
                 <div id="tab-content-users" style="display:none;">
+                    <div id="enrolSection" style="padding: 16px;">
+                        <h3 style="margin: 0 0 12px 0; font-size: 15px; color: #333;">Add User</h3>
+                        <div style="display: flex; flex-direction: column; gap: 8px; max-width: 320px;">
+                            <input id="enrol-username" type="text" placeholder="Username" style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;">
+                            <input id="enrol-email" type="email" placeholder="Email" style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;">
+                            <input id="enrol-password" type="password" placeholder="Password (min 6 chars)" style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="font-size: 12px; color: #666;">Quota (MB):</label>
+                                <input id="enrol-quota" type="number" value="2048" min="100" style="width: 80px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;">
+                            </div>
+                            <button onclick="createEnrolledUser()" style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 4px; font-size: 13px; cursor: pointer; align-self: flex-start;">Add User</button>
+                            <div id="enrol-status" style="font-size: 12px; min-height: 16px;"></div>
+                        </div>
+                        <h3 style="margin: 20px 0 8px 0; font-size: 15px; color: #333;">Enrolled Users</h3>
+                        <div id="enrol-list" style="font-size: 13px; color: #444;"></div>
+                    </div>
                 </div>
 
             </div>
@@ -923,6 +939,7 @@
             const coverageEl = document.getElementById('coverage-container');
             if (mapEl) mapEl.style.display = tab === 'viewports' ? '' : 'none';
             if (coverageEl) coverageEl.style.display = tab === 'validation' ? '' : 'none';
+            if (tab === 'users') loadEnrolledUsers();
         }
 
         // Auth check: set demo mode for unauthenticated users
@@ -981,14 +998,14 @@
 
         // ── Enrolment ──
         function toggleEnrolPanel() {
-            const panel = document.getElementById('enrolPanel');
-            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-            if (panel.style.display === 'block') loadEnrolledUsers();
+            // Users tab is always visible when active; load users on tab switch
+            loadEnrolledUsers();
         }
 
         async function createEnrolledUser() {
             const status = document.getElementById('enrol-status');
             const username = document.getElementById('enrol-username').value.trim();
+            const email = document.getElementById('enrol-email').value.trim();
             const password = document.getElementById('enrol-password').value;
             const quota = parseInt(document.getElementById('enrol-quota').value) || 2048;
 
@@ -1001,13 +1018,14 @@
                 const resp = await fetch('/api/enrol/create-user', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username, password, quota_mb: quota}),
+                    body: JSON.stringify({username, password, email, quota_mb: quota}),
                 });
                 const data = await resp.json();
                 if (resp.ok && data.success) {
                     status.textContent = `Created user "${username}"`;
                     status.style.color = '#28a745';
                     document.getElementById('enrol-username').value = '';
+                    document.getElementById('enrol-email').value = '';
                     document.getElementById('enrol-password').value = '';
                     loadEnrolledUsers();
                 } else {
@@ -1031,7 +1049,7 @@
                 }
                 list.innerHTML = data.users.map(u => `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid #eee;">
-                        <span>${u.username} <span style="color:#888; font-size:10px;">${u.quota_mb}MB${u.created_by ? ' by ' + u.created_by : ''}${u.can_enrol ? ' [enroller]' : ''}</span></span>
+                        <span>${u.username}${u.email ? ' <span style="color:#667eea; font-size:10px;">' + u.email + '</span>' : ''} <span style="color:#888; font-size:10px;">${u.quota_mb}MB${u.created_by ? ' by ' + u.created_by : ''}${u.can_enrol ? ' [enroller]' : ''}</span></span>
                         <span>
                             ${u.is_admin ? '<span style="color:#667eea; font-size:10px;">admin</span>' :
                               u.is_active ?

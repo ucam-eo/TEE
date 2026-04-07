@@ -49,6 +49,7 @@ def create_enrolled_user(request):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
     username = body.get('username', '').strip()
+    email = body.get('email', '').strip()
     password = body.get('password', '')
     quota_mb = int(body.get('quota_mb', DEFAULT_QUOTA_MB))
 
@@ -70,7 +71,7 @@ def create_enrolled_user(request):
         if enrolled_count >= 50:
             return JsonResponse({'error': 'Enrolment limit reached (50 users)'}, status=403)
 
-    user = User.objects.create_user(username=username, password=password)
+    user = User.objects.create_user(username=username, password=password, email=email)
     UserProfile.objects.update_or_create(
         user=user,
         defaults={
@@ -104,6 +105,7 @@ def list_enrolled_users(request):
     for p in profiles:
         users.append({
             'username': p.user.username,
+            'email': p.user.email or '',
             'quota_mb': p.quota_mb,
             'can_enrol': p.can_enrol,
             'is_active': p.user.is_active,

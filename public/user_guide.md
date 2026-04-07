@@ -64,7 +64,7 @@ A **viewport** is a 5km × 5km area for which TEE downloads and processes Sentin
 4. **Export / Import** — bulk operations on your viewports
 5. **Viewport list** — grouped by creator; your viewports show all actions (Open, +Year, Export, Delete); others' viewports show only Open
 
-> **Note:** Only the creator of a viewport can delete it. Years without GeoTessera coverage for your area are greyed out in the year selector.
+> **Note:** Only the creator of a viewport can delete it. Years without GeoTessera coverage for your area are greyed out in the year selector. Check **Private** when creating a viewport to hide it from other users.
 
 ### Validation Tab
 
@@ -110,6 +110,10 @@ Use the **layout dropdown** in the header for Explore, Change Detection, and Lab
 ### Switching Years
 
 Use the **year dropdown** above the embedding panels. In Change Detection mode, Y1 and Y2 can be set independently.
+
+### Satellite Imagery Source
+
+Use the **satellite source dropdown** in Panel 2 to switch between imagery providers (Esri, Google). The acquisition date of the current imagery is shown below the selector when available.
 
 ---
 
@@ -158,7 +162,7 @@ Build label classes by hand — placing pins, drawing polygons, or combining bot
 2. In Panel 6, select **Manual Label** from the sub-mode dropdown
 3. Type a **label name**, pick a **color**, click **Set**
 
-> **Tip:** Click **Schema** in the header to load a classification scheme (UKHab v2, EUNIS, HOTW, or custom) — click any entry to set it as the active label.
+> **Tip:** Click **Schema** in the header to load a classification scheme (UKHab v2, EUNIS, HOTW, or custom). The schema browser is a draggable floating window with a search box — type to filter entries, click any entry to set it as the active label with its code and colour.
 
 ### Placing Labels
 
@@ -247,6 +251,34 @@ Evaluate how well classifiers distinguish habitat classes using Tessera embeddin
 **Pixel classifiers** (k-NN, RF, XGBoost, MLP) use point-sampled embeddings — fast and memory-efficient for any scale.
 
 **Spatial classifiers** (Spatial MLP, U-Net) fetch real GeoTessera tiles and extract pixel-aligned 256×256 crops. This gives them true spatial structure at the tile's native 10m resolution, which is critical for learning convolutional features. The number of patches can be set in the controls (default 500, minimum 100).
+
+### Classifier Parameters
+
+Each classifier has tuneable parameters accessible via the controls panel:
+
+| Classifier | Parameter | Default | Notes |
+|-----------|-----------|---------|-------|
+| k-NN | Neighbors | 5 | Number of nearest neighbours |
+| k-NN | Weights | uniform | `uniform` or `distance` |
+| Random Forest | Trees | 100 | Number of estimators |
+| Random Forest | Max depth | None | Tree depth limit (None = unlimited) |
+| XGBoost | Rounds | 100 | Boosting rounds |
+| XGBoost | Learning rate | 0.1 | Step size shrinkage |
+| XGBoost | Max depth | 6 | Tree depth limit |
+| MLP | Hidden layers | 128,64 | Comma-separated layer sizes |
+| MLP | Max iterations | 200 | Training epochs |
+| Spatial MLP | Hidden layers | 128,64 | Comma-separated layer sizes |
+| Spatial MLP | Max iterations | 200 | Training epochs |
+| U-Net | Epochs | 20 | Training epochs |
+| U-Net | Learning rate | 0.001 | Adam optimizer LR |
+| U-Net | Depth | 3 | Encoder/decoder depth |
+| U-Net | Base filters | 32 | Filters in first layer (doubles each level) |
+
+### Hyperparameter Variants
+
+Click the **+** button next to any classifier to add a variant with different parameters. Each variant runs as a separate curve on the learning chart, labelled with a suffix (v1, v2, etc.). This lets you compare parameter settings in a single evaluation run — for example, Random Forest with 50 vs 200 trees, or MLP with different layer sizes.
+
+Click **×** on a variant row to remove it.
 
 ### Sampling Strategy
 
@@ -661,6 +693,12 @@ Two modes via the **Share** button:
 |------|--------------|------------|
 | **Private** | Embedding vectors only (no coordinates) | Nobody — contributes to Tessera's global model |
 | **Public** | Full ESRI Shapefile with locations | Other users on the same server |
+
+Check **Hide label locations** when sharing publicly to strip geographic coordinates from the export (shares class names and embeddings only).
+
+### Importing Shared Labels
+
+Click **Import** → **Shared Labels** to browse labels shared by other users on the same viewport. A notification badge appears when new shared labels are available. Click a shared label set to import it into your workspace.
 
 ---
 

@@ -168,6 +168,12 @@
                 const data = await resp.json();
                 if (data.success) {
                     const dest = new URLSearchParams(window.location.search).get('next') || '/';
+                    // Show Zulip welcome on first sign-in
+                    const welcomeKey = 'tee_welcome_shown_' + document.getElementById('username').value;
+                    if (!localStorage.getItem(welcomeKey)) {
+                        localStorage.setItem(welcomeKey, '1');
+                        alert('Welcome to TEE! Join the TEE community channel for support and discussion:\n\nhttps://eeg.zulipchat.com');
+                    }
                     window.location.href = dest;
                 } else {
                     errEl.textContent = data.error || 'Login failed';
