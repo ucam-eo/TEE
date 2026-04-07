@@ -679,7 +679,10 @@ function renderManualLabelsList() {
     if (!container) return;
 
     if (manualLabels.length === 0) {
-        container.innerHTML = '<div style="color: #999; font-size: 12px; padding: 10px; text-align: center;">Set a label above, then click to place pins. Use the similarity slider to expand.</div>';
+        const emptyMsg = '<div style="color: #999; font-size: 12px; padding: 10px; text-align: center;">Set a label above, then click to place pins. Use the similarity slider to expand.</div>';
+        container.innerHTML = emptyMsg;
+        const p6list = document.getElementById('panel6-labels-list');
+        if (p6list && p6list !== container) p6list.innerHTML = emptyMsg;
         return;
     }
 
@@ -1310,74 +1313,155 @@ function importManualLabels(file) {
 }
 
 function importGeoJSON(geojson) {
-    let count = 0;
+    const gt = window.localVectors ? window.localVectors.metadata.geotransform : null;
+    const grid = window.localVectors ? window.localVectors.gridLookup : null;
+    const dim = window.localVectors ? window.localVectors.dim : 0;
+
+    // Group point features by name so multiple pixels reconstitute one label
+    const pointGroups = new Map();  // name → { color, code, points: [{lon, lat}] }
+    const polygonFeatures = [];
+
     for (const feature of geojson.features) {
         const props = feature.properties || {};
         const geom = feature.geometry;
         if (!geom) continue;
+        const name = props.name || props.label || 'Imported';
 
         if (geom.type === 'Point') {
+            if (!pointGroups.has(name)) {
+                pointGroups.set(name, {
+                    color: props.color || null,
+                    code: props.code || null,
+                    points: []
+                });
+            }
             const [lon, lat] = geom.coordinates;
+            pointGroups.get(name).points.push({ lon, lat });
+        } else if (geom.type === 'Polygon') {
+            polygonFeatures.push({ props, geom });
+        }
+    }
+
+    let count = 0;
+
+    // Import grouped points: single point → point label, multiple → label with pixel_coords
+    let colorIdx = 0;
+    for (const [name, group] of pointGroups) {
+        const color = group.color || window.SEG_PALETTE[colorIdx % window.SEG_PALETTE.length];
+        colorIdx++;
+
+        if (group.points.length === 1) {
+            // Single point label
+            const { lon, lat } = group.points[0];
             const entry = {
-                name: props.name || props.label || 'Imported',
-                color: props.color || window.SEG_PALETTE[count % window.SEG_PALETTE.length],
-                code: props.code || null,
-                type: props.type || 'point',
-                lat, lon,
-                embedding: null,
-                threshold: props.threshold || 0,
-                matchCount: 0
+                name, color, code: group.code, type: 'point',
+                lat, lon, embedding: null, threshold: 0, matchCount: 0
             };
-            // Re-extract embedding if vectors available
             if (window.localVectors) {
                 const emb = window.localExtract(lat, lon);
                 if (emb) entry.embedding = Array.from(emb);
             }
             addManualLabel(entry);
             count++;
-        } else if (geom.type === 'Polygon') {
-            const ring = geom.coordinates[0];
-            const geoVertices = ring.slice(0, -1).map(c => [c[1], c[0]]); // [lat, lon]
+        } else if (gt && grid) {
+            // Multiple points → reconstitute as label with pixel_coords + centroid embedding
+            const pixel_coords = [];
+            const centroid = new Float32Array(dim);
+            let maxDistSq = 0;
+            let validCount = 0;
+            let sumLat = 0, sumLon = 0;
+
+            for (const { lon, lat } of group.points) {
+                const px = Math.trunc((lon - gt.c) / gt.a);
+                const py = Math.trunc((lat - gt.f) / gt.e);
+                const idx = window.gridLookupIndex(grid, px, py);
+                if (idx < 0) continue;
+                pixel_coords.push(px, py);
+                sumLat += lat;
+                sumLon += lon;
+                const base = idx * dim;
+                for (let d = 0; d < dim; d++) centroid[d] += window.localVectors.values[base + d];
+                validCount++;
+            }
+
+            if (validCount === 0) continue;
+
+            for (let d = 0; d < dim; d++) centroid[d] /= validCount;
+
+            // Compute threshold (max L2 distance from centroid)
+            for (let i = 0; i < pixel_coords.length; i += 2) {
+                const idx = window.gridLookupIndex(grid, pixel_coords[i], pixel_coords[i + 1]);
+                if (idx < 0) continue;
+                let s = 0;
+                const base = idx * dim;
+                for (let d = 0; d < dim; d++) {
+                    const diff = window.localVectors.values[base + d] - centroid[d];
+                    s += diff * diff;
+                }
+                if (s > maxDistSq) maxDistSq = s;
+            }
+
             const entry = {
-                name: props.name || props.label || 'Imported',
-                color: props.color || window.SEG_PALETTE[count % window.SEG_PALETTE.length],
-                code: props.code || null,
-                type: 'polygon',
-                lat: geoVertices.reduce((s, v) => s + v[0], 0) / geoVertices.length,
-                lon: geoVertices.reduce((s, v) => s + v[1], 0) / geoVertices.length,
-                vertices: geoVertices,
-                embedding: null,
-                threshold: 0,
-                matchCount: 0,
-                pixelCount: 0
+                name, color, code: group.code, type: 'similarity',
+                lat: sumLat / validCount, lon: sumLon / validCount,
+                embedding: Array.from(centroid),
+                threshold: Math.sqrt(maxDistSq),
+                matchCount: validCount,
+                pixelCount: validCount,
+                pixel_coords
             };
             addManualLabel(entry);
-            // Compute embedding for polygon
-            if (window.localVectors) {
-                const gt = window.localVectors.metadata.geotransform;
-                const pixVerts = geoVertices.map(v => [Math.round((v[1] - gt.c) / gt.a), Math.round((v[0] - gt.f) / gt.e)]);
-                const matches = rasterizePolygon(pixVerts);
-                const lbl = manualLabels[manualLabels.length - 1];
-                lbl.matchCount = matches.length;
-                lbl.pixelCount = matches.length;
-                if (matches.length > 0) {
-                    const dim = window.localVectors.dim;
-                    const centroid = new Float32Array(dim);
-                    for (const m of matches) {
-                        const base = m.vectorIndex * dim;
-                        for (let d = 0; d < dim; d++) centroid[d] += window.localVectors.values[base + d];
-                    }
-                    for (let d = 0; d < dim; d++) centroid[d] /= matches.length;
-                    lbl.embedding = Array.from(centroid);
-                }
-            }
             count++;
+        } else {
+            // No vectors loaded — import each point individually
+            for (const { lon, lat } of group.points) {
+                addManualLabel({
+                    name, color, code: group.code, type: 'point',
+                    lat, lon, embedding: null, threshold: 0, matchCount: 0
+                });
+                count++;
+            }
         }
     }
+
+    // Import polygon features (unchanged)
+    for (const { props, geom } of polygonFeatures) {
+        const name = props.name || props.label || 'Imported';
+        const color = props.color || window.SEG_PALETTE[colorIdx % window.SEG_PALETTE.length];
+        colorIdx++;
+        const ring = geom.coordinates[0];
+        const geoVertices = ring.slice(0, -1).map(c => [c[1], c[0]]); // [lat, lon]
+        const entry = {
+            name, color, code: props.code || null, type: 'polygon',
+            lat: geoVertices.reduce((s, v) => s + v[0], 0) / geoVertices.length,
+            lon: geoVertices.reduce((s, v) => s + v[1], 0) / geoVertices.length,
+            vertices: geoVertices,
+            embedding: null, threshold: 0, matchCount: 0, pixelCount: 0
+        };
+        addManualLabel(entry);
+        if (gt && grid) {
+            const pixVerts = geoVertices.map(v => [Math.round((v[1] - gt.c) / gt.a), Math.round((v[0] - gt.f) / gt.e)]);
+            const matches = rasterizePolygon(pixVerts);
+            const lbl = manualLabels[manualLabels.length - 1];
+            lbl.matchCount = matches.length;
+            lbl.pixelCount = matches.length;
+            if (matches.length > 0) {
+                const centroid = new Float32Array(dim);
+                for (const m of matches) {
+                    const base = m.vectorIndex * dim;
+                    for (let d = 0; d < dim; d++) centroid[d] += window.localVectors.values[base + d];
+                }
+                for (let d = 0; d < dim; d++) centroid[d] /= matches.length;
+                lbl.embedding = Array.from(centroid);
+            }
+        }
+        count++;
+    }
+
     saveManualLabelsToStorage();
     rebuildManualOverlays();
     renderManualLabelsList();
-    console.log(`[IMPORT] Imported ${count} features from GeoJSON`);
+    console.log(`[IMPORT] Imported ${count} labels (${geojson.features.length} features) from GeoJSON`);
 }
 
 function importLabelsJSON(labels) {
@@ -1404,8 +1488,17 @@ function importLabelsJSON(labels) {
 }
 
 async function importShapefile(arrayBuffer) {
-    // Try to load shapefile reader dynamically
     try {
+        // Load JSZip to extract .shp/.dbf from the zip
+        if (typeof JSZip === 'undefined') {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
         if (typeof shapefile === 'undefined') {
             await new Promise((resolve, reject) => {
                 const script = document.createElement('script');
@@ -1416,7 +1509,15 @@ async function importShapefile(arrayBuffer) {
             });
         }
 
-        const source = await shapefile.open(arrayBuffer);
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        const shpName = Object.keys(zip.files).find(n => n.toLowerCase().endsWith('.shp'));
+        const dbfName = Object.keys(zip.files).find(n => n.toLowerCase().endsWith('.dbf'));
+        if (!shpName) throw new Error('No .shp file found in zip');
+
+        const shpBuf = await zip.files[shpName].async('arraybuffer');
+        const dbfBuf = dbfName ? await zip.files[dbfName].async('arraybuffer') : undefined;
+
+        const source = await shapefile.open(shpBuf, dbfBuf);
         const features = [];
         let result = await source.read();
         while (!result.done) {
