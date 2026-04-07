@@ -53,6 +53,230 @@ DEFAULT_YEARS = range(2018, 2026)
 EMBEDDING_DIM = 128
 NUM_ZOOM_LEVELS = 6
 
+# ---------- Module-level caches ----------
+
+_tessera_instance = None  # cached GeoTessera (avoids 28s registry download per call)
+_zarr_instance = None     # cached GeoTesseraZarr (or False if unavailable)
+
+
+def _get_tessera():
+    """Return a cached GeoTessera instance, creating it on first call."""
+    global _tessera_instance
+    if _tessera_instance is None:
+        t0 = _time.monotonic()
+        _tessera_instance = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
+        logger.info("GeoTessera initialized in %.1fs", _time.monotonic() - t0)
+    return _tessera_instance
+
+
+def _get_zarr():
+    """Return a cached GeoTesseraZarr instance, or None if unavailable.
+
+    Only attempts the import once; caches the result (including failure).
+    """
+    global _zarr_instance
+    if _zarr_instance is None:
+        try:
+            from geotessera.store import GeoTesseraZarr
+            _zarr_instance = GeoTesseraZarr()
+            logger.info("GeoTesseraZarr available")
+        except Exception:
+            _zarr_instance = False  # sentinel: tried and failed
+            logger.info("GeoTesseraZarr not available, will use NPY path")
+    return _zarr_instance if _zarr_instance is not False else None
+
+
+# ---------- Zarr / NPY mosaic fetching ----------
+
+# Threshold for chunking: regions wider or taller than this (in degrees) get split
+_CHUNK_THRESHOLD = 0.2
+_CHUNK_SIZE = 0.1
+
+
+def _probe_zarr_coverage(gtz, bounds, year):
+    """Probe zarr store for coverage at the centre of bounds.
+
+    Returns True if zarr has non-NaN data for (year, centre-of-bounds).
+    """
+    try:
+        cx = (bounds[0] + bounds[2]) / 2
+        cy = (bounds[1] + bounds[3]) / 2
+        probe = gtz.sample_at(cx, cy, year)
+        return not np.isnan(probe).all()
+    except Exception:
+        return False
+
+
+def _fetch_mosaic_zarr(gtz, bounds, year):
+    """Fetch a mosaic via zarr read_region(), chunking if the region is large.
+
+    Returns (mosaic, transform, crs) with mosaic shape (H, W, 128), same as
+    GeoTessera.fetch_mosaic_for_region().
+    """
+    lon_span = bounds[2] - bounds[0]
+    lat_span = bounds[3] - bounds[1]
+
+    # Small region — single read
+    if lon_span <= _CHUNK_THRESHOLD and lat_span <= _CHUNK_THRESHOLD:
+        mosaic, transform, crs = gtz.read_region(bounds, year)
+        return mosaic, transform, crs
+
+    # Large region — split into chunks and merge
+    chunk_lons = []
+    lon = bounds[0]
+    while lon < bounds[2]:
+        chunk_lons.append((lon, min(lon + _CHUNK_SIZE, bounds[2])))
+        lon += _CHUNK_SIZE
+    chunk_lats = []
+    lat = bounds[1]
+    while lat < bounds[3]:
+        chunk_lats.append((lat, min(lat + _CHUNK_SIZE, bounds[3])))
+        lat += _CHUNK_SIZE
+
+    total_chunks = len(chunk_lons) * len(chunk_lats)
+    logger.info("Splitting into %d chunks (%d x %d) for zarr fetch",
+                total_chunks, len(chunk_lons), len(chunk_lats))
+
+    chunks = []  # (mosaic_chunk, transform, crs, col_offset, row_offset)
+    first_transform = None
+    first_crs = None
+
+    for lat_start, lat_end in chunk_lats:
+        for lon_start, lon_end in chunk_lons:
+            chunk_bbox = (lon_start, lat_start, lon_end, lat_end)
+            try:
+                emb, tfm, crs = gtz.read_region(chunk_bbox, year)
+            except Exception as e:
+                logger.warning("Zarr chunk (%.3f,%.3f)-(%.3f,%.3f) failed: %s",
+                               lon_start, lat_start, lon_end, lat_end, e)
+                continue
+            if emb is None or emb.size == 0:
+                continue
+            if first_transform is None:
+                first_transform = tfm
+                first_crs = crs
+            chunks.append((emb, tfm))
+
+    if not chunks:
+        raise RuntimeError("All zarr chunks returned empty data")
+
+    # Merge chunks into a single mosaic.
+    # Compute the global pixel grid from the first transform's resolution.
+    res_x = first_transform.a   # pixel width in degrees (positive)
+    res_y = first_transform.e   # pixel height in degrees (negative)
+    total_cols = int(round((bounds[2] - bounds[0]) / res_x))
+    total_rows = int(round((bounds[1] - bounds[3]) / res_y))  # res_y is negative
+
+    merged = np.full((total_rows, total_cols, EMBEDDING_DIM), np.nan, dtype=np.float32)
+
+    for emb, tfm in chunks:
+        # Determine where this chunk sits in the merged grid
+        col_off = int(round((tfm.c - bounds[0]) / res_x))
+        row_off = int(round((tfm.f - bounds[3]) / res_y))
+        h, w = emb.shape[:2]
+        # Clip to bounds
+        r0, r1 = max(0, row_off), min(total_rows, row_off + h)
+        c0, c1 = max(0, col_off), min(total_cols, col_off + w)
+        sr0, sc0 = r0 - row_off, c0 - col_off
+        merged[r0:r1, c0:c1, :] = emb[sr0:sr0 + (r1 - r0), sc0:sc0 + (c1 - c0), :]
+
+    # Build the canonical transform for the merged mosaic
+    merged_transform = Affine(res_x, 0, bounds[0], 0, res_y, bounds[3])
+    return merged, merged_transform, first_crs
+
+
+def _fetch_mosaic_npy(tessera, bounds, year, progress_fn=None):
+    """Fetch mosaic via the NPY path (GeoTessera.fetch_mosaic_for_region).
+
+    Wraps the existing threaded-download logic with download-progress reporting.
+    Returns (mosaic, transform, crs).
+    """
+    import threading as _threading
+
+    t0 = _time.monotonic()
+
+    # Estimate download size
+    expected_mb = 0
+    try:
+        tiles_needed = tessera.registry.load_blocks_for_region(bounds, year)
+        reg = tessera.registry._registry_gdf
+        for _, tile_lon, tile_lat in tiles_needed:
+            match = reg[(reg['lon'] == tile_lon) & (reg['lat'] == tile_lat) & (reg['year'] == year)]
+            if len(match) > 0:
+                row = match.iloc[0]
+                expected_mb += (row.get('file_size', 0) + row.get('scales_size', 0)) / (1024 * 1024)
+        if expected_mb > 0:
+            print(f"    Expected download: {expected_mb:.1f} MB ({len(tiles_needed)} tiles)")
+    except Exception:
+        pass
+
+    if progress_fn:
+        progress_fn(1, f"Fetching {expected_mb:.0f} MB..." if expected_mb > 0 else "Fetching mosaic...")
+
+    _fetch_result = [None, None, None, None]  # mosaic, transform, crs, error
+    _fetch_status = [None]
+
+    def _do_fetch():
+        try:
+            def _gt_progress(current, total, status):
+                _fetch_status[0] = f"{status} ({current}/{total})"
+            m, t, c = tessera.fetch_mosaic_for_region(
+                bbox=bounds, year=year,
+                target_crs='EPSG:4326', auto_download=True,
+                progress_callback=_gt_progress,
+            )
+            _fetch_result[:3] = [m, t, c]
+        except Exception as ex:
+            _fetch_result[3] = ex
+
+    def _dir_size(path):
+        total = 0
+        try:
+            for entry in os.scandir(path):
+                if entry.is_file(follow_symlinks=False):
+                    total += entry.stat().st_size
+                elif entry.is_dir(follow_symlinks=False):
+                    total += _dir_size(entry.path)
+        except OSError:
+            pass
+        return total
+
+    size_before = _dir_size(str(EMBEDDINGS_DIR))
+    ft = _threading.Thread(target=_do_fetch, daemon=True)
+    ft.start()
+    data_started = False
+
+    while ft.is_alive():
+        ft.join(timeout=2)
+        if ft.is_alive():
+            downloaded_mb = (_dir_size(str(EMBEDDINGS_DIR)) - size_before) / (1024 * 1024)
+            elapsed = _time.monotonic() - t0
+            if downloaded_mb > 0.1:
+                if not data_started:
+                    data_started = True
+                    print(f"    Download started after {elapsed:.0f}s")
+                speed_mbs = downloaded_mb / elapsed if elapsed > 0 else 0
+                if progress_fn:
+                    if expected_mb > 0:
+                        dl_pct = min(55, int(55 * downloaded_mb / expected_mb))
+                        progress_fn(max(1, dl_pct),
+                                    f"Downloading: {downloaded_mb:.1f}/{expected_mb:.0f} MB "
+                                    f"({int(100*downloaded_mb/expected_mb)}%, {speed_mbs:.1f} MB/s)")
+                    else:
+                        progress_fn(1, f"Downloading: {downloaded_mb:.1f} MB ({speed_mbs:.1f} MB/s)")
+            else:
+                gt_status = _fetch_status[0]
+                if progress_fn:
+                    if gt_status:
+                        progress_fn(1, gt_status)
+                    else:
+                        progress_fn(1, f"Waiting for tiles ({elapsed:.0f}s)")
+
+    if _fetch_result[3] is not None:
+        raise _fetch_result[3]
+
+    return _fetch_result[0], _fetch_result[1], _fetch_result[2]
+
 
 # ---------- Pyramid helpers (ported from create_pyramids.py) ----------
 
@@ -220,6 +444,9 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
                  progress=None, year_idx=0, num_years=1):
     """Process a single year: fetch mosaic -> pyramids -> vectors.
 
+    Tries zarr first (fast, no local cache needed), probes coverage, then
+    falls back to the NPY path via fetch_mosaic_for_region().
+
     All data stays in memory; no intermediate GeoTIFF files are created.
 
     Returns:
@@ -229,10 +456,10 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         """Report progress scaled to this year's slice of the overall 5-95% range."""
         if not progress:
             return
-        # Each year gets an equal slice of 5-95%
-        per_year = 90 / num_years  # e.g. 90% for 1 year, 45% for 2
+        per_year = 90 / num_years
         overall = 5 + year_idx * per_year + pct / 100 * per_year
         progress.update("processing", msg, percent=int(overall))
+
     year_pyramids_dir = pyramids_dir / str(year)
     year_vectors_dir = vectors_dir / str(year)
 
@@ -243,92 +470,40 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         print(f"  [{year}] Already processed (pyramids + vectors exist), skipping")
         return (year, True, "already exists")
 
-    # --- ESTIMATE DOWNLOAD SIZE ---
-    # Query registry for expected tile sizes (embedding + scales per tile)
-    expected_mb = 0
-    try:
-        tiles_needed = tessera.registry.load_blocks_for_region(bounds, year)
-        reg = tessera.registry._registry_gdf
-        for _, tile_lon, tile_lat in tiles_needed:
-            match = reg[(reg['lon'] == tile_lon) & (reg['lat'] == tile_lat) & (reg['year'] == year)]
-            if len(match) > 0:
-                row = match.iloc[0]
-                expected_mb += (row.get('file_size', 0) + row.get('scales_size', 0)) / (1024 * 1024)
-        if expected_mb > 0:
-            print(f"  [{year}] Expected download: {expected_mb:.1f} MB ({len(tiles_needed)} tiles)")
-    except Exception:
-        pass  # registry not available yet or format changed
-
-    # --- FETCH MOSAIC ---
-    _progress(1, f"[{year}] Fetching {expected_mb:.0f} MB..." if expected_mb > 0 else f"[{year}] Fetching mosaic...")
+    # --- FETCH MOSAIC (zarr-first, NPY fallback) ---
+    _progress(1, f"[{year}] Fetching mosaic...")
     print(f"  [{year}] Fetching mosaic...")
     t0 = _time.monotonic()
 
+    # Decide whether to use zarr for this year
+    gtz = _get_zarr()
+    use_zarr = False
+    if gtz is not None:
+        use_zarr = _probe_zarr_coverage(gtz, bounds, year)
+        if use_zarr:
+            print(f"  [{year}] Using zarr (fast path)")
+        else:
+            print(f"  [{year}] Zarr probe returned NaN, falling back to NPY")
+    else:
+        print(f"  [{year}] Using NPY path (zarr unavailable)")
+
     max_retries = 3
     mosaic = None
+    transform = None
+    crs = None
+
     for attempt in range(1, max_retries + 1):
         try:
-            # Run fetch in a thread so we can report download progress
-            import threading as _threading
-            _fetch_result = [None, None, None, None]  # mosaic, transform, crs, error
-            _fetch_status = [None]  # latest status message from GeoTessera callback
-            def _do_fetch():
-                try:
-                    def _gt_progress(current, total, status):
-                        _fetch_status[0] = f"{status} ({current}/{total})"
-                    m, t, c = tessera.fetch_mosaic_for_region(
-                        bbox=bounds, year=year,
-                        target_crs='EPSG:4326', auto_download=True,
-                        progress_callback=_gt_progress,
-                    )
-                    _fetch_result[:3] = [m, t, c]
-                except Exception as ex:
-                    _fetch_result[3] = ex
-
-            # Snapshot embeddings dir size before fetch
-            def _dir_size(path):
-                total = 0
-                try:
-                    for entry in os.scandir(path):
-                        if entry.is_file(follow_symlinks=False):
-                            total += entry.stat().st_size
-                        elif entry.is_dir(follow_symlinks=False):
-                            total += _dir_size(entry.path)
-                except OSError:
-                    pass
-                return total
-            size_before = _dir_size(str(EMBEDDINGS_DIR))
-
-            ft = _threading.Thread(target=_do_fetch, daemon=True)
-            ft.start()
-            data_started = False
-            while ft.is_alive():
-                ft.join(timeout=2)
-                if ft.is_alive():
-                    downloaded_mb = (_dir_size(str(EMBEDDINGS_DIR)) - size_before) / (1024 * 1024)
-                    elapsed = _time.monotonic() - t0
-                    if downloaded_mb > 0.1:
-                        if not data_started:
-                            data_started = True
-                            print(f"  [{year}] Download started after {elapsed:.0f}s")
-                        speed_mbs = downloaded_mb / elapsed if elapsed > 0 else 0
-                        if expected_mb > 0:
-                            dl_pct = min(55, int(55 * downloaded_mb / expected_mb))
-                            _progress(max(1, dl_pct), f"[{year}] Downloading: {downloaded_mb:.1f}/{expected_mb:.0f} MB ({int(100*downloaded_mb/expected_mb)}%, {speed_mbs:.1f} MB/s)")
-                        else:
-                            _progress(1, f"[{year}] Downloading: {downloaded_mb:.1f} MB ({speed_mbs:.1f} MB/s)")
-                    else:
-                        gt_status = _fetch_status[0]
-                        if gt_status:
-                            _progress(1, f"[{year}] {gt_status}")
-                        else:
-                            _progress(1, f"[{year}] Waiting for tiles ({elapsed:.0f}s)")
-            if _fetch_result[3] is not None:
-                raise _fetch_result[3]
-            mosaic, transform, crs = _fetch_result[0], _fetch_result[1], _fetch_result[2]
+            if use_zarr:
+                _progress(5, f"[{year}] Reading from zarr...")
+                mosaic, transform, crs = _fetch_mosaic_zarr(gtz, bounds, year)
+            else:
+                def _npy_progress(pct, msg):
+                    _progress(pct, f"[{year}] {msg}")
+                mosaic, transform, crs = _fetch_mosaic_npy(
+                    tessera, bounds, year, progress_fn=_npy_progress)
             break
         except Exception as e:
-            # Simplify known error messages
             err_str = str(e)
             if 'No embedding tiles found' in err_str:
                 short_msg = f"No embeddings available for {year} at this location"
@@ -347,7 +522,8 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
 
     height, width = mosaic.shape[:2]
     elapsed = _time.monotonic() - t0
-    print(f"  [{year}] Fetched {width}x{height} mosaic ({elapsed:.1f}s)")
+    path_label = "zarr" if use_zarr else "NPY"
+    print(f"  [{year}] Fetched {width}x{height} mosaic via {path_label} ({elapsed:.1f}s)")
 
     # Crop mosaic to exact viewport bounds (grid tiles may extend beyond ROI)
     col_start = max(0, int(np.floor((bounds[0] - transform.c) / transform.a)))
@@ -415,9 +591,9 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
 
 
 def _process_year_worker(args):
-    """Worker function for ProcessPoolExecutor. Creates its own GeoTessera instance."""
+    """Worker function for ProcessPoolExecutor. Uses cached GeoTessera instance."""
     viewport_id, bounds, year, pyramids_dir, vectors_dir = args
-    tessera = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
+    tessera = _get_tessera()
     return process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir)
 
 
@@ -488,19 +664,16 @@ def main():
 
     print(f"\nProcessing {len(years_to_process)} year(s): {years_to_process}")
 
-    # Process years in parallel
-    max_workers = min(len(years_to_process), os.cpu_count() or 1)
-    args_list = [
-        (viewport_id, bounds, year, pyramids_dir, vectors_dir)
-        for year in years_to_process
-    ]
-
-    progress.update("processing", f"Connecting to GeoTessera...", percent=1)
-    print(f"  Initializing GeoTessera...")
+    progress.update("processing", "Connecting to GeoTessera...", percent=1)
+    print("  Initializing GeoTessera (cached)...")
     t_init = _time.monotonic()
-    tessera = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
+    tessera = _get_tessera()
     init_secs = _time.monotonic() - t_init
     print(f"  GeoTessera ready ({init_secs:.1f}s)")
+
+    # Pre-warm zarr instance (non-blocking; logged inside _get_zarr)
+    _get_zarr()
+
     progress.update("processing", f"Processing {len(years_to_process)} year(s)...", percent=3)
 
     # Process years sequentially so progress is reported for each year.
