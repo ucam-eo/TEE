@@ -8,8 +8,6 @@
 
 A web-based tool for exploring and classifying land cover from Sentinel-2 satellite imagery using [Tessera](https://geotessera.org) embeddings.
 
-**Privacy by design:** Similarity searches and labelling run entirely in your browser. ML evaluation runs on your own compute server. Ground-truth data never leaves your machine.
-
 ## What can TEE do?
 
 - **Explore** any 5km x 5km area on Earth using 128-dimensional Tessera embeddings (2018-2025)
@@ -18,6 +16,8 @@ A web-based tool for exploring and classifying land cover from Sentinel-2 satell
 - **Evaluate classifiers** (k-NN, Random Forest, XGBoost, MLP, Spatial MLP, U-Net) on ground-truth shapefiles at any scale
 - **Generate classification maps** as GeoTIFFs for use in GIS
 - **Compare years** side by side to detect land-use change
+
+> **Privacy by design:** Similarity searches and labelling run entirely in your browser. ML evaluation runs on your own compute server. Ground-truth data never leaves your machine.
 
 ![Labelling mode](public/images/labelling.png)
 
