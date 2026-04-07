@@ -513,86 +513,60 @@ exit
 
 **Step 5: Deploy using the deploy script**
 
-From your laptop (where you cloned TEE):
-```bash
-./scripts/deploy-compute.sh gpu-box                  # deploy + start tunnel
-./scripts/deploy-compute.sh gpu-box --install-torch  # also install PyTorch for U-Net
-./scripts/deploy-compute.sh gpu-box --no-tunnel      # deploy only, no tunnel
-```
-
-The script pulls the latest code, installs dependencies, and starts an SSH tunnel. Use it for both initial setup and updates.
+The `deploy-compute.sh` script handles everything: pulls code, installs dependencies, starts the tunnel. Use it for both initial setup and updates.
 
 > **PyTorch note:** `--install-torch` auto-detects CUDA. If it installs the wrong version, see [Fixing PyTorch CUDA version mismatch](#fixing-pytorch-cuda-version-mismatch) below.
 
 ---
 
-### Option 1: Hosted + GPU Server (recommended)
+### Deployment Modes
 
-Use the hosted TEE server for the UI, tiles, and maps. Your GPU server runs ML evaluation via `tee-compute`, which proxies everything else to tee.cl.cam.ac.uk.
+All modes use a single script: `./scripts/deploy-compute.sh`
 
-```
-Browser → localhost:8001 → SSH tunnel → gpu-box (tee-compute)
-                                            │
-                                            ├── /api/evaluation/* → runs ML on gpu-box
-                                            └── everything else   → proxied to tee.cl.cam.ac.uk
-```
+| Command | UI served by | Compute runs on | Use when |
+|---------|-------------|----------------|----------|
+| `deploy-compute.sh gpu-box` | tee.cl.cam.ac.uk (proxied) | GPU server | Evaluation only, no local data needed |
+| `deploy-compute.sh --local gpu-box` | Your laptop (Django) | GPU server | Local viewports + GPU evaluation |
+| `deploy-compute.sh --local` | Your laptop (Django) | Your laptop | Offline use, small datasets |
+| `deploy-compute.sh gpu-box --no-tunnel` | — | — | Just deploy code to server |
 
-**Step 1 — start the tunnel:**
+---
+
+### Option 1: GPU Server (recommended)
+
+The UI comes from tee.cl.cam.ac.uk, evaluation runs on your GPU server. Nothing runs on your laptop except the SSH tunnel.
+
 ```bash
 ./scripts/deploy-compute.sh gpu-box
 ```
 
-**Step 2 — open in your browser:**
+Open **http://localhost:8001**.
 
-Open **http://localhost:8001**. The UI comes from tee.cl.cam.ac.uk (via proxy), evaluation runs on the GPU server.
-
-> **Why localhost instead of tee.cl.cam.ac.uk?** Browsers block HTTP requests from HTTPS pages. Since tee-compute runs on HTTP, you need to access it via `http://localhost:8001` where tee-compute proxies the hosted UI and handles evaluation locally.
+> **Why localhost?** Browsers block HTTP requests from HTTPS pages. tee-compute proxies the hosted UI via HTTP so evaluation requests work.
 
 ---
 
 ### Option 2: All Local
 
-Run everything on your laptop. No GPU needed for pixel classifiers (k-NN, RF, XGBoost, MLP). Good for small shapefiles and offline use.
-
-```
-Browser → localhost:8001 → Django + tee-compute (your laptop)
-```
+Everything runs on your laptop. Good for offline use and small datasets.
 
 ```bash
-cd ~/TEE
-./restart.sh
+./scripts/deploy-compute.sh --local
 ```
 
-Open `http://localhost:8001`. Both the UI and ML evaluation run on your laptop.
+Open **http://localhost:8001**.
 
 ---
 
 ### Option 3: Local UI + GPU Server
 
-Run TEE locally for offline labelling, but offload ML evaluation to a GPU server. The deploy script connects the tunnel on port 8001, so start Django on a different port:
+Local Django serves your viewports and labels. Evaluation offloads to a GPU server.
 
-```
-Browser → localhost:9001 → Django (your laptop)
-                               │
-                               └── /api/evaluation/* → localhost:8001 → tunnel → gpu-box
-```
-
-**Two terminals on your laptop:**
-
-Terminal 1 — start the GPU tunnel (port 8001):
 ```bash
-./scripts/deploy-compute.sh gpu-box
+./scripts/deploy-compute.sh --local gpu-box
 ```
 
-Terminal 2 — start Django on a different port:
-```bash
-cd ~/TEE
-TEE_COMPUTE_URL=http://localhost:8001 python3 -m waitress --host=127.0.0.1 --port=9001 --threads=16 --channel-timeout=7200 tee_project.wsgi:application
-```
-
-Open `http://localhost:9001` for local labelling. Open `http://localhost:8001` for evaluation.
-
-> Most users should use **Option 1** instead — it's simpler and doesn't require Django locally.
+Open **http://localhost:8001**.
 
 ### Command Reference
 
