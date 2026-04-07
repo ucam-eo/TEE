@@ -151,9 +151,15 @@ This is a quick way to explore what the embeddings "see" at any location. For bu
 
 A **label** is a named group of pixels that you've identified as belonging to the same land cover type (e.g., "Grassland", "Woodland", "Arable"). Labels are the building blocks for both manual habitat mapping and machine-learning evaluation.
 
+There are three ways to create labels:
+- **Auto-labelling** — run K-means clustering, then promote the clusters you want (see [Auto-Labelling](#auto-labelling-k-means-clustering))
+- **Manual pins and polygons** — place individual points or draw areas on the map (see [Manual Labelling](#manual-labelling))
+- **Import** — load labels from a previously exported JSON or Shapefile
+
+Once you have labels, you can:
+
 | What you can do | How |
 |-----------------|-----|
-| **Create** a label | After a similarity search, click **Save as Label** and give it a name |
 | **Show or hide** a label on the map | Click the eye icon next to the label name |
 | **Delete** a label | Click the **trash** icon or **×** next to it |
 | **See coverage across years** | Click the **clock icon** next to a label — it shows how many similar pixels exist in each year |
