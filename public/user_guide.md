@@ -45,7 +45,7 @@ With TEE you can:
 ### Path 2: Label habitats
 
 1. Open a viewport, then switch to **Labelling** mode using the dropdown in the top-left header bar
-2. In the bottom-right panel, click **Segment** — TEE will automatically group the pixels into clusters of similar land cover
+2. In the bottom-right panel, click **Go** — TEE will automatically group the pixels into clusters of similar land cover
 3. Review the clusters. Give meaningful names to the ones you want to keep (e.g., "Grassland", "Arable"), then click **Promote** to turn them into saved labels
 4. Fine-tune by adding manual pins (Ctrl+click on the map) or drawing polygons (Ctrl+double-click to start drawing)
 5. Click **Export** to save your labels as a Shapefile you can open in QGIS, or use as ground truth for validation
@@ -105,6 +105,8 @@ When you open a viewport, you enter the **Viewer** — a screen divided into six
 
 The header bar at the top lets you switch between different **modes**, each of which shows different information in the six panels:
 
+![The header bar: mode dropdown, help, feedback, and similarity slider](images/ui_header_bar.png)
+
 ### Panel Layout by Mode
 
 ![Panel layout — 2×3 synchronized grid](images/panel_layout.png)
@@ -145,6 +147,8 @@ This is TEE's core exploration feature, available in **Explore** mode. **Double-
 | 1 | **Double-click** any pixel on the map |
 | 2 | Coloured dots appear across all panels showing similar locations. Adjust the **similarity slider** in the header bar — drag left for stricter matching (fewer, more similar results), drag right for looser matching (more results, less similar). |
 
+![Similarity slider in the header bar](images/ui_similarity_slider.png)
+
 This is a quick way to explore what the embeddings "see" at any location. For building up a full set of habitat labels, see [Auto-Labelling](#auto-labelling-k-means-clustering) (which groups pixels into clusters you can review and promote) and [Manual Labelling](#manual-labelling) (which lets you place individual pins and draw polygons).
 
 > **First search takes a moment:** The first time you search in a viewport, TEE downloads the embedding data for all pixels (~20–50MB) and caches it in your browser. After that, all searches are instant.
@@ -156,6 +160,8 @@ This is a quick way to explore what the embeddings "see" at any location. For bu
 ## Labels
 
 A **label** is a named group of pixels that you've identified as belonging to the same land cover type (e.g., "Grassland", "Woodland", "Arable"). Labels are the building blocks for both manual habitat mapping and machine-learning evaluation.
+
+![Labelling toolbar: Schema, Export, Import, Share](images/ui_labelling_toolbar.png)
 
 There are three ways to create labels:
 - **Auto-labelling** — run K-means clustering, then promote the clusters you want (see [Auto-Labelling](#auto-labelling-k-means-clustering))
@@ -217,6 +223,8 @@ Click **Import** → **Shared Labels** to see labels that other users have share
 
 When labelling habitats (either manually or via auto-labelling), you can use a standard habitat classification scheme rather than inventing label names and colours from scratch. Click **Schema** in the header bar to open the schema browser — a draggable floating window with a search box.
 
+![Schema dropdown showing the three built-in schemas and the Custom upload option](images/ui_schema_menu.png)
+
 TEE includes three built-in schemas:
 
 | Schema | Description |
@@ -269,12 +277,18 @@ Once you have two or more label classes defined, click **Classify** in Panel 5 t
 
 Instead of labelling every habitat type by hand, you can ask TEE to automatically group the pixels in your viewport into clusters of similar land cover. This uses an algorithm called **K-means**, which divides all the pixels into a set number of groups (you choose how many) based on how similar their embeddings are.
 
+Panel 6 hosts the auto-labelling UI — a dropdown at the top switches between **Auto-label** (clusters) and **Manual Label** (pins, polygons), with the cluster list on the left and the saved label list on the right:
+
+![Panel 6 in labelling mode: Auto-label sub-mode, cluster list, and label list](images/ui_panel6_labelling.png)
+
 The clusters are **temporary previews** — you review them, name the ones that correspond to real habitat types, and "promote" them to saved labels. Clusters you don't want can simply be ignored.
+
+![K-means controls: adjust k, then click Go](images/ui_seg_controls.png)
 
 | Step | What to do |
 |------|------------|
 | 1 | In Panel 6, set **k** (the number of clusters) using the slider — start with 5–10 |
-| 2 | Click **Segment** — TEE runs K-means and colours each cluster on the map |
+| 2 | Click **Go** — TEE runs K-means and colours each cluster on the map |
 | 3 | Review the cluster list: each entry shows a colour swatch, pixel count, and percentage of the viewport |
 | 4 | Name the clusters you want to keep, then click the **Promote** arrow (↗) next to each one. Or click **Promote All** to promote everything at once. |
 
