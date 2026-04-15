@@ -29,11 +29,13 @@ across years, and evaluate classifiers against ground-truth shapefiles.
 - **K-means segmentation** via inline Web Worker with K-means++ initialisation
 - **Change-detection heatmap** comparing per-pixel embedding distances across years
 - **Manual labelling** with point, polygon, and similarity-expansion label types
-- **Hierarchical schema browser** for structured label ontologies (UKHab, HOTW, or custom)
-- **ML evaluation pipeline** with streaming NDJSON learning curves (k-NN, RF, MLP, spatial MLP, U-Net)
+- **Hierarchical schema browser** for structured label ontologies (UKHab v2, HOTW, EUNIS, or custom)
+- **ML evaluation pipeline** with streaming NDJSON learning curves (k-NN, RF, XGBoost, MLP, spatial MLP, U-Net)
 - **Confusion matrix** with interactive pop-up and percentage toggle
-- **Export** labels as JSON, GeoJSON, or ESRI Shapefile; download trained models
+- **Create Map** — generate a GeoTIFF classification raster from any trained classifier
+- **Export** labels as JSON, GeoJSON, or ESRI Shapefile (pixel labels vectorized to polygons via d3-contour); download trained models
 - **Label sharing** — contribute to the Tessera global habitat directory (private) or share with other users (public)
+- **Zarr embedding store** — pulls from `dl2.geotessera.org` zarr where available, falls back to per-tile NPY downloads
 
 ---
 
@@ -41,17 +43,21 @@ across years, and evaluate classifiers against ground-truth shapefiles.
 
 ```
 TEE/
-  public/js/           8 ES modules loaded by viewer.html
-  public/viewer.html   Main viewer (6-panel layout)
-  api/views/           Django view modules (HTTP endpoints)
-  api/urls.py          URL routing
-  lib/                 Pure-function backend libraries
-  process_viewport.py  Pipeline script (subprocess)
-  create_pyramids.py   Legacy satellite pyramid builder (unused)
-  docs/                This documentation
+  public/js/                 8 ES modules loaded by viewer.html
+  public/schemas/            Built-in classification schemas (UKHab, HOTW, EUNIS)
+  public/viewer.html         Main viewer (6-panel layout)
+  api/views/                 Django view modules (HTTP endpoints)
+  api/urls.py                URL routing
+  lib/                       Pure-function backend libraries (paths, viewport ops, tile rendering, pipeline)
+  packages/tessera-eval/     Standalone ML library used by the tee-compute server
+  process_viewport.py        Pipeline script (subprocess) — fetches tiles → pyramids → vectors
+  scripts/deploy-compute.sh  Start tee-compute (use --local for Django + tee-compute on localhost)
+  docs/                      This documentation
 ```
 
 The frontend is vanilla JavaScript with no build step.  Modules communicate
 through `window.*` properties bridged via `Object.defineProperty`.  The backend
-is Django served by Waitress WSGI, with a background pipeline that downloads
-embedding tiles via the GeoTessera library and builds pyramids + vector data.
+is Django served by Waitress WSGI; ML evaluation runs on a separate Flask
+service (`tee-compute`) which Django proxies on `/api/evaluation/*`.  A
+background pipeline downloads embedding tiles via the GeoTessera library
+(zarr-first, NPY fallback) and builds pyramids + vector data.

@@ -381,6 +381,11 @@ Show export dropdown menu (JSON, GeoJSON, Shapefile, Map JPG).
 #### `window.doExportManualLabels(format)`
 - **format** `string` -- `"json"`, `"geojson"`, or `"shapefile"`
 
+For GeoJSON and Shapefile exports, labels with stored `pixel_coords` (e.g.
+promoted clusters) are vectorized into Polygon features via d3-contour
+(loaded on demand from CDN).  Labels with polygon vertices are exported
+directly; point labels without `pixel_coords` are exported as Point features.
+
 #### `window.importManualLabels(file)`
 Import labels from JSON, GeoJSON, or Shapefile ZIP.
 
@@ -494,7 +499,7 @@ UI, segmentation overlay on Panel 5.
 |---|---|---|
 | `window.segAssignments` | `Int32Array \| null` | Per-pixel cluster assignments (length N) |
 | `window.segOverlay` | `L.ImageOverlay \| null` | Segmentation overlay on `maps.panel5` |
-| `window.segLabels` | `array` | Cluster metadata: `[{id, color, hex, name, count, embedding, sourcePixel, threshold, centroid}]` |
+| `window.segLabels` | `array` | Cluster metadata: `[{id, color, hex, name, count, embedding, sourcePixel, threshold, centroid, pixel_coords}]` |
 | `window.segRunning` | `boolean` | Whether segmentation is in progress |
 | `window.segVectors` | `object \| null` | Vector data used for current segmentation |
 | `window.segK` | `number` | Current k value (default 5) |
@@ -618,7 +623,8 @@ const layer = new HeatmapCanvasLayer(distances, stats);
 ## 7. evaluation.js
 
 **Purpose:** Validation panel: shapefile upload, NDJSON streaming for learning
-curves, confusion matrix rendering, model download.
+curves, confusion matrix rendering, model download, GeoTIFF map creation,
+embedding coverage probing.
 
 ### Bridged State
 
@@ -645,6 +651,16 @@ Export evaluation results as JSON file download.
 #### `window.openCMPopup(classifierName, data)`
 Open confusion matrix in a separate browser window (for large matrices).
 
+#### `window.createMap(classifierName)` -> `Promise<void>`
+Generate a GeoTIFF classification map from a trained classifier.  POSTs to
+`/api/evaluation/create-map` and streams NDJSON progress events
+(`status`, `map_progress`, `map_ready`, `done`, `error`).  When `map_ready`
+arrives, calls `download-map/{name}` to download the GeoTIFF.
+
+#### `window.checkEmbeddingCoverage(bbox)` -> `Promise<object>`
+POST `/api/viewports/embedding-coverage` to find which years have GeoTessera
+coverage for a bounding box.  Used before viewport creation.
+
 ### Constants
 
 ```javascript
@@ -670,17 +686,21 @@ const CLASSIFIER_LABELS = {
 ## 8. schema.js
 
 **Purpose:** Schema dropdown, floating tree browser for structured label
-ontologies (e.g. UKHab), label selection for both manual labels and seg clusters.
+ontologies (UKHab, HOTW, EUNIS, or user-uploaded), label selection for both
+manual labels and seg clusters.
 
 ### Schema File Formats
 
 A schema defines a hierarchical tree of label names and optional codes.  The
-user loads a schema via the "Schema" dropdown in the viewer header.  Three
-modes are available:
+user loads a schema via the "Schema" dropdown in the viewer header.  Available
+modes:
 
 - **None** — no schema, user types label names freely
 - **UKHab** — built-in UK Habitat Classification v2, loaded from
   `/schemas/ukhab-v2.json`
+- **HOTW** — built-in Habitats of the World, loaded from `/schemas/hotw.json`
+- **EUNIS** — built-in EUNIS terrestrial habitat classification, loaded from
+  `/schemas/eunis.json`
 - **Custom** — user uploads a file (JSON or tab-indented text)
 
 **JSON format** — `{name, tree}` object:
@@ -730,7 +750,7 @@ as the active manual label (or filled into a segmentation cluster input).
 | Property | Type | Description |
 |---|---|---|
 | `window.activeSchema` | `{name, tree} \| null` | Loaded schema object |
-| `window.activeSchemaMode` | `string` | `"none"`, `"ukhab"`, or `"custom"` |
+| `window.activeSchemaMode` | `string` | `"none"`, `"ukhab"`, `"hotw"`, `"eunis"`, or `"custom"` |
 
 ### Functions
 
@@ -738,9 +758,18 @@ as the active manual label (or filled into a segmentation cluster input).
 Toggle the schema selection dropdown menu.
 
 #### `window.loadSchema(mode)` -> `Promise<void>`
-- **mode** `string` -- `"none"`, `"ukhab"`, or `"custom"`
+- **mode** `string` -- `"none"`, `"ukhab"`, `"hotw"`, `"eunis"`, or `"custom"`
 
-Load a schema.  For UKHab, fetches `/schemas/ukhab-v2.json`.
+Load a schema.  Built-in schemas are looked up in a `builtinSchemas` table
+inside `loadSchema()` (see `public/js/schema.js:69-73`):
+
+```javascript
+const builtinSchemas = {
+    ukhab: { url: '/schemas/ukhab-v2.json', label: 'UKHab' },
+    hotw:  { url: '/schemas/hotw.json',     label: 'HOTW'  },
+    eunis: { url: '/schemas/eunis.json',    label: 'EUNIS' },
+};
+```
 
 #### `window.loadCustomSchema(file)`
 - **file** `File` -- JSON or tab-indented text file
@@ -875,9 +904,14 @@ Render schema tree as HTML string (recursive).
     embedding: number[],           // nearest-centroid embedding (128-dim)
     sourcePixel: {lat, lon},
     threshold: number,             // max distance from centroid
-    centroid: number[]             // cluster centroid (128-dim)
+    centroid: number[],            // cluster centroid (128-dim)
+    pixel_coords: number[]         // flat [px0, py0, px1, py1, ...] — set on promote-to-label
 }
 ```
+
+When a cluster is promoted to a manual label, its exact pixel set is stored as
+`pixel_coords` so the label can be rebuilt exactly on show/hide without
+re-running similarity search.
 
 ### 9.6 explorerResults
 
@@ -903,16 +937,27 @@ Which JS modules call which backend endpoints:
 | `app.js` | `GET` | `/api/operations/progress/{id}` (pipeline progress) |
 | `app.js` | `POST` | `/api/auth/logout` |
 | `maps.js` | `GET` | `/api/viewports/current` |
+| `maps.js` | `GET` | `/api/viewports/{name}/info` (viewport from URL param) |
 | `vectors.js` | `GET` | `/api/vector-data/{viewport}/{year}/all_embeddings_uint8.npy.gz` |
 | `vectors.js` | `GET` | `/api/vector-data/{viewport}/{year}/quantization.json` |
 | `vectors.js` | `GET` | `/api/vector-data/{viewport}/{year}/pixel_coords.npy.gz` |
 | `vectors.js` | `GET` | `/api/vector-data/{viewport}/{year}/metadata.json` |
 | `evaluation.js` | `POST` | `/api/evaluation/upload-shapefile` (FormData) |
-| `evaluation.js` | `POST` | `/api/evaluation/run` (streaming NDJSON response) |
+| `evaluation.js` | `POST` | `/api/evaluation/run-large-area` (streaming NDJSON learning curves) |
 | `evaluation.js` | `POST` | `/api/evaluation/finish-classifier` |
+| `evaluation.js` | `POST` | `/api/evaluation/train-models` |
 | `evaluation.js` | `GET` | `/api/evaluation/download-model/{name}` |
-| `evaluation.js` | `POST` | `/api/evaluation/class-counts` |
+| `evaluation.js` | `POST` | `/api/evaluation/create-map` (streaming NDJSON, GeoTIFF generation) |
+| `evaluation.js` | `GET` | `/api/evaluation/download-map/{name}` |
+| `evaluation.js` | `POST` | `/api/evaluation/cancel` (direct to tee-compute, CORS) |
+| `evaluation.js` | `POST` | `/api/viewports/embedding-coverage` (year coverage probe) |
+| `labels.js` | `POST` | `/api/evaluation/clear-shapefiles` |
+| `labels.js` | `POST` | `/api/share/submit` |
+| `labels.js` | `GET` | `/api/share/list/{viewport}` |
+| `labels.js` | `GET` | `/api/share/download/{sanitized_email}/{viewport}` |
 | `schema.js` | `GET` | `/schemas/ukhab-v2.json` (static file) |
+| `schema.js` | `GET` | `/schemas/hotw.json` (static file) |
+| `schema.js` | `GET` | `/schemas/eunis.json` (static file) |
 | (viewer.html inline) | `GET` | `/api/auth/status` |
 | (viewer.html inline) | `GET` | `/api/config` |
 

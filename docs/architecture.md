@@ -42,11 +42,11 @@ TEE runs as two services locally, or as a hosted server with user-run compute:
 
 ### Deployment Modes
 
-| Mode | Django (8001) | tee-compute (8002) | User opens |
-|------|:------------:|:------------------:|:----------:|
-| **Local dev** | localhost | localhost | localhost:8001 |
-| **Hosted + local compute** | tee.cl.cam.ac.uk | user's laptop | localhost:8001 (tee-compute proxies to hosted) |
-| **Hosted + remote compute** | tee.cl.cam.ac.uk | GPU box via SSH tunnel | localhost:8001 |
+| Mode | Django (8001) | tee-compute (8002) | User opens | How to start |
+|------|:------------:|:------------------:|:----------:|:------------|
+| **Local dev** | localhost | localhost | localhost:8001 | `./scripts/deploy-compute.sh --local` |
+| **Hosted + local compute** | tee.cl.cam.ac.uk | user's laptop | localhost:8001 (tee-compute proxies to hosted) | `./scripts/deploy-compute.sh` |
+| **Hosted + remote compute** | tee.cl.cam.ac.uk | GPU box via SSH tunnel | localhost:8001 | `./scripts/deploy-compute.sh gpu-box` |
 
 In all modes, the browser talks only to port 8001. Django proxies
 `/api/evaluation/*` requests to tee-compute. All ML runs on tee-compute,
@@ -89,7 +89,7 @@ const PANEL_LAYOUT = {
         { content: null,                    title: 'Tessera Embeddings' },
         { content: null,                    title: 'PCA (Embedding Space)' },
         { content: null,                    title: 'Classification results' },
-        { content: 'panel6-label-view',     title: 'Auto-label' },
+        { content: 'panel6-label-view',     title: '' },
     ],
     'validation': [
         { content: 'validation-controls',   title: 'Controls',         header: false, flow: true },
@@ -157,10 +157,13 @@ Django proxies `/api/evaluation/*` requests to it.
 Browser → Django :8001 → proxy → tee-compute :8002
                                     ├── /api/evaluation/upload-shapefile (returns estimated_labelled_pixels, per-class polygon counts)
                                     ├── /api/evaluation/clear-shapefiles
-                                    ├── /api/evaluation/run-large-area
+                                    ├── /api/evaluation/run-large-area (streaming NDJSON learning curves)
                                     ├── /api/evaluation/cancel (CORS-enabled for direct access)
                                     ├── /api/evaluation/finish-classifier
+                                    ├── /api/evaluation/train-models
                                     ├── /api/evaluation/download-model/<name>
+                                    ├── /api/evaluation/create-map (streaming NDJSON, GeoTIFF generation)
+                                    ├── /api/evaluation/download-map/<name>
                                     └── /health
 
                                   Everything else proxied back to Django
@@ -276,6 +279,7 @@ The ML library (`packages/tessera-eval/tessera_eval/`) is framework-independent:
 | `rasterize.py` | `rasterize_shapefile` (with optional pre-fitted LabelEncoder) |
 | `data.py` | `load_embeddings_for_shapefile` (tile-by-tile with CRS reprojection) |
 | `unet.py` | `extract_labelled_patches`, `TinyUNet`, `train_unet_on_patches` |
+| `zarr_utils.py` | Singleton zarr store instance, coverage probing, chunked region reading |
 | `server.py` | Flask compute server (`tee-compute` CLI) |
 
 The library has **no Django imports**. It can be installed standalone:
@@ -360,7 +364,7 @@ venv/bin/pytest validation/ tests/ -v
 ### Local development
 
 ```bash
-./restart.sh
+./scripts/deploy-compute.sh --local
 # Starts Django on :8001 + tee-compute on :8002
 # Open http://localhost:8001
 ```
@@ -373,7 +377,7 @@ docker buildx build --platform linux/amd64 \
     -t sk818/tee:stable --push .
 
 ssh tee.cl.cam.ac.uk
-sudo ./manage.sh   # option 5: pull, restart, health-check
+sudo ./manage.sh   # option 7: pull, restart, health-check
 ```
 
 Production runs Django only (no tee-compute). Users run their own `tee-compute`
@@ -404,6 +408,10 @@ TEE/
 │   │   ├── dimreduction.js     PCA, UMAP, heatmap, Three.js
 │   │   ├── evaluation.js       Validation panel content (NOT layout)
 │   │   └── schema.js           Schema browser, label selection
+│   ├── schemas/
+│   │   ├── ukhab-v2.json       UKHab v2 classification schema
+│   │   ├── hotw.json           Habitats of the World schema
+│   │   └── eunis.json          EUNIS terrestrial habitat schema
 │   ├── viewer.html             6-panel viewer
 │   ├── viewport_selector.html  Viewport list / creation
 │   └── user_guide.md           User documentation
@@ -411,9 +419,23 @@ TEE/
 ├── api/views/
 │   ├── viewports.py            Viewport CRUD + embedding coverage
 │   ├── evaluation.py           Proxy to tee-compute (no ML here)
+│   ├── pipeline.py             Pipeline progress + cancellation
 │   ├── tiles.py                Tile server
 │   ├── share.py                Label sharing
+│   ├── enrolment.py            User creation + management
+│   ├── vector_data.py          Serve raw vector files
+│   ├── compute.py              Projection loading, year lookups
 │   └── config.py               Health, config, static files
+│
+├── lib/
+│   ├── config.py               Paths & directory constants
+│   ├── viewport_utils.py       Viewport reading & validation
+│   ├── viewport_writer.py      Viewport creation & symlink
+│   ├── viewport_ops.py         Readiness checks, data deletion
+│   ├── pipeline.py             Pipeline orchestration
+│   ├── progress_tracker.py     Progress JSON persistence
+│   ├── tile_renderer.py        Slippy map tile rendering
+│   └── evaluation_engine.py    Shim — re-exports from tessera_eval
 │
 ├── packages/tessera-eval/tessera_eval/
 │   ├── evaluate.py             Learning curves, k-fold CV
@@ -421,11 +443,15 @@ TEE/
 │   ├── rasterize.py            Shapefile rasterization
 │   ├── data.py                 Tile-by-tile embedding loading
 │   ├── unet.py                 U-Net patches, training, prediction
+│   ├── zarr_utils.py           Zarr store singleton, coverage, chunked reads
 │   └── server.py               tee-compute Flask server
 │
-├── scripts/tee_evaluate.py     Standalone CLI for batch evaluation
-├── restart.sh                  Start Django + tee-compute locally
+├── scripts/
+│   ├── deploy-compute.sh       Start tee-compute (--local for Django too)
+│   └── tee_evaluate.py         Standalone CLI for batch evaluation
+├── process_viewport.py         Pipeline: fetch tiles → pyramids → vectors
 ├── Dockerfile                  Production Docker build
+├── docker-compose.yml          Docker Compose for production
 └── docs/                       This documentation
 ```
 

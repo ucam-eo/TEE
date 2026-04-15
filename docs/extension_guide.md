@@ -119,14 +119,19 @@ document.body.classList.remove(..., 'mode-comparison');
 
 ## 2. Adding a New Classifier
 
-The evaluation pipeline supports multiple classifiers.  To add a new one, you
-need to update both the backend (Python) and frontend (JavaScript).
+The evaluation pipeline supports multiple classifiers.  All ML now runs on the
+**tee-compute** server backed by the standalone `tessera_eval` library.  TEE's
+`api/views/evaluation.py` is a thin HTTP proxy and `lib/evaluation_engine.py`
+is a backward-compatibility shim — neither contains the classifier factory.
+
+To add a new classifier, work in `tessera_eval` (the package shipped from
+`packages/tessera-eval/`), then add the colour and checkbox in TEE's frontend.
 
 **Example:** Adding a Gradient Boosted Trees classifier via LightGBM.
 
-### Step 1: Add to evaluation_engine.py
+### Step 1: Add to tessera_eval/classify.py
 
-In `lib/evaluation_engine.py`, update `make_classifier()`:
+In `packages/tessera-eval/tessera_eval/classify.py`, update `make_classifier()`:
 
 ```python
 def make_classifier(name, params=None):
@@ -150,6 +155,8 @@ def make_classifier(name, params=None):
 ```
 
 The classifier must implement the scikit-learn interface (`fit()`, `predict()`).
+Add it to `available_classifiers()` in the same file so the server's
+`/api/evaluation/run-large-area` handler accepts it.
 
 ### Step 2: Add frontend color and label
 
@@ -195,13 +202,17 @@ The evaluation.js `runEvaluation()` function automatically reads all
 Add `lightgbm` to `requirements.txt`.
 
 **Extension Point:** The `run_learning_curve()` generator in
-`lib/evaluation_engine.py` handles training sizes, cross-validation splits, and
+`tessera_eval/evaluate.py` handles training sizes, cross-validation splits, and
 streaming results.  New classifiers plug in via `make_classifier()` alone --
 no changes needed to the evaluation loop itself, unless the classifier needs
 spatial features (like `spatial_mlp`).
 
 For spatial classifiers, check the `name.startswith('spatial_')` branch in
-`run_learning_curve()` which calls `gather_spatial_features()`.
+`run_learning_curve()` which calls `gather_spatial_features_2d()`.
+
+**Deploying the change:** After updating `tessera_eval`, restart the
+tee-compute server (`./scripts/deploy-compute.sh --local` for local dev).
+TEE's Django backend does not need a restart since it only proxies the request.
 
 ---
 
@@ -661,8 +672,9 @@ Schemas define hierarchical label ontologies for structured labelling.  See
 
 ```javascript
 const builtinSchemas = {
-    ukhab: { url: '/schemas/ukhab-v2.json', label: 'UKHab' },
-    hotw:  { url: '/schemas/hotw.json',      label: 'HOTW' },
+    ukhab:  { url: '/schemas/ukhab-v2.json', label: 'UKHab' },
+    hotw:   { url: '/schemas/hotw.json',     label: 'HOTW'  },
+    eunis:  { url: '/schemas/eunis.json',    label: 'EUNIS' },
     corine: { url: '/schemas/corine.json',   label: 'CORINE' },  // NEW
 };
 ```
@@ -696,7 +708,7 @@ No code changes needed — users can already upload custom schemas via the
 | Extension | Primary file | Key function/object |
 |---|---|---|
 | New panel mode | `maps.js` | `setPanelLayout()`, `PANEL5_LAYER_RULES` |
-| New classifier | `lib/evaluation_engine.py` | `make_classifier()` |
+| New classifier | `tessera_eval/classify.py` (in tee-compute) | `make_classifier()` |
 | New satellite source | `maps.js` | `satelliteSources` object |
 | New label type | `labels.js` | `rebuildClassOverlay()`, `doExportManualLabels()` |
 | New JS module | `viewer.html` + new file | `window.*` exports, `dependencyRegistry` |

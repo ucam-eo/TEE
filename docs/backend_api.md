@@ -18,8 +18,9 @@ these endpoints.
    - [Tiles](#14-tiles--apiviewstilespy)
    - [Evaluation](#15-evaluation--apiviewsevaluationpy)
    - [Label Sharing](#16-label-sharing--apiviewssharepy)
-   - [Vector Data](#17-vector-data--apiviewsvector_datapy)
-   - [Config & Health](#18-config--health--apiviewsconfigpy)
+   - [Enrolment](#17-enrolment--apiviewsenrolmentpy)
+   - [Vector Data](#18-vector-data--apiviewsvector_datapy)
+   - [Config & Health](#19-config--health--apiviewsconfigpy)
 2. [Library Modules](#2-library-modules)
    - [lib/config.py](#21-libconfigpy--paths--directories)
    - [lib/viewport_utils.py](#22-libviewport_utilspy--viewport-readingvalidation)
@@ -256,6 +257,18 @@ Validates year range (2017–2025). Cancels any in-progress pipeline for this vi
 { "success": false, "error": "Viewport xyz not found" }
 ```
 
+#### `GET /api/viewports/<viewport_name>/info`
+
+Get viewport info by name without changing the active viewport (concurrent-safe).
+
+```json
+// Response 200
+{ "success": true, "viewport": { "name": "cambridge", "bounds": {...}, "center": [...] } }
+
+// Response 404
+{ "success": false, "error": "Viewport xyz not found" }
+```
+
 #### `GET /api/viewports/<viewport_name>/available-years`
 
 List years that have pyramid data ready for viewing.
@@ -282,6 +295,19 @@ Check if a viewport has enough data to open the viewer. Returns `ready: true` on
   "years_processing": [],
   "years_unavailable": ["2019"]
 }
+```
+
+#### `POST /api/viewports/embedding-coverage`
+
+Check which years have GeoTessera embedding coverage for a bounding box.
+Used by the frontend to show coverage before creating a viewport.
+
+```json
+// Request
+{ "bbox": [0.08, 52.18, 0.16, 52.22] }
+
+// Response 200
+{ "coverage": { "2018": true, "2019": false, "2020": true, ... } }
 ```
 
 ---
@@ -388,9 +414,10 @@ List all viewports and their available map layers.
 
 ### 1.5 Evaluation — `api/views/evaluation.py`
 
-**Overview:** Upload shapefiles with ground-truth habitat classes, then run learning-curve evaluations against the embedding vectors. Supports multiple classifiers (k-NN, Random Forest, MLP, spatial MLP, U-Net). Results are streamed as NDJSON so the frontend can display progress in real-time.
-
-**Depends on:** `lib.evaluation_engine`
+**Overview:** Proxy layer to tee-compute. All ML evaluation runs on the compute
+server; `api/views/evaluation.py` forwards every request via `_proxy_to_compute()`.
+Supports multiple classifiers (k-NN, Random Forest, XGBoost, MLP, spatial MLP, U-Net).
+Results are streamed as NDJSON so the frontend can display progress in real-time.
 
 #### `POST /api/evaluation/upload-shapefile`
 
@@ -466,9 +493,9 @@ found is used. The others are silently ignored.
 { "error": "Field 'xyz' not found" }
 ```
 
-#### `POST /api/evaluation/run`
+#### `POST /api/evaluation/run-large-area`
 
-Run a learning-curve evaluation. Returns a streaming NDJSON response — one JSON object per line.
+Run a learning-curve evaluation. Returns a streaming NDJSON response — one JSON object per line. Proxied to tee-compute.
 
 ```json
 // Request
@@ -515,6 +542,49 @@ GET /api/evaluation/download-model/rf
 
 Response: application/octet-stream (joblib file)
 Content-Disposition: attachment; filename="rf.joblib"
+```
+
+#### `POST /api/evaluation/train-models`
+
+Train all selected classifiers on the full dataset (deferred, user-triggered).
+Streams NDJSON `model_ready` events as each model finishes training.
+
+#### `POST /api/evaluation/clear-shapefiles`
+
+Clear all uploaded shapefiles on the compute server.
+
+```json
+// Response 200
+{ "ok": true }
+```
+
+#### `POST /api/evaluation/create-map`
+
+Generate a GeoTIFF classification map from a trained classifier. Streams NDJSON
+progress events (`status`, `map_progress`, `map_ready`, `done`, `error`).
+
+```json
+// Request
+{ "viewport": "cambridge", "year": "2024", "classifier": "rf" }
+```
+
+#### `GET /api/evaluation/download-map/<name>`
+
+Download a generated GeoTIFF classification map.
+
+```
+GET /api/evaluation/download-map/cambridge_rf_2024
+
+Response: image/tiff (GeoTIFF file)
+```
+
+#### `GET /api/evaluation/health`
+
+Health check for the compute server.
+
+```json
+// Response 200
+{ "status": "ok" }
 ```
 
 ---
@@ -622,7 +692,54 @@ Content-Disposition: attachment; filename="shared_labels_Alice_cambridge.zip"
 
 ---
 
-### 1.7 Vector Data — `api/views/vector_data.py`
+### 1.7 Enrolment — `api/views/enrolment.py`
+
+**Overview:** User account management for enrolled users. Admin or enroller-flagged
+users can create new accounts with disk quotas. Limit: 50 users.
+
+#### `POST /api/enrol/create-user`
+
+Create a new user account.
+
+```json
+// Request
+{ "username": "bob", "email": "bob@cam.ac.uk", "password": "secret", "quota_mb": 2048 }
+
+// Response 200
+{ "success": true, "username": "bob" }
+
+// Response 403 (not admin/enroller, or limit reached)
+{ "error": "Enrolment limit reached (50 users)" }
+```
+
+#### `GET /api/enrol/list-users`
+
+List all enrolled users with quota and status.
+
+```json
+// Response 200
+{
+  "users": [
+    { "username": "bob", "email": "bob@cam.ac.uk", "quota_mb": 2048, "can_enrol": false, "is_active": true }
+  ]
+}
+```
+
+#### `POST /api/enrol/disable-user`
+
+Disable a user account.
+
+```json
+// Request
+{ "username": "bob" }
+
+// Response 200
+{ "success": true }
+```
+
+---
+
+### 1.8 Vector Data — `api/views/vector_data.py`
 
 **Overview:** Serve raw vector data files for client-side operations (similarity search, UMAP, etc.). Files are served from the `vectors/<viewport>/<year>/` directory.
 
@@ -647,7 +764,7 @@ Response: application/gzip (binary file)
 
 ---
 
-### 1.8 Config & Health — `api/views/config.py`
+### 1.9 Config & Health — `api/views/config.py`
 
 **Overview:** Static file serving, health check, and client configuration.
 
@@ -691,6 +808,7 @@ from lib.config import (
     VECTORS_DIR,     # DATA_DIR / 'vectors'  — TEE's processed vectors (uint8 quantized, per viewport/year)
     EMBEDDINGS_DIR,  # DATA_DIR / 'embeddings' — GeoTessera tile cache (raw int8 tiles, shared across viewports)
     PROGRESS_DIR,    # DATA_DIR / 'progress' — pipeline progress JSON files
+    SHARE_DIR,       # DATA_DIR / 'share' — submitted label shares (private + public)
     APP_DIR,         # Project root
     VIEWPORTS_DIR,   # APP_DIR / 'viewports' — viewport definition files (.txt) + configs (.json)
 )
@@ -1009,89 +1127,28 @@ Render a 256x256 PNG tile from a PNG pyramid level. Reads `pyramid_meta.json` fo
 
 ---
 
-### 2.8 `lib/evaluation_engine.py` — ML Evaluation
+### 2.8 `lib/evaluation_engine.py` — Shim
 
-**Overview:** Pure ML functions for the evaluation pipeline. Loads quantised vectors, rasterizes shapefiles, builds spatial features, creates classifiers, and runs learning curves. Extracted from `api/views/evaluation.py`.
-
-```python
-from lib.evaluation_engine import (
-    dequantize,
-    load_vectors,
-    rasterize_shapefile,
-    gather_spatial_features,
-    augment_spatial,
-    make_classifier,
-    run_learning_curve,
-)
-```
-
-#### `dequantize(quantized, dim_min, dim_max) -> np.ndarray`
-
-Convert uint8 embeddings back to float32.
+**Overview:** Backward-compatibility shim. All ML evaluation now lives in
+`tessera_eval` (the standalone library used by the tee-compute server). This
+file only re-exports `detect_field_type` for any code that still imports from
+`lib.evaluation_engine`.
 
 ```python
-embeddings_f32 = dequantize(quantized_uint8, dim_min, dim_max)
-# quantized: (N, 128) uint8
-# dim_min, dim_max: (128,) float64 from quantization.json
-# Returns: (N, 128) float32
+from lib.evaluation_engine import detect_field_type
 ```
 
-#### `load_vectors(viewport, year) -> tuple`
-
-Load dequantised float32 embeddings, pixel coordinates, and metadata for a viewport/year.
+For the actual ML functions (`make_classifier`, `run_learning_curve`,
+`rasterize_shapefile`, etc.), import directly from `tessera_eval`:
 
 ```python
-embeddings, coords, metadata = load_vectors("cambridge", "2024")
-# embeddings: (N, 128) float32
-# coords: (N, 2) int32 — (x, y) pixel coordinates
-# metadata: dict with "mosaic_width", "mosaic_height", "transform", etc.
+from tessera_eval.classify import make_classifier, gather_spatial_features_2d
+from tessera_eval.evaluate import run_learning_curve, run_kfold_cv
+from tessera_eval.rasterize import rasterize_shapefile
+from tessera_eval.unet import TinyUNet, train_unet_on_patches
 ```
 
-Internally loads `all_embeddings_uint8.npy.gz`, `quantization.json`, `pixel_coords.npy.gz`, and `metadata.json` from `vectors/<viewport>/<year>/`.
-
-#### `rasterize_shapefile(gdf, field, transform, width, height) -> np.ndarray`
-
-Rasterise a GeoPandas GeoDataFrame onto the pixel grid.
-
-```python
-label_grid = rasterize_shapefile(gdf, "habitat", affine_transform, 1000, 800)
-# Returns: (H, W) int array — 1-based class IDs, 0 = nodata
-```
-
-#### `gather_spatial_features(embeddings, coords, width, height, radius=1, subset_mask=None) -> np.ndarray`
-
-Build spatial neighbourhood features: for each pixel, concatenate embeddings from a `(2r+1) x (2r+1)` window around it.
-
-```python
-spatial_3x3 = gather_spatial_features(embeddings, coords, 1000, 800, radius=1)
-# Returns: (N, 9*128) = (N, 1152) float32 for 3x3 window
-
-spatial_5x5 = gather_spatial_features(embeddings, coords, 1000, 800, radius=2)
-# Returns: (N, 25*128) = (N, 3200) float32 for 5x5 window
-```
-
-#### `augment_spatial(X, y, window, dim) -> tuple`
-
-4x data augmentation via horizontal and vertical flips of spatial feature patches.
-
-```python
-X_aug, y_aug = augment_spatial(X_spatial, y_labels, window=3, dim=128)
-# X_aug: (4*N, window*window*dim) — original + 3 flips
-# y_aug: (4*N,)
-```
-
-#### `make_classifier(name, params=None) -> object | None`
-
-Create a classifier instance by name.
-
-```python
-clf = make_classifier("rf", params={"n_estimators": 200})
-# Returns: RandomForestClassifier(n_estimators=200, ...)
-
-clf = make_classifier("nn")        # KNeighborsClassifier(n_neighbors=5)
-clf = make_classifier("mlp")       # MLPClassifier(hidden_layer_sizes=(256, 128), ...)
-clf = make_classifier("unet")      # Returns None (U-Net handled separately)
-```
+**Classifier names** supported by `tessera_eval`:
 
 | Name | Classifier | Features |
 |---|---|---|
@@ -1103,33 +1160,8 @@ clf = make_classifier("unet")      # Returns None (U-Net handled separately)
 | `"spatial_mlp_5x5"` | MLP | 5x5 spatial (3200-dim) |
 | `"unet"` | U-Net (PyTorch) | 2D embedding grid |
 
-#### `run_learning_curve(embeddings, labels, classifier_names, training_sizes, ...) -> Generator`
-
-Generator that yields progress events as each training size completes. Runs 5 repeats (stratified shuffle-split) per size and averages F1 scores.
-
-```python
-for event in run_learning_curve(embeddings, labels, ["nn", "rf"], [50, 100, 500]):
-    if event["type"] == "progress":
-        print(f"Size {event['size']}: nn={event['classifiers']['nn']['f1']:.2f}")
-    elif event["type"] == "confusion_matrices":
-        print(f"Confusion matrices: {event['confusion_matrices'].keys()}")
-```
-
-**Yielded events:**
-
-```python
-# After each training size:
-{"type": "progress", "size": 100, "classifiers": {
-    "nn": {"f1": 0.55, "per_class": {"woodland": 0.62, "grassland": 0.48}},
-    "rf": {"f1": 0.51, ...}
-}}
-
-# After the largest training size (full confusion matrices):
-{"type": "confusion_matrices", "confusion_matrices": {
-    "nn": [[12, 3], [1, 45]],
-    "rf": [[10, 5], [2, 44]]
-}}
-```
+See [architecture.md §3](architecture.md#3-evaluation-architecture) for the
+full evaluation flow and the streaming NDJSON event schema.
 
 ---
 
@@ -1148,10 +1180,18 @@ python process_viewport.py              # all years 2018-2025
 
 **Task flow per year:**
 
-1. **Fetch mosaic** (0-55% of year): Download embedding tiles via `geotessera.fetch_mosaic_for_region()`. Reports progress using an asymptotic formula during download.
+1. **Fetch mosaic** (0-55% of year): For each year, probe the remote zarr store
+   at `dl2.geotessera.org` via `tessera_eval.zarr_utils.get_zarr()`. If zarr
+   coverage is available (sample_at center pixel returns non-NaN), use
+   `read_region_chunked()` to stream the bbox in chunks. Otherwise fall back
+   to per-tile NPY downloads via `geotessera.fetch_mosaic_for_region()`.
+   Reports progress using an asymptotic formula during download.
 2. **Create pyramids** (60%): Stack bands 0-2 as RGB, percentile-normalise to uint8, write 6-level PNG pyramid.
 3. **Extract vectors** (70%): Quantise all 128 bands to uint8, save compressed embeddings + coordinates + metadata.
 4. **UMAP** (80-95%): Compute 2D UMAP projection from the embedding vectors.
+
+**Note on zarr coverage:** 2025 has good coverage; earlier years (esp. 2024 and below)
+are sparse and typically fall back to NPY tile downloads.
 
 **Key functions:**
 
@@ -1306,17 +1346,17 @@ api/views/viewports.py
   ├── lib.config
   ├── lib.viewport_utils
   ├── lib.viewport_writer
-  ├── lib.viewport_ops      ← extracted in refactoring
+  ├── lib.viewport_ops
   ├── lib.pipeline
   └── api.helpers, api.tasks
 
 api/views/evaluation.py
-  └── lib.evaluation_engine  ← extracted in refactoring
+  └── (no lib imports — pure HTTP proxy to tee-compute)
 
 api/views/tiles.py
   ├── lib.config
   ├── lib.viewport_utils
-  └── lib.tile_renderer      ← extracted in refactoring
+  └── lib.tile_renderer
 
 api/views/pipeline.py
   ├── lib.config
@@ -1327,6 +1367,13 @@ api/views/pipeline.py
 api/views/vector_data.py
   ├── lib.config
   └── lib.viewport_utils
+
+api/views/share.py
+  ├── lib.config
+  └── lib.viewport_utils
+
+api/views/enrolment.py
+  └── api.models (UserProfile)
 
 api/views/config.py
   └── lib.config
@@ -1339,4 +1386,10 @@ api/tasks.py
 api/helpers.py
   ├── lib.config
   └── lib.viewport_utils
+
+process_viewport.py
+  ├── lib.config
+  ├── lib.viewport_utils
+  ├── lib.progress_tracker
+  └── tessera_eval.zarr_utils
 ```
