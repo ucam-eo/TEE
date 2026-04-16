@@ -109,16 +109,9 @@ The header bar at the top lets you switch between different **modes**, each of w
 
 ### Panel Layout by Mode
 
-![Panel layout — 2×3 synchronized grid](images/panel_layout.png)
+Each mode rearranges the six panels. Panels in the same position always show the same geographic area. Blue-highlighted panels change between modes:
 
-| Panel | Explore | Change Detection | Labelling | Validation |
-|:-----:|---------|-----------------|-----------|------------|
-| 1 | OpenStreetMap | OpenStreetMap | OpenStreetMap | **Controls** |
-| 2 | Satellite imagery | Satellite imagery | Satellite + labels | Satellite + polygons |
-| 3 | Embedding colours | Embeddings (Year 1) | Embedding colours | **Ground Truth classes** |
-| 4 | Dimensionality reduction (PCA/UMAP) | Change distribution | Dimensionality reduction | **Progress log** |
-| 5 | — | Change heatmap | Classification overlay | **Learning curves** |
-| 6 | — | Embeddings (Year 2) | Label management | **Confusion matrix** |
+![Panel layout by mode — 2×3 grid for Explore, Change Detection, Labelling, and Validation](images/panel_layout.png)
 
 **What are the embedding colour panels?** Each pixel's 128-dimensional embedding is compressed down to 3 numbers and displayed as a colour (red, green, blue). Pixels with similar colours have similar embeddings, which usually means similar land cover. This gives you a quick visual overview of the landscape structure.
 
