@@ -462,52 +462,33 @@ Body: file=<shapefile.zip>
 { "error": "Failed to read shapefile: ..." }
 ```
 
-#### `POST /api/evaluation/class-counts`
-
-Get pixel counts per class without running ML. Uses rasterization to count how
-many pixels in the viewport's embedding grid fall within each shapefile polygon,
-grouped by the selected `field` attribute.
-
-The `field` parameter selects which attribute column to use as the classification
-schema. The upload endpoint returns all available fields with their unique class
-counts — the user picks one. A single shapefile may have multiple schemas
-(e.g., `habitat`, `landuse`, `ukhab_code`) and the user can switch between them.
-
-**Note:** If the uploaded zip contains multiple `.shp` files, only the first one
-found is used. The others are silently ignored.
-
-```json
-// Request
-{ "viewport": "cambridge", "year": "2024", "field": "habitat" }
-
-// Response 200
-{
-  "classes": [
-    { "name": "woodland", "pixels": 4521 },
-    { "name": "grassland", "pixels": 8932 }
-  ]
-}
-
-// Response 400
-{ "error": "No shapefile uploaded." }
-{ "error": "Field 'xyz' not found" }
-```
-
 #### `POST /api/evaluation/run-large-area`
 
 Run a learning-curve evaluation. Returns a streaming NDJSON response — one JSON object per line. Proxied to tee-compute.
 
+The `field` parameter selects which attribute column from the uploaded shapefile
+to use as the classification schema. The upload endpoint returns all available
+fields with their unique class counts and per-class polygon counts — the user
+picks one.
+
 ```json
 // Request
 {
-  "viewport": "cambridge",
-  "year": "2024",
   "field": "habitat",
+  "year": 2024,
   "classifiers": ["nn", "rf", "mlp"],
-  "params": { "rf": { "n_estimators": 200 } },
-  "max_train": 5000
+  "classifier_params": { "rf": { "n_estimators": 200 } },
+  "max_training_samples": 200000,
+  "sampling": "sqrt",
+  "max_patches": 500,
+  "train_bboxes": [],
+  "test_bboxes": []
 }
 ```
+
+- `sampling` — `"equal"`, `"sqrt"`, or `"proportional"` (class-area weighting)
+- `max_patches` — cap on tiles fetched for spatial MLP / U-Net
+- `train_bboxes` / `test_bboxes` — optional spatial split rectangles
 
 ```
 // Response 200 (streaming NDJSON)

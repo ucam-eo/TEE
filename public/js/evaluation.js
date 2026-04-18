@@ -344,40 +344,6 @@ async function updateYearCoverage(geojson) {
     }
 }
 
-async function fetchClassPixelCounts(fieldName) {
-    const panel = document.getElementById('val-class-table-panel');
-    const table = document.getElementById('val-class-table');
-    const placeholder = panel.querySelector('.val-class-placeholder');
-    placeholder.textContent = 'Counting pixels...';
-    placeholder.style.display = '';
-    table.style.display = 'none';
-
-    try {
-        const resp = await fetch(evalUrl('class-counts'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                viewport: window.currentViewportName,
-                year: window.currentEmbeddingYear,
-                field: fieldName,
-            }),
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-            placeholder.textContent = data.error || 'Failed to count pixels';
-            return;
-        }
-        if (data.classes && data.classes.length > 0) {
-            const names = data.classes.map(c => c.name);
-            populateValClassTable(names, data.classes);
-        } else {
-            placeholder.textContent = 'No pixels overlap with shapefile';
-        }
-    } catch (e) {
-        placeholder.textContent = 'Error: ' + e.message;
-    }
-}
-
 function populateValClassTable(classNames, classData, isPixelCounts) {
     const panel = document.getElementById('val-class-table-panel');
     const table = document.getElementById('val-class-table');

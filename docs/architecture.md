@@ -42,15 +42,16 @@ TEE runs as two services locally, or as a hosted server with user-run compute:
 
 ### Deployment Modes
 
-| Mode | Django (8001) | tee-compute (8002) | User opens | How to start |
-|------|:------------:|:------------------:|:----------:|:------------|
-| **Local dev** | localhost | localhost | localhost:8001 | `./scripts/deploy-compute.sh --local` |
-| **Hosted + local compute** | tee.cl.cam.ac.uk | user's laptop | localhost:8001 (tee-compute proxies to hosted) | `./scripts/deploy-compute.sh` |
-| **Hosted + remote compute** | tee.cl.cam.ac.uk | GPU box via SSH tunnel | localhost:8001 | `./scripts/deploy-compute.sh gpu-box` |
+| Mode | Django serving UI | tee-compute (ML) | How to start |
+|------|:-----------------:|:----------------:|:-------------|
+| **All local** | localhost:8001 | localhost:8002 | `./scripts/deploy-compute.sh --local` |
+| **Local UI + remote GPU** | localhost:8001 | SSH tunnel from GPU box on :8002 | `./scripts/deploy-compute.sh --local gpu-box` |
+| **Remote GPU (hosted UI)** | tee.cl.cam.ac.uk (proxied via tee-compute) | GPU box, SSH-tunnelled on :8001 | `./scripts/deploy-compute.sh gpu-box` |
 
-In all modes, the browser talks only to port 8001. Django proxies
-`/api/evaluation/*` requests to tee-compute. All ML runs on tee-compute,
-never on the hosted Django server.
+The browser always opens `http://localhost:8001`. In the remote-GPU mode,
+tee-compute on the GPU box proxies non-eval requests back to the hosted Django
+server so the user sees a single origin. All ML runs on tee-compute, never on
+the hosted Django server.
 
 ### Data Privacy
 
@@ -89,7 +90,7 @@ const PANEL_LAYOUT = {
         { content: null,                    title: 'Tessera Embeddings' },
         { content: null,                    title: 'PCA (Embedding Space)' },
         { content: null,                    title: 'Classification results' },
-        { content: 'panel6-label-view',     title: '' },
+        { content: 'panel6-label-view',     title: '', header: false },
     ],
     'validation': [
         { content: 'validation-controls',   title: 'Controls',         header: false, flow: true },
@@ -351,10 +352,14 @@ venv/bin/pytest validation/ tests/ -v
 |------|---------------|
 | `validation/test_refactoring_guards.py` | API endpoints in JS, critical functions exist, state variables, DOM elements, CSS mode rules, PANEL_LAYOUT table, backend libraries, NDJSON event schema, tessera_eval self-containment |
 | `validation/test_viewer_html.py` | HTML structure, JS syntax, mode classes, panel layout has all modes, large-area validation elements |
+| `validation/test_label_export_import.py` | Shapefile / GeoJSON / JSON round-trip for manual labels |
+| `validation/test_viewer_logic.js` | Node-side sanity checks for viewer.js helpers |
 | `tests/test_kfold.py` | K-fold CV, regression metrics, regressor factory |
 | `tests/test_cli.py` | CLI config validation, auto-type detection, dry-run |
 | `tests/test_rasterize_encoder.py` | Rasterize with pre-fitted LabelEncoder |
 | `tests/test_dry_run_field_validation.py` | Dry-run with bad field name |
+| `tests/test_spatial_split.py` | Spatial train/test split sampling |
+| `tests/test_tile_disk_cache.py` | Tile-disk result cache keying and invalidation |
 | `tests/test_upload_proxy.py` | End-to-end upload through Django proxy (requires servers running) |
 
 ---
@@ -424,7 +429,6 @@ TEE/
 │   ├── share.py                Label sharing
 │   ├── enrolment.py            User creation + management
 │   ├── vector_data.py          Serve raw vector files
-│   ├── compute.py              Projection loading, year lookups
 │   └── config.py               Health, config, static files
 │
 ├── lib/

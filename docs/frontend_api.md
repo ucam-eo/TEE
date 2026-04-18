@@ -933,8 +933,12 @@ Which JS modules call which backend endpoints:
 
 | JS Module | HTTP Call | Backend Endpoint |
 |---|---|---|
+| `app.js` | `GET` | `/api/auth/status` (init) |
+| `app.js` | `GET` | `/api/config` (init) |
 | `app.js` | `GET` | `/api/viewports/{name}/is-ready` (poller) |
 | `app.js` | `GET` | `/api/operations/progress/{id}` (pipeline progress) |
+| `app.js` | `GET` | `/tiles/health` (Status button) |
+| `app.js` | `GET` | `/api/evaluation/health` (Status button) |
 | `app.js` | `POST` | `/api/auth/logout` |
 | `maps.js` | `GET` | `/api/viewports/current` |
 | `maps.js` | `GET` | `/api/viewports/{name}/info` (viewport from URL param) |
@@ -958,8 +962,6 @@ Which JS modules call which backend endpoints:
 | `schema.js` | `GET` | `/schemas/ukhab-v2.json` (static file) |
 | `schema.js` | `GET` | `/schemas/hotw.json` (static file) |
 | `schema.js` | `GET` | `/schemas/eunis.json` (static file) |
-| (viewer.html inline) | `GET` | `/api/auth/status` |
-| (viewer.html inline) | `GET` | `/api/config` |
 
 Tile requests bypass the Django middleware stack via `TileShortcircuitMiddleware`:
 
