@@ -222,9 +222,9 @@ TEE includes three built-in schemas:
 
 | Schema | Description |
 |--------|-------------|
-| **UKHab v2** | UK Habitat Classification — the standard for UK habitat surveys (e.g., "g1a Improved grassland", "w1f Wet woodland") |
+| **UKHab v2** | UK Habitat Classification v2.01 — the standard for UK habitat surveys (e.g., "g1a Lowland dry acid grassland", "w1f Lowland mixed deciduous woodland") |
 | **EUNIS** | European Nature Information System — a pan-European classification with 6 top-level groups and ~280 habitat types |
-| **Habitats of the World (HOTW)** | A global classification scheme |
+| **Habitats of the World (HOTW)** | A global scheme organised by continental guides |
 
 You can also upload a **custom schema** as a JSON file if your project uses a different classification.
 
@@ -514,16 +514,18 @@ Each classifier has adjustable parameters. Click the **...** button next to a cl
 | Random Forest | Trees | 100 | More trees = more robust but slower. 100 is usually plenty. |
 | Random Forest | Max depth | None | How deep each decision tree can grow. `None` means unlimited — the tree grows until it perfectly fits the data. |
 | XGBoost | Rounds | 100 | Number of boosting iterations. More rounds = more complex model. |
-| XGBoost | Learning rate | 0.1 | How much each round adjusts the model. Smaller values are more cautious but may need more rounds. |
+| XGBoost | Learning rate | 0.3 | How much each round adjusts the model. Smaller values are more cautious but may need more rounds. |
 | XGBoost | Max depth | 6 | Maximum depth of each tree. Deeper trees can capture more complex patterns but risk overfitting. |
-| MLP | Hidden layers | 128, 64 | Size of the neural network's hidden layers. Larger = more capacity but slower. |
+| MLP | Hidden layers | 64, 32 | Size of the neural network's hidden layers. Larger = more capacity but slower. |
 | MLP | Max iterations | 200 | Maximum training iterations (epochs). |
-| Spatial MLP | Hidden layers | 128, 64 | Same as MLP but for the spatial variant. |
-| Spatial MLP | Max iterations | 200 | Same as MLP. |
-| U-Net | Epochs | 20 | Number of training passes over the data. |
+| Spatial MLP (3×3) | Hidden layers | 256, 128 | Hidden layers for the 3×3 spatial variant (larger because the input is 9× wider). |
+| Spatial MLP (3×3) | Max iterations | 300 | Maximum training iterations. |
+| Spatial MLP (5×5) | Hidden layers | 512, 256 | Hidden layers for the 5×5 spatial variant. |
+| Spatial MLP (5×5) | Max iterations | 400 | Maximum training iterations. |
+| U-Net | Epochs | 50 | Number of training passes over the data. |
 | U-Net | Learning rate | 0.001 | Step size for the neural network optimiser. |
 | U-Net | Depth | 3 | Number of encoder/decoder levels. Deeper = captures larger-scale patterns. |
-| U-Net | Base filters | 32 | Number of feature channels in the first layer. Doubles at each level. |
+| U-Net | Base filters | 64 | Number of feature channels in the first layer. Doubles at each level. |
 
 ### Hyperparameter Variants
 
