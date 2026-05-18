@@ -56,10 +56,23 @@ curl http://localhost:8001/health
 
 `docker-compose.yml` runs the same image via Waitress
 (`waitress --host=0.0.0.0 --port=8001 --threads=16 tee_project.wsgi:application`)
-with a `/health` healthcheck. Manage the running container with
-`scripts/manage.sh` (copy it out of the container once:
-`docker cp tee:/app/scripts/manage.sh ~/manage.sh && chmod +x ~/manage.sh`),
-which wraps the Django user-management commands and pull/restart.
+with a `/health` healthcheck.
+
+**`scripts/manage.sh` is the operational tool for the running container** —
+this is how the deployed image on `tee.cl.cam.ac.uk` is updated. Copy it out
+of the container once:
+
+```bash
+docker cp tee:/app/scripts/manage.sh ~/manage.sh && chmod +x ~/manage.sh
+```
+
+Then `sudo ./manage.sh` gives an interactive menu:
+
+| Option | Action |
+|--------|--------|
+| 1–6 | User management (list / add / remove / set quota / grant–revoke enroller) — wraps the `manage.py tee_*` commands via `docker exec` |
+| **7) Update container** | **`docker pull sk818/tee:stable`, then stop + remove + re-`docker run` the container with the production env/volumes, then `/health` check** — the standard image-upgrade path on the server |
+| 8 | Exit |
 
 ### Option B — Bare metal (git checkout + venv)
 
