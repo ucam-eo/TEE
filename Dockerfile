@@ -9,7 +9,10 @@
 
 FROM ghcr.io/osgeo/gdal:ubuntu-small-3.10.0
 
-LABEL version="Beta 1.0.0"
+# Static OCI label; the authoritative runtime version is the GIT_VERSION
+# build arg baked into /app/VERSION below (git describe, e.g. v1.2.1-...).
+LABEL org.opencontainers.image.title="TEE" \
+      org.opencontainers.image.source="https://github.com/ucam-eo/TEE"
 
 WORKDIR /app
 

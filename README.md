@@ -79,7 +79,7 @@ MIT License — see LICENSE file for details.
 ## Authors
 
 - **S. Keshav** — Primary development and design
-- **Claude Opus 4.6** — AI-assisted development
+- **Claude Opus 4.7** — AI-assisted development
 
 ## Acknowledgements
 
@@ -90,8 +90,8 @@ Thanks to Julia Jones (Bangor), David Coomes (Cambridge), Anil Madhavapeddy (Cam
 ```bibtex
 @software{tee2025,
   title={TEE: Tessera Embeddings Explorer},
-  author={Keshav, S. and Claude Opus 4.6},
-  year={2025},
+  author={Keshav, S. and Claude Opus 4.7},
+  year={2026},
   url={https://github.com/ucam-eo/TEE}
 }
 ```

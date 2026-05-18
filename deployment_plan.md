@@ -1,124 +1,124 @@
 # Deployment Plan: TEE on a VM Behind Apache
 
+Deploy TEE on a public-facing VM with Apache as the HTTPS reverse proxy.
+
+> See also [docs/architecture.md §7](docs/architecture.md#7-deployment) for the
+> Docker-based production flow and the local-development modes. This document
+> covers the bare-metal VM-behind-Apache setup specifically.
+
 ## Overview
 
-Deploy TEE (web server + tile server) behind Apache reverse proxy on a public-facing VM. Uses plain Flask (no gunicorn) and a dedicated `tee` system user.
+TEE is a **single Django application** served by the Waitress WSGI server on
+port 8001. There is no separate tile server — map tiles are served by Django
+itself at the root paths `/tiles/...` and `/bounds/...` (they bypass the
+middleware stack via `TileShortcircuitMiddleware` for performance). All ML
+evaluation runs on a user-operated `tee-compute` service, **not** on the
+hosted server.
 
 ## Architecture
 
 ```
 Internet (Port 443)
        |
-  [ Apache ]   HTTPS, caching, compression, security headers
+  [ Apache ]   HTTPS, HTTP/2, caching, compression, security headers
        |
-  /api/* + static → Flask:8001 (web server)
-  /tiles/*        → Flask:5125 (tile server)
-  (both on localhost only, run as tee user)
+  everything → Django (Waitress) :8001  (localhost only, run as tee user)
+                 ├── /                static UI (public/)
+                 ├── /api/*           backend API
+                 ├── /tiles/*         tile server (built into Django)
+                 └── /bounds/*        layer bounds
 ```
+
+The hosted server runs Django only. Users who need ML evaluation run their
+own `tee-compute` locally and point it at the hosted server with
+`tee-compute --hosted https://tee.yourdomain.com`.
 
 | Component | RAM | Notes |
 |-----------|-----|-------|
 | OS + Apache | ~350 MB | Ubuntu + reverse proxy |
-| Flask web server | ~120 MB | Single process, threaded |
-| Flask tile server | ~80 MB | Single process, stateless |
-| Pipeline subprocess | ~300 MB | Peak during UMAP; stages run sequentially    |
-| **Total peak** | **~850 MB** | Safe for 2GB+ VM |
+| Django (Waitress, 16 threads) | ~150 MB | Single process, serves UI + API + tiles |
+| Pipeline subprocess | ~300 MB | Peak during UMAP; stages run sequentially |
+| **Total peak** | **~800 MB** | Safe for 2 GB+ VM |
 
-## Directory Layout
+## Two ways to run on the VM
 
-```
-/opt/tee/                   # App (git clone), owned by tee
-  backend/web_server.py
-  tile_server.py
-  deploy.sh                 # First-time setup (run once)
-  restart.sh                # Start/restart services
-  shutdown.sh               # Stop services
-  logs/                     # Server logs (local dev only)
+### Option A — Docker (recommended)
 
-/home/tee/data/             # Data (auto-created), owned by tee
-  mosaics/
-  pyramids/
-  vectors/
-  embeddings/
-  progress/
-  passwd                    # Auth credentials
+This is the same path documented in the README and `docs/architecture.md`.
+
+```bash
+docker pull sk818/tee:stable
+docker run -d --name tee --restart unless-stopped \
+    -p 8001:8001 -v /data:/data -v /data/viewports:/app/viewports \
+    sk818/tee:stable
+curl http://localhost:8001/health
 ```
 
----
+`docker-compose.yml` runs the same image via Waitress
+(`waitress --host=0.0.0.0 --port=8001 --threads=16 tee_project.wsgi:application`)
+with a `/health` healthcheck. Manage the running container with
+`scripts/manage.sh` (copy it out of the container once:
+`docker cp tee:/app/scripts/manage.sh ~/manage.sh && chmod +x ~/manage.sh`),
+which wraps the Django user-management commands and pull/restart.
 
-## First-Time Setup
+### Option B — Bare metal (git checkout + venv)
 
-### 1. Clone the repo
+Use the repo's own scripts:
 
 ```bash
 cd /opt
-sudo git clone https://github.com/sk818/TEE.git tee
+sudo git clone https://github.com/ucam-eo/TEE.git tee
 cd /opt/tee
+sudo bash deploy.sh        # creates 'tee' user, venv, dirs, @reboot crontab
+sudo bash restart.sh       # starts Django via Waitress
+curl http://localhost:8001/health
 ```
 
-### 2. Run deploy.sh
+`deploy.sh` creates the `tee` system user, the Python venv, data
+directories, a Django `check --deploy` validation, and an `@reboot`
+crontab entry that runs `restart.sh`. `restart.sh` auto-detects mode: if the
+`tee` user exists it runs server mode (Django on `127.0.0.1:8001`, no
+tee-compute); otherwise it runs local-dev mode (Django on `:8001` +
+tee-compute on `:8002`). Stop with `sudo bash shutdown.sh`, check with
+`bash status.sh`.
+
+## Directory Layout (bare-metal)
+
+```
+/opt/tee/                   # App (git clone), owned by tee
+  manage.py
+  tee_project/              # Django project (settings, wsgi, celery)
+  api/  lib/  public/
+  deploy.sh restart.sh shutdown.sh status.sh
+  venv/                     # Python virtualenv (created by deploy.sh)
+
+/home/tee/data/             # Data dir (TEE_DATA_DIR), owned by tee
+  mosaics/ pyramids/ vectors/ embeddings/ progress/ share/
+  .django_sessions/ .django_secret_key
+
+/var/log/tee/               # Server logs (server mode)
+```
+
+Under Docker the data dir is the mounted volume (e.g. `/data`), set via
+`TEE_DATA_DIR`; viewport definition files live in `/app/viewports`.
+
+## User Management
+
+There is **no `passwd` file and no `scripts/manage_users.py`**. Users are
+Django users managed by management commands (run inside the container with
+`docker exec tee python3 manage.py …`, or on bare metal with
+`sudo -u tee /opt/tee/venv/bin/python3 manage.py …`):
 
 ```bash
-sudo bash deploy.sh
+manage.py tee_adduser <username> [--admin] [--email E] [--quota MB]
+manage.py tee_listusers
+manage.py tee_removeuser <username>
+manage.py tee_setquota <username> <quota_mb>
+manage.py tee_setenroller <username> [--revoke]
 ```
 
-This creates the `tee` user, data directories, Python venv, and `@reboot` crontab entry. See the script for details.
-
-### 3. Consolidate old data (if migrating)
-
-```bash
-sudo rsync -a /root/blore_data/ /home/tee/data/
-sudo chown -R tee:tee /home/tee/data
-```
-
-### 4. Create admin user
-
-```bash
-sudo -u tee /opt/tee/venv/bin/python3 /opt/tee/scripts/manage_users.py add admin
-```
-
-### 5. Start services
-
-```bash
-sudo bash restart.sh
-curl http://localhost:8001/health   # verify
-```
-
----
-
-## Day-to-Day Operations
-
-**Update code:**
-```bash
-cd /opt/tee
-sudo git pull
-sudo bash restart.sh
-```
-
-**Stop services:**
-```bash
-sudo bash shutdown.sh
-```
-
-**Check status:**
-```bash
-bash status.sh
-```
-
-**View logs:**
-```bash
-tail -f /var/log/tee/web_server.log
-tail -f /var/log/tee/tile_server.log
-```
-
-**Manage users:**
-```bash
-sudo -u tee /opt/tee/venv/bin/python3 /opt/tee/scripts/manage_users.py add alice
-sudo -u tee /opt/tee/venv/bin/python3 /opt/tee/scripts/manage_users.py list
-sudo -u tee /opt/tee/venv/bin/python3 /opt/tee/scripts/manage_users.py remove alice
-```
-
----
+Auth is optional: it activates automatically once at least one Django user
+exists. With no users, the site is read-only demo mode.
 
 ## Apache Configuration
 
@@ -142,6 +142,8 @@ sudo systemctl restart apache2
 
 ### HTTPS virtual host (`/etc/apache2/sites-available/tee-ssl.conf`)
 
+A single backend handles everything (UI, API, tiles) on `127.0.0.1:8001`.
+
 ```apache
 <VirtualHost *:443>
     ServerName tee.yourdomain.com
@@ -155,20 +157,17 @@ sudo systemctl restart apache2
     # HTTP/2
     Protocols h2 http/1.1
 
-    # Health checks - exempt from auth
+    # Health check - exempt from any auth
     <Location /health>
         Require all granted
     </Location>
 
-    # Proxy to Flask servers (localhost only)
+    # Proxy everything to Django (localhost only).
+    # Long timeout: evaluation streams NDJSON for up to 2 hours.
     ProxyPreserveHost On
     ProxyRequests Off
-    ProxyTimeout 300
+    ProxyTimeout 7200
 
-    ProxyPass /tiles http://127.0.0.1:5125/tiles
-    ProxyPassReverse /tiles http://127.0.0.1:5125/tiles
-    ProxyPass /bounds http://127.0.0.1:5125/bounds
-    ProxyPassReverse /bounds http://127.0.0.1:5125/bounds
     ProxyPass / http://127.0.0.1:8001/
     ProxyPassReverse / http://127.0.0.1:8001/
 
@@ -178,10 +177,11 @@ sudo systemctl restart apache2
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
     ServerSignature Off
 
-    # Compression
+    # Compression — never gzip PNG tiles, and never buffer NDJSON streams
     <IfModule mod_deflate.c>
         AddOutputFilterByType DEFLATE application/json text/html text/css application/javascript
         SetEnvIfNoCase Request_URI "\.png$" no-gzip
+        SetEnvIf Request_URI "^/api/evaluation/" no-gzip
     </IfModule>
 
     # Caching
@@ -208,8 +208,6 @@ sudo apache2ctl configtest
 sudo systemctl reload apache2
 ```
 
----
-
 ## Firewall
 
 ```bash
@@ -218,30 +216,42 @@ sudo ufw default allow outgoing
 sudo ufw allow ssh
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
-sudo ufw deny 8001/tcp    # Block direct Flask access
-sudo ufw deny 5125/tcp
+sudo ufw deny 8001/tcp    # Block direct access to Django
 sudo ufw enable
 ```
 
----
+## Day-to-Day Operations
+
+| Action | Docker | Bare metal |
+|--------|--------|------------|
+| Update | `sudo ./manage.sh` (pull + restart + health-check) | `cd /opt/tee && sudo git pull && sudo bash restart.sh` |
+| Stop | `docker stop tee` | `sudo bash shutdown.sh` |
+| Status | `docker ps` / `curl localhost:8001/health` | `bash status.sh` |
+| Logs | `docker logs -f tee` | `tail -f /var/log/tee/web_server.log` |
+| Users | `docker exec tee python3 manage.py tee_listusers` | `sudo -u tee venv/bin/python3 manage.py tee_listusers` |
 
 ## Why Not Gunicorn?
 
-Flask's built-in threaded server is sufficient for TEE because:
+Waitress's threaded WSGI server is sufficient for TEE because:
 
-- **1-2 concurrent users** — this is a research tool, not a high-traffic service
-- **CPU-heavy work runs as subprocesses** — pipeline stages (download, vectors, UMAP) are already memory-isolated via `subprocess.Popen`
-- **Apache handles the hard parts** — TLS, HTTP/2, caching, compression
-- **Memory matters** — gunicorn with 4 workers uses ~800MB idle; Flask uses ~120MB
-- **No worker recycling** — gunicorn's `max_requests` can kill workers mid-pipeline
+- **1–2 concurrent users** — this is a research tool, not a high-traffic service.
+- **CPU-heavy work runs as subprocesses** — pipeline stages (download,
+  vectors, UMAP) are memory-isolated via `subprocess.Popen`; ML runs on a
+  separate `tee-compute` process entirely.
+- **Apache handles the hard parts** — TLS, HTTP/2, caching, compression.
+- **Memory matters** — a single Waitress process uses ~150 MB; multi-worker
+  setups multiply that with no concurrency benefit here.
+- **No worker recycling** — nothing kills the process mid-pipeline.
 
-If concurrency becomes a problem (>5 users), add gunicorn back with a single line change in `restart.sh`.
-
----
+If concurrency ever becomes a problem (>5 users), raise `--threads` in
+`restart.sh` / `docker-compose.yml` before reaching for a multi-process server.
 
 ## Design Principles
 
-- **Fewer moving parts** — no systemd services, no multi-worker processes
-- **One data directory** — `/home/tee/data`, owned by `tee`, no env var needed
-- **Auto-detect environment** — `restart.sh` works on both server (tee user) and laptop (your user)
-- **Memory efficient** — total peak ~850MB on a 3.8GB VM
+- **Fewer moving parts** — one Django process; no separate tile server, no
+  multi-worker pool.
+- **One data directory** — `TEE_DATA_DIR` (e.g. `/home/tee/data` or a Docker
+  volume), owned by the `tee` user.
+- **Auto-detect environment** — `restart.sh` works as the `tee` user on a
+  server and as your own user for local development.
+- **Memory efficient** — total peak ~800 MB, comfortable on a 2 GB+ VM.

@@ -58,7 +58,10 @@ Authenticate with username and password.
 // Response 200
 { "success": true, "user": "alice" }
 
-// Response 400
+// Response 400 (missing username or password)
+{ "error": "Username and password required" }
+
+// Response 401 (wrong credentials)
 { "error": "Invalid credentials" }
 ```
 
@@ -89,8 +92,10 @@ Check current auth state.
 
 ```json
 // Response 200
-{ "auth_enabled": true, "logged_in": true, "user": "alice" }
+{ "auth_enabled": true, "logged_in": true, "user": "alice", "is_admin": false, "is_enroller": true }
 ```
+
+`is_admin` and `is_enroller` are only present when `logged_in` is `true`.
 
 ---
 
@@ -514,6 +519,17 @@ Tell the server to stop evaluating a classifier early (it will skip remaining tr
 { "ok": true }
 ```
 
+#### `POST /api/evaluation/cancel`
+
+Cancel an in-progress evaluation. The compute server sets a cancel flag checked
+per tile and per learning-curve step. CORS-enabled so the browser can call
+tee-compute directly even when the streaming response is in flight.
+
+```json
+// Response 200
+{ "ok": true }
+```
+
 #### `GET /api/evaluation/download-model/<classifier>`
 
 Download a trained model file. Returns `.pt` for U-Net, `.joblib` for sklearn models.
@@ -753,7 +769,7 @@ Response: application/gzip (binary file)
 
 #### `GET /` — Serve `viewport_selector.html`
 
-#### `GET /public/<path>` — Serve static files from `public/` with path-traversal protection.
+#### `GET /<path>` — Catch-all that serves static files from `public/` (path-traversal protected). The URL has **no** `/public/` prefix — e.g. `/viewer.html` resolves to `public/viewer.html`, `/js/app.js` to `public/js/app.js`.
 
 #### `GET /health`
 
@@ -761,7 +777,7 @@ Docker/monitoring health check.
 
 ```json
 // Response 200
-{ "status": "healthy", "service": "TEE", "version": "v1.2.3-abc1234" }
+{ "status": "healthy", "service": "TEE", "version": "v1.2.1-36-g7bc21e2", "host": "tee.cl.cam.ac.uk" }
 ```
 
 #### `GET /api/config`
@@ -1015,8 +1031,8 @@ success, error = runner.run_full_pipeline(
 runner.run_script("process_viewport.py", "--years", "2024", timeout=1800)
     # -> subprocess.CompletedProcess
 
-# Update pipeline progress (monotonically increasing)
-runner.update_progress("process", stage_percent=50, message="Fetching mosaic...")
+# Run the single processing stage (download tiles + pyramids + vectors)
+runner.stage_1_process_viewport("cambridge", "2023,2024", cancel_check=lambda: False)
 
 # Wait for a file to appear on disk
 runner.wait_for_file(Path("pyramids/cambridge/2024/level_0.png"), min_size_bytes=1024)
@@ -1066,7 +1082,6 @@ progress.cleanup()  # delete the progress file
 from lib.tile_renderer import (
     tile_to_bbox,
     get_pyramid_path,
-    render_tile,
     render_tile_png,
 )
 ```
@@ -1343,7 +1358,8 @@ api/views/pipeline.py
   ├── lib.config
   ├── lib.viewport_utils
   ├── lib.viewport_writer
-  └── lib.pipeline
+  ├── lib.pipeline
+  └── api.helpers, api.tasks
 
 api/views/vector_data.py
   ├── lib.config

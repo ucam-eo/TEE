@@ -330,15 +330,17 @@ through `window.*` properties. No import/export between modules.
 
 ### 5.2 Window Property Bridges
 
-Each module declares private state and exposes it on `window`:
+Each module declares private state and exposes it on `window`. The table below
+lists the **primary** cross-module properties; see
+[frontend_api.md](frontend_api.md) for the complete per-module list.
 
-| Module | Properties on `window` |
+| Module | Key properties on `window` |
 |---|---|
-| `app.js` | `currentViewportName`, `currentEmbeddingYear`, `viewportStatus`, `currentPanelMode` |
-| `maps.js` | `viewportBounds`, `PANEL5_LAYER_RULES`, `persistentLabelMarkers` |
+| `app.js` | `currentViewportName`, `currentEmbeddingYear`, `viewportStatus`, `currentPanelMode`, `TILE_SERVER`, `panel5SatelliteLayer`, `isLoggedIn` |
+| `maps.js` | `viewportBounds`, `PANEL5_LAYER_RULES`, `persistentLabelMarkers`, `satelliteSources`, `currentSatelliteSource`, `TRIANGLE_ICON` |
 | `vectors.js` | `localVectors`, `explorerResults` |
-| `labels.js` | `manualLabels`, `currentManualLabel`, `savedLabels` |
-| `evaluation.js` | `lastEvalData` |
+| `labels.js` | `manualLabels`, `currentManualLabel`, `savedLabels`, `currentSearchCache`, `manualClassOverlays`, `isPolygonDrawing`, `labelMode` |
+| `evaluation.js` | `lastEvalData`, `valChart`, `lastChartData` |
 
 ---
 
@@ -390,12 +392,18 @@ pointing `--hosted` at `https://tee.cl.cam.ac.uk`.
 
 ### Version tags
 
-Always create an annotated git tag on version bumps:
+Versions follow `vMAJOR.MINOR.PATCH` (the scheme shown in the README badge,
+e.g. `v1.2.1`). Always create an **annotated** git tag on version bumps —
+`git describe` ignores lightweight tags, so a lightweight tag won't show up
+in the version string:
 ```bash
-git tag -a alpha-3.10 -m "description"
-git push origin alpha-3.10
+git tag -a v1.2.2 -m "description"
+git push origin v1.2.2
 ```
-The viewport selector header shows the version from `git describe --tags --always`.
+The `/health` endpoint and the viewport selector header show the version from
+`git describe --tags --always` (e.g. `v1.2.1-36-g7bc21e2` for commits after a
+tag). Under Docker, `.git` is excluded, so the build bakes this string into
+`/app/VERSION` via the `GIT_VERSION` build arg.
 
 ---
 

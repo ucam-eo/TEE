@@ -157,11 +157,10 @@ In manual label mode, drop a colored point label at the given location.
 #### `window.calculatePixelBounds(lat, lon)` -> `[[sw_lat, sw_lon], [ne_lat, ne_lon]]`
 Calculate geographic bounds of a 10m x 10m pixel centered at the given lat/lon.
 
-#### `window.applyLayerRule(layer, shouldShow, map)`
-Add or remove a Leaflet layer from the given map based on the boolean flag.
-
 #### `window.applyHeatmapLayerRule(layer, shouldShow)`
-Convenience wrapper: calls `applyLayerRule(layer, shouldShow, maps.panel5)`.
+Add or remove a Leaflet layer from `maps.panel5` based on the boolean flag.
+Thin wrapper over the module-private `applyLayerRule(layer, shouldShow, map)`
+helper (not exposed on `window`).
 
 #### `window.setPanelLayout(mode)`
 - **mode** `string` -- `"explore"`, `"change-detection"`, `"labelling"`, or `"validation"`
@@ -451,9 +450,10 @@ Collect the current manual labels, build a shapefile ZIP via
 toggle (`#share-privacy`) to determine public vs private sharing. Shows a
 success/error toast on completion.
 
-#### `window.collectPrivateShareData()` -> `object`
+#### `collectPrivateShareData()` -> `object` *(module-private, not on `window`)*
 Gather the data needed for a private share: viewport name, user email,
-GeoJSON feature collection, and base64-encoded shapefile ZIP.
+GeoJSON feature collection, and base64-encoded shapefile ZIP.  Called
+internally by `submitShare()`.
 
 #### `window.buildShapefileZip()` -> `Promise<Blob>`
 Build an ESRI Shapefile ZIP from the current manual labels using `shp-write`.
@@ -463,8 +463,9 @@ Returns a `Blob` containing the ZIP bytes.
 Fetch `GET /api/share/list/<viewport>` and render the list of available public
 shares into the import dropdown. Updates the `#import-share-badge` count.
 
-#### `window.importSharedLabels(shareId)` -> `Promise<void>`
-- **shareId** `string` -- share identifier from the list
+#### `window.importSharedLabels(sanitizedEmail, viewport)` -> `Promise<void>`
+- **sanitizedEmail** `string` -- sanitized email of the share owner
+- **viewport** `string` -- viewport the share belongs to
 
 Download shared labels and merge them into the current manual labels array.
 Rebuilds overlays and re-renders the label list.
@@ -651,15 +652,17 @@ Export evaluation results as JSON file download.
 #### `window.openCMPopup(classifierName, data)`
 Open confusion matrix in a separate browser window (for large matrices).
 
-#### `window.createMap(classifierName)` -> `Promise<void>`
-Generate a GeoTIFF classification map from a trained classifier.  POSTs to
-`/api/evaluation/create-map` and streams NDJSON progress events
+#### `createMap()` -> `Promise<void>` *(module-private, wired via a button event listener — not on `window`, takes no args)*
+Generate a GeoTIFF classification map from the selected trained classifier.
+POSTs to `/api/evaluation/create-map` and streams NDJSON progress events
 (`status`, `map_progress`, `map_ready`, `done`, `error`).  When `map_ready`
 arrives, calls `download-map/{name}` to download the GeoTIFF.
 
-#### `window.checkEmbeddingCoverage(bbox)` -> `Promise<object>`
-POST `/api/viewports/embedding-coverage` to find which years have GeoTessera
-coverage for a bounding box.  Used before viewport creation.
+> **Embedding-coverage probe:** the year-coverage check before viewport
+> creation is an inline `POST /api/viewports/embedding-coverage` in
+> `evaluation.js` (not a named `window.*` function).  A separate
+> `checkEmbeddingCoverage(bbox)` function exists in
+> `public/viewport_selector.html`, outside the 8 ES modules.
 
 ### Constants
 
@@ -886,6 +889,8 @@ Render schema tree as HTML string (recursive).
     embedding: number[],           // 128-dim
     pixel_count: number,
     pixel_coords: number[] | null, // flat [px0, py0, px1, py1, ...]
+                                   // not set by confirmSaveLabel(); only
+                                   // present on imported/promoted labels
     created: string,               // ISO date
     visible: boolean,
     pixels: [{lat, lon, distance}] // recomputed from vectors on load
@@ -938,8 +943,8 @@ Which JS modules call which backend endpoints:
 | `app.js` | `GET` | `/api/viewports/{name}/is-ready` (poller) |
 | `app.js` | `GET` | `/api/operations/progress/{id}` (pipeline progress) |
 | `app.js` | `GET` | `/tiles/health` (Status button) |
-| `app.js` | `GET` | `/api/evaluation/health` (Status button) |
 | `app.js` | `POST` | `/api/auth/logout` |
+| `labels.js` | `GET` | `/health` + `/api/evaluation/health` (Status panel) |
 | `maps.js` | `GET` | `/api/viewports/current` |
 | `maps.js` | `GET` | `/api/viewports/{name}/info` (viewport from URL param) |
 | `vectors.js` | `GET` | `/api/vector-data/{viewport}/{year}/all_embeddings_uint8.npy.gz` |
@@ -955,7 +960,7 @@ Which JS modules call which backend endpoints:
 | `evaluation.js` | `GET` | `/api/evaluation/download-map/{name}` |
 | `evaluation.js` | `POST` | `/api/evaluation/cancel` (direct to tee-compute, CORS) |
 | `evaluation.js` | `POST` | `/api/viewports/embedding-coverage` (year coverage probe) |
-| `labels.js` | `POST` | `/api/evaluation/clear-shapefiles` |
+| `evaluation.js` | `POST` | `/api/evaluation/clear-shapefiles` |
 | `labels.js` | `POST` | `/api/share/submit` |
 | `labels.js` | `GET` | `/api/share/list/{viewport}` |
 | `labels.js` | `GET` | `/api/share/download/{sanitized_email}/{viewport}` |
@@ -968,7 +973,10 @@ Tile requests bypass the Django middleware stack via `TileShortcircuitMiddleware
 | Source | URL Pattern |
 |---|---|
 | Leaflet tile layers | `/tiles/{viewport}/{year}/{z}/{x}/{y}.png` |
-| Viewport bounds | `/bounds/{viewport}/{year}` |
+
+The `/bounds/{viewport}/{year}` endpoint also bypasses middleware but is not
+currently requested by any of the `public/js/` modules (viewport bounds come
+from `/api/viewports/current` instead).
 
 ---
 
