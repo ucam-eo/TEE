@@ -1,3 +1,9 @@
+<!--
+  SINGLE SOURCE OF TRUTH for the TEE user guide.
+  Do not create derived copies (PDF/HTML content dumps). user_guide.html
+  is only a renderer — it fetches and displays this file at runtime via
+  marked.js, so edits here are reflected everywhere automatically.
+-->
 # TEE User Guide
 
 > **Latest version:** This guide is also available on [GitHub](https://github.com/ucam-eo/TEE/blob/main/public/user_guide.md), which may be more up to date than the version bundled with the hosted server.

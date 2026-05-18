@@ -4,7 +4,7 @@
 
 # TEE: Tessera Embeddings Explorer
 
-**v1.2.1** | [User Guide](public/user_guide.md) | [User Guide (PDF)](public/user_guide.pdf) | [Docker Hub](https://hub.docker.com/r/sk818/tee)
+**v1.2.1** | [User Guide](public/user_guide.md) | [Docker Hub](https://hub.docker.com/r/sk818/tee)
 
 A web-based tool for exploring and classifying land cover from Sentinel-2 satellite imagery using [Tessera](https://geotessera.org) embeddings.
 
@@ -54,7 +54,7 @@ Then open http://localhost:8001 and go to Validation > Evaluate.
 
 ## Documentation
 
-The **[User Guide](public/user_guide.md)** ([PDF](public/user_guide.pdf)) covers everything:
+The **[User Guide](public/user_guide.md)** covers everything:
 
 - Creating and managing viewports
 - Similarity search and labelling workflows
