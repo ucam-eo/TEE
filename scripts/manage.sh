@@ -125,12 +125,25 @@ cmd_update() {
         -v /data/viewports:/app/viewports \
         "$IMAGE"
     echo ""
-    echo "Waiting for health check..."
-    sleep 3
-    if curl -sf http://localhost:8001/health > /dev/null; then
-        echo "Container is healthy."
+    echo "Waiting for health check (up to 60s)..."
+    healthy=0
+    for i in $(seq 1 30); do
+        if curl -sf http://localhost:8001/health > /dev/null 2>&1; then
+            healthy=1
+            break
+        fi
+        # Bail out early if the container died instead of starting up
+        if [ -z "$(docker ps -q --filter "name=^${CONTAINER}$")" ]; then
+            echo "Container is not running — check 'docker logs $CONTAINER'"
+            return 1
+        fi
+        sleep 2
+    done
+    if [ "$healthy" -eq 1 ]; then
+        version=$(curl -sf http://localhost:8001/health | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p')
+        echo "Container is healthy${version:+ (version: $version)}."
     else
-        echo "Warning: health check failed — check 'docker logs $CONTAINER'"
+        echo "Warning: health check did not pass within 60s — check 'docker logs $CONTAINER'"
     fi
 }
 
