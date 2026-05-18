@@ -159,7 +159,7 @@ Browser → Django :8001 → proxy → tee-compute :8002
                                     ├── /api/evaluation/upload-shapefile (returns estimated_labelled_pixels, per-class polygon counts)
                                     ├── /api/evaluation/clear-shapefiles
                                     ├── /api/evaluation/run-large-area (streaming NDJSON learning curves)
-                                    ├── /api/evaluation/cancel (CORS-enabled for direct access)
+                                    ├── /api/evaluation/cancel (separate connection, mid-stream)
                                     ├── /api/evaluation/finish-classifier
                                     ├── /api/evaluation/train-models
                                     ├── /api/evaluation/download-model/<name>

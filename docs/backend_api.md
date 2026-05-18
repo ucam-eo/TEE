@@ -521,9 +521,9 @@ Tell the server to stop evaluating a classifier early (it will skip remaining tr
 
 #### `POST /api/evaluation/cancel`
 
-Cancel an in-progress evaluation. The compute server sets a cancel flag checked
-per tile and per learning-curve step. CORS-enabled so the browser can call
-tee-compute directly even when the streaming response is in flight.
+Cancel an in-progress evaluation. Proxied to tee-compute, which sets a cancel
+flag checked per tile and per learning-curve step. The browser POSTs this on a
+separate connection while the NDJSON learning-curve response is still streaming.
 
 ```json
 // Response 200
@@ -1032,7 +1032,8 @@ runner.run_script("process_viewport.py", "--years", "2024", timeout=1800)
     # -> subprocess.CompletedProcess
 
 # Run the single processing stage (download tiles + pyramids + vectors)
-runner.stage_1_process_viewport("cambridge", "2023,2024", cancel_check=lambda: False)
+runner.stage_1_process_viewport("cambridge", "2023,2024")
+# (cancellation is handled by run_full_pipeline's cancel_check, not here)
 
 # Wait for a file to appear on disk
 runner.wait_for_file(Path("pyramids/cambridge/2024/level_0.png"), min_size_bytes=1024)

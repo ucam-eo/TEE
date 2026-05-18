@@ -958,7 +958,7 @@ Which JS modules call which backend endpoints:
 | `evaluation.js` | `GET` | `/api/evaluation/download-model/{name}` |
 | `evaluation.js` | `POST` | `/api/evaluation/create-map` (streaming NDJSON, GeoTIFF generation) |
 | `evaluation.js` | `GET` | `/api/evaluation/download-map/{name}` |
-| `evaluation.js` | `POST` | `/api/evaluation/cancel` (direct to tee-compute, CORS) |
+| `evaluation.js` | `POST` | `/api/evaluation/cancel` (separate connection while NDJSON streams) |
 | `evaluation.js` | `POST` | `/api/viewports/embedding-coverage` (year coverage probe) |
 | `evaluation.js` | `POST` | `/api/evaluation/clear-shapefiles` |
 | `labels.js` | `POST` | `/api/share/submit` |
