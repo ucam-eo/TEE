@@ -363,10 +363,14 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
     print(f"  [{year}] Fetching mosaic...")
     t0 = _time.monotonic()
 
-    # Decide whether to use zarr for this year
-    gtz = get_zarr()
+    # Decide whether to use zarr for this year.
+    # TEE_DISABLE_ZARR=1 forces the slower NPY path (stopgap for zarr issues).
+    disable_zarr = os.environ.get("TEE_DISABLE_ZARR", "").lower() in ("1", "true", "yes")
+    gtz = None if disable_zarr else get_zarr()
     use_zarr = False
-    if gtz is not None:
+    if disable_zarr:
+        print(f"  [{year}] Zarr disabled (TEE_DISABLE_ZARR), using NPY path")
+    elif gtz is not None:
         use_zarr = probe_zarr_coverage(gtz, bounds, year)
         if use_zarr:
             print(f"  [{year}] Using zarr (fast path)")

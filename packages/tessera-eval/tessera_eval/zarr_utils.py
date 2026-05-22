@@ -52,6 +52,50 @@ CHUNK_THRESHOLD = 0.2  # degrees — regions larger than this get split
 CHUNK_SIZE = 0.1       # degrees per chunk
 
 
+def _reproject_to_4326(mosaic, transform, src_crs):
+    """Reproject a (H, W, B) mosaic to EPSG:4326.
+
+    geotessera's zarr ``read_region`` returns data in the native UTM zone CRS
+    (e.g. EPSG:32631, metre coordinates), but the viewport pipeline — the crop
+    math in process_viewport, pyramid georeferencing, the 4326 vectors
+    metadata, and the Leaflet frontend — all assume lon/lat degrees. Reproject
+    here so the zarr fast path matches the NPY path (which already requests
+    target_crs='EPSG:4326').
+
+    Nearest-neighbour resampling preserves exact embedding vectors (bilinear
+    would blend the 128-d embeddings and corrupt similarity search). NaN
+    nodata is carried through. No-op if already EPSG:4326.
+
+    Returns (mosaic_4326, transform_4326, 'EPSG:4326').
+    """
+    dst_crs = "EPSG:4326"
+    if str(src_crs).upper().replace(" ", "") in ("EPSG:4326", "WGS84"):
+        return mosaic, transform, dst_crs
+
+    from rasterio.warp import calculate_default_transform, reproject, Resampling
+
+    h, w, bands = mosaic.shape
+    left, top = transform.c, transform.f
+    right = left + transform.a * w
+    bottom = top + transform.e * h
+
+    dst_transform, dst_w, dst_h = calculate_default_transform(
+        src_crs, dst_crs, w, h, left=left, bottom=bottom, right=right, top=top)
+
+    src = np.ascontiguousarray(np.transpose(mosaic, (2, 0, 1)))  # (B, H, W)
+    dst = np.full((bands, dst_h, dst_w), np.nan, dtype=np.float32)
+    reproject(
+        source=src, destination=dst,
+        src_transform=transform, src_crs=src_crs,
+        dst_transform=dst_transform, dst_crs=dst_crs,
+        src_nodata=np.nan, dst_nodata=np.nan,
+        resampling=Resampling.nearest,
+    )
+    logger.info("Reprojected zarr mosaic %s (%dx%d) -> EPSG:4326 (%dx%d)",
+                src_crs, w, h, dst_w, dst_h)
+    return np.transpose(dst, (1, 2, 0)), dst_transform, dst_crs
+
+
 def read_region_chunked(gtz, bounds, year):
     """Read a region via zarr, chunking if larger than CHUNK_THRESHOLD.
 
@@ -61,8 +105,10 @@ def read_region_chunked(gtz, bounds, year):
         year: int
 
     Returns:
-        (mosaic, transform, crs) where mosaic is (H, W, 128) float32.
-        Returns (None, None, None) if no data available.
+        (mosaic, transform, crs) where mosaic is (H, W, 128) float32 and the
+        transform/crs are reprojected to EPSG:4326 (geotessera returns native
+        UTM; downstream assumes lon/lat). Returns (None, None, None) if no
+        data available.
     """
     west, south, east, north = bounds
     lon_span = east - west
@@ -71,7 +117,7 @@ def read_region_chunked(gtz, bounds, year):
     # Small region — single read
     if lon_span <= CHUNK_THRESHOLD and lat_span <= CHUNK_THRESHOLD:
         mosaic, transform, crs = gtz.read_region(bounds, year)
-        return mosaic, transform, crs
+        return _reproject_to_4326(mosaic, transform, crs)
 
     # Large region — split into chunks and merge
     chunk_lons = []
@@ -134,4 +180,5 @@ def read_region_chunked(gtz, bounds, year):
         h, w = emb.shape[:2]
         mosaic[row_off:row_off + h, col_off:col_off + w] = emb
 
-    return mosaic, first_transform, first_crs
+    # Merge happens in native CRS; reproject the assembled mosaic to 4326.
+    return _reproject_to_4326(mosaic, first_transform, first_crs)
