@@ -1,0 +1,15 @@
+# TEE (Tessera Embeddings Explorer) - Development / test dependencies
+# Install: pip install -r requirements-dev.txt
+# Includes everything in requirements.txt plus test-only tooling.
+# Kept separate so the production Docker image (requirements.txt) stays lean.
+
+-r requirements.txt
+
+# =============================================================================
+# TEST RUNNER
+# =============================================================================
+# Run the suites with: venv/bin/pytest validation/ tests/ -v
+pytest>=8.0
+
+# HTML structure guards in validation/test_viewer_html.py
+beautifulsoup4>=4.12

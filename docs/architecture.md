@@ -347,6 +347,7 @@ lists the **primary** cross-module properties; see
 ## 6. Testing
 
 ```bash
+pip install -r requirements-dev.txt   # test-only deps (pytest, beautifulsoup4)
 venv/bin/pytest validation/ tests/ -v
 ```
 
