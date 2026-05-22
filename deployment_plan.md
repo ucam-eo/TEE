@@ -58,6 +58,20 @@ curl http://localhost:8001/health
 (`waitress --host=0.0.0.0 --port=8001 --threads=16 tee_project.wsgi:application`)
 with a `/health` healthcheck.
 
+**Building & publishing the image (maintainer).** Produce a new
+`sk818/tee:stable` from the repo with `scripts/build-image.sh`:
+
+```bash
+scripts/build-image.sh        # cross-builds linux/amd64, bakes GIT_VERSION, pushes
+```
+
+It wraps `docker buildx --platform linux/amd64`, so building on an Apple
+Silicon Mac still yields an amd64 image the VM can pull — a native
+`docker build` on arm64 produces a manifest the amd64 server rejects with
+`no matching manifest for linux/amd64`. The git version (`git describe`) is
+baked into `/app/VERSION` and surfaced by `/health`. After it pushes,
+upgrade the running container with `manage.sh` → **Update container** below.
+
 **`scripts/manage.sh` is the operational tool for the running container** —
 this is how the deployed image on `tee.cl.cam.ac.uk` is updated. Copy it out
 of the container once:
