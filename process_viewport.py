@@ -449,6 +449,14 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         print(f"  [{year}] Creating vectors...")
         all_embeddings = mosaic.reshape(-1, EMBEDDING_DIM)
 
+        # Zero-fill NaN nodata before extraction. Reprojection (zarr path) and
+        # edge tiles leave NaN at the mosaic corners; NaN can't be quantised
+        # (it propagates through min/max -> every value casts to 0) and can't be
+        # stored in JSON the browser will accept (JS JSON.parse rejects literal
+        # NaN). Matches the NPY path's nodata handling. In-place is safe — the
+        # pyramids are already written and `mosaic` is freed below.
+        np.nan_to_num(all_embeddings, copy=False, nan=0.0)
+
         # Validate non-zero
         if not np.any(all_embeddings):
             print(f"  [{year}] All embeddings are zero - mosaic may be corrupt")
