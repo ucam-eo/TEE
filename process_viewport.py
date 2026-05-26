@@ -136,11 +136,19 @@ def _fetch_mosaic_npy(tessera, bounds, year, progress_fn=None):
         try:
             def _gt_progress(current, total, status):
                 _fetch_status[0] = f"{status} ({current}/{total})"
-            m, t, c = tessera.fetch_mosaic_for_region(
-                bbox=bounds, year=year,
-                target_crs='EPSG:4326', auto_download=True,
-                progress_callback=_gt_progress,
-            )
+            # progress_callback is GeoTessera-only; VQTessera's
+            # fetch_mosaic_for_region doesn't accept it. Feature-detect so the
+            # same call path serves both clients.
+            kwargs = dict(bbox=bounds, year=year,
+                          target_crs='EPSG:4326', auto_download=True)
+            import inspect as _inspect
+            try:
+                params = _inspect.signature(tessera.fetch_mosaic_for_region).parameters
+                if 'progress_callback' in params:
+                    kwargs['progress_callback'] = _gt_progress
+            except (TypeError, ValueError):
+                pass
+            m, t, c = tessera.fetch_mosaic_for_region(**kwargs)
             _fetch_result[:3] = [m, t, c]
         except Exception as ex:
             _fetch_result[3] = ex
