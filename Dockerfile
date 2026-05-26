@@ -16,11 +16,14 @@ LABEL org.opencontainers.image.title="TEE" \
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies. git is required because tessera-vq is pinned
+# as a git+https requirement in requirements.txt and pip shells out to git
+# to clone it.
 RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-venv \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
