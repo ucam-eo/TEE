@@ -39,7 +39,7 @@ except ImportError as e:
     sys.exit(1)
 
 try:
-    from lib.viewport_utils import get_active_viewport
+    from lib.viewport_utils import get_active_viewport, get_viewport_vq_config
     from lib.progress_tracker import ProgressTracker
     from lib.config import DATA_DIR, EMBEDDINGS_DIR, PYRAMIDS_DIR, VECTORS_DIR, pyramid_exists
 except ImportError as e:
@@ -55,15 +55,39 @@ NUM_ZOOM_LEVELS = 6
 
 # ---------- Module-level caches ----------
 
-_tessera_instance = None  # cached GeoTessera (avoids 28s registry download per call)
-def _get_tessera():
-    """Return a cached GeoTessera instance, creating it on first call."""
-    global _tessera_instance
-    if _tessera_instance is None:
-        t0 = _time.monotonic()
-        _tessera_instance = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
+_provider_instance = None  # cached client (GeoTessera or VQTessera) for this process
+_provider_kind = None      # 'geotessera' or 'vqtessera', for log lines
+
+
+def _get_provider(viewport_name):
+    """Return a cached embeddings client for this process.
+
+    process_viewport.py handles exactly one viewport per invocation, so the
+    choice of plain ``GeoTessera`` vs ``VQTessera`` (the fast path) is fixed
+    for the process lifetime. A cached singleton avoids the 28s GeoTessera
+    registry download per year (only relevant on the plain path; VQTessera
+    has no registry).
+    """
+    global _provider_instance, _provider_kind
+    if _provider_instance is not None:
+        return _provider_instance
+
+    t0 = _time.monotonic()
+    vq = get_viewport_vq_config(viewport_name) if viewport_name else None
+    if vq is None:
+        _provider_instance = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
+        _provider_kind = 'geotessera'
         logger.info("GeoTessera initialized in %.1fs", _time.monotonic() - t0)
-    return _tessera_instance
+    else:
+        from tessera_vq.client import VQTessera
+        url = os.environ.get("TESSERA_VQ_URL", "http://127.0.0.1:8000")
+        _provider_instance = VQTessera(url=url, t=vq['t'], k=vq['k'], m=vq['m'], k2=vq['k2'])
+        _provider_kind = 'vqtessera'
+        logger.info(
+            "VQTessera initialized in %.1fs (t=%d k=%d k2=%s m=%s url=%s)",
+            _time.monotonic() - t0, vq['t'], vq['k'], vq['k2'], vq['m'], url,
+        )
+    return _provider_instance
 
 
 # Zarr utilities shared with tessera_eval.server
@@ -365,10 +389,19 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
 
     # Decide whether to use zarr for this year.
     # TEE_DISABLE_ZARR=1 forces the slower NPY path (stopgap for zarr issues).
-    disable_zarr = os.environ.get("TEE_DISABLE_ZARR", "").lower() in ("1", "true", "yes")
+    # The zarr fast path bypasses ``tessera`` and reads geotessera's zarr store
+    # directly, so it must be disabled for the VQTessera fast path (which
+    # fetches quantised embeddings via the bolt-on instead).
+    is_geotessera = isinstance(tessera, gt.GeoTessera)
+    disable_zarr = (
+        os.environ.get("TEE_DISABLE_ZARR", "").lower() in ("1", "true", "yes")
+        or not is_geotessera
+    )
     gtz = None if disable_zarr else get_zarr()
     use_zarr = False
-    if disable_zarr:
+    if not is_geotessera:
+        print(f"  [{year}] VQTessera fast path (zarr skipped)")
+    elif disable_zarr:
         print(f"  [{year}] Zarr disabled (TEE_DISABLE_ZARR), using NPY path")
     elif gtz is not None:
         use_zarr = probe_zarr_coverage(gtz, bounds, year)
@@ -491,9 +524,9 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
 
 
 def _process_year_worker(args):
-    """Worker function for ProcessPoolExecutor. Uses cached GeoTessera instance."""
+    """Worker function for ProcessPoolExecutor. Uses the cached provider."""
     viewport_id, bounds, year, pyramids_dir, vectors_dir = args
-    tessera = _get_tessera()
+    tessera = _get_provider(viewport_id)
     return process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir)
 
 
@@ -564,15 +597,18 @@ def main():
 
     print(f"\nProcessing {len(years_to_process)} year(s): {years_to_process}")
 
-    progress.update("processing", "Connecting to GeoTessera...", percent=1)
-    print("  Initializing GeoTessera (cached)...")
+    progress.update("processing", "Connecting to embeddings provider...", percent=1)
+    print("  Initializing embeddings provider (cached)...")
     t_init = _time.monotonic()
-    tessera = _get_tessera()
+    tessera = _get_provider(viewport_id)
     init_secs = _time.monotonic() - t_init
-    print(f"  GeoTessera ready ({init_secs:.1f}s)")
+    label = "VQTessera" if _provider_kind == 'vqtessera' else "GeoTessera"
+    print(f"  {label} ready ({init_secs:.1f}s)")
 
-    # Pre-warm zarr instance (non-blocking; logged inside _get_zarr)
-    get_zarr()
+    # Pre-warm zarr instance — only relevant on the GeoTessera path. The
+    # VQTessera fast path fetches via the bolt-on and ignores zarr/NPY.
+    if _provider_kind != 'vqtessera':
+        get_zarr()
 
     progress.update("processing", f"Processing {len(years_to_process)} year(s)...", percent=3)
 

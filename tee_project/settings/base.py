@@ -1,3 +1,4 @@
+import os
 import secrets
 
 from lib.config import DATA_DIR, APP_DIR
@@ -110,3 +111,16 @@ LOGGING = {
         'level': 'INFO',
     },
 }
+
+# ── Tessera VQ bolt-on ──────────────────────────────────────────────────────
+# Per-viewport fast path: opted in at viewport creation time. The bolt-on runs
+# on 127.0.0.1:8000 (systemd unit `tessera-vq.service`). All values overridable
+# via env vars for production. Defaults are RVQ with t=256, k1=k2=256, L2.
+TESSERA_VQ_URL = os.environ.get("TESSERA_VQ_URL", "http://127.0.0.1:8000")
+TESSERA_VQ_DEFAULTS = {
+    "t":  int(os.environ.get("TESSERA_VQ_DEFAULT_T",  "256")),
+    "k":  int(os.environ.get("TESSERA_VQ_DEFAULT_K",  "256")),
+    "k2": int(os.environ.get("TESSERA_VQ_DEFAULT_K2", "256")),
+    "m":  os.environ.get("TESSERA_VQ_DEFAULT_M", "euclidean"),
+}
+TESSERA_VQ_TIMEOUT_SECONDS = float(os.environ.get("TESSERA_VQ_TIMEOUT_SECONDS", "120"))

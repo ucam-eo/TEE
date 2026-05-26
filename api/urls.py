@@ -2,7 +2,7 @@ from django.urls import path
 from .auth_views import auth_login, auth_logout, auth_change_password, auth_status
 from .views.viewports import (list_viewports, current_viewport, viewport_info,
     switch_viewport, create_viewport, delete_viewport, add_years, available_years, is_ready,
-    embedding_coverage)
+    embedding_coverage, residual_histogram)
 from .views.pipeline import operations_progress, cancel_processing
 from .views.vector_data import serve_vector_data
 from .views.config import get_config
@@ -27,6 +27,7 @@ urlpatterns = [
     path('viewports/<str:viewport_name>/available-years', available_years),
     path('viewports/<str:viewport_name>/is-ready', is_ready),
     path('viewports/<str:viewport_name>/cancel-processing', cancel_processing),
+    path('viewports/<str:viewport_name>/residual-histogram', residual_histogram),
     path('viewports/embedding-coverage', embedding_coverage),
     # Pipeline
     path('operations/progress/<str:operation_id>', operations_progress),

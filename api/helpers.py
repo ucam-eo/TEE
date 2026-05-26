@@ -10,7 +10,7 @@ from pathlib import Path
 from django.http import JsonResponse
 
 from lib.config import MOSAICS_DIR, PYRAMIDS_DIR, VECTORS_DIR, EMBEDDINGS_DIR, VIEWPORTS_DIR, pyramid_exists
-from lib.viewport_utils import list_viewports, read_viewport_file
+from lib.viewport_utils import list_viewports, read_viewport_file, get_viewport_vq_config  # noqa: F401 (re-exported)
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +202,45 @@ def get_viewport_data_size(viewport_name, active_viewport_name):
                 total_size += item.stat().st_size
 
     return round(total_size / (1024 * 1024), 1)
+
+
+def parse_vq_request(data):
+    """Normalise the VQ fields from a create-viewport JSON body.
+
+    Accepts the inbound request dict and returns ``(fast_path, vq_or_None)``
+    suitable for storage in ``{viewport}_config.json``. Falls back to the
+    settings defaults for any missing/invalid values. RVQ (``k2``) is dropped
+    under ``m='cosine'`` since the bolt-on supports RVQ in L2 only.
+    """
+    from django.conf import settings as _settings
+
+    fast_path = bool(data.get('fast_path', True))   # UI checkbox default = on
+    if not fast_path:
+        return False, None
+
+    vq_in = data.get('vq') or {}
+    defaults = _settings.TESSERA_VQ_DEFAULTS
+
+    def _pos_int(value, default):
+        try:
+            v = int(value)
+        except (TypeError, ValueError):
+            return default
+        return v if v >= 1 else default
+
+    m = (vq_in.get('m') or defaults['m']).lower()
+    if m not in ('euclidean', 'cosine'):
+        m = defaults['m']
+
+    t = _pos_int(vq_in.get('t'), defaults['t'])
+    k = _pos_int(vq_in.get('k'), defaults['k'])
+    if m == 'cosine':
+        k2 = None
+    else:
+        k2_raw = vq_in.get('k2', defaults['k2'])
+        k2 = _pos_int(k2_raw, defaults['k2']) if k2_raw is not None else None
+
+    return True, {'t': t, 'k': k, 'k2': k2, 'm': m}
 
 
 def get_user_viewports(username):

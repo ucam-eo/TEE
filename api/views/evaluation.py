@@ -8,17 +8,48 @@ variable (default: http://localhost:8002 for local dev).
 """
 
 import os
+import json
 import logging
 
 import requests as _requests
 from django.http import StreamingHttpResponse, JsonResponse
+
+from lib.viewport_utils import get_viewport_vq_config
 
 logger = logging.getLogger(__name__)
 
 COMPUTE_URL = os.environ.get("TEE_COMPUTE_URL", "http://localhost:8002")
 
 
-def _proxy_to_compute(request, path):
+def _inject_vq_into_body(request, body_bytes):
+    """Add ``vq`` to a JSON body if the active viewport opted into the fast path.
+
+    The eval server reads ``vq`` from the request payload and instantiates
+    ``VQTessera`` instead of ``GeoTessera`` when present, so embedding fetches
+    during evaluation / Create Map use the same quantisation that
+    ``process_viewport`` did. No-op if there's no active viewport, the
+    viewport doesn't have ``fast_path=True``, or the body isn't parseable JSON.
+    Never overrides ``vq`` if the client already sent one.
+    """
+    if not body_bytes:
+        return body_bytes
+    viewport = request.session.get('active_viewport')
+    if not viewport:
+        return body_bytes
+    vq = get_viewport_vq_config(viewport)
+    if vq is None:
+        return body_bytes
+    try:
+        body = json.loads(body_bytes)
+    except Exception:
+        return body_bytes
+    if not isinstance(body, dict) or 'vq' in body:
+        return body_bytes
+    body['vq'] = vq
+    return json.dumps(body).encode('utf-8')
+
+
+def _proxy_to_compute(request, path, *, inject_vq=False):
     """Forward a request to the compute server and stream the response back."""
     target = f"{COMPUTE_URL}/{path}"
     if request.META.get("QUERY_STRING"):
@@ -37,10 +68,13 @@ def _proxy_to_compute(request, path):
             headers = {}
             if request.content_type:
                 headers["Content-Type"] = request.content_type
+            body = request.body if request.method != "GET" else None
+            if inject_vq and body and (request.content_type or "").startswith("application/json"):
+                body = _inject_vq_into_body(request, body)
             resp = _requests.request(
                 method=request.method, url=target,
                 headers=headers,
-                data=request.body if request.method != "GET" else None,
+                data=body,
                 stream=True, timeout=7200,
             )
     except _requests.ConnectionError:
@@ -84,7 +118,9 @@ def compute_health(request):
 
 
 def run_evaluation(request):
-    return _proxy_to_compute(request, "api/evaluation/run-large-area")
+    # Inject the active viewport's VQ config so eval fetches embeddings the
+    # same way process_viewport did.
+    return _proxy_to_compute(request, "api/evaluation/run-large-area", inject_vq=True)
 
 
 def cancel_evaluation(request):
@@ -104,7 +140,8 @@ def download_model(request, classifier):
 
 
 def create_map(request):
-    return _proxy_to_compute(request, "api/evaluation/create-map")
+    # Inject the active viewport's VQ config so Create Map uses the same path.
+    return _proxy_to_compute(request, "api/evaluation/create-map", inject_vq=True)
 
 
 def download_map(request, name):

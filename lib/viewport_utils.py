@@ -259,3 +259,40 @@ def read_viewport_file(viewport_name: str) -> Dict:
         content = f.read()
 
     return parse_viewport_content(content)
+
+
+def get_viewport_vq_config(viewport_name: str) -> Optional[Dict]:
+    """Return the viewport's VQ fast-path config, or None for plain GeoTessera.
+
+    Reads ``viewports/{viewport_name}_config.json``. Returns None for viewports
+    without a config file (legacy) or with ``fast_path != True``. Otherwise
+    returns ``{"t", "k", "k2", "m"}`` — the kwargs needed by
+    :class:`tessera_vq.client.VQTessera`. ``k2`` is None for single-stage VQ;
+    ``m='cosine'`` always implies single-stage (the bolt-on does not support
+    RVQ with cosine).
+
+    Kept Django-free so ``process_viewport.py`` (a subprocess) can call it.
+    """
+    import json
+    config_file = Path(__file__).parent.parent / "viewports" / f"{viewport_name}_config.json"
+    if not config_file.exists():
+        return None
+    try:
+        with open(config_file) as f:
+            cfg = json.load(f)
+    except Exception:
+        return None
+    if not cfg.get('fast_path'):
+        return None
+    vq = cfg.get('vq') or {}
+    m = str(vq.get('m') or 'euclidean').lower()
+    k2 = vq.get('k2')
+    # RVQ is L2-only; force single-stage under cosine.
+    if m == 'cosine':
+        k2 = None
+    return {
+        't':  int(vq.get('t', 256)),
+        'k':  int(vq.get('k', 256)),
+        'k2': int(k2) if k2 is not None else None,
+        'm':  m,
+    }
