@@ -752,19 +752,24 @@
                             📍 <strong>Or click on the map</strong> to create a 5km × 5km viewport centered at that location
                         </div>
 
-                        <!-- VQ fast path (tessera-vq bolt-on) -->
-                        <div id="fastPathSection" style="margin-bottom: 12px; padding: 10px; background: #f5f8f5; border-radius: 6px; border-left: 3px solid #4caf50;">
+                        <!-- VQ fast path (tessera-vq bolt-on) — experimental, off by default -->
+                        <div id="fastPathSection" style="margin-bottom: 12px; padding: 10px; background: #fff8e1; border-radius: 6px; border-left: 3px solid #ff9800;">
                             <label style="display: flex; align-items: center; font-weight: 600; font-size: 13px; cursor: pointer;">
-                                <input type="checkbox" id="fastPath" checked
+                                <input type="checkbox" id="fastPath"
                                        style="width: 16px; height: 16px; margin-right: 8px; cursor: pointer;">
                                 Fast path (Tessera VQ)
+                                <span style="margin-left: 8px; padding: 1px 6px; font-size: 10px; font-weight: 700;
+                                             color: #b26900; background: #ffe082; border-radius: 3px; letter-spacing: 0.5px;">
+                                    EXPERIMENTAL
+                                </span>
                             </label>
                             <div style="font-size: 11px; color: #555; margin-top: 4px;">
-                                Quantised embeddings download faster. Defaults: RVQ with
-                                <code>t=256, k1=k2=256, L2</code>. See
+                                Opt-in: fetches quantised embeddings via the
                                 <a href="https://github.com/sk818/tessera-vq" target="_blank" rel="noopener"
-                                   style="color: #667eea;">github.com/sk818/tessera-vq</a>
-                                to run your own parameter sweeps and pick optimal values.
+                                   style="color: #667eea;">tessera-vq</a>
+                                bolt-on. <strong>Coverage is currently narrower than full GeoTessera</strong>
+                                — creation will fail with a "no coverage" error in unsupported regions.
+                                Defaults: RVQ with <code>t=256, k1=k2=256, L2</code>; tune in Advanced.
                             </div>
                             <button type="button" id="vqAdvancedBtn" onclick="toggleVqAdvanced()"
                                     style="margin-top: 6px; background: none; border: none; color: #667eea; cursor: pointer; text-decoration: underline; padding: 0; font-size: 12px;">

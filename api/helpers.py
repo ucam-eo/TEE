@@ -214,7 +214,9 @@ def parse_vq_request(data):
     """
     from django.conf import settings as _settings
 
-    fast_path = bool(data.get('fast_path', True))   # UI checkbox default = on
+    # Experimental: opt-in only. Default off — bolt-on coverage is still
+    # narrower than full Tessera, so this isn't safe as a global default yet.
+    fast_path = bool(data.get('fast_path', False))
     if not fast_path:
         return False, None
 
