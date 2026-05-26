@@ -462,6 +462,20 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
     path_label = "zarr" if use_zarr else "NPY"
     print(f"  [{year}] Fetched {width}x{height} mosaic via {path_label} ({elapsed:.1f}s)")
 
+    # No-coverage detection: a fully-NaN mosaic means the upstream provider
+    # (typically the tessera-vq bolt-on) has no data for this bbox/year.
+    # Detect *before* the vector path's nan_to_num, which would otherwise
+    # convert all-NaN -> all-zero and surface as the misleading "all-zero
+    # embeddings" error in the UI.
+    if np.all(np.isnan(mosaic)):
+        kind = 'vqtessera' if _provider_kind == 'vqtessera' else 'geotessera'
+        msg = (f"No embeddings available for this region in {year} "
+               f"(upstream {kind} returned no coverage for bbox {bounds})")
+        print(f"  [{year}] {msg}")
+        del mosaic
+        gc.collect()
+        return (year, False, msg)
+
     # Crop mosaic to exact viewport bounds (grid tiles may extend beyond ROI)
     col_start = max(0, int(np.floor((bounds[0] - transform.c) / transform.a)))
     col_end = min(width, int(np.ceil((bounds[2] - transform.c) / transform.a)))
