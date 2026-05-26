@@ -57,8 +57,10 @@ def get_embeddings_provider(viewport_name: Optional[str] = None,
         viewport_name, vq['t'], vq['k'], vq['k2'], vq['m'], settings.TESSERA_VQ_URL,
     )
     return VQTessera(
-        url=settings.TESSERA_VQ_URL,
-        t=vq['t'], k=vq['k'], m=vq['m'], k2=vq['k2'],
+        server_url=settings.TESSERA_VQ_URL,
+        t=vq['t'], k=vq['k'], m=vq['m'],
+        timeout=settings.TESSERA_VQ_TIMEOUT_SECONDS,
+        k2=vq['k2'],
     )
 
 
@@ -71,9 +73,10 @@ def build_vq_client_from_config(vq: dict):
     """
     from tessera_vq.client import VQTessera
     return VQTessera(
-        url=settings.TESSERA_VQ_URL,
+        server_url=settings.TESSERA_VQ_URL,
         t=int(vq['t']),
         k=int(vq['k']),
         m=str(vq.get('m', 'euclidean')).lower(),
+        timeout=settings.TESSERA_VQ_TIMEOUT_SECONDS,
         k2=(int(vq['k2']) if vq.get('k2') is not None else None),
     )

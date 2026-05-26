@@ -81,7 +81,11 @@ def _get_provider(viewport_name):
     else:
         from tessera_vq.client import VQTessera
         url = os.environ.get("TESSERA_VQ_URL", "http://127.0.0.1:8000")
-        _provider_instance = VQTessera(url=url, t=vq['t'], k=vq['k'], m=vq['m'], k2=vq['k2'])
+        timeout = float(os.environ.get("TESSERA_VQ_TIMEOUT_SECONDS", "120"))
+        _provider_instance = VQTessera(
+            server_url=url, t=vq['t'], k=vq['k'], m=vq['m'],
+            timeout=timeout, k2=vq['k2'],
+        )
         _provider_kind = 'vqtessera'
         logger.info(
             "VQTessera initialized in %.1fs (t=%d k=%d k2=%s m=%s url=%s)",
