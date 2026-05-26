@@ -751,6 +751,49 @@
                         <div id="mapClickInstruction" style="font-size: 12px; color: #333; margin-bottom: 12px; padding: 10px; background: #e8f4f8; border-radius: 6px; border-left: 3px solid #667eea;">
                             📍 <strong>Or click on the map</strong> to create a 5km × 5km viewport centered at that location
                         </div>
+
+                        <!-- VQ fast path (tessera-vq bolt-on) -->
+                        <div id="fastPathSection" style="margin-bottom: 12px; padding: 10px; background: #f5f8f5; border-radius: 6px; border-left: 3px solid #4caf50;">
+                            <label style="display: flex; align-items: center; font-weight: 600; font-size: 13px; cursor: pointer;">
+                                <input type="checkbox" id="fastPath" checked
+                                       style="width: 16px; height: 16px; margin-right: 8px; cursor: pointer;">
+                                Fast path (Tessera VQ)
+                            </label>
+                            <div style="font-size: 11px; color: #555; margin-top: 4px;">
+                                Quantised embeddings download faster. Defaults: RVQ with
+                                <code>t=256, k1=k2=256, L2</code>. See
+                                <a href="https://github.com/sk818/tessera-vq" target="_blank" rel="noopener"
+                                   style="color: #667eea;">github.com/sk818/tessera-vq</a>
+                                to run your own parameter sweeps and pick optimal values.
+                            </div>
+                            <button type="button" id="vqAdvancedBtn" onclick="toggleVqAdvanced()"
+                                    style="margin-top: 6px; background: none; border: none; color: #667eea; cursor: pointer; text-decoration: underline; padding: 0; font-size: 12px;">
+                                Advanced ▾
+                            </button>
+                            <div id="vqAdvanced" style="display: none; margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 12px;">
+                                <div style="display: grid; grid-template-columns: auto 1fr; gap: 6px 8px; align-items: center;">
+                                    <label for="vqT">t  (tile dim)</label>
+                                    <input type="number" id="vqT" value="256" min="1" max="1024"
+                                           style="width: 90px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
+                                    <label for="vqK1">k1 (1st codebook)</label>
+                                    <input type="number" id="vqK1" value="256" min="1" max="65536"
+                                           style="width: 90px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
+                                    <label for="vqK2">k2 (2nd codebook, RVQ)</label>
+                                    <input type="number" id="vqK2" value="256" min="1" max="65536"
+                                           style="width: 90px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
+                                    <label for="vqM">m  (metric)</label>
+                                    <select id="vqM" onchange="onVqMetricChange()"
+                                            style="width: 100px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
+                                        <option value="euclidean" selected>L2</option>
+                                        <option value="cosine">cosine</option>
+                                    </select>
+                                </div>
+                                <div id="vqK2Note" style="display: none; font-size: 11px; color: #b26900; margin-top: 6px;">
+                                    RVQ is L2-only — k2 ignored under cosine (single-stage VQ).
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="formFields" style="display: none;">
                             <div class="form-group">
                                 <label>Viewport Name <span style="color: #d32f2f;">*</span></label>
@@ -1513,6 +1556,40 @@
             return selected.sort();
         }
 
+        // ── VQ fast-path controls ────────────────────────────────────────────
+        function toggleVqAdvanced() {
+            const adv = document.getElementById('vqAdvanced');
+            const btn = document.getElementById('vqAdvancedBtn');
+            const showing = adv.style.display !== 'none';
+            adv.style.display = showing ? 'none' : 'block';
+            btn.textContent = showing ? 'Advanced ▾' : 'Advanced ▴';
+        }
+
+        function onVqMetricChange() {
+            // RVQ (k2) is L2-only. Under cosine, disable the k2 input and
+            // show the hint; the request omits k2 (single-stage VQ).
+            const m = document.getElementById('vqM').value;
+            const k2 = document.getElementById('vqK2');
+            const note = document.getElementById('vqK2Note');
+            const cosine = (m === 'cosine');
+            k2.disabled = cosine;
+            k2.style.opacity = cosine ? '0.5' : '1';
+            note.style.display = cosine ? 'block' : 'none';
+        }
+
+        function getVqFormConfig() {
+            // Returns { fast_path: bool, vq: {t,k,k2,m} | undefined } shaped
+            // for the create-viewport POST body. k2 is omitted when m=cosine.
+            const fastPath = document.getElementById('fastPath').checked;
+            if (!fastPath) return { fast_path: false };
+            const t  = parseInt(document.getElementById('vqT').value)  || 256;
+            const k  = parseInt(document.getElementById('vqK1').value) || 256;
+            const m  = document.getElementById('vqM').value;
+            const k2Raw = parseInt(document.getElementById('vqK2').value);
+            const k2 = (m === 'cosine' || isNaN(k2Raw)) ? null : k2Raw;
+            return { fast_path: true, vq: { t, k, k2, m } };
+        }
+
         async function confirmViewportCreation() {
             if (!pendingViewportBounds) return;
 
@@ -1547,7 +1624,13 @@
                 const response = await fetch('/api/viewports/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ bounds, name, description: `${VIEWPORT_SIZE_KM}km × ${VIEWPORT_SIZE_KM}km`, years, private: document.getElementById('privateViewport').checked })
+                    body: JSON.stringify({
+                        bounds, name,
+                        description: `${VIEWPORT_SIZE_KM}km × ${VIEWPORT_SIZE_KM}km`,
+                        years,
+                        private: document.getElementById('privateViewport').checked,
+                        ...getVqFormConfig(),
+                    })
                 });
 
                 const data = await response.json();

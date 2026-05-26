@@ -1382,5 +1382,27 @@
     }
 
     </script>
+
+    <!-- VQ residual histogram (per-viewport, fast path only). residual.js
+         hides this when window.viewportStatus.fast_path is false. -->
+    <div id="residual-panel"
+         style="display: none; position: fixed; bottom: 16px; right: 16px;
+                width: 320px; background: rgba(255,255,255,0.97); border: 1px solid #ddd;
+                border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+                padding: 10px; z-index: 600;
+                font-family: -apple-system, BlinkMacSystemFont, sans-serif;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <div style="font-weight: 600; font-size: 12px; color: #333;">VQ residuals</div>
+            <button onclick="document.getElementById('residual-panel').style.display='none'"
+                    title="Hide"
+                    style="background: none; border: none; cursor: pointer; color: #999; font-size: 14px; padding: 0 4px;">×</button>
+        </div>
+        <div style="position: relative; height: 110px;">
+            <canvas id="residual-chart"></canvas>
+        </div>
+        <div id="residual-stats" style="font-size: 10px; color: #555; margin-top: 4px;"></div>
+        <div id="residual-panel-status" style="font-size: 11px; color: #999;"></div>
+    </div>
+    <script type="module" src="js/residual.js"></script>
 </body>
 </html>
