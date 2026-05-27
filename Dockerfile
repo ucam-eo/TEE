@@ -29,6 +29,18 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements first for better caching
 COPY requirements.txt .
 
+# numpy first, on its own, with --ignore-installed: the gdal base image's
+# apt python3-numpy lacks pip RECORD files (Debian-managed), so pip can't
+# uninstall it. When something else in requirements.txt later resolves to a
+# newer numpy, pip aborts mid-install. Doing numpy as its own pip call with
+# --ignore-installed sidesteps that — the apt numpy stays in
+# /usr/lib/python3/dist-packages where it can't conflict, and the pip-
+# installed numpy lands in /usr/local/lib/python3.12/dist-packages where it
+# takes import priority. Without this preamble we'd be back to either
+# global --ignore-installed (wasteful) or build failure.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install --break-system-packages --ignore-installed numpy
+
 # Install Python packages. The gdal base image doesn't ship most of the
 # geo-Python wheels (rasterio, scipy, sklearn, xgboost, umap-learn, zarr,
 # dask, …), so pip downloads them on every cache-busted rebuild. The
