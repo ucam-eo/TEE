@@ -116,10 +116,14 @@ cmd_update() {
     echo "Restarting container..."
     docker stop "$CONTAINER" 2>/dev/null || true
     docker rm "$CONTAINER" 2>/dev/null || true
+    # --network host is required so the VQ fast path can reach the
+    # tessera-vq bolt-on on the host's 127.0.0.1:8000 (bridged containers
+    # have their own loopback and would get ECONNREFUSED). -p is redundant
+    # under host networking — Django binds directly to the host's :8001.
     docker run -d \
         --name "$CONTAINER" \
         --restart unless-stopped \
-        -p 8001:8001 \
+        --network host \
         -e TEE_HTTPS=1 \
         -v /data:/data \
         -v /data/viewports:/app/viewports \

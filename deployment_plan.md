@@ -49,10 +49,18 @@ This is the same path documented in the README and `docs/architecture.md`.
 ```bash
 docker pull sk818/tee:stable
 docker run -d --name tee --restart unless-stopped \
-    -p 8001:8001 -v /data:/data -v /data/viewports:/app/viewports \
+    --network host \
+    -e TEE_HTTPS=1 \
+    -v /data:/data -v /data/viewports:/app/viewports \
     sk818/tee:stable
 curl http://localhost:8001/health
 ```
+
+`--network host` is required so the optional VQ fast path can reach the
+`tessera-vq` bolt-on on the host's `127.0.0.1:8000`. Bridged containers have
+their own loopback and would get `ECONNREFUSED`. Under host networking the
+`-p 8001:8001` flag is redundant (Django binds directly to the host's
+`:8001`) and is therefore omitted.
 
 `docker-compose.yml` runs the same image via Waitress
 (`waitress --host=0.0.0.0 --port=8001 --threads=16 tee_project.wsgi:application`)
