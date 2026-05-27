@@ -291,7 +291,7 @@ def get_viewport_vq_config(viewport_name: str) -> Optional[Dict]:
     if m == 'cosine':
         k2 = None
     return {
-        't':  int(vq.get('t', 256)),
+        't':  int(vq.get('t', 64)),
         'k':  int(vq.get('k', 256)),
         'k2': int(k2) if k2 is not None else None,
         'm':  m,

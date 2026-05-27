@@ -767,9 +767,7 @@
                                 Opt-in: fetches quantised embeddings via the
                                 <a href="https://github.com/sk818/tessera-vq" target="_blank" rel="noopener"
                                    style="color: #667eea;">tessera-vq</a>
-                                bolt-on. <strong>Coverage is currently narrower than full GeoTessera</strong>
-                                — creation will fail with a "no coverage" error in unsupported regions.
-                                Defaults: RVQ with <code>t=256, k1=k2=256, L2</code>; tune in Advanced.
+                                bolt-on. Defaults: RVQ with <code>t=64, k1=k2=256, L2</code>; tune in Advanced.
                             </div>
                             <button type="button" id="vqAdvancedBtn" onclick="toggleVqAdvanced()"
                                     style="margin-top: 6px; background: none; border: none; color: #667eea; cursor: pointer; text-decoration: underline; padding: 0; font-size: 12px;">
@@ -778,7 +776,7 @@
                             <div id="vqAdvanced" style="display: none; margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 12px;">
                                 <div style="display: grid; grid-template-columns: auto 1fr; gap: 6px 8px; align-items: center;">
                                     <label for="vqT">t  (tile dim)</label>
-                                    <input type="number" id="vqT" value="256" min="1" max="1024"
+                                    <input type="number" id="vqT" value="64" min="1" max="1024"
                                            style="width: 90px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
                                     <label for="vqK1">k1 (1st codebook)</label>
                                     <input type="number" id="vqK1" value="256" min="1" max="65536"
@@ -1587,7 +1585,7 @@
             // for the create-viewport POST body. k2 is omitted when m=cosine.
             const fastPath = document.getElementById('fastPath').checked;
             if (!fastPath) return { fast_path: false };
-            const t  = parseInt(document.getElementById('vqT').value)  || 256;
+            const t  = parseInt(document.getElementById('vqT').value)  || 64;
             const k  = parseInt(document.getElementById('vqK1').value) || 256;
             const m  = document.getElementById('vqM').value;
             const k2Raw = parseInt(document.getElementById('vqK2').value);
