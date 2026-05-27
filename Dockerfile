@@ -29,8 +29,13 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python packages (ignore system numpy to avoid conflicts)
-RUN pip3 install --no-cache-dir --break-system-packages --ignore-installed numpy -r requirements.txt
+# Install Python packages. --break-system-packages is required because the
+# gdal base image is Debian-packaged; pip uses normal resolution from there
+# (numpy version is enforced by requirements.txt's numpy>=1.24.0 floor).
+# DON'T add --ignore-installed: despite the old "ignore system numpy"
+# comment, that flag is global, not per-package — it caused a full
+# re-download/install of every dependency on every cache-busted rebuild.
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 # Copy application code
 COPY . .
