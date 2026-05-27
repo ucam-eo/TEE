@@ -2280,12 +2280,20 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
 
-        // Format elapsed time
-        function formatElapsed(startTimeStr) {
-            if (!startTimeStr) return '';
-            const start = new Date(startTimeStr);
-            const now = new Date();
-            const elapsed = Math.floor((now - start) / 1000);
+        // Format elapsed time. Prefer the server's Unix epoch (start_epoch) —
+        // it avoids any ISO-string / timezone parsing differences between the
+        // server's UTC encoding and the browser's local-time interpretation.
+        // Falls back to start_time string for older progress files.
+        function formatElapsed(progress) {
+            let elapsed;
+            if (progress && typeof progress.start_epoch === 'number') {
+                elapsed = Math.floor(Date.now() / 1000 - progress.start_epoch);
+            } else {
+                const startTimeStr = (progress && progress.start_time) || progress || '';
+                if (!startTimeStr) return '';
+                elapsed = Math.floor((Date.now() - new Date(startTimeStr).getTime()) / 1000);
+            }
+            elapsed = Math.max(0, elapsed);
             if (elapsed < 60) return `${elapsed}s`;
             const mins = Math.floor(elapsed / 60);
             const secs = elapsed % 60;
@@ -2318,7 +2326,7 @@ Max Lon: ${bounds.maxLon.toFixed(4)}°
             document.getElementById('processingViewportName').textContent = viewportName;
             document.getElementById('processingProgressBar').style.width = `${percent}%`;
             document.getElementById('processingPercent').textContent = `${percent}%`;
-            document.getElementById('processingElapsed').textContent = formatElapsed(startTime);
+            document.getElementById('processingElapsed').textContent = formatElapsed(progress);
 
             const emoji = getStageEmoji(status, message);
             document.getElementById('processingStage').textContent = `${emoji} ${message}`;

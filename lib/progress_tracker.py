@@ -5,6 +5,7 @@ Writes progress JSON to PROGRESS_DIR/<operation_id>.json for frontend polling.
 """
 
 import json
+import time
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -23,6 +24,10 @@ class ProgressTracker:
         """
         self.operation_id = operation_id
         self.progress_file = PROGRESS_DIR / f"{operation_id}_progress.json"
+        # Authoritative Unix epoch for client-side elapsed math (avoids any
+        # ISO-string / timezone parsing edge cases). ``start_time`` is kept
+        # for backward compatibility / human-readable logs.
+        self.start_epoch = time.time()
         self.start_time = datetime.now(timezone.utc).isoformat()
 
     def update(self, status: str, message: str = "", current_value: int = 0,
@@ -52,6 +57,7 @@ class ProgressTracker:
             "percent": percent,
             "current_file": current_file,
             "start_time": self.start_time,
+            "start_epoch": self.start_epoch,
             "last_update": datetime.now(timezone.utc).isoformat()
         }
 
