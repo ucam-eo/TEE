@@ -357,9 +357,157 @@ def save_vectors(quantized, coords, dim_min, dim_max, transform, height, width,
             "f": transform.f
         }
     }
+    # Tag the legacy format explicitly so the browser can branch on metadata.kind
+    # without having to detect it from file presence.
+    metadata["kind"] = "uint8"
     metadata_file = output_dir / "metadata.json"
     with open(metadata_file, 'w') as f:
         json.dump(metadata, f, indent=2)
+
+
+# ---------- VQ-structure helpers (Path A: codebooks + indices on the wire) ----
+
+def _save_npy_gz(path, arr, compresslevel=6):
+    """Write a numpy array to a gzipped .npy file (compatible with the existing
+    pixel_coords / embeddings format the frontend already knows how to decode)."""
+    import io
+    buf = io.BytesIO()
+    np.save(buf, arr)
+    buf.seek(0)
+    with gzip.open(path, 'wb', compresslevel=compresslevel) as f_out:
+        f_out.write(buf.read())
+
+
+def _quantise_codebook(cb):
+    """Uint8-quantise a per-tile codebook with per-tile per-dim min/max scales.
+
+    Args:
+        cb: (n_tiles, k, 128) float32.
+    Returns:
+        cb_uint8: (n_tiles, k, 128) uint8.
+        scales: (n_tiles, 128, 2) float32 — per-tile per-dim ``(min, max)``.
+        Dims with zero range get max := min + 1 so the uint8 decoder produces
+        the original min value (correct reconstruction of constant dimensions).
+    """
+    n_tiles, k, dim = cb.shape
+    cb_min = cb.min(axis=1)                       # (n_tiles, 128)
+    cb_max = cb.max(axis=1)                       # (n_tiles, 128)
+    span = cb_max - cb_min
+    # Avoid div-by-zero on constant dims; the recovered value (min + 0/(1)*1) = min.
+    safe_span = np.where(span == 0, 1.0, span).astype(np.float32)
+    cb_uint8 = (
+        (cb - cb_min[:, None, :]) / safe_span[:, None, :] * 255.0
+    ).clip(0, 255).astype(np.uint8)
+    scales = np.stack([cb_min.astype(np.float32),
+                       cb_max.astype(np.float32)], axis=-1)   # (n_tiles, 128, 2)
+    return cb_uint8, scales
+
+
+def _assemble_indices_from_tiles(qs, attr_name, out_h, out_w):
+    """Stitch per-tile (n_tiles, t, t) indices into a flat (out_h, out_w) array.
+
+    Only tiles whose pixel range lies entirely within the truncated mosaic
+    [0, out_h) × [0, out_w) are written; edge tiles that would extend past
+    out_h/out_w are silently dropped to match reconstruct_from_structure's
+    behaviour. Missing tiles leave their pixels at 0 (safe — the corresponding
+    codebook lookup is also at 0, so the recovered embedding is the dim_min
+    vector for that tile, which we never reference since indices.shape only
+    spans the tile-aligned region anyway).
+    """
+    per_tile = getattr(qs, attr_name)              # (n_tiles, t, t) uint8/16
+    t = qs.tile_size
+    full = np.zeros((out_h, out_w), dtype=per_tile.dtype)
+    for i in range(per_tile.shape[0]):
+        r, c = int(qs.positions[i, 0]), int(qs.positions[i, 1])
+        row_off, col_off = r * t, c * t
+        if row_off + t > out_h or col_off + t > out_w:
+            continue  # edge tile outside the truncated mosaic
+        full[row_off:row_off + t, col_off:col_off + t] = per_tile[i]
+    return full
+
+
+def save_vectors_rvq(qs, transform, viewport_id, year, output_dir):
+    """Save VQ structure (codebooks + indices + metadata) for the browser.
+
+    Replaces the ~28 MB uint8 mosaic + pixel_coords with a ~5 MB codebook-and-
+    indices bundle the browser can decode tile-by-tile. ``qs`` is the
+    ``QuantizedStructure`` returned by ``tessera_vq.client.fetch_quantized_structure``;
+    ``transform`` is the affine returned by ``reconstruct_from_structure`` so
+    we never recompute it ourselves and never drift from upstream.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    t = qs.tile_size
+    full_h, full_w = int(qs.mosaic_shape[0]), int(qs.mosaic_shape[1])
+    out_h = (full_h // t) * t
+    out_w = (full_w // t) * t
+    is_rvq = qs.codebooks2 is not None
+
+    # Per-pixel indices at the truncated tile-aligned shape; tile_id derived
+    # in the browser as (py // t, px // t).
+    idx1 = _assemble_indices_from_tiles(qs, 'indices1', out_h, out_w)
+    _save_npy_gz(output_dir / 'indices1.npy.gz', idx1)
+    if is_rvq:
+        idx2 = _assemble_indices_from_tiles(qs, 'indices2', out_h, out_w)
+        _save_npy_gz(output_dir / 'indices2.npy.gz', idx2)
+
+    # uint8-quantised codebooks + per-tile per-dim scales. Per-tile scales add
+    # ~64 KB and keep reconstruction quality close to the bolt-on's k-means.
+    cb1_u8, cb1_scales = _quantise_codebook(qs.codebooks1)
+    _save_npy_gz(output_dir / 'codebooks1_uint8.npy.gz', cb1_u8)
+    _save_npy_gz(output_dir / 'codebooks1_scales.npy.gz', cb1_scales)
+    if is_rvq:
+        cb2_u8, cb2_scales = _quantise_codebook(qs.codebooks2)
+        _save_npy_gz(output_dir / 'codebooks2_uint8.npy.gz', cb2_u8)
+        _save_npy_gz(output_dir / 'codebooks2_scales.npy.gz', cb2_scales)
+
+    n_tile_rows = full_h // t
+    n_tile_cols = full_w // t
+    tile_index = {
+        'tile_size': t,
+        'n_tiles': int(qs.codebooks1.shape[0]),
+        'n_tile_rows': n_tile_rows,
+        'n_tile_cols': n_tile_cols,
+        'tiles': [
+            {'id': i, 'row': int(qs.positions[i, 0]), 'col': int(qs.positions[i, 1])}
+            for i in range(qs.codebooks1.shape[0])
+        ],
+    }
+    with open(output_dir / 'tile_index.json', 'w') as f:
+        json.dump(tile_index, f)
+
+    # VQ-aware metadata (separate from the legacy metadata.json which is also
+    # written; the browser branches on metadata.kind to pick the read path).
+    vq_meta = {
+        'viewport_id': viewport_id,
+        'kind': 'rvq' if is_rvq else 'vq',
+        'mosaic_shape': [full_h, full_w],         # full reprojected shape
+        'output_shape': [out_h, out_w],           # tile-aligned, where indices live
+        'num_total_pixels': out_h * out_w,
+        'embedding_dim': qs.codebooks1.shape[-1],
+        'pixel_size_meters': 10,
+        'crs': 'EPSG:4326',
+        'geotransform': {
+            'a': transform.a, 'b': transform.b, 'c': transform.c,
+            'd': transform.d, 'e': transform.e, 'f': transform.f,
+        },
+        'tile_size': t,
+        'k1': int(qs.k1),
+        'k2': int(qs.k2) if is_rvq else None,
+        'n_tile_rows': n_tile_rows,
+        'n_tile_cols': n_tile_cols,
+        'metric': qs.metric,
+    }
+    with open(output_dir / 'vq_metadata.json', 'w') as f:
+        json.dump(vq_meta, f, indent=2)
+
+    files = ['indices1.npy.gz', 'codebooks1_uint8.npy.gz', 'codebooks1_scales.npy.gz']
+    if is_rvq:
+        files += ['indices2.npy.gz', 'codebooks2_uint8.npy.gz', 'codebooks2_scales.npy.gz']
+    total_kb = sum((output_dir / fn).stat().st_size for fn in files) / 1024
+    print(f"  VQ structure: {total_kb:.1f} KB "
+          f"({'RVQ' if is_rvq else 'VQ'}, n_tiles={tile_index['n_tiles']}, "
+          f"t={t}, k1={qs.k1}{', k2='+str(qs.k2) if is_rvq else ''})")
 
 
 # ---------- Per-year processing ----------
@@ -394,98 +542,143 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         print(f"  [{year}] Already processed (pyramids + vectors exist), skipping")
         return (year, True, "already exists")
 
-    # --- FETCH MOSAIC (zarr-first, NPY fallback) ---
+    # --- FETCH MOSAIC ---
+    # Three paths, tried in order:
+    #   1. QS fast path: VQTessera + the upstream's public
+    #      fetch_quantized_structure → reconstruct_from_structure. Gives us
+    #      the per-tile structure for the new browser format AND a tile-aligned
+    #      mosaic in one round-trip; transform math comes from upstream so it
+    #      can't drift.
+    #   2. Zarr fast path: GeoTessera + zarr store. Skipped for VQTessera (it
+    #      would bypass tessera entirely) and gated by TEE_DISABLE_ZARR.
+    #   3. NPY path: tessera.fetch_mosaic_for_region — works for both clients.
     _progress(1, f"[{year}] Fetching mosaic...")
     print(f"  [{year}] Fetching mosaic...")
     t0 = _time.monotonic()
 
-    # Decide whether to use zarr for this year.
-    # TEE_DISABLE_ZARR=1 forces the slower NPY path (stopgap for zarr issues).
-    # The zarr fast path bypasses ``tessera`` and reads geotessera's zarr store
-    # directly, so it must be disabled for the VQTessera fast path (which
-    # fetches quantised embeddings via the bolt-on instead).
-    is_geotessera = isinstance(tessera, gt.GeoTessera)
-    disable_zarr = (
-        os.environ.get("TEE_DISABLE_ZARR", "").lower() in ("1", "true", "yes")
-        or not is_geotessera
-    )
-    gtz = None if disable_zarr else get_zarr()
-    use_zarr = False
-    if not is_geotessera:
-        print(f"  [{year}] VQTessera fast path (zarr skipped)")
-    elif disable_zarr:
-        print(f"  [{year}] Zarr disabled (TEE_DISABLE_ZARR), using NPY path")
-    elif gtz is not None:
-        use_zarr = probe_zarr_coverage(gtz, bounds, year)
-        if use_zarr:
-            print(f"  [{year}] Using zarr (fast path)")
-        else:
-            print(f"  [{year}] Zarr probe returned NaN, falling back to NPY")
-    else:
-        print(f"  [{year}] Using NPY path (zarr unavailable)")
-
-    max_retries = 3
-    mosaic = None
-    transform = None
-    crs = None
-
-    for attempt in range(1, max_retries + 1):
+    qs = None
+    if _provider_kind == 'vqtessera' and hasattr(tessera, 'fetch_quantized_structure'):
         try:
-            if use_zarr:
-                _progress(5, f"[{year}] Reading from zarr...")
-                mosaic, transform, crs = read_region_chunked(gtz, bounds, year)
-            else:
-                def _npy_progress(pct, msg):
-                    _progress(pct, f"[{year}] {msg}")
-                mosaic, transform, crs = _fetch_mosaic_npy(
-                    tessera, bounds, year, progress_fn=_npy_progress)
-            break
+            from tessera_vq.client import (
+                NoCoverageError, reconstruct_from_structure,
+            )
+            print(f"  [{year}] Fetching quantized structure (VQ fast path)...")
+            qs = tessera.fetch_quantized_structure(bbox=bounds, year=year)
+            mosaic, transform, crs = reconstruct_from_structure(qs)
+            elapsed = _time.monotonic() - t0
+            n_tiles = int(qs.codebooks1.shape[0])
+            k2_str = f", k2={qs.k2}" if qs.codebooks2 is not None else ""
+            print(f"  [{year}] Fetched VQ structure: n_tiles={n_tiles} "
+                  f"output_shape={mosaic.shape[:2]} t={qs.tile_size} "
+                  f"k1={qs.k1}{k2_str} ({elapsed:.1f}s)")
+        except NoCoverageError as e:
+            # Explicit "no coverage" from upstream — fail clean with the same
+            # message wording the post-fetch NaN heuristic would have produced.
+            msg = (f"No embeddings available for this region in {year} "
+                   f"(upstream vqtessera: {e})")
+            print(f"  [{year}] {msg}")
+            return (year, False, msg)
         except Exception as e:
-            err_str = str(e)
-            if 'No embedding tiles found' in err_str:
-                short_msg = f"No embeddings available for {year} at this location"
+            # Any other error: drop QS and fall through to the legacy mosaic
+            # path so a transient bolt-on issue doesn't break processing.
+            print(f"  [{year}] QS fetch failed ({type(e).__name__}: {e}); "
+                  f"falling back to mosaic path")
+            qs = None
+
+    if qs is None:
+        # Legacy: zarr-first, NPY fallback.
+        # TEE_DISABLE_ZARR=1 forces the slower NPY path (stopgap for zarr issues).
+        # The zarr fast path bypasses ``tessera`` and reads geotessera's zarr
+        # store directly, so it must be disabled for VQTessera.
+        is_geotessera = isinstance(tessera, gt.GeoTessera)
+        disable_zarr = (
+            os.environ.get("TEE_DISABLE_ZARR", "").lower() in ("1", "true", "yes")
+            or not is_geotessera
+        )
+        gtz = None if disable_zarr else get_zarr()
+        use_zarr = False
+        if not is_geotessera:
+            print(f"  [{year}] VQTessera (no fetch_quantized_structure on client — using NPY)")
+        elif disable_zarr:
+            print(f"  [{year}] Zarr disabled (TEE_DISABLE_ZARR), using NPY path")
+        elif gtz is not None:
+            use_zarr = probe_zarr_coverage(gtz, bounds, year)
+            if use_zarr:
+                print(f"  [{year}] Using zarr (fast path)")
             else:
-                short_msg = f"{type(e).__name__}: {err_str}"
+                print(f"  [{year}] Zarr probe returned NaN, falling back to NPY")
+        else:
+            print(f"  [{year}] Using NPY path (zarr unavailable)")
 
-            if attempt < max_retries:
-                print(f"  [{year}] Attempt {attempt}/{max_retries} failed, retrying in 5s: {short_msg}")
-                _time.sleep(5)
-            else:
-                print(f"  [{year}] Failed after {max_retries} attempts: {short_msg}")
-                return (year, False, short_msg)
+        max_retries = 3
+        mosaic = None
+        transform = None
+        crs = None
 
-    if mosaic is None:
-        return (year, False, "fetch failed")
+        for attempt in range(1, max_retries + 1):
+            try:
+                if use_zarr:
+                    _progress(5, f"[{year}] Reading from zarr...")
+                    mosaic, transform, crs = read_region_chunked(gtz, bounds, year)
+                else:
+                    def _npy_progress(pct, msg):
+                        _progress(pct, f"[{year}] {msg}")
+                    mosaic, transform, crs = _fetch_mosaic_npy(
+                        tessera, bounds, year, progress_fn=_npy_progress)
+                break
+            except Exception as e:
+                err_str = str(e)
+                if 'No embedding tiles found' in err_str:
+                    short_msg = f"No embeddings available for {year} at this location"
+                else:
+                    short_msg = f"{type(e).__name__}: {err_str}"
 
-    height, width = mosaic.shape[:2]
-    elapsed = _time.monotonic() - t0
-    path_label = "zarr" if use_zarr else "NPY"
-    print(f"  [{year}] Fetched {width}x{height} mosaic via {path_label} ({elapsed:.1f}s)")
+                if attempt < max_retries:
+                    print(f"  [{year}] Attempt {attempt}/{max_retries} failed, retrying in 5s: {short_msg}")
+                    _time.sleep(5)
+                else:
+                    print(f"  [{year}] Failed after {max_retries} attempts: {short_msg}")
+                    return (year, False, short_msg)
 
-    # No-coverage detection: a fully-NaN mosaic means the upstream provider
-    # (typically the tessera-vq bolt-on) has no data for this bbox/year.
-    # Detect *before* the vector path's nan_to_num, which would otherwise
-    # convert all-NaN -> all-zero and surface as the misleading "all-zero
-    # embeddings" error in the UI.
-    if np.all(np.isnan(mosaic)):
-        kind = 'vqtessera' if _provider_kind == 'vqtessera' else 'geotessera'
-        msg = (f"No embeddings available for this region in {year} "
-               f"(upstream {kind} returned no coverage for bbox {bounds})")
-        print(f"  [{year}] {msg}")
-        del mosaic
-        gc.collect()
-        return (year, False, msg)
+        if mosaic is None:
+            return (year, False, "fetch failed")
 
-    # Crop mosaic to exact viewport bounds (grid tiles may extend beyond ROI)
-    col_start = max(0, int(np.floor((bounds[0] - transform.c) / transform.a)))
-    col_end = min(width, int(np.ceil((bounds[2] - transform.c) / transform.a)))
-    row_start = max(0, int(np.floor((bounds[3] - transform.f) / transform.e)))
-    row_end = min(height, int(np.ceil((bounds[1] - transform.f) / transform.e)))
-    if col_start > 0 or row_start > 0 or col_end < width or row_end < height:
-        mosaic = mosaic[row_start:row_end, col_start:col_end, :]
-        transform = transform * Affine.translation(col_start, row_start)
+        elapsed = _time.monotonic() - t0
+        path_label = "zarr" if use_zarr else "NPY"
         height, width = mosaic.shape[:2]
-        print(f"  [{year}] Cropped to viewport: {width}x{height}")
+        print(f"  [{year}] Fetched {width}x{height} mosaic via {path_label} ({elapsed:.1f}s)")
+    else:
+        height, width = mosaic.shape[:2]
+
+    # The QS path already raised NoCoverageError for empty/all-NaN responses
+    # and its mosaic is tile-aligned by construction. Both the legacy NaN
+    # heuristic and the bbox crop below would break tile-alignment, so skip
+    # them when we came via QS.
+    if qs is None:
+        # No-coverage detection: a fully-NaN mosaic means the upstream provider
+        # (typically the tessera-vq bolt-on) has no data for this bbox/year.
+        # Detect *before* the vector path's nan_to_num, which would otherwise
+        # convert all-NaN -> all-zero and surface as the misleading "all-zero
+        # embeddings" error in the UI.
+        if np.all(np.isnan(mosaic)):
+            kind = 'vqtessera' if _provider_kind == 'vqtessera' else 'geotessera'
+            msg = (f"No embeddings available for this region in {year} "
+                   f"(upstream {kind} returned no coverage for bbox {bounds})")
+            print(f"  [{year}] {msg}")
+            del mosaic
+            gc.collect()
+            return (year, False, msg)
+
+        # Crop mosaic to exact viewport bounds (grid tiles may extend beyond ROI)
+        col_start = max(0, int(np.floor((bounds[0] - transform.c) / transform.a)))
+        col_end = min(width, int(np.ceil((bounds[2] - transform.c) / transform.a)))
+        row_start = max(0, int(np.floor((bounds[3] - transform.f) / transform.e)))
+        row_end = min(height, int(np.ceil((bounds[1] - transform.f) / transform.e)))
+        if col_start > 0 or row_start > 0 or col_end < width or row_end < height:
+            mosaic = mosaic[row_start:row_end, col_start:col_end, :]
+            transform = transform * Affine.translation(col_start, row_start)
+            height, width = mosaic.shape[:2]
+            print(f"  [{year}] Cropped to viewport: {width}x{height}")
 
     # --- PYRAMIDS (bands 0-2 -> RGB) ---
     if not pyramids_ok:
@@ -538,6 +731,14 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         save_vectors(quantized, coords, dim_min, dim_max, transform,
                      height, width, viewport_id, year, year_vectors_dir)
         del quantized, coords, dim_min, dim_max
+
+        # Path A dual-write: when we came via the VQ fast path, also persist
+        # the codebooks + indices so the browser can download a ~5 MB bundle
+        # instead of the ~28 MB uint8 mosaic. Phase 2 (browser reader) detects
+        # kind='vq'|'rvq' in vq_metadata.json and switches over; Phase 3 will
+        # then drop the legacy uint8 emission above.
+        if qs is not None:
+            save_vectors_rvq(qs, transform, viewport_id, year, year_vectors_dir)
     else:
         print(f"  [{year}] Vectors already exist, skipping")
 

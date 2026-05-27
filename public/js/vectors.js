@@ -133,10 +133,263 @@ function parseNpy(buffer) {
 
 // ── Download ──
 
+// ── VQ format reader (Path A) ──
+// Reads the codebooks+indices format produced by tessera-vq fast-path
+// viewports, reconstructs a full float32 mosaic, re-quantises to uint8 with
+// global per-dim min/max, and hands the result to the rest of vectors.js in
+// the same shape the legacy uint8 path uses. The bandwidth win is on the
+// wire (~5 MB instead of ~28 MB); browser memory + compute paths downstream
+// stay identical. Phase 4 will skip the re-quantise round-trip with a
+// codebook-distance LUT.
+
+function _decodeCodebook(uint8Buf, scalesBuf, nTiles, k, dim) {
+    // uint8Buf shape: (nTiles, k, dim); scalesBuf shape: (nTiles, dim, 2).
+    // Decode each entry to float using the per-tile per-dim (min, max).
+    const out = new Float32Array(nTiles * k * dim);
+    for (let t = 0; t < nTiles; t++) {
+        const scaleBase = t * dim * 2;
+        const tileBase = t * k * dim;
+        for (let i = 0; i < k; i++) {
+            const inBase = tileBase + i * dim;
+            for (let d = 0; d < dim; d++) {
+                const mn = scalesBuf[scaleBase + d * 2];
+                const mx = scalesBuf[scaleBase + d * 2 + 1];
+                const span = (mx - mn) || 1.0;
+                out[inBase + d] = mn + (uint8Buf[inBase + d] / 255.0) * span;
+            }
+        }
+    }
+    return out;
+}
+
+function _indicesArrayFromParsed(parsed) {
+    // Respect npy dtype — k > 256 produces uint16, otherwise uint8.
+    if (parsed.dtype === '<u2' || parsed.dtype === '>u2' || parsed.dtype === 'u2') {
+        return new Uint16Array(parsed.rawData);
+    }
+    return new Uint8Array(parsed.rawData);
+}
+
+async function downloadVectorDataVq(viewport, year, vqMeta) {
+    const base = `/api/vector-data/${viewport}/${year}`;
+    const isRvq = vqMeta.kind === 'rvq';
+
+    const overlay = document.getElementById('progress-overlay');
+    const title = document.getElementById('progress-title');
+    const message = document.getElementById('progress-message');
+    const bar = document.getElementById('progress-bar');
+    const percent = document.getElementById('progress-percent');
+    const status = document.getElementById('progress-status');
+    if (overlay) {
+        overlay.style.display = 'flex';
+        title.textContent = `Downloading Vector Data (${year})`;
+        message.textContent = isRvq ? 'VQ fast path (RVQ): codebooks + indices'
+                                    : 'VQ fast path: codebooks + indices';
+        status.textContent = 'Starting download...';
+        bar.style.width = '0%';
+        percent.textContent = '0%';
+    }
+    const setProgress = (pct, msg) => {
+        if (overlay) {
+            bar.style.width = `${pct}%`;
+            percent.textContent = `${pct}%`;
+            if (msg) status.textContent = msg;
+        }
+    };
+
+    const fetchNpy = async (url) => {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`${url}: ${resp.status}`);
+        return parseNpy(await decompressGzip(await resp.blob()));
+    };
+    const fetchJson = async (url) => {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`${url}: ${resp.status}`);
+        return resp.json();
+    };
+
+    try {
+        setProgress(10, 'Downloading codebooks + indices...');
+
+        // Concurrent fetch (small files; total ~5 MB).
+        const tasks = [
+            fetchNpy(`${base}/codebooks1_uint8.npy.gz`),
+            fetchNpy(`${base}/codebooks1_scales.npy.gz`),
+            fetchNpy(`${base}/indices1.npy.gz`),
+            fetchJson(`${base}/tile_index.json`),
+        ];
+        if (isRvq) {
+            tasks.push(
+                fetchNpy(`${base}/codebooks2_uint8.npy.gz`),
+                fetchNpy(`${base}/codebooks2_scales.npy.gz`),
+                fetchNpy(`${base}/indices2.npy.gz`),
+            );
+        }
+        const results = await Promise.all(tasks);
+        const cb1Parsed = results[0], cb1ScalesParsed = results[1];
+        const idx1Parsed = results[2], tileIndex = results[3];
+        let cb2Parsed = null, cb2ScalesParsed = null, idx2Parsed = null;
+        if (isRvq) {
+            cb2Parsed = results[4]; cb2ScalesParsed = results[5]; idx2Parsed = results[6];
+        }
+
+        setProgress(50, 'Reconstructing embeddings...');
+
+        const t = vqMeta.tile_size;
+        const k1 = vqMeta.k1;
+        const k2 = vqMeta.k2 || 0;
+        const [outH, outW] = vqMeta.output_shape;
+        const nTileCols = vqMeta.n_tile_cols;
+        const dim = vqMeta.embedding_dim || 128;
+        const nTiles = tileIndex.n_tiles;
+        const numPixels = outH * outW;
+
+        const cb1Uint8 = new Uint8Array(cb1Parsed.rawData);
+        const cb1Scales = new Float32Array(cb1ScalesParsed.rawData);
+        const cb1Float = _decodeCodebook(cb1Uint8, cb1Scales, nTiles, k1, dim);
+        const idx1 = _indicesArrayFromParsed(idx1Parsed);
+        let cb2Float = null, idx2 = null;
+        if (isRvq) {
+            const cb2Uint8 = new Uint8Array(cb2Parsed.rawData);
+            const cb2Scales = new Float32Array(cb2ScalesParsed.rawData);
+            cb2Float = _decodeCodebook(cb2Uint8, cb2Scales, nTiles, k2, dim);
+            idx2 = _indicesArrayFromParsed(idx2Parsed);
+        }
+
+        // Reconstruct full float mosaic via codebook lookup.
+        const floatMosaic = new Float32Array(numPixels * dim);
+        for (let py = 0; py < outH; py++) {
+            const tileRow = Math.floor(py / t);
+            for (let px = 0; px < outW; px++) {
+                const pixel = py * outW + px;
+                const tileCol = Math.floor(px / t);
+                const tileId = tileRow * nTileCols + tileCol;
+                const i1 = idx1[pixel];
+                const cb1Off = tileId * k1 * dim + i1 * dim;
+                const outOff = pixel * dim;
+                if (cb2Float) {
+                    const i2 = idx2[pixel];
+                    const cb2Off = tileId * k2 * dim + i2 * dim;
+                    for (let d = 0; d < dim; d++) {
+                        floatMosaic[outOff + d] = cb1Float[cb1Off + d] + cb2Float[cb2Off + d];
+                    }
+                } else {
+                    for (let d = 0; d < dim; d++) {
+                        floatMosaic[outOff + d] = cb1Float[cb1Off + d];
+                    }
+                }
+            }
+        }
+
+        setProgress(80, 'Quantising to uint8 for legacy consumers...');
+
+        // Global per-dim min/max (the rest of vectors.js expects this format).
+        const dimMin = new Float32Array(dim).fill(Infinity);
+        const dimMax = new Float32Array(dim).fill(-Infinity);
+        for (let i = 0; i < numPixels; i++) {
+            const off = i * dim;
+            for (let d = 0; d < dim; d++) {
+                const v = floatMosaic[off + d];
+                if (v < dimMin[d]) dimMin[d] = v;
+                if (v > dimMax[d]) dimMax[d] = v;
+            }
+        }
+        const dimScale = new Float32Array(dim);
+        for (let d = 0; d < dim; d++) dimScale[d] = (dimMax[d] - dimMin[d]) || 1;
+
+        const values = new Uint8Array(numPixels * dim);
+        for (let i = 0; i < numPixels; i++) {
+            const off = i * dim;
+            for (let d = 0; d < dim; d++) {
+                const q = Math.round((floatMosaic[off + d] - dimMin[d]) / dimScale[d] * 255);
+                values[off + d] = q < 0 ? 0 : q > 255 ? 255 : q;
+            }
+        }
+
+        // Full-grid pixel coords (matches the legacy save).
+        const coords = new Int32Array(numPixels * 2);
+        for (let py = 0; py < outH; py++) {
+            for (let px = 0; px < outW; px++) {
+                const i = py * outW + px;
+                coords[i * 2] = px;
+                coords[i * 2 + 1] = py;
+            }
+        }
+
+        const metadata = {
+            viewport_id: viewport,
+            mosaic_height: outH,
+            mosaic_width: outW,
+            clipped_height: outH,
+            clipped_width: outW,
+            num_total_pixels: numPixels,
+            embedding_dim: dim,
+            pixel_size_meters: 10,
+            crs: 'EPSG:4326',
+            geotransform: vqMeta.geotransform,
+            kind: vqMeta.kind,
+            dim_min: Array.from(dimMin),
+            dim_max: Array.from(dimMax),
+            vq: {
+                tile_size: t,
+                k1, k2,
+                n_tile_rows: vqMeta.n_tile_rows,
+                n_tile_cols: nTileCols,
+            },
+        };
+
+        const grid = buildGridLookup(coords, numPixels);
+        localVectors = {
+            values, coords, metadata,
+            gridLookup: grid, numVectors: numPixels, dim,
+            viewport, year: String(year),
+        };
+
+        setProgress(100, 'Done');
+        if (overlay) overlay.style.display = 'none';
+
+        // Cache the re-quantised mosaic (same shape as legacy path).
+        try {
+            await VectorCache.put(viewport, year, { values, coords, metadata });
+        } catch (e) {
+            console.warn('[VECTORS] IndexedDB cache write failed:', e);
+        }
+
+        const wireMb = (
+            cb1Parsed.rawData.byteLength + cb1ScalesParsed.rawData.byteLength +
+            idx1Parsed.rawData.byteLength +
+            (isRvq ? (cb2Parsed.rawData.byteLength + cb2ScalesParsed.rawData.byteLength + idx2Parsed.rawData.byteLength) : 0)
+        ) / (1024 * 1024);
+        console.log(`[VECTORS] VQ load complete: ${numPixels} px, wire ~${wireMb.toFixed(1)} MB (was ~28 MB)`);
+
+        return localVectors;
+    } catch (err) {
+        console.error('[VECTORS] VQ download failed:', err);
+        if (overlay && status) status.textContent = `Download failed: ${err.message}`;
+        throw err;
+    }
+}
+
 async function downloadVectorData(viewport, year) {
     // Skip if already loaded in memory for this viewport/year
     if (localVectors && localVectors.viewport === viewport && localVectors.year === String(year)) {
         return localVectors;
+    }
+
+    // Path A: probe for the VQ format. If the viewport was processed via the
+    // tessera-vq fast path, the server emits vq_metadata.json + codebooks +
+    // indices (~5 MB) instead of the 28 MB uint8 mosaic. We load that, expand
+    // back to a uint8 mosaic in memory, and feed it into the existing
+    // localVectors pipeline so search / extract / PCA all work unchanged.
+    try {
+        const vqResp = await fetch(`/api/vector-data/${viewport}/${year}/vq_metadata.json`);
+        if (vqResp.ok) {
+            const vqMeta = await vqResp.json();
+            console.log(`[VECTORS] Using VQ format (${vqMeta.kind}) for ${viewport}/${year}`);
+            return await downloadVectorDataVq(viewport, year, vqMeta);
+        }
+    } catch (e) {
+        console.warn('[VECTORS] VQ probe failed, falling back to uint8 path:', e);
     }
 
     // Fetch metadata first (small, needed for cache validation)
