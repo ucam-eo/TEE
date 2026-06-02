@@ -10,11 +10,13 @@ the app, not hand-authored).
 Load a file via the schema browser's **Custom** option. The loader
 (`public/js/schema.js`) accepts three shapes:
 
+The templates are bundled with the app under `public/schemas/`:
+
 | File | Shape |
 |------|-------|
-| [`custom-schema-template.json`](custom-schema-template.json) | Object with a `tree` array (recommended) |
+| [`custom-schema-template.json`](../../public/schemas/custom-schema-template.json) | Object with a `tree` array (recommended) |
 | — | A bare top-level array `[ <node>, ... ]` (the `name`/`version`/`date` wrapper is then omitted; the filename becomes the schema name) |
-| [`custom-schema-template.txt`](custom-schema-template.txt) | Tab-indented text fallback |
+| [`custom-schema-template.txt`](../../public/schemas/custom-schema-template.txt) | Tab-indented text fallback |
 
 ## JSON format
 
