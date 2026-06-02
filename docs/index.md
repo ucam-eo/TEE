@@ -19,6 +19,7 @@ across years, and evaluate classifiers against ground-truth shapefiles.
 | [backend_api.md](backend_api.md) | Python HTTP endpoints, library modules, standalone scripts |
 | [extension_guide.md](extension_guide.md) | Recipes for adding panels, classifiers, data sources, endpoints, label types — with checklist |
 | [label-format.md](label-format.md) | Label serialisation spec: JSON + GeoJSON export formats, CRS conventions, localStorage schema |
+| [examples/](examples/README.md) | Ready-to-edit custom classification-schema templates (JSON + tab-indented text) |
 
 ---
 

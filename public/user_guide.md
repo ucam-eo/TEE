@@ -232,7 +232,7 @@ TEE includes three built-in schemas:
 | **EUNIS** | European Nature Information System — a pan-European classification with 6 top-level groups and ~280 habitat types |
 | **Habitats of the World (HOTW)** | A global scheme organised by continental guides |
 
-You can also upload a **custom schema** as a JSON file if your project uses a different classification.
+You can also upload a **custom schema** if your project uses a different classification. Choose **Custom** in the schema browser and select your file. A ready-to-edit starting point is provided in [`docs/examples/`](../docs/examples/README.md): copy [`custom-schema-template.json`](../docs/examples/custom-schema-template.json) (or the tab-indented [`custom-schema-template.txt`](../docs/examples/custom-schema-template.txt)) and replace the placeholder codes and names with your own.
 
 To use a schema: open the browser, type to filter (e.g., "grassland"), and click an entry. TEE sets it as the active label with the standard code, name, and colour. This ensures consistent naming across your team and makes labels directly comparable with other datasets using the same scheme.
 
