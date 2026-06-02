@@ -1,0 +1,7 @@
+a Top-level class A
+    a1 Sub-class A1
+        a1a Leaf A1a
+        a1b Leaf A1b
+    a2 Sub-class A2 (no children)
+b Top-level class B
+    b1 Sub-class B1

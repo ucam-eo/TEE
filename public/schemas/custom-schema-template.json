@@ -1,0 +1,33 @@
+{
+  "name": "My Custom Schema",
+  "version": "1.0",
+  "date": "2026-06-02",
+  "tree": [
+    {
+      "code": "a",
+      "name": "Top-level class A",
+      "children": [
+        {
+          "code": "a1",
+          "name": "Sub-class A1",
+          "children": [
+            { "code": "a1a", "name": "Leaf A1a", "children": [] },
+            { "code": "a1b", "name": "Leaf A1b", "children": [] }
+          ]
+        },
+        {
+          "code": "a2",
+          "name": "Sub-class A2 (no children)",
+          "children": []
+        }
+      ]
+    },
+    {
+      "code": "b",
+      "name": "Top-level class B",
+      "children": [
+        { "code": "b1", "name": "Sub-class B1", "children": [] }
+      ]
+    }
+  ]
+}
