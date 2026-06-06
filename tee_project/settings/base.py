@@ -115,12 +115,13 @@ LOGGING = {
 # ── Tessera VQ bolt-on ──────────────────────────────────────────────────────
 # Per-viewport fast path: opted in at viewport creation time. The bolt-on runs
 # on 127.0.0.1:8000 (systemd unit `tessera-vq.service`). All values overridable
-# via env vars for production. Defaults are RVQ with t=64, k1=k2=256, L2 —
-# t=256 was too large for the bolt-on's RVQ tile generation in practice.
+# via env vars for production. Defaults are the study-recommended RVQ config:
+# t=512, k1=20, k2=256, L2 (~1.77 B/px = 72x int8, downstream-lossless; see the
+# tessera-vq tech note). Larger k1 or t=1024 cost downstream accuracy for little gain.
 TESSERA_VQ_URL = os.environ.get("TESSERA_VQ_URL", "http://127.0.0.1:8000")
 TESSERA_VQ_DEFAULTS = {
-    "t":  int(os.environ.get("TESSERA_VQ_DEFAULT_T",  "64")),
-    "k":  int(os.environ.get("TESSERA_VQ_DEFAULT_K",  "256")),
+    "t":  int(os.environ.get("TESSERA_VQ_DEFAULT_T",  "512")),
+    "k":  int(os.environ.get("TESSERA_VQ_DEFAULT_K",  "20")),
     "k2": int(os.environ.get("TESSERA_VQ_DEFAULT_K2", "256")),
     "m":  os.environ.get("TESSERA_VQ_DEFAULT_M", "euclidean"),
 }
