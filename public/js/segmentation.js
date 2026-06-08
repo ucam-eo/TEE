@@ -10,6 +10,7 @@ let segOverlay = null;       // L.imageOverlay instance
 let segLabels = [];          // [{id, color, name, count}, ...]
 let segRunning = false;      // prevent concurrent runs
 let segVectors = null;       // vectors used for current segmentation (may differ from localVectors)
+let segVectorsKey = null;    // `${viewport}/${year}` segVectors was loaded for (memo across k-changes)
 
 Object.defineProperty(window, 'segAssignments', {
     get: () => segAssignments,
@@ -220,9 +221,14 @@ async function runKMeans(k) {
 
     // Always segment the year shown in panel 3
     const segYear = document.getElementById('embedding-year-selector').value || window.localVectors.year;
+    const segKey = `${window.currentViewportName}/${segYear}`;
 
-    // Load vectors for selected year (may differ from localVectors)
-    if (String(segYear) !== String(window.localVectors.year)) {
+    // Load vectors for the selected year (may differ from localVectors). Memoise
+    // across k-changes: bumping the cluster count must not re-download / re-decode
+    // the same year's vectors (and flash the loading overlay) every time.
+    if (segVectors && segVectorsKey === segKey) {
+        // reuse the vectors already held for this viewport/year
+    } else if (String(segYear) !== String(window.localVectors.year)) {
         const saved = window.localVectors;
         try {
             await window.downloadVectorData(window.currentViewportName, segYear);
@@ -230,8 +236,10 @@ async function runKMeans(k) {
         } finally {
             window.localVectors = saved;
         }
+        segVectorsKey = segKey;
     } else {
         segVectors = window.localVectors;
+        segVectorsKey = segKey;
     }
 
     const N = segVectors.numVectors;

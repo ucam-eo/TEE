@@ -51,7 +51,9 @@ const VectorCache = {
     async open() {
         if (this._db) return this._db;
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open(this.DB_NAME, 4);
+            // v5: VQ path used to cache uint8 `values`; now caches Float32 (matches
+            // the legacy path). Bump to drop any stale uint8 entries.
+            const req = indexedDB.open(this.DB_NAME, 5);
             req.onupgradeneeded = (e) => {
                 const db = req.result;
                 // Delete old store on upgrade to invalidate stale cache
@@ -281,30 +283,14 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
             }
         }
 
-        setProgress(80, 'Quantising to uint8 for legacy consumers...');
+        setProgress(80, 'Finalising embeddings...');
 
-        // Global per-dim min/max (the rest of vectors.js expects this format).
-        const dimMin = new Float32Array(dim).fill(Infinity);
-        const dimMax = new Float32Array(dim).fill(-Infinity);
-        for (let i = 0; i < numPixels; i++) {
-            const off = i * dim;
-            for (let d = 0; d < dim; d++) {
-                const v = floatMosaic[off + d];
-                if (v < dimMin[d]) dimMin[d] = v;
-                if (v > dimMax[d]) dimMax[d] = v;
-            }
-        }
-        const dimScale = new Float32Array(dim);
-        for (let d = 0; d < dim; d++) dimScale[d] = (dimMax[d] - dimMin[d]) || 1;
-
-        const values = new Uint8Array(numPixels * dim);
-        for (let i = 0; i < numPixels; i++) {
-            const off = i * dim;
-            for (let d = 0; d < dim; d++) {
-                const q = Math.round((floatMosaic[off + d] - dimMin[d]) / dimScale[d] * 255);
-                values[off + d] = q < 0 ? 0 : q > 255 ? 255 : q;
-            }
-        }
+        // localVectors.values must be the FLOAT32 (dequantised) embedding mosaic, to
+        // match the legacy uint8 path (which dequantises to Float32). The k-means
+        // worker and labels.js read values as float32; a previous version re-quantised
+        // this back to uint8, so the worker read a 1/4-size buffer as float32 -> garbage
+        // -> a single cluster. Use the reconstructed float mosaic directly.
+        const values = floatMosaic;
 
         // Full-grid pixel coords (matches the legacy save).
         const coords = new Int32Array(numPixels * 2);
@@ -328,8 +314,6 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
             crs: 'EPSG:4326',
             geotransform: vqMeta.geotransform,
             kind: vqMeta.kind,
-            dim_min: Array.from(dimMin),
-            dim_max: Array.from(dimMax),
             vq: {
                 tile_size: t,
                 k1, k2,
