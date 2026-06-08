@@ -1,6 +1,36 @@
 # Browser-side RVQ decode — design
 
-**Status:** DRAFT for review. No code yet. **Date:** 2026-06-06.
+**Status: LANDED 2026-06-06.** On building it we found the feature was ~90% already
+implemented from a prior effort — this doc's "new ArrayBuffer format + new JS decoder"
+were redundant. What actually existed vs what was missing:
+
+- **JS decoder — already shipped.** `public/js/vectors.js`: `downloadVectorData()` prefers
+  the VQ path when `vq_metadata.json` exists (else falls back to int8), and
+  `downloadVectorDataVq()` + `_decodeCodebook()` fetch per-tile `codebooks{1,2}_uint8` +
+  `_scales` (per-dim min/max) + `indices{1,2}` + `tile_index.json` and reconstruct.
+- **Producer — already shipped and wired.** `process_viewport.save_vectors_rvq()` writes
+  exactly those files; it's called at the dual-write site (`if qs is not None:`) whenever a
+  viewport is processed via the VQTessera fast path (`fetch_quantized_structure`).
+- **The only gap — serving.** `api/views/vector_data.py`'s `ALLOWED_FILES` omitted the VQ
+  files, so the frontend got 403s and silently used the ~28 MB uint8 mosaic. **Fixed**
+  (commit a8e9d76): the VQ bundle is now served, lighting up the whole path.
+- **RLE vs gzip (investigated per request): keep gzip.** Indices are stored gzip'd-raw.
+  Measured on realistic idx1: `gzip(raw)` ≈ 0.025–0.25 B/px and **beats explicit RLE**
+  (RLE alone ~4× worse; `gzip(RLE)` only ties) — DEFLATE already captures the runs, and
+  RLE would need a JS decoder for no gain. No change made.
+
+So the wire format below is **not** what shipped (the shipped format is the multi-`.npy.gz`
+bundle the existing JS reads); the rest of this doc is retained as background/rationale and
+for the not-yet-built linear fast path (§5).
+
+Remaining optional follow-ups: the **linear fast path** (§5, decode-free for RGB/probes),
+and migrating existing int8-only viewports (they keep working via fallback; they gain the
+VQ bundle on reprocess).
+
+---
+
+_Original design (pre-discovery) follows._
+
 **Goal:** ship VQ-compressed embeddings over the TEE→browser hop and decode them in
 JavaScript, instead of sending raw int8 vectors.
 
