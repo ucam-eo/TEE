@@ -125,6 +125,7 @@ cmd_update() {
         --restart unless-stopped \
         --network host \
         -e TEE_HTTPS=1 \
+        -e TESSERA_VQ_URL=http://127.0.0.1:8010 \
         -v /data:/data \
         -v /data/viewports:/app/viewports \
         "$IMAGE"
