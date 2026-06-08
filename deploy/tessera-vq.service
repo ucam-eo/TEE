@@ -1,0 +1,16 @@
+[Unit]
+Description=Tessera VQ bolt-on
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sk818
+WorkingDirectory=/home/sk818/tessera-vq
+Environment=PATH=/home/sk818/.local/bin:/usr/bin:/bin
+ExecStart=/home/sk818/.local/bin/uv run python -m tessera_vq.server
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
