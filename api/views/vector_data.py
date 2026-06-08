@@ -12,6 +12,12 @@ logger = logging.getLogger(__name__)
 ALLOWED_FILES = {
     'pixel_coords.npy', 'pixel_coords.npy.gz', 'metadata.json',
     'all_embeddings_uint8.npy.gz', 'quantization.json',
+    # VQ fast-path bundle (produced by process_viewport.save_vectors_rvq, decoded by
+    # public/js/vectors.js downloadVectorDataVq). Replaces the ~28 MB uint8 mosaic with
+    # a ~5 MB codebooks+indices bundle on the TEE->browser hop.
+    'vq_metadata.json', 'tile_index.json',
+    'codebooks1_uint8.npy.gz', 'codebooks1_scales.npy.gz', 'indices1.npy.gz',
+    'codebooks2_uint8.npy.gz', 'codebooks2_scales.npy.gz', 'indices2.npy.gz',
 }
 
 
