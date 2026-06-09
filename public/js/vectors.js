@@ -51,9 +51,10 @@ const VectorCache = {
     async open() {
         if (this._db) return this._db;
         return new Promise((resolve, reject) => {
-            // v5: VQ path used to cache uint8 `values`; now caches Float32 (matches
-            // the legacy path). Bump to drop any stale uint8 entries.
-            const req = indexedDB.open(this.DB_NAME, 5);
+            // v6: VQ path caches compact uint8 `values` + dim_min/dim_max (keeps
+            // explore-mode panning light); the worker dequantises on demand. Bump to
+            // drop the short-lived v5 Float32 entries.
+            const req = indexedDB.open(this.DB_NAME, 6);
             req.onupgradeneeded = (e) => {
                 const db = req.result;
                 // Delete old store on upgrade to invalidate stale cache
@@ -283,14 +284,35 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
             }
         }
 
-        setProgress(80, 'Finalising embeddings...');
+        setProgress(80, 'Quantising to uint8...');
 
-        // localVectors.values must be the FLOAT32 (dequantised) embedding mosaic, to
-        // match the legacy uint8 path (which dequantises to Float32). The k-means
-        // worker and labels.js read values as float32; a previous version re-quantised
-        // this back to uint8, so the worker read a 1/4-size buffer as float32 -> garbage
-        // -> a single cluster. Use the reconstructed float mosaic directly.
-        const values = floatMosaic;
+        // Keep values compact as uint8 + per-dim min/max (dim_min/dim_max in metadata),
+        // so explore-mode panning stays light (a Float32 mosaic of a large viewport is
+        // ~570 MB and makes panning laggy). Consumers that need real floats dequantise
+        // on demand: the k-means worker rebuilds a transient Float32 buffer from these
+        // (see segmentation.js::runKMeans). NOTE: feeding the worker the raw uint8 buffer
+        // makes it read 1/4-size garbage and collapse to one cluster — it must dequantise.
+        const dimMin = new Float32Array(dim).fill(Infinity);
+        const dimMax = new Float32Array(dim).fill(-Infinity);
+        for (let i = 0; i < numPixels; i++) {
+            const off = i * dim;
+            for (let d = 0; d < dim; d++) {
+                const v = floatMosaic[off + d];
+                if (v < dimMin[d]) dimMin[d] = v;
+                if (v > dimMax[d]) dimMax[d] = v;
+            }
+        }
+        const dimScale = new Float32Array(dim);
+        for (let d = 0; d < dim; d++) dimScale[d] = (dimMax[d] - dimMin[d]) || 1;
+
+        const values = new Uint8Array(numPixels * dim);
+        for (let i = 0; i < numPixels; i++) {
+            const off = i * dim;
+            for (let d = 0; d < dim; d++) {
+                const q = Math.round((floatMosaic[off + d] - dimMin[d]) / dimScale[d] * 255);
+                values[off + d] = q < 0 ? 0 : q > 255 ? 255 : q;
+            }
+        }
 
         // Full-grid pixel coords (matches the legacy save).
         const coords = new Int32Array(numPixels * 2);
@@ -314,6 +336,8 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
             crs: 'EPSG:4326',
             geotransform: vqMeta.geotransform,
             kind: vqMeta.kind,
+            dim_min: Array.from(dimMin),
+            dim_max: Array.from(dimMax),
             vq: {
                 tile_size: t,
                 k1, k2,

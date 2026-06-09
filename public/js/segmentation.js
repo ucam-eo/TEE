@@ -245,8 +245,30 @@ async function runKMeans(k) {
     const N = segVectors.numVectors;
     const dim = segVectors.dim;
 
-    // Slice to avoid detaching segVectors.values
-    const embCopy = segVectors.values.buffer.slice(0);
+    // The worker clusters on Float32. The legacy path already holds Float32 values; the
+    // VQ fast path keeps values compact as uint8 + per-dim dim_min/dim_max (so explore
+    // panning stays light) -> dequantise to a transient Float32 buffer just for the worker.
+    // (Passing the raw uint8 buffer makes the worker read 1/4-size garbage -> one cluster.)
+    let embCopy;
+    const sv = segVectors.values;
+    if (sv.BYTES_PER_ELEMENT === 1) {
+        const md = segVectors.metadata || {};
+        const dmin = md.dim_min, dmax = md.dim_max;
+        const f = new Float32Array(sv.length);
+        if (dmin && dmax) {
+            const scale = new Float32Array(dim);
+            for (let d = 0; d < dim; d++) scale[d] = (dmax[d] - dmin[d]) / 255;
+            for (let i = 0; i < N; i++) {
+                const b = i * dim;
+                for (let d = 0; d < dim; d++) f[b + d] = sv[b + d] * scale[d] + dmin[d];
+            }
+        } else {
+            for (let i = 0; i < sv.length; i++) f[i] = sv[i];
+        }
+        embCopy = f.buffer;
+    } else {
+        embCopy = sv.buffer.slice(0);
+    }
     const transferables = [embCopy];
 
     const sampleSize = Math.min(Math.max(5000, k * 500), N);
