@@ -71,7 +71,7 @@ sleep 1
 
 if [[ -n "$REMOTE" ]]; then
     echo "=== Deploying to $REMOTE ==="
-    ssh "$REMOTE" "cd ~/$REMOTE_DIR && git pull && $VENV/bin/pip install -q --upgrade geotessera && $VENV/bin/pip install -q -e 'packages/tessera-eval[server]' 2>&1 || true"
+    ssh "$REMOTE" "cd ~/$REMOTE_DIR && git pull && $VENV/bin/pip install -q --upgrade geotessera && $VENV/bin/pip install -q --upgrade 'tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.0.0' 2>&1 || true"
 
     if [[ "$EXTRA_ARGS" == *"--install-torch"* ]]; then
         if ssh "$REMOTE" "nvidia-smi" &>/dev/null; then

@@ -54,8 +54,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Copy application code
 COPY . .
 
-# Install tessera-eval from local package
-RUN pip3 install --no-cache-dir --break-system-packages packages/tessera-eval/
+# tessera-eval is installed from its own repo via requirements.txt (git pin),
+# so there is no local package install step here any more.
 
 # Bake git version (passed as build arg since .git is excluded)
 ARG GIT_VERSION=unknown

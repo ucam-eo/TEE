@@ -373,18 +373,8 @@ class TestBackendLibraries:
         ("lib/evaluation_engine.py", [
             "detect_field_type",
         ]),
-        ("packages/tessera-eval/tessera_eval/classify.py", [
-            "make_classifier", "make_regressor", "available_regressors",
-        ]),
-        ("packages/tessera-eval/tessera_eval/evaluate.py", [
-            "run_kfold_cv", "regression_metrics", "detect_field_type",
-        ]),
-        ("packages/tessera-eval/tessera_eval/data.py", [
-            "load_embeddings_for_shapefile",
-        ]),
-        ("packages/tessera-eval/tessera_eval/rasterize.py", [
-            "rasterize_shapefile",
-        ]),
+        # tessera_eval.* moved to its own repo (ucam-eo/tessera-eval); its API is
+        # guarded there + by TestTesseraEvalSelfContained (import-based) below.
         ("lib/tile_renderer.py", [
             "render_tile_png", "tile_to_bbox", "get_pyramid_path",
         ]),
@@ -523,95 +513,38 @@ class TestExternalDeps:
 
 
 # ──────────────────────────────────────────────────
-# 10. tessera-eval library completeness
-#     The library must be self-contained and usable
-#     without Django for the compute separation plan.
+# 10. tessera-eval is an external dependency
+#     (https://github.com/ucam-eo/tessera-eval). Its
+#     structural guarantees live in that repo's own
+#     tests; here we only assert the runtime contract
+#     blore relies on: it imports and is Django-free.
 # ──────────────────────────────────────────────────
-
-TESSERA_EVAL = ROOT / "packages" / "tessera-eval" / "tessera_eval"
 
 
 class TestTesseraEvalSelfContained:
-    """tessera_eval must be usable standalone (no Django imports)."""
+    """tessera_eval must import and stay framework-independent (no Django)."""
 
-    MODULES = ["__init__.py", "classify.py", "data.py", "evaluate.py", "rasterize.py"]
+    def test_importable(self):
+        pytest.importorskip("tessera_eval")
 
-    @pytest.mark.parametrize("module", MODULES)
-    def test_module_exists(self, module):
-        assert (TESSERA_EVAL / module).is_file(), f"tessera_eval/{module} missing"
+    def test_no_django_dependency(self):
+        import pkgutil
+        te = pytest.importorskip("tessera_eval")
+        pkg_dir = Path(te.__file__).parent
+        for mod in pkgutil.iter_modules([str(pkg_dir)]):
+            src = (pkg_dir / f"{mod.name}.py").read_text()
+            assert "import django" not in src and "from django" not in src, (
+                f"tessera_eval/{mod.name}.py imports Django"
+            )
 
-    @pytest.mark.parametrize("module", MODULES)
-    def test_no_django_import(self, module):
-        source = (TESSERA_EVAL / module).read_text()
-        assert "import django" not in source and "from django" not in source, (
-            f"tessera_eval/{module} imports Django — must be framework-independent"
-        )
-
-    def test_init_exports_core(self):
-        source = (TESSERA_EVAL / "__init__.py").read_text()
+    def test_exports_core_api(self):
+        te = pytest.importorskip("tessera_eval")
         for name in [
             "run_learning_curve", "run_kfold_cv", "regression_metrics",
             "detect_field_type", "make_classifier", "make_regressor",
             "rasterize_shapefile", "load_embeddings_for_shapefile",
         ]:
-            assert name in source, f"tessera_eval.__init__ missing export: {name}"
-
-    def test_rasterize_accepts_label_encoder(self):
-        source = (TESSERA_EVAL / "rasterize.py").read_text()
-        assert "label_encoder" in source, (
-            "rasterize_shapefile must accept label_encoder param for cross-tile consistency"
-        )
-
-    def test_evaluate_has_logging(self):
-        source = (TESSERA_EVAL / "evaluate.py").read_text()
-        assert "import logging" in source, "evaluate.py must use logging, not bare except"
-
-    def test_data_reprojects_to_tile_crs(self):
-        source = (TESSERA_EVAL / "data.py").read_text()
-        assert "to_crs" in source, (
-            "load_embeddings_for_shapefile must reproject GDF to tile CRS before rasterizing"
-        )
-
-    def test_pyproject_has_server_extra(self):
-        toml_path = ROOT / "packages" / "tessera-eval" / "pyproject.toml"
-        if not toml_path.is_file():
-            pytest.skip("pyproject.toml not found")
-        source = toml_path.read_text()
-        # Will be added when compute server is implemented
-        if "server" not in source:
-            pytest.skip("server extra not yet added — pending compute separation")
-
-    def test_server_module_exists(self):
-        server = TESSERA_EVAL / "server.py"
-        if not server.is_file():
-            pytest.skip("server.py not yet created — pending compute separation")
-        source = server.read_text()
-        assert "def main(" in source, "server.py must have a main() entry point"
-
-    def test_server_has_train_models_endpoint(self):
-        source = (TESSERA_EVAL / "server.py").read_text()
-        assert "train-models" in source, "server.py must have /train-models endpoint"
-        assert "train_models" in source, "server.py must have train_models function"
-
-    def test_server_uses_point_sampling(self):
-        source = (TESSERA_EVAL / "server.py").read_text()
-        assert "sample_embeddings_at_points" in source, (
-            "server.py must use GeoTessera's sample_embeddings_at_points API"
-        )
-        assert "sample_points" in source, (
-            "server.py must generate sample points within shapefile polygons"
-        )
-
-    def test_server_defers_model_training(self):
-        """Model training must NOT happen in run-large-area, only in train-models."""
-        source = (TESSERA_EVAL / "server.py").read_text()
-        # Find the run_large_area function body
-        idx = source.find("def run_large_area(")
-        end = source.find("\ndef ", idx + 1)
-        run_body = source[idx:end] if end > idx else source[idx:]
-        assert "joblib.dump" not in run_body, (
-            "run_large_area must NOT train models — training is deferred to train-models endpoint"
-        )
+            assert hasattr(te, name), f"tessera_eval missing export: {name}"
 
 
 # ──────────────────────────────────────────────────
