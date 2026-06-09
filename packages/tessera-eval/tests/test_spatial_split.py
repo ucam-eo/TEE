@@ -41,15 +41,17 @@ def spatial_split_data():
 
 def test_spatial_split_yields_progress(spatial_split_data):
     """Spatial split mode should yield progress events with F1 scores."""
-    events = list(run_learning_curve(
-        spatial_split_data["train_vectors"],
-        spatial_split_data["train_labels"],
-        classifier_names=["nn"],
-        training_pcts=[10, 50],
-        repeats=2,
-        test_vectors=spatial_split_data["test_vectors"],
-        test_labels=spatial_split_data["test_labels"],
-    ))
+    events = list(
+        run_learning_curve(
+            spatial_split_data["train_vectors"],
+            spatial_split_data["train_labels"],
+            classifier_names=["nn"],
+            training_pcts=[10, 50],
+            repeats=2,
+            test_vectors=spatial_split_data["test_vectors"],
+            test_labels=spatial_split_data["test_labels"],
+        )
+    )
 
     progress_events = [e for e in events if e["type"] == "progress"]
     assert len(progress_events) == 2
@@ -61,15 +63,17 @@ def test_spatial_split_yields_progress(spatial_split_data):
 
 def test_spatial_split_confusion_matrix(spatial_split_data):
     """Spatial split should produce a confusion matrix at the largest pct."""
-    events = list(run_learning_curve(
-        spatial_split_data["train_vectors"],
-        spatial_split_data["train_labels"],
-        classifier_names=["nn"],
-        training_pcts=[50, 80],
-        repeats=2,
-        test_vectors=spatial_split_data["test_vectors"],
-        test_labels=spatial_split_data["test_labels"],
-    ))
+    events = list(
+        run_learning_curve(
+            spatial_split_data["train_vectors"],
+            spatial_split_data["train_labels"],
+            classifier_names=["nn"],
+            training_pcts=[50, 80],
+            repeats=2,
+            test_vectors=spatial_split_data["test_vectors"],
+            test_labels=spatial_split_data["test_labels"],
+        )
+    )
 
     cm_events = [e for e in events if e["type"] == "confusion_matrices"]
     assert len(cm_events) == 1
@@ -84,17 +88,18 @@ def test_spatial_split_confusion_matrix(spatial_split_data):
 def test_no_spatial_split_backward_compatible(spatial_split_data):
     """Without test_vectors/test_labels, existing random split should work."""
     # Combine train+test as single pool (existing behavior)
-    vectors = np.vstack([spatial_split_data["train_vectors"],
-                         spatial_split_data["test_vectors"]])
-    labels = np.concatenate([spatial_split_data["train_labels"],
-                             spatial_split_data["test_labels"]])
+    vectors = np.vstack([spatial_split_data["train_vectors"], spatial_split_data["test_vectors"]])
+    labels = np.concatenate([spatial_split_data["train_labels"], spatial_split_data["test_labels"]])
 
-    events = list(run_learning_curve(
-        vectors, labels,
-        classifier_names=["nn"],
-        training_pcts=[10, 50],
-        repeats=2,
-    ))
+    events = list(
+        run_learning_curve(
+            vectors,
+            labels,
+            classifier_names=["nn"],
+            training_pcts=[10, 50],
+            repeats=2,
+        )
+    )
 
     progress_events = [e for e in events if e["type"] == "progress"]
     assert len(progress_events) == 2
@@ -105,15 +110,17 @@ def test_no_spatial_split_backward_compatible(spatial_split_data):
 def test_spatial_split_test_set_is_fixed(spatial_split_data):
     """In spatial split mode, test set size should not vary with training pct."""
     # The test set is fixed, so the number of test samples evaluated should be constant
-    events = list(run_learning_curve(
-        spatial_split_data["train_vectors"],
-        spatial_split_data["train_labels"],
-        classifier_names=["nn"],
-        training_pcts=[10, 80],
-        repeats=1,
-        test_vectors=spatial_split_data["test_vectors"],
-        test_labels=spatial_split_data["test_labels"],
-    ))
+    events = list(
+        run_learning_curve(
+            spatial_split_data["train_vectors"],
+            spatial_split_data["train_labels"],
+            classifier_names=["nn"],
+            training_pcts=[10, 80],
+            repeats=1,
+            test_vectors=spatial_split_data["test_vectors"],
+            test_labels=spatial_split_data["test_labels"],
+        )
+    )
 
     # Both should complete successfully
     progress_events = [e for e in events if e["type"] == "progress"]

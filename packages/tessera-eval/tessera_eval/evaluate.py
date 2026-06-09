@@ -7,23 +7,38 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 from sklearn.metrics import (
-    confusion_matrix, f1_score, mean_absolute_error, mean_squared_error, r2_score,
+    confusion_matrix,
+    f1_score,
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
 )
 from sklearn.model_selection import KFold, StratifiedKFold
-from sklearn.preprocessing import LabelEncoder
 
 from tessera_eval.classify import (
-    make_classifier, make_regressor, augment_spatial, _strip_variant_suffix,
+    _strip_variant_suffix,
+    augment_spatial,
+    make_classifier,
+    make_regressor,
 )
 
 
-def run_learning_curve(vectors, labels, classifier_names, training_pcts,
-                       repeats=5, classifier_params=None, spatial_vectors=None,
-                       spatial_vectors_5x5=None, spatial_labels=None,
-                       finish_classifiers=None,
-                       unet_patches=None,
-                       test_vectors=None, test_labels=None,
-                       **kwargs):
+def run_learning_curve(
+    vectors,
+    labels,
+    classifier_names,
+    training_pcts,
+    repeats=5,
+    classifier_params=None,
+    spatial_vectors=None,
+    spatial_vectors_5x5=None,
+    spatial_labels=None,
+    finish_classifiers=None,
+    unet_patches=None,
+    test_vectors=None,
+    test_labels=None,
+    **kwargs,
+):
     """Generator that yields progress events after each training percentage.
 
     Runs stratified sampling at each training percentage, computing F1 scores
@@ -53,6 +68,7 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
     warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
     warnings.filterwarnings("ignore", category=FutureWarning, module="sklearn")
     from sklearn.exceptions import ConvergenceWarning
+
     warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
     if finish_classifiers is None:
@@ -66,9 +82,12 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
     all_labels = np.concatenate([labels, test_labels]) if spatial_split else labels
     n_classes = len(np.unique(all_labels))
 
-    # Separate pixel-based and U-Net classifiers (use base name for type checks)
-    pixel_classifiers = [n for n in classifier_names if _strip_variant_suffix(n) != 'unet']
-    has_unet = any(_strip_variant_suffix(n) == 'unet' for n in classifier_names) and unet_patches and len(unet_patches) > 0
+    # Detect U-Net classifiers (use base name for type checks)
+    has_unet = (
+        any(_strip_variant_suffix(n) == "unet" for n in classifier_names)
+        and unet_patches
+        and len(unet_patches) > 0
+    )
 
     # Count total labelled pixels across all patches (for unified x-axis)
     # Computed even without U-Net — spatial MLP uses patches too
@@ -93,20 +112,32 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
         test_labels = test_labels[test_subsample]
 
     import time as _time
+
     if spatial_split:
-        logger.info("Learning curve (spatial split): %d train, %d test pixels, %d classes, %d classifiers, pcts=%s",
-                    n_samples, len(test_labels), n_classes, len(classifier_names), training_pcts)
+        logger.info(
+            "Learning curve (spatial split): %d train, %d test pixels, %d classes, %d classifiers, pcts=%s",
+            n_samples,
+            len(test_labels),
+            n_classes,
+            len(classifier_names),
+            training_pcts,
+        )
     else:
-        logger.info("Learning curve: %d pixels, %d classes, %d classifiers, pcts=%s",
-                    n_samples, n_classes, len(classifier_names), training_pcts)
+        logger.info(
+            "Learning curve: %d pixels, %d classes, %d classifiers, pcts=%s",
+            n_samples,
+            n_classes,
+            len(classifier_names),
+            training_pcts,
+        )
 
     for pct_idx, pct in enumerate(training_pcts):
         pct_t0 = _time.time()
         active = [n for n in classifier_names if n not in finish_classifiers]
-        active_pixel = [n for n in active if _strip_variant_suffix(n) != 'unet']
+        active_pixel = [n for n in active if _strip_variant_suffix(n) != "unet"]
         f1_scores = {name: [] for name in active}
         f1w_scores = {name: [] for name in active}
-        is_largest = (pct == training_pcts[-1])
+        is_largest = pct == training_pcts[-1]
 
         # Number of pixels for this percentage
         size = max(1, int(n_samples * pct / 100.0))
@@ -162,29 +193,42 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
             # Pixel-based classifiers
             for clf_idx, name in enumerate(active_pixel):
                 if seed == 0:
-                    yield {"type": "classifier_status",
-                           "message": f"Pct {pct}%: training {name} (repeat {seed+1}/{n_repeats})..."}
+                    yield {
+                        "type": "classifier_status",
+                        "message": f"Pct {pct}%: training {name} (repeat {seed + 1}/{n_repeats})...",
+                    }
                 base_clf_name = _strip_variant_suffix(name)
                 if base_clf_name == "spatial_mlp" and spatial_vectors is not None:
                     if spatial_labels is not None:
                         # Spatial vectors have their own labels (from patches, different size from pixel vectors)
                         n_sp = len(spatial_vectors)
                         sp_size = max(1, int(n_sp * pct / 100.0))
-                        sp_train_idx = rng.choice(n_sp, size=min(sp_size, int(n_sp * 0.8)), replace=False)
+                        sp_train_idx = rng.choice(
+                            n_sp, size=min(sp_size, int(n_sp * 0.8)), replace=False
+                        )
                         sp_test_mask = np.ones(n_sp, dtype=bool)
                         sp_test_mask[sp_train_idx] = False
                         sp_test_idx = np.where(sp_test_mask)[0]
                         X_tr, X_te = spatial_vectors[sp_train_idx], spatial_vectors[sp_test_idx]
-                        y_train_sp, y_test = spatial_labels[sp_train_idx], spatial_labels[sp_test_idx]
-                        X_tr, y_tr_aug = augment_spatial(X_tr, y_train_sp, window=3, dim=vectors.shape[1])
+                        y_train_sp, y_test = (
+                            spatial_labels[sp_train_idx],
+                            spatial_labels[sp_test_idx],
+                        )
+                        X_tr, y_tr_aug = augment_spatial(
+                            X_tr, y_train_sp, window=3, dim=vectors.shape[1]
+                        )
                     elif spatial_split:
                         # Spatial split: no test_idx, use fixed test set
                         X_tr, X_te = spatial_vectors[train_idx], X_test
-                        X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=3, dim=vectors.shape[1])
+                        X_tr, y_tr_aug = augment_spatial(
+                            X_tr, y_train, window=3, dim=vectors.shape[1]
+                        )
                         y_test = test_labels
                     else:
                         X_tr, X_te = spatial_vectors[train_idx], spatial_vectors[test_idx]
-                        X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=3, dim=vectors.shape[1])
+                        X_tr, y_tr_aug = augment_spatial(
+                            X_tr, y_train, window=3, dim=vectors.shape[1]
+                        )
                         y_test = labels[test_idx]
                 elif base_clf_name == "spatial_mlp_5x5" and spatial_vectors_5x5 is not None:
                     sp_vecs = spatial_vectors_5x5
@@ -192,20 +236,28 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                     if sp_lbls is not None:
                         n_sp = len(sp_vecs)
                         sp_size = max(1, int(n_sp * pct / 100.0))
-                        sp_train_idx = rng.choice(n_sp, size=min(sp_size, int(n_sp * 0.8)), replace=False)
+                        sp_train_idx = rng.choice(
+                            n_sp, size=min(sp_size, int(n_sp * 0.8)), replace=False
+                        )
                         sp_test_mask = np.ones(n_sp, dtype=bool)
                         sp_test_mask[sp_train_idx] = False
                         sp_test_idx = np.where(sp_test_mask)[0]
                         X_tr, X_te = sp_vecs[sp_train_idx], sp_vecs[sp_test_idx]
                         y_train_sp, y_test = sp_lbls[sp_train_idx], sp_lbls[sp_test_idx]
-                        X_tr, y_tr_aug = augment_spatial(X_tr, y_train_sp, window=5, dim=vectors.shape[1])
+                        X_tr, y_tr_aug = augment_spatial(
+                            X_tr, y_train_sp, window=5, dim=vectors.shape[1]
+                        )
                     elif spatial_split:
                         X_tr, X_te = sp_vecs[train_idx], X_test
-                        X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=5, dim=vectors.shape[1])
+                        X_tr, y_tr_aug = augment_spatial(
+                            X_tr, y_train, window=5, dim=vectors.shape[1]
+                        )
                         y_test = test_labels
                     else:
                         X_tr, X_te = sp_vecs[train_idx], sp_vecs[test_idx]
-                        X_tr, y_tr_aug = augment_spatial(X_tr, y_train, window=5, dim=vectors.shape[1])
+                        X_tr, y_tr_aug = augment_spatial(
+                            X_tr, y_train, window=5, dim=vectors.shape[1]
+                        )
                         y_test = labels[test_idx]
                 else:
                     X_tr, X_te = X_train, X_test
@@ -227,19 +279,25 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                         cm = confusion_matrix(y_test, y_pred, labels=np.arange(n_classes))
                         cm_accum[name] += cm
                 except Exception as exc:
-                    logger.warning("Classifier %s failed at pct %.1f seed %d: %s", name, pct, seed, exc)
+                    logger.warning(
+                        "Classifier %s failed at pct %.1f seed %d: %s", name, pct, seed, exc
+                    )
                     f1_scores[name].append(0.0)
                     f1w_scores[name].append(0.0)
 
             # U-Net: patch-based train/test split
             # Only run 1 repeat for U-Net (training is expensive, variance is dominated by SGD noise)
-            unet_active = [n for n in active if _strip_variant_suffix(n) == 'unet']
+            unet_active = [n for n in active if _strip_variant_suffix(n) == "unet"]
             if has_unet and unet_active and seed == 0:
-                yield {"type": "classifier_status",
-                       "message": f"Pct {pct}%: training U-Net..."}
+                yield {"type": "classifier_status", "message": f"Pct {pct}%: training U-Net..."}
                 for unet_name in unet_active:
                     try:
-                        from tessera_eval.unet import train_unet_on_patches, predict_unet_tile, _HAS_TORCH
+                        from tessera_eval.unet import (
+                            _HAS_TORCH,
+                            predict_unet_tile,
+                            train_unet_on_patches,
+                        )
+
                         if _HAS_TORCH:
                             n_patches = len(unet_patches)
                             n_train = max(1, int(n_patches * pct / 100.0))
@@ -247,20 +305,22 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                             n_train = min(n_train, 20)  # cap training patches for speed
                             patch_idx = rng.permutation(n_patches)
                             train_patches = [unet_patches[i] for i in patch_idx[:n_train]]
-                            test_patches = [unet_patches[i] for i in patch_idx[n_train:n_train + 10]]  # cap test too
+                            test_patches = [
+                                unet_patches[i] for i in patch_idx[n_train : n_train + 10]
+                            ]  # cap test too
 
                             if train_patches and test_patches:
                                 # Use fewer epochs for learning curve (full epochs only for final model)
                                 unet_params = dict((classifier_params or {}).get(unet_name, {}))
-                                unet_params.setdefault('epochs', 15)
-                                model = train_unet_on_patches(
-                                    train_patches, n_classes, unet_params)
+                                unet_params.setdefault("epochs", 15)
+                                model = train_unet_on_patches(train_patches, n_classes, unet_params)
 
                                 # Evaluate on test patches
                                 all_true, all_pred = [], []
                                 for emb_patch, lbl_patch in test_patches:
-                                    pred = predict_unet_tile(model, emb_patch,
-                                                             patch_size=emb_patch.shape[0])
+                                    pred = predict_unet_tile(
+                                        model, emb_patch, patch_size=emb_patch.shape[0]
+                                    )
                                     # Ensure pred and lbl_patch have matching shapes
                                     ph = min(pred.shape[0], lbl_patch.shape[0])
                                     pw = min(pred.shape[1], lbl_patch.shape[1])
@@ -275,11 +335,15 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                                     y_true = np.concatenate(all_true)
                                     y_pred = np.concatenate(all_pred)
                                     f1 = f1_score(y_true, y_pred, average="macro", zero_division=0)
-                                    f1w = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+                                    f1w = f1_score(
+                                        y_true, y_pred, average="weighted", zero_division=0
+                                    )
                                     f1_scores[unet_name].append(float(f1))
                                     f1w_scores[unet_name].append(float(f1w))
                                     if is_largest:
-                                        cm = confusion_matrix(y_true, y_pred, labels=np.arange(n_classes))
+                                        cm = confusion_matrix(
+                                            y_true, y_pred, labels=np.arange(n_classes)
+                                        )
                                         cm_accum[unet_name] += cm
                                 else:
                                     f1_scores[unet_name].append(0.0)
@@ -288,7 +352,9 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
                                 f1_scores[unet_name].append(0.0)
                                 f1w_scores[unet_name].append(0.0)
                     except Exception as exc:
-                        logger.warning("U-Net %s failed at pct %.1f seed %d: %s", unet_name, pct, seed, exc)
+                        logger.warning(
+                            "U-Net %s failed at pct %.1f seed %d: %s", unet_name, pct, seed, exc
+                        )
                         f1_scores.setdefault(unet_name, []).append(0.0)
                         f1w_scores.setdefault(unet_name, []).append(0.0)
 
@@ -306,18 +372,28 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
         # Compute actual training pixel counts for unified x-axis
         pixel_train_count = len(train_idx)  # from last repeat (representative)
         unet_train_count = 0
-        if has_unet and any(_strip_variant_suffix(n) == 'unet' for n in active):
+        if has_unet and any(_strip_variant_suffix(n) == "unet" for n in active):
             n_train_patches = max(1, int(len(unet_patches) * pct / 100.0))
             n_train_patches = min(n_train_patches, len(unet_patches) - 1)
             n_train_patches = min(n_train_patches, 20)
             unet_train_count = sum(unet_patch_pixel_counts[:n_train_patches])
 
         pct_elapsed = _time.time() - pct_t0
-        f1_summary = ", ".join(f"{n}={pct_results[n]['mean_f1']:.3f}" for n in active if n in pct_results)
-        logger.info("Pct %d/%d (%.0f%%) done in %.1fs — %s",
-                     pct_idx + 1, len(training_pcts), pct, pct_elapsed, f1_summary)
+        f1_summary = ", ".join(
+            f"{n}={pct_results[n]['mean_f1']:.3f}" for n in active if n in pct_results
+        )
+        logger.info(
+            "Pct %d/%d (%.0f%%) done in %.1fs — %s",
+            pct_idx + 1,
+            len(training_pcts),
+            pct,
+            pct_elapsed,
+            f1_summary,
+        )
         yield {
-            "type": "progress", "pct": pct, "classifiers": pct_results,
+            "type": "progress",
+            "pct": pct,
+            "classifiers": pct_results,
             "pixel_train_count": pixel_train_count,
             "unet_train_count": unet_train_count,
             "total_pixels": n_samples,
@@ -332,9 +408,17 @@ def run_learning_curve(vectors, labels, classifier_names, training_pcts,
         yield {"type": "confusion_matrices", "confusion_matrices": confusion_matrices}
 
 
-def evaluate(vectors, labels, classifiers=None, training_sizes=None,
-             max_train=10000, repeats=5, classifier_params=None,
-             spatial_vectors=None, spatial_vectors_5x5=None):
+def evaluate(
+    vectors,
+    labels,
+    classifiers=None,
+    training_sizes=None,
+    max_train=10000,
+    repeats=5,
+    classifier_params=None,
+    spatial_vectors=None,
+    spatial_vectors_5x5=None,
+):
     """Run evaluation and collect all results (non-streaming).
 
     Convenience wrapper around run_learning_curve that collects all events
@@ -367,8 +451,14 @@ def evaluate(vectors, labels, classifiers=None, training_sizes=None,
     confusion_matrices = {}
 
     for event in run_learning_curve(
-        vectors, labels, classifiers, training_sizes, repeats,
-        classifier_params, spatial_vectors, spatial_vectors_5x5
+        vectors,
+        labels,
+        classifiers,
+        training_sizes,
+        repeats,
+        classifier_params,
+        spatial_vectors,
+        spatial_vectors_5x5,
     ):
         if event["type"] == "progress":
             progress_events.append(event)
@@ -426,8 +516,16 @@ def regression_metrics(y_true, y_pred):
     }
 
 
-def run_kfold_cv(vectors, labels, model_names, k=5, task="classification",
-                 model_params=None, max_training_samples=None, seed=42):
+def run_kfold_cv(
+    vectors,
+    labels,
+    model_names,
+    k=5,
+    task="classification",
+    model_params=None,
+    max_training_samples=None,
+    seed=42,
+):
     """Generator that yields per-fold and aggregate results for k-fold CV.
 
     Supports both classification and regression tasks. For classification,
@@ -454,16 +552,15 @@ def run_kfold_cv(vectors, labels, model_names, k=5, task="classification",
     warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
     warnings.filterwarnings("ignore", category=FutureWarning, module="sklearn")
     from sklearn.exceptions import ConvergenceWarning
+
     warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
-    n_samples = len(labels)
-    is_classification = (task == "classification")
+    is_classification = task == "classification"
 
     if is_classification:
         splitter = StratifiedKFold(n_splits=k, shuffle=True, random_state=seed)
         n_classes = len(np.unique(labels))
-        cm_accum = {name: np.zeros((n_classes, n_classes), dtype=np.int64)
-                    for name in model_names}
+        cm_accum = {name: np.zeros((n_classes, n_classes), dtype=np.int64) for name in model_names}
     else:
         splitter = KFold(n_splits=k, shuffle=True, random_state=seed)
 
@@ -491,10 +588,12 @@ def run_kfold_cv(vectors, labels, model_names, k=5, task="classification",
 
                 if is_classification:
                     metrics = {
-                        "mean_f1": round(float(f1_score(
-                            y_test, y_pred, average="macro", zero_division=0)), 4),
-                        "mean_f1w": round(float(f1_score(
-                            y_test, y_pred, average="weighted", zero_division=0)), 4),
+                        "mean_f1": round(
+                            float(f1_score(y_test, y_pred, average="macro", zero_division=0)), 4
+                        ),
+                        "mean_f1w": round(
+                            float(f1_score(y_test, y_pred, average="weighted", zero_division=0)), 4
+                        ),
                     }
                     cm = confusion_matrix(y_test, y_pred, labels=np.arange(n_classes))
                     cm_accum[name] += cm

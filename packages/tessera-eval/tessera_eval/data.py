@@ -137,6 +137,7 @@ def load_embeddings_for_shapefile(gdf, field, year, gt_instance, callback=None):
         ValueError: If no labelled pixels found
     """
     from sklearn.preprocessing import LabelEncoder
+
     from tessera_eval.rasterize import rasterize_shapefile
 
     bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)

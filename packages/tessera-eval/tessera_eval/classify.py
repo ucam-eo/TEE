@@ -14,7 +14,7 @@ def _strip_variant_suffix(name):
     Variant names are created by the server when a classifier has multiple
     parameter sets. The base name is used for classifier lookup.
     """
-    return re.sub(r'_v\d+$', '', name)
+    return re.sub(r"_v\d+$", "", name)
 
 
 def available_classifiers():
@@ -22,6 +22,7 @@ def available_classifiers():
     names = ["nn", "rf", "mlp", "spatial_mlp", "spatial_mlp_5x5"]
     try:
         import xgboost  # noqa: F401
+
         names.append("xgboost")
     except ImportError:
         pass
@@ -60,16 +61,21 @@ def make_classifier(name, params=None):
         return RandomForestClassifier(
             n_estimators=int(p.get("n_estimators", 100)),
             max_depth=max_depth,
-            n_jobs=-1, random_state=42,
+            n_jobs=-1,
+            random_state=42,
         )
     elif base_name == "xgboost":
         from xgboost import XGBClassifier
+
         return XGBClassifier(
             n_estimators=int(p.get("n_estimators", 100)),
             max_depth=int(p.get("max_depth", 6)),
             learning_rate=float(p.get("learning_rate", 0.3)),
-            n_jobs=-1, random_state=42,
-            use_label_encoder=False, eval_metric="mlogloss", verbosity=0,
+            n_jobs=-1,
+            random_state=42,
+            use_label_encoder=False,
+            eval_metric="mlogloss",
+            verbosity=0,
         )
     elif base_name == "mlp":
         layers_str = p.get("hidden_layers", "64,32")
@@ -99,8 +105,7 @@ def make_classifier(name, params=None):
         raise ValueError(f"Unknown classifier: {name}")
 
 
-def gather_spatial_features(vectors, coords, width, height, radius=1,
-                            subset_mask=None):
+def gather_spatial_features(vectors, coords, width, height, radius=1, subset_mask=None):
     """Build (2r+1)^2 neighbourhood features from (N, dim) vectors on a regular grid.
 
     For each pixel, concatenates its own embedding with those of its
@@ -129,8 +134,7 @@ def gather_spatial_features(vectors, coords, width, height, radius=1,
     else:
         sub_coords = coords
 
-    offsets = [(dr, dc) for dr in range(-radius, radius + 1)
-                        for dc in range(-radius, radius + 1)]
+    offsets = [(dr, dc) for dr in range(-radius, radius + 1) for dc in range(-radius, radius + 1)]
     spatial = np.zeros((len(sub_coords), window * window * dim), dtype=np.float32)
 
     for i, (dr, dc) in enumerate(offsets):
@@ -139,7 +143,7 @@ def gather_spatial_features(vectors, coords, width, height, radius=1,
         valid = (nr >= 0) & (nr < height) & (nc >= 0) & (nc < width)
         idx = np.where(valid, grid[np.clip(nr, 0, height - 1), np.clip(nc, 0, width - 1)], -1)
         has_neighbour = valid & (idx >= 0)
-        spatial[has_neighbour, i * dim:(i + 1) * dim] = vectors[idx[has_neighbour]]
+        spatial[has_neighbour, i * dim : (i + 1) * dim] = vectors[idx[has_neighbour]]
 
     return spatial
 
@@ -203,6 +207,7 @@ def available_regressors():
     names = ["nn_reg", "rf_reg", "mlp_reg"]
     try:
         import xgboost  # noqa: F401
+
         names.append("xgboost_reg")
     except ImportError:
         pass
@@ -240,15 +245,19 @@ def make_regressor(name, params=None):
         return RandomForestRegressor(
             n_estimators=int(p.get("n_estimators", 100)),
             max_depth=max_depth,
-            n_jobs=-1, random_state=42,
+            n_jobs=-1,
+            random_state=42,
         )
     elif base_name == "xgboost_reg":
         from xgboost import XGBRegressor
+
         return XGBRegressor(
             n_estimators=int(p.get("n_estimators", 100)),
             max_depth=int(p.get("max_depth", 6)),
             learning_rate=float(p.get("learning_rate", 0.3)),
-            n_jobs=-1, random_state=42, verbosity=0,
+            n_jobs=-1,
+            random_state=42,
+            verbosity=0,
         )
     elif base_name == "mlp_reg":
         layers_str = p.get("hidden_layers", "64,32")

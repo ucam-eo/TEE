@@ -1,11 +1,11 @@
 """Test rasterize_shapefile with a pre-fitted LabelEncoder (Fix 1)."""
 
+import geopandas as gpd
 import numpy as np
 import pytest
 from affine import Affine
-from sklearn.preprocessing import LabelEncoder
-import geopandas as gpd
 from shapely.geometry import box
+from sklearn.preprocessing import LabelEncoder
 
 from tessera_eval.rasterize import rasterize_shapefile
 
@@ -13,13 +13,16 @@ from tessera_eval.rasterize import rasterize_shapefile
 @pytest.fixture
 def sample_gdf():
     """GDF with three habitat types covering a small grid."""
-    return gpd.GeoDataFrame({
-        "geometry": [
-            box(0, 0, 5, 5),
-            box(5, 0, 10, 5),
-        ],
-        "habitat": ["grassland", "woodland"],
-    }, crs="EPSG:4326")
+    return gpd.GeoDataFrame(
+        {
+            "geometry": [
+                box(0, 0, 5, 5),
+                box(5, 0, 10, 5),
+            ],
+            "habitat": ["grassland", "woodland"],
+        },
+        crs="EPSG:4326",
+    )
 
 
 def test_prefitted_encoder_matches_ordering(sample_gdf):
@@ -32,7 +35,12 @@ def test_prefitted_encoder_matches_ordering(sample_gdf):
     transform = Affine(1, 0, 0, 0, -1, 10)  # 1 px = 1 unit
 
     raster = rasterize_shapefile(
-        sample_gdf, "habitat", transform, width=10, height=10, label_encoder=le,
+        sample_gdf,
+        "habitat",
+        transform,
+        width=10,
+        height=10,
+        label_encoder=le,
     )
 
     # Encoder ordering: grassland=0, wetland=1, woodland=2

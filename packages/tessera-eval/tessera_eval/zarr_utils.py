@@ -6,6 +6,7 @@ Used by both the evaluation server (server.py) and viewport processing
 """
 
 import logging
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ def get_zarr():
     if _zarr_instance is None:
         try:
             from geotessera.store import GeoTesseraZarr
+
             _zarr_instance = GeoTesseraZarr()
             logger.info("GeoTesseraZarr available: %s", _zarr_instance.url)
         except Exception:
@@ -49,7 +51,7 @@ def probe_zarr_coverage(gtz, bounds, year):
 # ── Chunked region reading ──
 
 CHUNK_THRESHOLD = 0.2  # degrees — regions larger than this get split
-CHUNK_SIZE = 0.1       # degrees per chunk
+CHUNK_SIZE = 0.1  # degrees per chunk
 
 
 def _reproject_to_4326(mosaic, transform, src_crs):
@@ -72,7 +74,7 @@ def _reproject_to_4326(mosaic, transform, src_crs):
     if str(src_crs).upper().replace(" ", "") in ("EPSG:4326", "WGS84"):
         return mosaic, transform, dst_crs
 
-    from rasterio.warp import calculate_default_transform, reproject, Resampling
+    from rasterio.warp import Resampling, calculate_default_transform, reproject
 
     h, w, bands = mosaic.shape
     left, top = transform.c, transform.f
@@ -80,19 +82,25 @@ def _reproject_to_4326(mosaic, transform, src_crs):
     bottom = top + transform.e * h
 
     dst_transform, dst_w, dst_h = calculate_default_transform(
-        src_crs, dst_crs, w, h, left=left, bottom=bottom, right=right, top=top)
+        src_crs, dst_crs, w, h, left=left, bottom=bottom, right=right, top=top
+    )
 
     src = np.ascontiguousarray(np.transpose(mosaic, (2, 0, 1)))  # (B, H, W)
     dst = np.full((bands, dst_h, dst_w), np.nan, dtype=np.float32)
     reproject(
-        source=src, destination=dst,
-        src_transform=transform, src_crs=src_crs,
-        dst_transform=dst_transform, dst_crs=dst_crs,
-        src_nodata=np.nan, dst_nodata=np.nan,
+        source=src,
+        destination=dst,
+        src_transform=transform,
+        src_crs=src_crs,
+        dst_transform=dst_transform,
+        dst_crs=dst_crs,
+        src_nodata=np.nan,
+        dst_nodata=np.nan,
         resampling=Resampling.nearest,
     )
-    logger.info("Reprojected zarr mosaic %s (%dx%d) -> EPSG:4326 (%dx%d)",
-                src_crs, w, h, dst_w, dst_h)
+    logger.info(
+        "Reprojected zarr mosaic %s (%dx%d) -> EPSG:4326 (%dx%d)", src_crs, w, h, dst_w, dst_h
+    )
     return np.transpose(dst, (1, 2, 0)), dst_transform, dst_crs
 
 
@@ -145,8 +153,14 @@ def read_region_chunked(gtz, bounds, year):
             try:
                 emb, tfm, crs = gtz.read_region(chunk_bbox, year)
             except Exception as e:
-                logger.warning("Zarr chunk (%.3f,%.3f)-(%.3f,%.3f) failed: %s",
-                               lon_start, lat_start, lon_end, lat_end, e)
+                logger.warning(
+                    "Zarr chunk (%.3f,%.3f)-(%.3f,%.3f) failed: %s",
+                    lon_start,
+                    lat_start,
+                    lon_end,
+                    lat_end,
+                    e,
+                )
                 continue
             if emb is None or emb.size == 0:
                 continue
@@ -159,7 +173,6 @@ def read_region_chunked(gtz, bounds, year):
         return None, None, None
 
     # Merge: compute the full mosaic size from the first and last transforms
-    import rasterio.transform
     px = first_transform.a  # pixel size in CRS units
     all_rows = []
     all_cols = []
@@ -178,7 +191,7 @@ def read_region_chunked(gtz, bounds, year):
         col_off = round((tfm.c - first_transform.c) / px)
         row_off = round((first_transform.f - tfm.f) / px)
         h, w = emb.shape[:2]
-        mosaic[row_off:row_off + h, col_off:col_off + w] = emb
+        mosaic[row_off : row_off + h, col_off : col_off + w] = emb
 
     # Merge happens in native CRS; reproject the assembled mosaic to 4326.
     return _reproject_to_4326(mosaic, first_transform, first_crs)

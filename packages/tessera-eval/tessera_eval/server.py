@@ -43,8 +43,15 @@ _merged_gdf = None
 _trained_models = {}  # classifier name → temp file path
 _generated_maps = {}  # map name → temp file path (GeoTIFF)
 _finish_classifiers = set()
-_tile_cache = {"key": None, "vectors": None, "labels": None, "class_names": None,
-               "stats": None, "spatial_3x3": None, "spatial_5x5": None}
+_tile_cache = {
+    "key": None,
+    "vectors": None,
+    "labels": None,
+    "class_names": None,
+    "stats": None,
+    "spatial_3x3": None,
+    "spatial_5x5": None,
+}
 _hosted_url = None
 _tile_disk_cache_dir = None  # set in main()
 _geotessera_instance = None  # cached to avoid 10-30s registry init per run
@@ -70,6 +77,7 @@ def _result_cache_path(field, year, gdf_hash, sampling="equal"):
 def _gdf_hash(gdf):
     """Quick hash of a GeoDataFrame for cache keying."""
     import hashlib
+
     h = hashlib.md5()
     h.update(str(len(gdf)).encode())
     h.update(str(sorted(gdf.columns.tolist())).encode())
@@ -84,21 +92,36 @@ def _load_cached_result(field, year, gdf, sampling="equal"):
     if path.exists():
         try:
             data = np.load(path, allow_pickle=True)
-            return (data["vectors"], data["labels"],
-                    data["class_names"].tolist(), dict(data["stats"].item()))
+            return (
+                data["vectors"],
+                data["labels"],
+                data["class_names"].tolist(),
+                dict(data["stats"].item()),
+            )
         except Exception:
             path.unlink(missing_ok=True)
     return None
 
 
-from tessera_eval.zarr_utils import get_zarr, probe_zarr_coverage, read_region_chunked
+from tessera_eval.zarr_utils import get_zarr, probe_zarr_coverage
 
 
-def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
-                          patch_size=256, max_patches=500,
-                          needs_spatial_3x3=False, needs_spatial_5x5=False,
-                          sample_points_lonlat=None,
-                          logger=None, progress_cb=None, cancel_flag=None):
+def _extract_tile_patches(
+    gt,
+    gdf,
+    field_name,
+    year,
+    le,
+    n_classes,
+    patch_size=256,
+    max_patches=500,
+    needs_spatial_3x3=False,
+    needs_spatial_5x5=False,
+    sample_points_lonlat=None,
+    logger=None,
+    progress_cb=None,
+    cancel_flag=None,
+):
     """Extract pixel-aligned 2D patches and optionally point samples from tiles.
 
     Uses zarr read_region() when available (~0.2s/patch vs ~15s/tile via NPY).
@@ -107,11 +130,12 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
     Returns (unet_patches, spatial_3x3, spatial_5x5, point_vectors) where
     point_vectors is a (N, 128) array if sample_points_lonlat was given, else None.
     """
-    from tessera_eval.classify import gather_spatial_features_2d
-    from tessera_eval.rasterize import rasterize_shapefile
+    import rasterio.transform
     from rasterio.transform import array_bounds
     from shapely.geometry import box as _box
-    import rasterio.transform
+
+    from tessera_eval.classify import gather_spatial_features_2d
+    from tessera_eval.rasterize import rasterize_shapefile
 
     rng = np.random.RandomState(42)
 
@@ -123,7 +147,9 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
     gtz = get_zarr()
     use_zarr = gtz is not None and probe_zarr_coverage(gtz, bounds, year)
     if logger:
-        logger.info("Using %s for tile reads", "zarr (fast)" if use_zarr else "NPY tiles with local cache")
+        logger.info(
+            "Using %s for tile reads", "zarr (fast)" if use_zarr else "NPY tiles with local cache"
+        )
     bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
     tiles_to_fetch = gt.registry.load_blocks_for_region(bbox, year)
     tiles_to_fetch = list(tiles_to_fetch)
@@ -147,7 +173,11 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
             points_by_tile[key].append(pt_idx)
 
     if logger:
-        pts_info = f", {len(sample_points_lonlat)} sample points" if sample_points_lonlat is not None else ""
+        pts_info = (
+            f", {len(sample_points_lonlat)} sample points"
+            if sample_points_lonlat is not None
+            else ""
+        )
         logger.info("Reading %d tiles (shuffled)%s...", len(tiles_to_fetch), pts_info)
 
     unet_patches = []
@@ -192,6 +222,7 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
         n_extracted = 0
         if tile_key in points_by_tile:
             from pyproj import Transformer
+
             pt_indices = np.array(points_by_tile[tile_key])
             lons = np.array([sample_points_lonlat[i][0] for i in pt_indices])
             lats = np.array([sample_points_lonlat[i][1] for i in pt_indices])
@@ -208,8 +239,14 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
             n_extracted = int(valid.sum())
         if logger and t_idx < 3:  # debug first 3 tiles
             n_pts = len(points_by_tile.get(tile_key, []))
-            logger.info("  tile_key=%s, %d points matched, %d extracted, tile shape=%s, crs=%s",
-                        tile_key, n_pts, n_extracted, tile_emb.shape, crs)
+            logger.info(
+                "  tile_key=%s, %d points matched, %d extracted, tile shape=%s, crs=%s",
+                tile_key,
+                n_pts,
+                n_extracted,
+                tile_emb.shape,
+                crs,
+            )
 
         patches_full = len(unet_patches) >= max_patches
         if patches_full:
@@ -217,15 +254,25 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
 
         if h < patch_size or w < patch_size:
             if logger:
-                logger.info("  Skipping tile (%d×%d) — smaller than patch size %d", h, w, patch_size)
+                logger.info(
+                    "  Skipping tile (%d×%d) — smaller than patch size %d", h, w, patch_size
+                )
             continue
 
         if logger:
-            logger.info("Tile %d/%d (%.2f, %.2f): %s, extracting patches...",
-                        t_idx + 1, total_tiles, tlon, tlat, tile_emb.shape[:2])
+            logger.info(
+                "Tile %d/%d (%.2f, %.2f): %s, extracting patches...",
+                t_idx + 1,
+                total_tiles,
+                tlon,
+                tlat,
+                tile_emb.shape[:2],
+            )
 
         # Filter GDF to tile area BEFORE reprojecting (avoids reprojecting 42K features)
-        tile_bbox_lonlat = _box(tlon - 0.06, tlat - 0.06, tlon + 0.06, tlat + 0.06)  # slight padding
+        tile_bbox_lonlat = _box(
+            tlon - 0.06, tlat - 0.06, tlon + 0.06, tlat + 0.06
+        )  # slight padding
         tile_gdf = gdf[gdf.intersects(tile_bbox_lonlat)]
         if tile_gdf.empty:
             continue
@@ -236,8 +283,7 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
             continue
 
         # Rasterize labels for the full tile
-        tile_labels = rasterize_shapefile(tile_gdf, field_name, transform,
-                                          h, w, label_encoder=le)
+        tile_labels = rasterize_shapefile(tile_gdf, field_name, transform, h, w, label_encoder=le)
 
         # Find rows/cols where labels exist, with enough margin for a patch
         labelled_rows, labelled_cols = np.where(tile_labels > 0)
@@ -245,8 +291,12 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
             continue
 
         margin = patch_size // 2
-        valid = ((labelled_rows >= margin) & (labelled_rows < h - margin) &
-                 (labelled_cols >= margin) & (labelled_cols < w - margin))
+        valid = (
+            (labelled_rows >= margin)
+            & (labelled_rows < h - margin)
+            & (labelled_cols >= margin)
+            & (labelled_cols < w - margin)
+        )
         valid_rows = labelled_rows[valid]
         valid_cols = labelled_cols[valid]
         if len(valid_rows) == 0:
@@ -303,26 +353,45 @@ def _extract_tile_patches(gt, gdf, field_name, year, le, n_classes,
         if logger:
             logger.info("  %d patches so far (%d from this tile)", len(unet_patches), n_pick)
 
-    spatial_3x3 = np.concatenate(all_spatial_3x3, axis=0).astype(np.float32) if all_spatial_3x3 else None
-    spatial_5x5 = np.concatenate(all_spatial_5x5, axis=0).astype(np.float32) if all_spatial_5x5 else None
-    spatial_labels_3x3 = np.concatenate(all_spatial_labels_3x3).astype(np.int32) if all_spatial_labels_3x3 else None
-    spatial_labels_5x5 = np.concatenate(all_spatial_labels_5x5).astype(np.int32) if all_spatial_labels_5x5 else None
+    spatial_3x3 = (
+        np.concatenate(all_spatial_3x3, axis=0).astype(np.float32) if all_spatial_3x3 else None
+    )
+    spatial_5x5 = (
+        np.concatenate(all_spatial_5x5, axis=0).astype(np.float32) if all_spatial_5x5 else None
+    )
+    spatial_labels_3x3 = (
+        np.concatenate(all_spatial_labels_3x3).astype(np.int32) if all_spatial_labels_3x3 else None
+    )
+    spatial_labels_5x5 = (
+        np.concatenate(all_spatial_labels_5x5).astype(np.int32) if all_spatial_labels_5x5 else None
+    )
 
     if logger:
         s3 = f", spatial_3x3={spatial_3x3.shape}" if spatial_3x3 is not None else ""
         s5 = f", spatial_5x5={spatial_5x5.shape}" if spatial_5x5 is not None else ""
         logger.info("Tile patches: %d total%s%s", len(unet_patches), s3, s5)
 
-    return unet_patches, spatial_3x3, spatial_5x5, point_vectors, spatial_labels_3x3, spatial_labels_5x5
+    return (
+        unet_patches,
+        spatial_3x3,
+        spatial_5x5,
+        point_vectors,
+        spatial_labels_3x3,
+        spatial_labels_5x5,
+    )
 
 
 def _save_cached_result(field, year, gdf, vectors, labels, class_names, stats, sampling="equal"):
     """Save evaluation result to disk cache."""
     try:
         path = _result_cache_path(field, year, _gdf_hash(gdf), sampling)
-        np.savez_compressed(path, vectors=vectors, labels=labels,
-                            class_names=np.array(class_names),
-                            stats=np.array(stats))
+        np.savez_compressed(
+            path,
+            vectors=vectors,
+            labels=labels,
+            class_names=np.array(class_names),
+            stats=np.array(stats),
+        )
     except Exception as e:
         logger.debug("Failed to save result cache: %s", e)
 
@@ -344,12 +413,15 @@ def _get_merged_gdf():
     if not _uploaded_shapefiles:
         return None
     import pandas as pd
+
     _merged_gdf = gpd.GeoDataFrame(
-        pd.concat([g for _, g in _uploaded_shapefiles], ignore_index=True))
+        pd.concat([g for _, g in _uploaded_shapefiles], ignore_index=True)
+    )
     return _merged_gdf
 
 
 # ── Local evaluation endpoints ──
+
 
 @app.route("/api/evaluation/upload-shapefile", methods=["POST"])
 def upload_shapefile():
@@ -378,6 +450,7 @@ def upload_shapefile():
 
     try:
         import pandas as pd
+
         gdfs = [gpd.read_file(shp) for shp in shp_files]
         gdf = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True)) if len(gdfs) > 1 else gdfs[0]
     except Exception as e:
@@ -399,8 +472,12 @@ def upload_shapefile():
     _merged_gdf = None  # invalidate merged GDF cache
     # Note: _tile_cache is NOT invalidated here — tiles don't depend on shapefile.
     # The cache key is (field, year) which naturally misses if field changes.
-    logger.info("Uploaded '%s': %d features, %d fields",
-                uploaded.filename, len(gdf), len([c for c in gdf.columns if c != "geometry"]))
+    logger.info(
+        "Uploaded '%s': %d features, %d fields",
+        uploaded.filename,
+        len(gdf),
+        len([c for c in gdf.columns if c != "geometry"]),
+    )
 
     merged = _get_merged_gdf()
 
@@ -417,11 +494,16 @@ def upload_shapefile():
         # Per-class polygon counts (from full GDF, not truncated GeoJSON)
         class_counts = merged[col].dropna().value_counts().to_dict()
         class_counts = {str(k): int(v) for k, v in class_counts.items()}
-        fields.append({
-            "name": col, "unique_count": int(unique_count),
-            "non_null": non_null, "total": total, "samples": samples,
-            "class_counts": class_counts,
-        })
+        fields.append(
+            {
+                "name": col,
+                "unique_count": int(unique_count),
+                "non_null": non_null,
+                "total": total,
+                "samples": samples,
+                "class_counts": class_counts,
+            }
+        )
 
     # Build GeoJSON for map overlay
     MAX_OVERLAY = 10_000
@@ -439,11 +521,14 @@ def upload_shapefile():
     except Exception:
         estimated_labelled_pixels = 0
 
-    return jsonify({
-        "fields": fields, "geojson": geojson,
-        "files": [f for f, _ in _uploaded_shapefiles],
-        "estimated_labelled_pixels": estimated_labelled_pixels,
-    })
+    return jsonify(
+        {
+            "fields": fields,
+            "geojson": geojson,
+            "files": [f for f, _ in _uploaded_shapefiles],
+            "estimated_labelled_pixels": estimated_labelled_pixels,
+        }
+    )
 
 
 @app.route("/api/evaluation/clear-shapefiles", methods=["POST"])
@@ -516,11 +601,12 @@ def run_large_area():
 
     # Auto-detect task type
     from tessera_eval.evaluate import detect_field_type
+
     task = body.get("task")
     if task is None or task == "auto":
         task = detect_field_type(gdf, field_name)
 
-    is_classification = (task == "classification")
+    is_classification = task == "classification"
     _CLF_TO_REG = {"nn": "nn_reg", "rf": "rf_reg", "mlp": "mlp_reg", "xgboost": "xgboost_reg"}
     # Expand hyperparameter variants: if classifier_params[name] is a list,
     # each element becomes a separate variant (e.g., "mlp_v1", "mlp_v2").
@@ -538,7 +624,7 @@ def run_large_area():
             p = params.get(name, {})
             if isinstance(p, list):
                 for i, variant_p in enumerate(p):
-                    variant_name = f"{name}_v{i+1}"
+                    variant_name = f"{name}_v{i + 1}"
                     expanded_names.append(variant_name)
                     expanded_params[variant_name] = variant_p
             else:
@@ -559,7 +645,7 @@ def run_large_area():
             model_names, model_params = _expand_variants(reg_names, reg_params)
 
     def _base_name(name):
-        return _re.sub(r'_v\d+$', '', name)
+        return _re.sub(r"_v\d+$", "", name)
 
     # Determine which spatial features are needed (check base names)
     needs_spatial_3x3 = any(_base_name(n) == "spatial_mlp" for n in model_names)
@@ -568,16 +654,14 @@ def run_large_area():
 
     def stream():
         import threading
+
         global _cancel_flag
         _cancel_flag = threading.Event()
 
         from geotessera import GeoTessera
-        from rasterio.transform import array_bounds as _array_bounds
-        from shapely.geometry import box as _box
         from sklearn.preprocessing import LabelEncoder
-        from tessera_eval.rasterize import rasterize_shapefile
+
         from tessera_eval.evaluate import run_learning_curve
-        from tessera_eval.classify import make_classifier, gather_spatial_features_2d
 
         _finish_classifiers.clear()
 
@@ -600,7 +684,7 @@ def run_large_area():
         spatial_3x3 = spatial_5x5 = unet_patches = None
         spatial_labels_3x3 = spatial_labels_5x5 = None
         all_sample_points = None  # (lon, lat) coordinates of all sample points
-        all_valid_mask = None     # boolean mask: True for points with valid embeddings
+        all_valid_mask = None  # boolean mask: True for points with valid embeddings
 
         has_spatial_bboxes = bool(train_bboxes or test_bboxes)
         if _tile_cache["key"] == cache_key and _tile_cache["vectors"] is not None:
@@ -616,7 +700,9 @@ def run_large_area():
             logger.info("In-memory cache hit for %s/%s (%d pixels)", field_name, year, len(labels))
 
             # If spatial features needed but not cached, must reload
-            if (needs_spatial_3x3 and spatial_3x3 is None) or (needs_spatial_5x5 and spatial_5x5 is None):
+            if (needs_spatial_3x3 and spatial_3x3 is None) or (
+                needs_spatial_5x5 and spatial_5x5 is None
+            ):
                 logger.info("Spatial features needed but not cached — reloading tiles")
                 vectors = None  # force reload
 
@@ -628,30 +714,57 @@ def run_large_area():
         if vectors is None:
             # Check disk result cache (much smaller than raw tiles)
             cached_result = _load_cached_result(field_name, year, gdf, sampling)
-            if cached_result and not needs_spatial_3x3 and not needs_spatial_5x5 and not needs_unet and not has_spatial_bboxes:
+            if (
+                cached_result
+                and not needs_spatial_3x3
+                and not needs_spatial_5x5
+                and not needs_unet
+                and not has_spatial_bboxes
+            ):
                 vectors, labels, class_names, stats = cached_result
-                logger.info("Disk result cache hit for %s/%s (%d pixels)", field_name, year, len(labels))
+                logger.info(
+                    "Disk result cache hit for %s/%s (%d pixels)", field_name, year, len(labels)
+                )
 
         if vectors is not None:
-            yield json.dumps({
-                "event": "download_progress", "tile": stats.get("tile_count", 0),
-                "total": stats.get("tile_count", 0), "cached": True,
-            }) + "\n"
+            yield (
+                json.dumps(
+                    {
+                        "event": "download_progress",
+                        "tile": stats.get("tile_count", 0),
+                        "total": stats.get("tile_count", 0),
+                        "cached": True,
+                    }
+                )
+                + "\n"
+            )
             # Update in-memory cache so we skip the GeoTessera fetch below
-            _tile_cache.update({
-                "key": cache_key, "vectors": vectors, "labels": labels,
-                "class_names": class_names, "stats": stats,
-                "spatial_3x3": None, "spatial_5x5": None, "unet_patches": [],
-            })
+            _tile_cache.update(
+                {
+                    "key": cache_key,
+                    "vectors": vectors,
+                    "labels": labels,
+                    "class_names": class_names,
+                    "stats": stats,
+                    "spatial_3x3": None,
+                    "spatial_5x5": None,
+                    "unet_patches": [],
+                }
+            )
 
         if _tile_cache["key"] != cache_key:
             # Emit early so the browser knows we're working
-            yield json.dumps({
-                "event": "field_start",
-                "field": field_name,
-                "type": task,
-                "status": "Loading GeoTessera tile index...",
-            }) + "\n"
+            yield (
+                json.dumps(
+                    {
+                        "event": "field_start",
+                        "field": field_name,
+                        "type": task,
+                        "status": "Loading GeoTessera tile index...",
+                    }
+                )
+                + "\n"
+            )
 
             # Reuse cached GeoTessera instance (avoids 10-30s registry init per run)
             global _geotessera_instance
@@ -673,7 +786,15 @@ def run_large_area():
 
                 # Generate random sample points within shapefile polygons
                 logger.info("Generating sample points across %d classes...", n_classes)
-                yield json.dumps({"event": "status", "message": f"Generating sample points across {n_classes} classes..."}) + "\n"
+                yield (
+                    json.dumps(
+                        {
+                            "event": "status",
+                            "message": f"Generating sample points across {n_classes} classes...",
+                        }
+                    )
+                    + "\n"
+                )
 
                 valid_gdf = gdf.dropna(subset=[field_name]).copy()
                 label_ids = le.transform(valid_gdf[field_name])
@@ -683,6 +804,7 @@ def run_large_area():
                 MIN_PER_CLASS = 50
                 if sampling in ("proportional", "sqrt"):
                     import math
+
                     area_crs = valid_gdf.estimate_utm_crs()
                     projected = valid_gdf.to_crs(area_crs)
                     projected["_area"] = projected.geometry.area
@@ -693,13 +815,17 @@ def run_large_area():
                     else:
                         weights = dict(class_areas)
                     total_weight = sum(weights.values())
-                    raw_alloc = {c: max(MIN_PER_CLASS, int(MAX_SAMPLE_PIXELS * w / total_weight))
-                                 for c, w in weights.items()}
+                    raw_alloc = {
+                        c: max(MIN_PER_CLASS, int(MAX_SAMPLE_PIXELS * w / total_weight))
+                        for c, w in weights.items()
+                    }
                     # Scale down if total exceeds budget
                     alloc_total = sum(raw_alloc.values())
                     if alloc_total > MAX_SAMPLE_PIXELS:
                         scale = MAX_SAMPLE_PIXELS / alloc_total
-                        raw_alloc = {c: max(MIN_PER_CLASS, int(n * scale)) for c, n in raw_alloc.items()}
+                        raw_alloc = {
+                            c: max(MIN_PER_CLASS, int(n * scale)) for c, n in raw_alloc.items()
+                        }
                 else:
                     # Equal per class
                     equal_n = MAX_SAMPLE_PIXELS // n_classes
@@ -719,6 +845,7 @@ def run_large_area():
                     pts_per_row = max(1, per_class // n_rows)
                     try:
                         import warnings
+
                         with warnings.catch_warnings():
                             warnings.simplefilter("ignore", UserWarning)
                             pts = cls_gdf.sample_points(size=pts_per_row)
@@ -733,17 +860,35 @@ def run_large_area():
 
                 n_points = len(sample_points)
                 if n_points == 0:
-                    yield json.dumps({"event": "error", "message": "No sample points generated from shapefile polygons"}) + "\n"
+                    yield (
+                        json.dumps(
+                            {
+                                "event": "error",
+                                "message": "No sample points generated from shapefile polygons",
+                            }
+                        )
+                        + "\n"
+                    )
                     return
 
                 logger.info("Generated %d sample points across %d classes", n_points, n_classes)
-                yield json.dumps({"event": "status", "message": f"Generated {n_points:,} sample points across {n_classes} classes"}) + "\n"
+                yield (
+                    json.dumps(
+                        {
+                            "event": "status",
+                            "message": f"Generated {n_points:,} sample points across {n_classes} classes",
+                        }
+                    )
+                    + "\n"
+                )
 
                 if _cancelled():
                     yield json.dumps({"event": "error", "message": "Cancelled"}) + "\n"
                     return
 
-                import queue, threading
+                import queue
+                import threading
+
                 progress_q = queue.Queue()
                 spatial_3x3 = None
                 spatial_5x5 = None
@@ -754,16 +899,30 @@ def run_large_area():
                 if needs_spatial_3x3 or needs_spatial_5x5 or needs_unet:
                     # Single tile pass: fetch tiles once, extract both point samples AND patches
                     logger.info("Loading embeddings for %d points + patches...", n_points)
-                    yield json.dumps({"event": "status", "message": f"Loading embeddings for {n_points:,} points + patches..."}) + "\n"
+                    yield (
+                        json.dumps(
+                            {
+                                "event": "status",
+                                "message": f"Loading embeddings for {n_points:,} points + patches...",
+                            }
+                        )
+                        + "\n"
+                    )
 
                     def _tile_progress(current, total):
                         progress_q.put(("tile", current, total))
 
                     tile_result = [None, None]
+
                     def _fetch_all():
                         try:
                             tile_result[0] = _extract_tile_patches(
-                                gt, gdf, field_name, year, le, n_classes,
+                                gt,
+                                gdf,
+                                field_name,
+                                year,
+                                le,
+                                n_classes,
                                 max_patches=max_patches,
                                 needs_spatial_3x3=needs_spatial_3x3,
                                 needs_spatial_5x5=needs_spatial_5x5,
@@ -797,14 +956,31 @@ def run_large_area():
                             pct = int(100 * cur / tot) if tot else 0
                             msg = f"Loading tile {cur}/{tot} ({pct}%)"
                             logger.info(msg)
-                            yield json.dumps({"event": "progress", "pct": pct, "message": msg}) + "\n"
+                            yield (
+                                json.dumps({"event": "progress", "pct": pct, "message": msg}) + "\n"
+                            )
 
                     t.join()
                     if tile_result[1] is not None:
-                        yield json.dumps({"event": "error", "message": f"Tile fetch failed: {tile_result[1]}"}) + "\n"
+                        yield (
+                            json.dumps(
+                                {
+                                    "event": "error",
+                                    "message": f"Tile fetch failed: {tile_result[1]}",
+                                }
+                            )
+                            + "\n"
+                        )
                         return
 
-                    unet_patches, spatial_3x3, spatial_5x5, vectors, spatial_labels_3x3, spatial_labels_5x5 = tile_result[0]
+                    (
+                        unet_patches,
+                        spatial_3x3,
+                        spatial_5x5,
+                        vectors,
+                        spatial_labels_3x3,
+                        spatial_labels_5x5,
+                    ) = tile_result[0]
                     if vectors is not None:
                         n_valid = (~np.isnan(vectors).any(axis=1)).sum()
                         logger.info("Point vectors from tiles: %d/%d valid", n_valid, len(vectors))
@@ -813,15 +989,27 @@ def run_large_area():
                 else:
                     # Pixel-only: use sample_embeddings_at_points (faster, no tile loading)
                     logger.info("Fetching embeddings for %d points...", n_points)
-                    yield json.dumps({"event": "status", "message": f"Fetching embeddings for {n_points:,} points..."}) + "\n"
+                    yield (
+                        json.dumps(
+                            {
+                                "event": "status",
+                                "message": f"Fetching embeddings for {n_points:,} points...",
+                            }
+                        )
+                        + "\n"
+                    )
 
                     result_holder = [None, None]
+
                     def _fetch():
                         try:
+
                             def _cb(current, total, status):
                                 progress_q.put(("tile", current, total))
+
                             vecs = gt.sample_embeddings_at_points(
-                                sample_points, year=year, progress_callback=_cb)
+                                sample_points, year=year, progress_callback=_cb
+                            )
                             result_holder[0] = vecs
                         except Exception as e:
                             result_holder[1] = e
@@ -852,11 +1040,21 @@ def run_large_area():
                             pct = int(100 * current / total) if total else 0
                             msg = f"Fetching embeddings: {current}/{total} tiles ({pct}%)"
                             logger.info(msg)
-                            yield json.dumps({"event": "progress", "pct": pct, "message": msg}) + "\n"
+                            yield (
+                                json.dumps({"event": "progress", "pct": pct, "message": msg}) + "\n"
+                            )
 
                     t.join()
                     if result_holder[1] is not None:
-                        yield json.dumps({"event": "error", "message": f"GeoTessera sampling failed: {result_holder[1]}"}) + "\n"
+                        yield (
+                            json.dumps(
+                                {
+                                    "event": "error",
+                                    "message": f"GeoTessera sampling failed: {result_holder[1]}",
+                                }
+                            )
+                            + "\n"
+                        )
                         return
                     vectors = result_holder[0]
 
@@ -870,15 +1068,33 @@ def run_large_area():
                 if valid_mask.sum() < len(vectors):
                     n_removed = len(vectors) - valid_mask.sum()
                     n_remaining = valid_mask.sum()
-                    logger.info("Removed %d points outside coverage (%d remaining)", n_removed, n_remaining)
-                    yield json.dumps({"event": "status", "message": f"Removed {n_removed:,} points outside coverage ({n_remaining:,} remaining)"}) + "\n"
+                    logger.info(
+                        "Removed %d points outside coverage (%d remaining)", n_removed, n_remaining
+                    )
+                    yield (
+                        json.dumps(
+                            {
+                                "event": "status",
+                                "message": f"Removed {n_removed:,} points outside coverage ({n_remaining:,} remaining)",
+                            }
+                        )
+                        + "\n"
+                    )
                     vectors = vectors[valid_mask].astype(np.float32)
                     labels = labels[valid_mask]
                 else:
                     vectors = vectors.astype(np.float32)
 
                 if len(vectors) == 0:
-                    yield json.dumps({"event": "error", "message": "No valid embeddings found at sample points"}) + "\n"
+                    yield (
+                        json.dumps(
+                            {
+                                "event": "error",
+                                "message": "No valid embeddings found at sample points",
+                            }
+                        )
+                        + "\n"
+                    )
                     return
 
                 # Count tiles used
@@ -895,21 +1111,30 @@ def run_large_area():
                 }
 
                 # Cache in memory and on disk
-                _tile_cache.update({
-                    "key": cache_key, "vectors": vectors, "labels": labels,
-                    "class_names": class_names, "stats": stats,
-                    "spatial_3x3": None, "spatial_5x5": None,
-                    "unet_patches": [],
-                    "sample_points": sample_points,
-                    "valid_mask": valid_mask,
-                })
-                _save_cached_result(field_name, year, gdf, vectors, labels, class_names, stats, sampling)
+                _tile_cache.update(
+                    {
+                        "key": cache_key,
+                        "vectors": vectors,
+                        "labels": labels,
+                        "class_names": class_names,
+                        "stats": stats,
+                        "spatial_3x3": None,
+                        "spatial_5x5": None,
+                        "unet_patches": [],
+                        "sample_points": sample_points,
+                        "valid_mask": valid_mask,
+                    }
+                )
+                _save_cached_result(
+                    field_name, year, gdf, vectors, labels, class_names, stats, sampling
+                )
 
                 all_sample_points = sample_points
                 all_valid_mask = valid_mask
 
-                logger.info("Point sampling complete: %d pixels, %.1fMB",
-                            len(labels), vectors.nbytes / 1e6)
+                logger.info(
+                    "Point sampling complete: %d pixels, %.1fMB", len(labels), vectors.nbytes / 1e6
+                )
 
             except Exception as e:
                 yield json.dumps({"event": "error", "message": str(e)}) + "\n"
@@ -927,6 +1152,7 @@ def run_large_area():
         has_spatial_split = bool(train_bboxes or test_bboxes)
 
         if has_spatial_split:
+
             def _point_in_bboxes(lon, lat, bboxes):
                 """Check if (lon, lat) falls inside any bbox [south, west, north, east]."""
                 for south, west, north, east in bboxes:
@@ -935,7 +1161,15 @@ def run_large_area():
                 return False
 
             if all_sample_points is None:
-                yield json.dumps({"event": "error", "message": "Spatial split requires sample point coordinates (not available from cache)"}) + "\n"
+                yield (
+                    json.dumps(
+                        {
+                            "event": "error",
+                            "message": "Spatial split requires sample point coordinates (not available from cache)",
+                        }
+                    )
+                    + "\n"
+                )
                 return
 
             # Apply valid_mask to match the filtered vectors/labels
@@ -956,18 +1190,48 @@ def run_large_area():
             n_train = train_mask.sum()
             n_test = test_mask_sp.sum()
             n_discard = len(sp) - n_train - n_test
-            logger.info("Spatial split: %d train, %d test, %d discarded", n_train, n_test, n_discard)
-            yield json.dumps({"event": "status", "message": f"Spatial split: {int(n_train):,} train, {int(n_test):,} test, {int(n_discard):,} discarded"}) + "\n"
+            logger.info(
+                "Spatial split: %d train, %d test, %d discarded", n_train, n_test, n_discard
+            )
+            yield (
+                json.dumps(
+                    {
+                        "event": "status",
+                        "message": f"Spatial split: {int(n_train):,} train, {int(n_test):,} test, {int(n_discard):,} discarded",
+                    }
+                )
+                + "\n"
+            )
 
             if n_train == 0:
-                yield json.dumps({"event": "error", "message": "No sample points in train bounding boxes"}) + "\n"
+                yield (
+                    json.dumps(
+                        {"event": "error", "message": "No sample points in train bounding boxes"}
+                    )
+                    + "\n"
+                )
                 return
             if n_test == 0:
-                yield json.dumps({"event": "error", "message": "No sample points in test bounding boxes"}) + "\n"
+                yield (
+                    json.dumps(
+                        {"event": "error", "message": "No sample points in test bounding boxes"}
+                    )
+                    + "\n"
+                )
                 return
             if n_test < 100:
-                logger.warning("Very small test set (%d pixels) — results may be unreliable", n_test)
-                yield json.dumps({"event": "status", "message": f"Warning: only {int(n_test)} test pixels — results may be unreliable. Consider enlarging test area."}) + "\n"
+                logger.warning(
+                    "Very small test set (%d pixels) — results may be unreliable", n_test
+                )
+                yield (
+                    json.dumps(
+                        {
+                            "event": "status",
+                            "message": f"Warning: only {int(n_test)} test pixels — results may be unreliable. Consider enlarging test area.",
+                        }
+                    )
+                    + "\n"
+                )
 
             spatial_train_vectors = vectors[train_mask]
             spatial_train_labels = labels[train_mask]
@@ -1001,18 +1265,42 @@ def run_large_area():
             if bn == "unet":
                 try:
                     from tessera_eval.unet import _HAS_TORCH
+
                     if not _HAS_TORCH:
                         logger.warning("Skipping U-Net: PyTorch not installed")
-                        yield json.dumps({"event": "status", "message": f"{name} skipped — PyTorch not installed"}) + "\n"
+                        yield (
+                            json.dumps(
+                                {
+                                    "event": "status",
+                                    "message": f"{name} skipped — PyTorch not installed",
+                                }
+                            )
+                            + "\n"
+                        )
                         continue
                 except ImportError:
                     continue
                 if not unet_patches:
-                    yield json.dumps({"event": "status", "message": f"{name} skipped — no labelled patches found"}) + "\n"
+                    yield (
+                        json.dumps(
+                            {
+                                "event": "status",
+                                "message": f"{name} skipped — no labelled patches found",
+                            }
+                        )
+                        + "\n"
+                    )
                     continue
             if bn in ("spatial_mlp", "spatial_mlp_5x5"):
-                if (bn == "spatial_mlp" and spatial_3x3 is None) or (bn == "spatial_mlp_5x5" and spatial_5x5 is None):
-                    yield json.dumps({"event": "status", "message": f"{name} skipped — no spatial features"}) + "\n"
+                if (bn == "spatial_mlp" and spatial_3x3 is None) or (
+                    bn == "spatial_mlp_5x5" and spatial_5x5 is None
+                ):
+                    yield (
+                        json.dumps(
+                            {"event": "status", "message": f"{name} skipped — no spatial features"}
+                        )
+                        + "\n"
+                    )
                     continue
             active_models.append(name)
 
@@ -1033,9 +1321,13 @@ def run_large_area():
 
         # Run learning curve (all classifiers including U-Net)
         lc_kwargs = dict(
-            repeats=5, classifier_params=model_params,
-            spatial_vectors=spatial_3x3, spatial_vectors_5x5=spatial_5x5,
-            spatial_labels=spatial_labels_3x3 if spatial_labels_3x3 is not None else spatial_labels_5x5,
+            repeats=5,
+            classifier_params=model_params,
+            spatial_vectors=spatial_3x3,
+            spatial_vectors_5x5=spatial_5x5,
+            spatial_labels=spatial_labels_3x3
+            if spatial_labels_3x3 is not None
+            else spatial_labels_5x5,
             finish_classifiers=_finish_classifiers,
             unet_patches=unet_patches,
         )
@@ -1044,7 +1336,10 @@ def run_large_area():
             lc_kwargs["test_labels"] = spatial_test_labels
 
         for event in run_learning_curve(
-            vectors, labels, active_models, training_pcts,
+            vectors,
+            labels,
+            active_models,
+            training_pcts,
             **lc_kwargs,
         ):
             if _cancelled():
@@ -1052,25 +1347,40 @@ def run_large_area():
                 yield json.dumps({"event": "error", "message": "Cancelled"}) + "\n"
                 return
             if event["type"] == "progress":
-                yield json.dumps({
-                    "event": "progress",
-                    "pct": event["pct"],
-                    "classifiers": event["classifiers"],
-                    "pixel_train_count": event.get("pixel_train_count", 0),
-                    "unet_train_count": event.get("unet_train_count", 0),
-                    "total_pixels": event.get("total_pixels", 0),
-                    "total_unet_pixels": event.get("total_unet_pixels", 0),
-                }) + "\n"
+                yield (
+                    json.dumps(
+                        {
+                            "event": "progress",
+                            "pct": event["pct"],
+                            "classifiers": event["classifiers"],
+                            "pixel_train_count": event.get("pixel_train_count", 0),
+                            "unet_train_count": event.get("unet_train_count", 0),
+                            "total_pixels": event.get("total_pixels", 0),
+                            "total_unet_pixels": event.get("total_unet_pixels", 0),
+                        }
+                    )
+                    + "\n"
+                )
             elif event["type"] == "classifier_status":
-                yield json.dumps({
-                    "event": "status",
-                    "message": event["message"],
-                }) + "\n"
+                yield (
+                    json.dumps(
+                        {
+                            "event": "status",
+                            "message": event["message"],
+                        }
+                    )
+                    + "\n"
+                )
             elif event["type"] == "confusion_matrices":
-                yield json.dumps({
-                    "event": "confusion_matrices",
-                    "confusion_matrices": event["confusion_matrices"],
-                }) + "\n"
+                yield (
+                    json.dumps(
+                        {
+                            "event": "confusion_matrices",
+                            "confusion_matrices": event["confusion_matrices"],
+                        }
+                    )
+                    + "\n"
+                )
 
         # Store active_models for deferred training
         _tile_cache["_active_models"] = active_models
@@ -1079,16 +1389,24 @@ def run_large_area():
 
         _cancel_flag = None  # reset cancellation flag
         elapsed = time.time() - t0
-        yield json.dumps({
-            "event": "done",
-            "elapsed_seconds": round(elapsed, 1),
-            "field": field_name,
-            "year": year,
-            "models_available": list(_trained_models.keys()),
-        }) + "\n"
+        yield (
+            json.dumps(
+                {
+                    "event": "done",
+                    "elapsed_seconds": round(elapsed, 1),
+                    "field": field_name,
+                    "year": year,
+                    "models_available": list(_trained_models.keys()),
+                }
+            )
+            + "\n"
+        )
 
-    return Response(_padded(stream()), mimetype="application/x-ndjson",
-                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return Response(
+        _padded(stream()),
+        mimetype="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/api/evaluation/train-models", methods=["POST"])
@@ -1110,8 +1428,10 @@ def train_models():
     if not active_models:
         return jsonify({"error": "No classifiers configured."}), 400
 
-    valid_class_names = [class_names[lbl] if lbl < len(class_names) else f"Class {lbl}"
-                         for lbl in sorted(np.unique(labels))]
+    valid_class_names = [
+        class_names[lbl] if lbl < len(class_names) else f"Class {lbl}"
+        for lbl in sorted(np.unique(labels))
+    ]
 
     def stream():
         from tessera_eval.classify import make_classifier
@@ -1124,65 +1444,115 @@ def train_models():
                 pass
         _trained_models.clear()
 
-        yield json.dumps({"event": "status", "message": "Training final models for download..."}) + "\n"
+        yield (
+            json.dumps({"event": "status", "message": "Training final models for download..."})
+            + "\n"
+        )
 
         for name in active_models:
             logger.info("Training %s...", name)
             yield json.dumps({"event": "status", "message": f"Training {name}..."}) + "\n"
             try:
                 import re as _re
-                _bn = _re.sub(r'_v\d+$', '', name)
+
+                _bn = _re.sub(r"_v\d+$", "", name)
                 if _bn == "unet":
-                    from tessera_eval.unet import train_unet_on_patches, _HAS_TORCH
                     import torch as _torch
+
+                    from tessera_eval.unet import _HAS_TORCH, train_unet_on_patches
+
                     if _HAS_TORCH and unet_patches:
                         n_cls = len(np.unique(labels))
                         _unet_progress = []
+
                         def _unet_cb(epoch, total, loss):
                             _unet_progress.append((epoch, total, loss))
+
                         model = train_unet_on_patches(
-                            unet_patches, n_cls, model_params.get(name, {}),
-                            progress_callback=_unet_cb)
+                            unet_patches,
+                            n_cls,
+                            model_params.get(name, {}),
+                            progress_callback=_unet_cb,
+                        )
                         for ep, tot, loss in _unet_progress:
-                            yield json.dumps({"event": "status", "message": f"U-Net epoch {ep}/{tot} loss={loss:.4f}"}) + "\n"
-                        tmp = tempfile.NamedTemporaryFile(suffix=".pt", prefix=f"{name}_model_", delete=False)
-                        _torch.save({"model_state": model.state_dict(), "class_names": valid_class_names}, tmp.name)
+                            yield (
+                                json.dumps(
+                                    {
+                                        "event": "status",
+                                        "message": f"U-Net epoch {ep}/{tot} loss={loss:.4f}",
+                                    }
+                                )
+                                + "\n"
+                            )
+                        tmp = tempfile.NamedTemporaryFile(
+                            suffix=".pt", prefix=f"{name}_model_", delete=False
+                        )
+                        _torch.save(
+                            {"model_state": model.state_dict(), "class_names": valid_class_names},
+                            tmp.name,
+                        )
                         _trained_models[name] = tmp.name
                     else:
-                        yield json.dumps({"event": "status", "message": f"{name} skipped — no patches or PyTorch"}) + "\n"
+                        yield (
+                            json.dumps(
+                                {
+                                    "event": "status",
+                                    "message": f"{name} skipped — no patches or PyTorch",
+                                }
+                            )
+                            + "\n"
+                        )
                         continue
                 elif _bn == "spatial_mlp" and spatial_3x3 is not None:
                     from tessera_eval.classify import augment_spatial
-                    X_aug, y_aug = augment_spatial(spatial_3x3, labels, window=3, dim=vectors.shape[1])
+
+                    X_aug, y_aug = augment_spatial(
+                        spatial_3x3, labels, window=3, dim=vectors.shape[1]
+                    )
                     clf = make_classifier(name, model_params.get(name, {}))
                     clf.fit(X_aug, y_aug)
-                    tmp = tempfile.NamedTemporaryFile(suffix=".joblib", prefix=f"{name}_model_", delete=False)
+                    tmp = tempfile.NamedTemporaryFile(
+                        suffix=".joblib", prefix=f"{name}_model_", delete=False
+                    )
                     joblib.dump({"model": clf, "class_names": valid_class_names}, tmp.name)
                     _trained_models[name] = tmp.name
                 elif _bn == "spatial_mlp_5x5" and spatial_5x5 is not None:
                     from tessera_eval.classify import augment_spatial
-                    X_aug, y_aug = augment_spatial(spatial_5x5, labels, window=5, dim=vectors.shape[1])
+
+                    X_aug, y_aug = augment_spatial(
+                        spatial_5x5, labels, window=5, dim=vectors.shape[1]
+                    )
                     clf = make_classifier(name, model_params.get(name, {}))
                     clf.fit(X_aug, y_aug)
-                    tmp = tempfile.NamedTemporaryFile(suffix=".joblib", prefix=f"{name}_model_", delete=False)
+                    tmp = tempfile.NamedTemporaryFile(
+                        suffix=".joblib", prefix=f"{name}_model_", delete=False
+                    )
                     joblib.dump({"model": clf, "class_names": valid_class_names}, tmp.name)
                     _trained_models[name] = tmp.name
                 else:
                     clf = make_classifier(name, model_params.get(name, {}))
                     clf.fit(vectors, labels)
-                    tmp = tempfile.NamedTemporaryFile(suffix=".joblib", prefix=f"{name}_model_", delete=False)
+                    tmp = tempfile.NamedTemporaryFile(
+                        suffix=".joblib", prefix=f"{name}_model_", delete=False
+                    )
                     joblib.dump({"model": clf, "class_names": valid_class_names}, tmp.name)
                     _trained_models[name] = tmp.name
                 logger.info("Trained model '%s' → %s", name, tmp.name)
                 yield json.dumps({"event": "model_ready", "classifier": name}) + "\n"
             except Exception as e:
                 logger.warning("Failed to train model '%s': %s", name, e)
-                yield json.dumps({"event": "status", "message": f"Failed to train {name}: {e}"}) + "\n"
+                yield (
+                    json.dumps({"event": "status", "message": f"Failed to train {name}: {e}"})
+                    + "\n"
+                )
 
         yield json.dumps({"event": "done", "models_available": list(_trained_models.keys())}) + "\n"
 
-    return Response(_padded(stream()), mimetype="application/x-ndjson",
-                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return Response(
+        _padded(stream()),
+        mimetype="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/api/evaluation/download-model/<name>", methods=["GET"])
@@ -1192,7 +1562,8 @@ def download_model(name):
     if not path or not Path(path).exists():
         return jsonify({"error": f"No trained model for '{name}'"}), 404
     import re as _re
-    _bn = _re.sub(r'_v\d+$', '', name)
+
+    _bn = _re.sub(r"_v\d+$", "", name)
     ext = ".pt" if _bn == "unet" else ".joblib"
     return send_file(path, as_attachment=True, download_name=f"{name}_model{ext}")
 
@@ -1216,7 +1587,9 @@ def create_map():
     map_bboxes = body.get("map_bboxes", [])
 
     if not map_bboxes:
-        return jsonify({"error": "No map bounding boxes provided. Draw green map areas first."}), 400
+        return jsonify(
+            {"error": "No map bounding boxes provided. Draw green map areas first."}
+        ), 400
 
     cache = _tile_cache
     if cache.get("vectors") is None:
@@ -1228,17 +1601,21 @@ def create_map():
     model_params = cache.get("_model_params", {})
 
     import re as _re
-    base_name = _re.sub(r'_v\d+$', '', classifier_name)
+
+    base_name = _re.sub(r"_v\d+$", "", classifier_name)
     unsupported = ("spatial_mlp", "spatial_mlp_5x5", "unet")
     if base_name in unsupported:
-        return jsonify({
-            "error": f"'{classifier_name}' is not supported for map generation. "
-                     f"Spatial MLP and U-Net require neighbourhood features at every pixel, "
-                     f"which is too expensive for dense prediction. Use k-NN, RF, XGBoost, or MLP."
-        }), 400
+        return jsonify(
+            {
+                "error": f"'{classifier_name}' is not supported for map generation. "
+                f"Spatial MLP and U-Net require neighbourhood features at every pixel, "
+                f"which is too expensive for dense prediction. Use k-NN, RF, XGBoost, or MLP."
+            }
+        ), 400
 
     def stream():
         import threading
+
         global _cancel_flag
         _cancel_flag = threading.Event()
 
@@ -1247,17 +1624,33 @@ def create_map():
 
         t0 = time.time()
 
-        yield json.dumps({"event": "status", "message": f"Training {classifier_name} on all {len(vectors):,} labels..."}) + "\n"
+        yield (
+            json.dumps(
+                {
+                    "event": "status",
+                    "message": f"Training {classifier_name} on all {len(vectors):,} labels...",
+                }
+            )
+            + "\n"
+        )
 
         try:
             from tessera_eval.classify import make_classifier
+
             clf = make_classifier(classifier_name, model_params.get(classifier_name, {}))
             clf.fit(vectors, labels)
         except Exception as e:
-            yield json.dumps({"event": "error", "message": f"Failed to train classifier: {e}"}) + "\n"
+            yield (
+                json.dumps({"event": "error", "message": f"Failed to train classifier: {e}"}) + "\n"
+            )
             return
 
-        yield json.dumps({"event": "status", "message": f"Classifier trained. Predicting map areas..."}) + "\n"
+        yield (
+            json.dumps(
+                {"event": "status", "message": "Classifier trained. Predicting map areas..."}
+            )
+            + "\n"
+        )
 
         if _cancelled():
             yield json.dumps({"event": "error", "message": "Cancelled"}) + "\n"
@@ -1265,6 +1658,7 @@ def create_map():
 
         # Prepare GeoTessera and zarr
         from geotessera import GeoTessera
+
         global _geotessera_instance
 
         if _geotessera_instance is None:
@@ -1290,10 +1684,15 @@ def create_map():
 
             # bbox = [south, west, north, east]
             south, west, north, east = bbox
-            yield json.dumps({
-                "event": "status",
-                "message": f"Map area {bbox_idx + 1}/{len(map_bboxes)}: ({south:.3f}, {west:.3f}) to ({north:.3f}, {east:.3f})",
-            }) + "\n"
+            yield (
+                json.dumps(
+                    {
+                        "event": "status",
+                        "message": f"Map area {bbox_idx + 1}/{len(map_bboxes)}: ({south:.3f}, {west:.3f}) to ({north:.3f}, {east:.3f})",
+                    }
+                )
+                + "\n"
+            )
 
             # Split bbox into 0.1 deg chunks to manage memory
             CHUNK_SIZE = 0.1
@@ -1309,19 +1708,31 @@ def create_map():
                 lat += CHUNK_SIZE
 
             total_chunks = len(chunk_lons) * len(chunk_lats)
-            yield json.dumps({
-                "event": "status",
-                "message": f"Map area {bbox_idx + 1}: {total_chunks} chunks ({len(chunk_lons)} x {len(chunk_lats)})",
-            }) + "\n"
+            yield (
+                json.dumps(
+                    {
+                        "event": "status",
+                        "message": f"Map area {bbox_idx + 1}: {total_chunks} chunks ({len(chunk_lons)} x {len(chunk_lats)})",
+                    }
+                )
+                + "\n"
+            )
 
             # Probe zarr coverage
             gtz = get_zarr()
-            use_zarr = gtz is not None and probe_zarr_coverage(gtz, (west, south, east, north), year)
+            use_zarr = gtz is not None and probe_zarr_coverage(
+                gtz, (west, south, east, north), year
+            )
 
-            yield json.dumps({
-                "event": "status",
-                "message": f"Using {'zarr (fast)' if use_zarr else 'NPY tiles'} for predictions",
-            }) + "\n"
+            yield (
+                json.dumps(
+                    {
+                        "event": "status",
+                        "message": f"Using {'zarr (fast)' if use_zarr else 'NPY tiles'} for predictions",
+                    }
+                )
+                + "\n"
+            )
 
             # We'll collect chunk arrays and merge at the end.
             # To build the final GeoTIFF, we need to know the CRS and resolution.
@@ -1336,13 +1747,18 @@ def create_map():
                         return
 
                     chunk_counter += 1
-                    yield json.dumps({
-                        "event": "map_progress",
-                        "bbox_idx": bbox_idx,
-                        "chunk": chunk_counter,
-                        "total_chunks": total_chunks,
-                        "message": f"Predicting chunk {chunk_counter}/{total_chunks}",
-                    }) + "\n"
+                    yield (
+                        json.dumps(
+                            {
+                                "event": "map_progress",
+                                "bbox_idx": bbox_idx,
+                                "chunk": chunk_counter,
+                                "total_chunks": total_chunks,
+                                "message": f"Predicting chunk {chunk_counter}/{total_chunks}",
+                            }
+                        )
+                        + "\n"
+                    )
 
                     chunk_bbox = (lon_start, lat_start, lon_end, lat_end)
 
@@ -1385,30 +1801,44 @@ def create_map():
 
                     except Exception as e:
                         logger.warning("Chunk %d failed: %s", chunk_counter, e)
-                        yield json.dumps({
-                            "event": "status",
-                            "message": f"Chunk {chunk_counter} failed: {e}",
-                        }) + "\n"
+                        yield (
+                            json.dumps(
+                                {
+                                    "event": "status",
+                                    "message": f"Chunk {chunk_counter} failed: {e}",
+                                }
+                            )
+                            + "\n"
+                        )
                         continue
 
             if not chunk_results:
-                yield json.dumps({
-                    "event": "error",
-                    "message": f"No data found in map area {bbox_idx + 1}. Check embedding coverage.",
-                }) + "\n"
+                yield (
+                    json.dumps(
+                        {
+                            "event": "error",
+                            "message": f"No data found in map area {bbox_idx + 1}. Check embedding coverage.",
+                        }
+                    )
+                    + "\n"
+                )
                 continue
 
             # Merge chunks into a single GeoTIFF
-            yield json.dumps({
-                "event": "status",
-                "message": f"Writing GeoTIFF for map area {bbox_idx + 1}...",
-            }) + "\n"
+            yield (
+                json.dumps(
+                    {
+                        "event": "status",
+                        "message": f"Writing GeoTIFF for map area {bbox_idx + 1}...",
+                    }
+                )
+                + "\n"
+            )
 
             try:
                 import rasterio
-                from rasterio.transform import from_bounds as _from_bounds
-                from rasterio.merge import merge as _rasterio_merge
                 import rasterio.io
+                from rasterio.merge import merge as _rasterio_merge
 
                 if len(chunk_results) == 1:
                     # Single chunk — write directly
@@ -1422,9 +1852,14 @@ def create_map():
                     for predicted_2d, transform, crs, _ in chunk_results:
                         memfile = rasterio.io.MemoryFile()
                         ds = memfile.open(
-                            driver="GTiff", height=predicted_2d.shape[0],
-                            width=predicted_2d.shape[1], count=1, dtype="uint8",
-                            crs=crs, transform=transform, nodata=0,
+                            driver="GTiff",
+                            height=predicted_2d.shape[0],
+                            width=predicted_2d.shape[1],
+                            count=1,
+                            dtype="uint8",
+                            crs=crs,
+                            transform=transform,
+                            nodata=0,
                         )
                         ds.write(predicted_2d, 1)
                         datasets.append(ds)
@@ -1439,13 +1874,21 @@ def create_map():
                 # Write final GeoTIFF
                 map_name = f"map_{bbox_idx + 1}"
                 tmp = tempfile.NamedTemporaryFile(
-                    suffix=".tif", prefix=f"tee_map_{bbox_idx + 1}_", delete=False,
+                    suffix=".tif",
+                    prefix=f"tee_map_{bbox_idx + 1}_",
+                    delete=False,
                 )
                 with rasterio.open(
-                    tmp.name, "w", driver="GTiff",
-                    height=out_arr.shape[0], width=out_arr.shape[1],
-                    count=1, dtype="uint8", crs=out_crs,
-                    transform=out_transform, nodata=0,
+                    tmp.name,
+                    "w",
+                    driver="GTiff",
+                    height=out_arr.shape[0],
+                    width=out_arr.shape[1],
+                    count=1,
+                    dtype="uint8",
+                    crs=out_crs,
+                    transform=out_transform,
+                    nodata=0,
                     compress="lz4",
                 ) as dst:
                     dst.write(out_arr, 1)
@@ -1455,36 +1898,56 @@ def create_map():
                     dst.update_tags(**tags)
 
                 _generated_maps[map_name] = tmp.name
-                logger.info("GeoTIFF written: %s (%d x %d)", tmp.name, out_arr.shape[1], out_arr.shape[0])
+                logger.info(
+                    "GeoTIFF written: %s (%d x %d)", tmp.name, out_arr.shape[1], out_arr.shape[0]
+                )
 
-                yield json.dumps({
-                    "event": "map_ready",
-                    "name": map_name,
-                    "bbox_idx": bbox_idx,
-                    "download_url": f"/api/evaluation/download-map/{map_name}",
-                    "width": out_arr.shape[1],
-                    "height": out_arr.shape[0],
-                    "n_classes": len(class_names),
-                }) + "\n"
+                yield (
+                    json.dumps(
+                        {
+                            "event": "map_ready",
+                            "name": map_name,
+                            "bbox_idx": bbox_idx,
+                            "download_url": f"/api/evaluation/download-map/{map_name}",
+                            "width": out_arr.shape[1],
+                            "height": out_arr.shape[0],
+                            "n_classes": len(class_names),
+                        }
+                    )
+                    + "\n"
+                )
 
             except Exception as e:
                 logger.error("GeoTIFF write failed: %s", e, exc_info=True)
-                yield json.dumps({
-                    "event": "error",
-                    "message": f"Failed to write GeoTIFF: {e}",
-                }) + "\n"
+                yield (
+                    json.dumps(
+                        {
+                            "event": "error",
+                            "message": f"Failed to write GeoTIFF: {e}",
+                        }
+                    )
+                    + "\n"
+                )
                 continue
 
         _cancel_flag = None
         elapsed = time.time() - t0
-        yield json.dumps({
-            "event": "done",
-            "elapsed_seconds": round(elapsed, 1),
-            "maps_available": list(_generated_maps.keys()),
-        }) + "\n"
+        yield (
+            json.dumps(
+                {
+                    "event": "done",
+                    "elapsed_seconds": round(elapsed, 1),
+                    "maps_available": list(_generated_maps.keys()),
+                }
+            )
+            + "\n"
+        )
 
-    return Response(_padded(stream()), mimetype="application/x-ndjson",
-                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return Response(
+        _padded(stream()),
+        mimetype="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/api/evaluation/download-map/<name>", methods=["GET"])
@@ -1493,28 +1956,31 @@ def download_map(name):
     path = _generated_maps.get(name)
     if not path or not Path(path).exists():
         return jsonify({"error": f"No generated map '{name}'"}), 404
-    return send_file(path, as_attachment=True, download_name=f"{name}.tif",
-                     mimetype="image/tiff")
+    return send_file(path, as_attachment=True, download_name=f"{name}.tif", mimetype="image/tiff")
 
 
 @app.route("/health", methods=["GET"])
 def health():
     """Health check — reports status, hosted server, and loaded data."""
     import socket
+
     gdf = _get_merged_gdf()
-    return jsonify({
-        "status": "ok",
-        "mode": "compute",
-        "compute_host": socket.gethostname(),
-        "hosted": _hosted_url,
-        "version": _get_version(),
-        "shapefiles": len(_uploaded_shapefiles),
-        "features": len(gdf) if gdf is not None else 0,
-        "models_available": list(_trained_models.keys()),
-    })
+    return jsonify(
+        {
+            "status": "ok",
+            "mode": "compute",
+            "compute_host": socket.gethostname(),
+            "hosted": _hosted_url,
+            "version": _get_version(),
+            "shapefiles": len(_uploaded_shapefiles),
+            "features": len(gdf) if gdf is not None else 0,
+            "models_available": list(_trained_models.keys()),
+        }
+    )
 
 
 # ── Reverse proxy for everything else ──
+
 
 @app.route("/", defaults={"path": ""}, methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 @app.route("/<path:path>", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
@@ -1551,7 +2017,12 @@ def proxy(path):
     # Stream response back
     proxy_headers = {}
     for k, v in resp.headers.items():
-        if k.lower() not in ("content-encoding", "content-length", "transfer-encoding", "connection"):
+        if k.lower() not in (
+            "content-encoding",
+            "content-length",
+            "transfer-encoding",
+            "connection",
+        ):
             proxy_headers[k] = v
 
     return Response(
@@ -1563,15 +2034,18 @@ def proxy(path):
 
 # ── Helpers ──
 
+
 def _get_version():
     try:
         from tessera_eval import __version__
+
         return __version__
     except Exception:
         return "unknown"
 
 
 # ── CLI entry point ──
+
 
 def main():
     global _hosted_url
@@ -1580,19 +2054,24 @@ def main():
         description="TEE compute server — run ML evaluation locally, proxy data from hosted server",
     )
     parser.add_argument(
-        "--hosted", default="https://tee.cl.cam.ac.uk",
+        "--hosted",
+        default="https://tee.cl.cam.ac.uk",
         help="URL of the hosted TEE server for data/UI (default: https://tee.cl.cam.ac.uk)",
     )
     parser.add_argument(
-        "--port", type=int, default=8001,
+        "--port",
+        type=int,
+        default=8001,
         help="Port to serve on (default: 8001)",
     )
     parser.add_argument(
-        "--host", default="127.0.0.1",
+        "--host",
+        default="127.0.0.1",
         help="Host to bind to (default: 127.0.0.1)",
     )
     parser.add_argument(
-        "--debug", action="store_true",
+        "--debug",
+        action="store_true",
         help="Run in Flask debug mode (auto-reload, verbose errors)",
     )
     args = parser.parse_args()
@@ -1614,6 +2093,7 @@ def main():
         app.run(host=args.host, port=args.port, debug=True)
     else:
         from waitress import serve
+
         serve(app, host=args.host, port=args.port, threads=4, channel_timeout=7200)
 
 

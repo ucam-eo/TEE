@@ -15,6 +15,7 @@ try:
     import torch.nn as nn
     import torch.nn.functional as F
     from torch.utils.data import DataLoader, TensorDataset
+
     _HAS_TORCH = True
 except ImportError:
     torch = None
@@ -34,8 +35,8 @@ def _require_torch():
 # Patch extraction
 # ---------------------------------------------------------------------------
 
-def extract_labelled_patches(tile_emb, class_raster, patch_size=256,
-                             min_labelled=10):
+
+def extract_labelled_patches(tile_emb, class_raster, patch_size=256, min_labelled=10):
     """Extract embedding/label patch pairs centered on clusters of labelled pixels.
 
     Uses connected-component analysis (via scipy) to find clusters of labelled
@@ -153,8 +154,7 @@ if _HAS_TORCH:
             base_filters: Filters in the first encoder stage (default 64).
         """
 
-        def __init__(self, in_channels=128, n_classes=2, depth=3,
-                     base_filters=64):
+        def __init__(self, in_channels=128, n_classes=2, depth=3, base_filters=64):
             super().__init__()
             self.depth = depth
 
@@ -163,7 +163,7 @@ if _HAS_TORCH:
             self.pools = nn.ModuleList()
             ch = in_channels
             for i in range(depth):
-                out_ch = base_filters * (2 ** i)
+                out_ch = base_filters * (2**i)
                 self.encoders.append(_ConvBlock(ch, out_ch))
                 self.pools.append(nn.MaxPool2d(2))
                 ch = out_ch
@@ -176,9 +176,8 @@ if _HAS_TORCH:
             self.upconvs = nn.ModuleList()
             self.decoders = nn.ModuleList()
             for i in range(depth - 1, -1, -1):
-                skip_ch = base_filters * (2 ** i)
-                self.upconvs.append(
-                    nn.ConvTranspose2d(ch, skip_ch, 2, stride=2))
+                skip_ch = base_filters * (2**i)
+                self.upconvs.append(nn.ConvTranspose2d(ch, skip_ch, 2, stride=2))
                 self.decoders.append(_ConvBlock(skip_ch * 2, skip_ch))
                 ch = skip_ch
 
@@ -186,7 +185,7 @@ if _HAS_TORCH:
             self.out_conv = nn.Conv2d(ch, n_classes, 1)
 
         def forward(self, x):
-            factor = 2 ** self.depth
+            factor = 2**self.depth
             _, _, h, w = x.shape
             pad_h = (factor - h % factor) % factor
             pad_w = (factor - w % factor) % factor
@@ -203,12 +202,10 @@ if _HAS_TORCH:
             x = self.bottleneck(x)
 
             # Decoder
-            for upconv, dec, skip in zip(self.upconvs, self.decoders,
-                                         reversed(skips)):
+            for upconv, dec, skip in zip(self.upconvs, self.decoders, reversed(skips)):
                 x = upconv(x)
                 if x.shape != skip.shape:
-                    x = F.pad(x, [0, skip.shape[3] - x.shape[3],
-                                   0, skip.shape[2] - x.shape[2]])
+                    x = F.pad(x, [0, skip.shape[3] - x.shape[3], 0, skip.shape[2] - x.shape[2]])
                 x = torch.cat([x, skip], dim=1)
                 x = dec(x)
 
@@ -219,6 +216,7 @@ if _HAS_TORCH:
 # ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
+
 
 def train_unet_on_patches(patches, n_classes, params=None, progress_callback=None):
     """Train a TinyUNet on extracted embedding/label patches.
@@ -253,13 +251,22 @@ def train_unet_on_patches(patches, n_classes, params=None, progress_callback=Non
     # Filter patches to consistent shape and stack with augmentation
     # Find the most common patch shape
     shapes = [(p[0].shape, p[1].shape) for p in patches]
-    target_emb_shape = max(set(s[0] for s in shapes), key=lambda s: sum(1 for x in shapes if x[0] == s))
+    target_emb_shape = max(
+        set(s[0] for s in shapes), key=lambda s: sum(1 for x in shapes if x[0] == s)
+    )
     target_lbl_shape = target_emb_shape[:2]  # (H, W)
-    filtered = [(e, l) for e, l in patches
-                if e.shape == target_emb_shape and l.shape == target_lbl_shape]
+    filtered = [
+        (e, lbl)
+        for e, lbl in patches
+        if e.shape == target_emb_shape and lbl.shape == target_lbl_shape
+    ]
     if len(filtered) < len(patches):
-        logger.warning("Filtered %d/%d patches with inconsistent shapes (target %s)",
-                       len(patches) - len(filtered), len(patches), target_emb_shape)
+        logger.warning(
+            "Filtered %d/%d patches with inconsistent shapes (target %s)",
+            len(patches) - len(filtered),
+            len(patches),
+            target_emb_shape,
+        )
     if not filtered:
         raise ValueError("No patches with consistent shapes")
 
@@ -271,7 +278,7 @@ def train_unet_on_patches(patches, n_classes, params=None, progress_callback=Non
     lbl_list = []
     for emb_patch, lbl_patch in filtered:
         emb = emb_patch.transpose(2, 0, 1)  # (dim, H, W)
-        lbl = lbl_patch.astype(np.int64)     # (H, W)
+        lbl = lbl_patch.astype(np.int64)  # (H, W)
         for k in range(4):
             emb_r = np.rot90(emb, k, axes=(1, 2)).copy()
             lbl_r = np.rot90(lbl, k, axes=(0, 1)).copy()
@@ -295,20 +302,29 @@ def train_unet_on_patches(patches, n_classes, params=None, progress_callback=Non
     aug_factor = len(emb_list) // len(filtered) if filtered else 0
     X = torch.from_numpy(np.stack(emb_list))
     Y = torch.from_numpy(np.stack(lbl_list))
-    logger.info("U-Net training: %d original patches (×%d augmentation = %d)",
-                len(filtered), aug_factor, len(emb_list))
+    logger.info(
+        "U-Net training: %d original patches (×%d augmentation = %d)",
+        len(filtered),
+        aug_factor,
+        len(emb_list),
+    )
 
     dataset = TensorDataset(X, Y)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     in_channels = X.shape[1]
     # n_classes+1 outputs: index 0 is the ignore/background class
-    model = TinyUNet(in_channels=in_channels, n_classes=n_classes + 1,
-                     depth=depth, base_filters=base_filters)
+    model = TinyUNet(
+        in_channels=in_channels, n_classes=n_classes + 1, depth=depth, base_filters=base_filters
+    )
 
-    device = torch.device("cuda" if torch.cuda.is_available()
-                          else "mps" if torch.backends.mps.is_available()
-                          else "cpu")
+    device = torch.device(
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.CrossEntropyLoss(ignore_index=0)
@@ -319,7 +335,7 @@ def train_unet_on_patches(patches, n_classes, params=None, progress_callback=Non
         for xb, yb in loader:
             xb, yb = xb.to(device), yb.to(device)
             optimizer.zero_grad()
-            out = model(xb)          # (B, n_classes+1, H, W)
+            out = model(xb)  # (B, n_classes+1, H, W)
             loss = criterion(out, yb)
             loss.backward()
             optimizer.step()
@@ -337,6 +353,7 @@ def train_unet_on_patches(patches, n_classes, params=None, progress_callback=Non
 # ---------------------------------------------------------------------------
 # Tile-level prediction
 # ---------------------------------------------------------------------------
+
 
 def predict_unet_tile(model, tile_emb, patch_size=256, overlap=32):
     """Sliding-window U-Net prediction over a full embedding tile.
@@ -358,9 +375,13 @@ def predict_unet_tile(model, tile_emb, patch_size=256, overlap=32):
     H, W, dim = tile_emb.shape
     stride = patch_size - overlap
 
-    device = torch.device("cuda" if torch.cuda.is_available()
-                          else "mps" if torch.backends.mps.is_available()
-                          else "cpu")
+    device = torch.device(
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
     model.to(device).eval()
 
     # Determine n_classes from the model output layer
@@ -385,15 +406,12 @@ def predict_unet_tile(model, tile_emb, patch_size=256, overlap=32):
                 ph, pw = patch.shape[:2]
 
                 if ph < patch_size or pw < patch_size:
-                    padded = np.zeros((patch_size, patch_size, dim),
-                                     dtype=np.float32)
+                    padded = np.zeros((patch_size, patch_size, dim), dtype=np.float32)
                     padded[:ph, :pw] = patch
                     patch = padded
 
                 # (1, dim, ps, ps)
-                x = torch.from_numpy(
-                    patch.transpose(2, 0, 1)[np.newaxis]
-                ).to(device)
+                x = torch.from_numpy(patch.transpose(2, 0, 1)[np.newaxis]).to(device)
 
                 out = model(x)  # (1, n_out, ps, ps)
                 probs = F.softmax(out, dim=1).squeeze(0).cpu().numpy()

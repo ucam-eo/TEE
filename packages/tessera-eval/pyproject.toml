@@ -26,6 +26,7 @@ xgboost = ["xgboost>=1.7"]
 torch = ["torch>=2.0"]
 plot = ["matplotlib>=3.5"]
 server = ["flask>=3.0", "waitress>=2.1", "requests>=2.28", "geotessera>=0.8.0"]
+dev = ["pytest>=7.0", "ruff>=0.4", "mypy>=1.8"]
 all = ["geotessera>=0.8.0", "xgboost>=1.7", "matplotlib>=3.5"]
 
 [project.scripts]
@@ -33,3 +34,30 @@ tee-compute = "tessera_eval.server:main"
 
 [project.urls]
 Homepage = "https://github.com/ucam-eo/tessera-eval"
+Repository = "https://github.com/ucam-eo/tessera-eval"
+
+[tool.setuptools.packages.find]
+include = ["tessera_eval*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Conservative default set; the codebase predates linting, so keep it gentle.
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E501",  # long lines abound in docstrings/tables; not worth churn
+    "E402",  # several modules deliberately order a logger/guard before imports
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # re-exports define the public API
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = false

@@ -4,24 +4,27 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 
 def test_result_cache_roundtrip():
     """Save evaluation results to disk cache and load them back."""
-    import tessera_eval.server as srv
     import geopandas as gpd
     from shapely.geometry import box
+
+    import tessera_eval.server as srv
 
     old_dir = srv._tile_disk_cache_dir
     try:
         srv._tile_disk_cache_dir = Path(tempfile.mkdtemp())
 
         # Create a simple GDF for hashing
-        gdf = gpd.GeoDataFrame({
-            "geometry": [box(0, 0, 1, 1)] * 5,
-            "habitat": ["woodland"] * 5,
-        }, crs="EPSG:4326")
+        gdf = gpd.GeoDataFrame(
+            {
+                "geometry": [box(0, 0, 1, 1)] * 5,
+                "habitat": ["woodland"] * 5,
+            },
+            crs="EPSG:4326",
+        )
 
         vectors = np.random.randn(1000, 128).astype(np.float32)
         labels = np.random.randint(0, 5, size=1000).astype(np.int32)
@@ -47,18 +50,22 @@ def test_result_cache_roundtrip():
 
 def test_result_cache_miss():
     """Loading a non-existent result returns None."""
-    import tessera_eval.server as srv
     import geopandas as gpd
     from shapely.geometry import box
+
+    import tessera_eval.server as srv
 
     old_dir = srv._tile_disk_cache_dir
     try:
         srv._tile_disk_cache_dir = Path(tempfile.mkdtemp())
 
-        gdf = gpd.GeoDataFrame({
-            "geometry": [box(0, 0, 1, 1)],
-            "habitat": ["x"],
-        }, crs="EPSG:4326")
+        gdf = gpd.GeoDataFrame(
+            {
+                "geometry": [box(0, 0, 1, 1)],
+                "habitat": ["x"],
+            },
+            crs="EPSG:4326",
+        )
 
         result = srv._load_cached_result("nonexistent", 2099, gdf)
         assert result is None

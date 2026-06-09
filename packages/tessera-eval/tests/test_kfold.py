@@ -3,11 +3,11 @@
 import numpy as np
 import pytest
 
-from tessera_eval.classify import make_regressor, available_regressors
-from tessera_eval.evaluate import run_kfold_cv, regression_metrics
-
+from tessera_eval.classify import available_regressors, make_regressor
+from tessera_eval.evaluate import regression_metrics, run_kfold_cv
 
 # ── Synthetic data fixtures ──
+
 
 @pytest.fixture
 def classification_data():
@@ -39,6 +39,7 @@ def regression_data():
 
 
 # ── TestMakeRegressor ──
+
 
 class TestMakeRegressor:
     def test_rf_regressor_created(self):
@@ -73,12 +74,19 @@ class TestMakeRegressor:
 
 # ── TestRunKfoldClassification ──
 
+
 class TestRunKfoldClassification:
     def test_yields_k_fold_results(self, classification_data):
         vectors, labels = classification_data
-        events = list(run_kfold_cv(
-            vectors, labels, ["nn", "rf"], k=3, task="classification",
-        ))
+        events = list(
+            run_kfold_cv(
+                vectors,
+                labels,
+                ["nn", "rf"],
+                k=3,
+                task="classification",
+            )
+        )
         fold_events = [e for e in events if e["type"] == "fold_result"]
         agg_events = [e for e in events if e["type"] == "aggregate"]
         cm_events = [e for e in events if e["type"] == "confusion_matrices"]
@@ -89,6 +97,7 @@ class TestRunKfoldClassification:
     def test_stratified_folds(self, classification_data):
         vectors, labels = classification_data
         from sklearn.model_selection import StratifiedKFold
+
         skf = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
         for train_idx, test_idx in skf.split(vectors, labels):
             # Each fold should have all 3 classes
@@ -96,9 +105,15 @@ class TestRunKfoldClassification:
 
     def test_f1_scores_between_0_and_1(self, classification_data):
         vectors, labels = classification_data
-        events = list(run_kfold_cv(
-            vectors, labels, ["nn"], k=3, task="classification",
-        ))
+        events = list(
+            run_kfold_cv(
+                vectors,
+                labels,
+                ["nn"],
+                k=3,
+                task="classification",
+            )
+        )
         for ev in events:
             if ev["type"] == "fold_result":
                 f1 = ev["models"]["nn"]["mean_f1"]
@@ -106,9 +121,15 @@ class TestRunKfoldClassification:
 
     def test_confusion_matrix_shape(self, classification_data):
         vectors, labels = classification_data
-        events = list(run_kfold_cv(
-            vectors, labels, ["nn"], k=3, task="classification",
-        ))
+        events = list(
+            run_kfold_cv(
+                vectors,
+                labels,
+                ["nn"],
+                k=3,
+                task="classification",
+            )
+        )
         cm_event = [e for e in events if e["type"] == "confusion_matrices"][0]
         cm = cm_event["confusion_matrices"]["nn"]
         assert len(cm) == 3  # 3 classes
@@ -117,21 +138,34 @@ class TestRunKfoldClassification:
     def test_max_train_caps_training_set(self, classification_data):
         vectors, labels = classification_data
         # With max_training_samples=50, training should be capped
-        events = list(run_kfold_cv(
-            vectors, labels, ["nn"], k=3, task="classification",
-            max_training_samples=50,
-        ))
+        events = list(
+            run_kfold_cv(
+                vectors,
+                labels,
+                ["nn"],
+                k=3,
+                task="classification",
+                max_training_samples=50,
+            )
+        )
         assert len(events) > 0  # Should complete without error
 
 
 # ── TestRunKfoldRegression ──
 
+
 class TestRunKfoldRegression:
     def test_yields_k_fold_results(self, regression_data):
         vectors, targets = regression_data
-        events = list(run_kfold_cv(
-            vectors, targets, ["rf_reg"], k=3, task="regression",
-        ))
+        events = list(
+            run_kfold_cv(
+                vectors,
+                targets,
+                ["rf_reg"],
+                k=3,
+                task="regression",
+            )
+        )
         fold_events = [e for e in events if e["type"] == "fold_result"]
         agg_events = [e for e in events if e["type"] == "aggregate"]
         assert len(fold_events) == 3
@@ -139,32 +173,51 @@ class TestRunKfoldRegression:
 
     def test_r2_score_reasonable(self, regression_data):
         vectors, targets = regression_data
-        events = list(run_kfold_cv(
-            vectors, targets, ["rf_reg"], k=3, task="regression",
-        ))
+        events = list(
+            run_kfold_cv(
+                vectors,
+                targets,
+                ["rf_reg"],
+                k=3,
+                task="regression",
+            )
+        )
         agg = [e for e in events if e["type"] == "aggregate"][0]
         r2 = agg["models"]["rf_reg"]["mean_r2"]
         assert r2 > 0, "R2 should be positive for correlated features"
 
     def test_rmse_positive(self, regression_data):
         vectors, targets = regression_data
-        events = list(run_kfold_cv(
-            vectors, targets, ["rf_reg"], k=3, task="regression",
-        ))
+        events = list(
+            run_kfold_cv(
+                vectors,
+                targets,
+                ["rf_reg"],
+                k=3,
+                task="regression",
+            )
+        )
         agg = [e for e in events if e["type"] == "aggregate"][0]
         rmse = agg["models"]["rf_reg"]["mean_rmse"]
         assert rmse > 0
 
     def test_no_confusion_matrix_for_regression(self, regression_data):
         vectors, targets = regression_data
-        events = list(run_kfold_cv(
-            vectors, targets, ["rf_reg"], k=3, task="regression",
-        ))
+        events = list(
+            run_kfold_cv(
+                vectors,
+                targets,
+                ["rf_reg"],
+                k=3,
+                task="regression",
+            )
+        )
         cm_events = [e for e in events if e["type"] == "confusion_matrices"]
         assert len(cm_events) == 0
 
 
 # ── TestRegressionMetrics ──
+
 
 class TestRegressionMetrics:
     def test_perfect_prediction(self):
