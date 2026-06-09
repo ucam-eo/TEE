@@ -51,10 +51,10 @@ const VectorCache = {
     async open() {
         if (this._db) return this._db;
         return new Promise((resolve, reject) => {
-            // v6: VQ path caches compact uint8 `values` + dim_min/dim_max (keeps
-            // explore-mode panning light); the worker dequantises on demand. Bump to
-            // drop the short-lived v5 Float32 entries.
-            const req = indexedDB.open(this.DB_NAME, 6);
+            // v7: both paths now cache compact uint8 `values` + dim_min/dim_max
+            // (legacy used to cache Float32). Consumers dequantize on demand. Bump to
+            // drop stale Float32 legacy entries.
+            const req = indexedDB.open(this.DB_NAME, 7);
             req.onupgradeneeded = (e) => {
                 const db = req.result;
                 // Delete old store on upgrade to invalidate stale cache
@@ -560,48 +560,29 @@ async function downloadVectorData(viewport, year) {
         const embDim = 128;
         let embeddingsData;
 
-        // Handle dtype: uint8 with dequantization
+        // Handle dtype. Keep uint8 compact (consumers dequantize on demand via
+        // metadata.dim_min/dim_max — keeps explore-mode panning light); only the
+        // raw-float fallback stays Float32.
         if (embParsed.dtype === '|u1' || embParsed.dtype === '<u1') {
             const raw = new Uint8Array(embParsed.rawData);
             const N = embParsed.shape[0];
-            embeddingsData = new Float32Array(N * embDim);
-            if (quantParams) {
-                // Pre-compute per-dimension scale/offset for row-major dequant
-                const scales = new Float32Array(embDim);
-                const mins = new Float32Array(embDim);
-                for (let d = 0; d < embDim; d++) {
-                    scales[d] = (quantParams.dim_max[d] - quantParams.dim_min[d]) / 255.0;
-                    mins[d] = quantParams.dim_min[d];
-                }
-                status.textContent = 'Dequantizing embeddings...';
-                if (embParsed.fortranOrder) {
-                    for (let i = 0; i < N; i++) {
-                        const outBase = i * embDim;
-                        for (let d = 0; d < embDim; d++) {
-                            embeddingsData[outBase + d] = raw[d * N + i] * scales[d] + mins[d];
-                        }
-                    }
-                } else {
-                    // Row-major: sequential reads and writes for cache efficiency
-                    for (let i = 0; i < N; i++) {
-                        const base = i * embDim;
-                        for (let d = 0; d < embDim; d++) {
-                            embeddingsData[base + d] = raw[base + d] * scales[d] + mins[d];
-                        }
+            if (embParsed.fortranOrder) {
+                // Transpose to row-major uint8
+                embeddingsData = new Uint8Array(N * embDim);
+                for (let i = 0; i < N; i++) {
+                    for (let d = 0; d < embDim; d++) {
+                        embeddingsData[i * embDim + d] = raw[d * N + i];
                     }
                 }
             } else {
-                // Legacy uint8 without quantization params — copy as-is
-                if (embParsed.fortranOrder) {
-                    for (let i = 0; i < N; i++) {
-                        for (let d = 0; d < embDim; d++) {
-                            embeddingsData[i * embDim + d] = raw[d * N + i];
-                        }
-                    }
-                } else {
-                    for (let k = 0; k < raw.length; k++) embeddingsData[k] = raw[k];
-                }
+                embeddingsData = raw;
             }
+            if (quantParams) {
+                // Carry per-dim scale on metadata; getDequant() reads these.
+                metadata.dim_min = quantParams.dim_min;
+                metadata.dim_max = quantParams.dim_max;
+            }
+            // (no quantParams → uint8 treated as identity by getDequant, as before)
         } else if (embParsed.dtype === '<f4') {
             const raw = new Float32Array(embParsed.rawData);
             const N = embParsed.shape[0];
@@ -669,6 +650,41 @@ async function downloadVectorData(viewport, year) {
     }
 }
 
+// ── Dequantization (single source of truth) ──
+// localVectors.values is stored compact as uint8 + per-dim metadata.dim_min/dim_max
+// (keeps explore-mode panning light). Real value = u8 * (max[d]-min[d])/255 + min[d].
+// The rare raw-float fallback stores Float32 values and is treated as identity.
+// Consumers dequantize inline / on demand; never a resident Float32 mosaic.
+function getDequant(lv) {
+    if (lv._dequant) return lv._dequant;
+    const dim = lv.dim || 128;
+    const scale = new Float32Array(dim);
+    const min = new Float32Array(dim);
+    const md = lv.metadata || {};
+    const isUint8 = lv.values && lv.values.BYTES_PER_ELEMENT === 1;
+    if (isUint8 && md.dim_min && md.dim_max) {
+        for (let d = 0; d < dim; d++) {
+            scale[d] = (md.dim_max[d] - md.dim_min[d]) / 255;
+            min[d] = md.dim_min[d];
+        }
+    } else {
+        scale.fill(1); // Float32 values (or uint8 without params): identity passthrough
+    }
+    lv._dequant = { scale, min };
+    return lv._dequant;
+}
+
+// Dequantized embedding for one pixel index → a fresh Float32Array(dim).
+function dequantSlice(lv, idx) {
+    const dim = lv.dim || 128;
+    const { scale, min } = getDequant(lv);
+    const v = lv.values;
+    const base = idx * dim;
+    const out = new Float32Array(dim);
+    for (let d = 0; d < dim; d++) out[d] = v[base + d] * scale[d] + min[d];
+    return out;
+}
+
 // ── Client-Side Search Functions ──
 
 function localExtract(lat, lon) {
@@ -691,8 +707,8 @@ function localExtract(lat, lon) {
     }
     if (idx < 0) return null;
 
-    // Return 128-dim embedding slice
-    return localVectors.values.slice(idx * 128, (idx + 1) * 128);
+    // Return dequantized 128-dim embedding (real-space float).
+    return dequantSlice(localVectors, idx);
 }
 
 // Pre-allocated distance buffer (reused across calls to avoid GC pressure)
@@ -705,6 +721,12 @@ function localSearchSimilar(embedding, threshold) {
     const emb = localVectors.values;
     const coords = localVectors.coords;
     const threshSq = threshold * threshold;
+
+    // Dequantize inline: real = emb*scale[d] + min[d]. Fold min into the query so the
+    // inner loop is one multiply + subtract (q = query - min); identity for float.
+    const { scale, min } = getDequant(localVectors);
+    const q = new Float32Array(dim);
+    for (let d = 0; d < dim; d++) q[d] = embedding[d] - min[d];
 
     // Allocate or reuse distance buffer
     if (!_distSqBuf || _distSqBuf.length < N) {
@@ -720,14 +742,14 @@ function localSearchSimilar(embedding, threshold) {
         const base = i * dim;
         let d = 0;
         for (; d < dim4; d += 4) {
-            const d0 = emb[base + d]     - embedding[d];
-            const d1 = emb[base + d + 1] - embedding[d + 1];
-            const d2 = emb[base + d + 2] - embedding[d + 2];
-            const d3 = emb[base + d + 3] - embedding[d + 3];
+            const d0 = emb[base + d]     * scale[d]     - q[d];
+            const d1 = emb[base + d + 1] * scale[d + 1] - q[d + 1];
+            const d2 = emb[base + d + 2] * scale[d + 2] - q[d + 2];
+            const d3 = emb[base + d + 3] * scale[d + 3] - q[d + 3];
             s += d0*d0 + d1*d1 + d2*d2 + d3*d3;
         }
         for (; d < dim; d++) {
-            const diff = emb[base + d] - embedding[d];
+            const diff = emb[base + d] * scale[d] - q[d];
             s += diff * diff;
         }
         distBuf[i] = s;
@@ -759,24 +781,32 @@ function localSearchSimilarMulti(embeddings, threshold) {
     const coords = localVectors.coords;
     const threshSq = threshold * threshold;
 
+    // Dequantize inline (real = emb*scale[d] + min[d]); fold min into each query.
+    const { scale, min } = getDequant(localVectors);
+    const qs = embeddings.map(qEmb => {
+        const q = new Float32Array(dim);
+        for (let d = 0; d < dim; d++) q[d] = qEmb[d] - min[d];
+        return q;
+    });
+
     const dim4 = dim & ~3;
     const matches = [];
     for (let i = 0; i < N; i++) {
         const base = i * dim;
         let hit = false;
-        for (let e = 0; e < embeddings.length; e++) {
-            const qEmb = embeddings[e];
+        for (let e = 0; e < qs.length; e++) {
+            const q = qs[e];
             let s = 0;
             let d = 0;
             for (; d < dim4; d += 4) {
-                const d0 = emb[base + d]     - qEmb[d];
-                const d1 = emb[base + d + 1] - qEmb[d + 1];
-                const d2 = emb[base + d + 2] - qEmb[d + 2];
-                const d3 = emb[base + d + 3] - qEmb[d + 3];
+                const d0 = emb[base + d]     * scale[d]     - q[d];
+                const d1 = emb[base + d + 1] * scale[d + 1] - q[d + 1];
+                const d2 = emb[base + d + 2] * scale[d + 2] - q[d + 2];
+                const d3 = emb[base + d + 3] * scale[d + 3] - q[d + 3];
                 s += d0*d0 + d1*d1 + d2*d2 + d3*d3;
             }
             for (; d < dim; d++) {
-                const diff = emb[base + d] - qEmb[d];
+                const diff = emb[base + d] * scale[d] - q[d];
                 s += diff * diff;
             }
             if (s <= threshSq) { hit = true; break; }
@@ -800,13 +830,20 @@ function localSearchSimilarMulti(embeddings, threshold) {
 function searchMultiInVectorData(data, searches) {
     const N = data.numVectors;
     const emb = data.values;
+    // Dequantize inline (real = emb*scale[d] + min[d]); fold min into each search query.
+    const { scale, min } = getDequant(data);
+    const qps = searches.map(s => {
+        const q = new Float32Array(128);
+        for (let d = 0; d < 128; d++) q[d] = s.embedding[d] - min[d];
+        return { q, threshSq: s.threshSq };
+    });
     let count = 0;
     for (let i = 0; i < N; i++) {
         const base = i * 128;
-        for (const s of searches) {
+        for (const s of qps) {
             let distSq = 0;
             for (let d = 0; d < 128; d++) {
-                const diff = emb[base + d] - s.embedding[d];
+                const diff = emb[base + d] * scale[d] - s.q[d];
                 distSq += diff * diff;
             }
             if (distSq <= s.threshSq) { count++; break; }
@@ -868,7 +905,7 @@ function extractFromData(data, lat, lon) {
         }
     }
     if (idx < 0) return null;
-    return data.values.slice(idx * 128, (idx + 1) * 128);
+    return dequantSlice(data, idx);
 }
 
 // ── Explorer Visualization ──
@@ -1234,6 +1271,8 @@ window.gridLookupIndex = gridLookupIndex;
 window.VectorCache = VectorCache;
 window.decompressGzip = decompressGzip;
 window.parseNpy = parseNpy;
+window.getDequant = getDequant;
+window.dequantSlice = dequantSlice;
 window.downloadVectorData = downloadVectorData;
 window.localExtract = localExtract;
 window.localSearchSimilar = localSearchSimilar;

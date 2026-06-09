@@ -712,9 +712,11 @@ async function getUmapWorkerURL() {
 function computePCAFromLocal(lv) {
     const N = lv.numVectors;
     const dim = lv.dim; // 128
-    const emb = lv.values; // Float32Array, N * dim
+    const emb = lv.values; // uint8 (or Float32 legacy) — dequantize via getDequant
     const allCoords = lv.coords;  // Int32Array, N * 2
     const gt = lv.metadata.geotransform;
+    // Dequantize rows into the (small) subsample buffer: real = emb*scale[d] + min[d].
+    const { scale, min } = window.getDequant(lv);
 
     // Subsample for scatter plot (PCA is fast, so allow 4x more points than UMAP)
     let n, subEmb, subCoords;
@@ -724,14 +726,19 @@ function computePCAFromLocal(lv) {
         subEmb = new Float32Array(n * dim);
         subCoords = new Int32Array(n * 2);
         for (let i = 0, si = 0; si < n; i += stride, si++) {
-            subEmb.set(emb.subarray(i * dim, (i + 1) * dim), si * dim);
+            const src = i * dim, dst = si * dim;
+            for (let d = 0; d < dim; d++) subEmb[dst + d] = emb[src + d] * scale[d] + min[d];
             subCoords[si * 2] = allCoords[i * 2];
             subCoords[si * 2 + 1] = allCoords[i * 2 + 1];
         }
         console.log(`[PCA] Subsampled ${N} -> ${n} points (stride ${stride})`);
     } else {
         n = N;
-        subEmb = emb;
+        subEmb = new Float32Array(n * dim);
+        for (let i = 0; i < n; i++) {
+            const b = i * dim;
+            for (let d = 0; d < dim; d++) subEmb[b + d] = emb[b + d] * scale[d] + min[d];
+        }
         subCoords = allCoords;
     }
 
@@ -902,6 +909,9 @@ async function loadDimReduction(method = null) {
             const emb = window.localVectors.values;
             const coords = window.localVectors.coords;
             const nComponents = 3;
+            // Dequantize rows into subEmb (real = emb*scale[d] + min[d]). subEmb must be
+            // a freshly-owned Float32Array — its buffer is transferred to the worker.
+            const { scale, min } = window.getDequant(window.localVectors);
 
             // Subsample if too many points
             let subN, subEmb, subCoords;
@@ -911,14 +921,19 @@ async function loadDimReduction(method = null) {
                 subEmb = new Float32Array(subN * dim);
                 subCoords = new Int32Array(subN * 2);
                 for (let i = 0, si = 0; si < subN; i += stride, si++) {
-                    subEmb.set(emb.subarray(i * dim, (i + 1) * dim), si * dim);
+                    const src = i * dim, dst = si * dim;
+                    for (let d = 0; d < dim; d++) subEmb[dst + d] = emb[src + d] * scale[d] + min[d];
                     subCoords[si * 2] = coords[i * 2];
                     subCoords[si * 2 + 1] = coords[i * 2 + 1];
                 }
                 console.log(`[UMAP] Subsampled ${N} -> ${subN} points (stride ${stride})`);
             } else {
                 subN = N;
-                subEmb = emb.slice(0);
+                subEmb = new Float32Array(subN * dim);
+                for (let i = 0; i < subN; i++) {
+                    const b = i * dim;
+                    for (let d = 0; d < dim; d++) subEmb[b + d] = emb[b + d] * scale[d] + min[d];
+                }
                 subCoords = coords;
             }
 
@@ -1083,6 +1098,8 @@ async function loadHeatmap() {
         const emb1 = data1.values;
         const emb2 = data2.values;
         const coords = data1.coords;
+        // Each year dequantizes via its own per-dim scale (real = emb*scale[d] + min[d]).
+        const dq1 = window.getDequant(data1), dq2 = window.getDequant(data2);
 
         // Compute Euclidean distances element-wise and build result array
         const distances = new Array(numVectors);
@@ -1093,7 +1110,8 @@ async function loadHeatmap() {
             let sum = 0;
             const base = i * dim;
             for (let d = 0; d < dim; d++) {
-                const diff = emb1[base + d] - emb2[base + d];
+                const diff = (emb1[base + d] * dq1.scale[d] + dq1.min[d])
+                           - (emb2[base + d] * dq2.scale[d] + dq2.min[d]);
                 sum += diff * diff;
             }
             const dist = Math.sqrt(sum);

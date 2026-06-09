@@ -245,28 +245,22 @@ async function runKMeans(k) {
     const N = segVectors.numVectors;
     const dim = segVectors.dim;
 
-    // The worker clusters on Float32. The legacy path already holds Float32 values; the
-    // VQ fast path keeps values compact as uint8 + per-dim dim_min/dim_max (so explore
-    // panning stays light) -> dequantise to a transient Float32 buffer just for the worker.
-    // (Passing the raw uint8 buffer makes the worker read 1/4-size garbage -> one cluster.)
-    let embCopy;
+    // The worker clusters on Float32. Build a transient dequantized buffer via the
+    // shared getDequant() (uint8 -> real via dim_min/dim_max; Float32 -> identity);
+    // never keep a resident float array. (Passing raw uint8 to the worker makes it
+    // read 1/4-size garbage -> one cluster.)
     const sv = segVectors.values;
+    let embCopy;
     if (sv.BYTES_PER_ELEMENT === 1) {
-        const md = segVectors.metadata || {};
-        const dmin = md.dim_min, dmax = md.dim_max;
+        const { scale, min } = window.getDequant(segVectors);
         const f = new Float32Array(sv.length);
-        if (dmin && dmax) {
-            const scale = new Float32Array(dim);
-            for (let d = 0; d < dim; d++) scale[d] = (dmax[d] - dmin[d]) / 255;
-            for (let i = 0; i < N; i++) {
-                const b = i * dim;
-                for (let d = 0; d < dim; d++) f[b + d] = sv[b + d] * scale[d] + dmin[d];
-            }
-        } else {
-            for (let i = 0; i < sv.length; i++) f[i] = sv[i];
+        for (let i = 0; i < N; i++) {
+            const b = i * dim;
+            for (let d = 0; d < dim; d++) f[b + d] = sv[b + d] * scale[d] + min[d];
         }
         embCopy = f.buffer;
     } else {
+        // Already Float32 — copy before transferring (don't neuter the live buffer).
         embCopy = sv.buffer.slice(0);
     }
     const transferables = [embCopy];
@@ -307,7 +301,7 @@ async function runKMeans(k) {
                 const px = segVectors.coords[ni * 2], py = segVectors.coords[ni * 2 + 1];
                 segLabels.push({
                     id: c, color, hex, name: `Cluster ${c + 1}`, count: counts[c],
-                    embedding: Array.from(segVectors.values.subarray(ni * dim, (ni + 1) * dim)),
+                    embedding: Array.from(window.dequantSlice(segVectors, ni)),
                     sourcePixel: { lat: gt.f + py * gt.e, lon: gt.c + px * gt.a },
                     threshold: maxDistArr[c],
                     centroid: Array.from(centroids.subarray(c * dim, (c + 1) * dim))
@@ -518,6 +512,8 @@ function saveClusterAsLabel(clusterId) {
     const centroid = cluster.embedding;
     const dim = segVectors.dim || 128;
     const emb = segVectors.values;
+    // Dequantize inline (real = emb*scale[d] + min[d]); centroid is already real-space.
+    const { scale, min } = window.getDequant(segVectors);
     let maxDistSq = 0;
     for (let i = 0; i < N; i++) {
         if (segAssignments[i] !== clusterId) continue;
@@ -533,7 +529,7 @@ function saveClusterAsLabel(clusterId) {
             let s = 0;
             const base = i * dim;
             for (let d = 0; d < dim; d++) {
-                const diff = emb[base + d] - centroid[d];
+                const diff = emb[base + d] * scale[d] + min[d] - centroid[d];
                 s += diff * diff;
             }
             if (s > maxDistSq) maxDistSq = s;

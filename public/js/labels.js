@@ -815,6 +815,8 @@ function renderManualClassification() {
     const emb = window.localVectors.values;
     const gt = window.localVectors.metadata.geotransform;
     const grid = window.localVectors.gridLookup;
+    // Dequantize inline: real = emb*scale[d] + min[d] (identity for float legacy).
+    const { scale, min } = window.getDequant(window.localVectors);
 
     // -1 = unassigned
     const assignments = new Int8Array(N).fill(-1);
@@ -860,7 +862,7 @@ function renderManualClassification() {
                 const src = sources[s];
                 let distSq = 0;
                 for (let d = 0; d < dim; d++) {
-                    const diff = emb[base + d] - src.emb[d];
+                    const diff = emb[base + d] * scale[d] + min[d] - src.emb[d];
                     distSq += diff * diff;
                 }
                 if (distSq <= src.threshSq && distSq < bestDist) {
@@ -1041,22 +1043,21 @@ function handlePolygonComplete(latLngs) {
     };
 
     if (polygonSearchMode === 'union') {
-        // Store all individual pixel embeddings for union search
+        // Store all individual pixel embeddings (dequantized real-space) for union search
         const allEmbs = [];
         for (const m of matches) {
-            const emb = new Float32Array(dim);
-            const base = m.vectorIndex * dim;
-            for (let d = 0; d < dim; d++) emb[d] = window.localVectors.values[base + d];
-            allEmbs.push(Array.from(emb));
+            allEmbs.push(Array.from(window.dequantSlice(window.localVectors, m.vectorIndex)));
         }
         entry.embeddings = allEmbs;
         entry.embedding = null;
     } else {
-        // Compute centroid (mean) embedding from interior pixels
+        // Compute centroid (mean) embedding from interior pixels (dequantized inline)
+        const { scale, min } = window.getDequant(window.localVectors);
+        const vals = window.localVectors.values;
         const centroid = new Float32Array(dim);
         for (const m of matches) {
             const base = m.vectorIndex * dim;
-            for (let d = 0; d < dim; d++) centroid[d] += window.localVectors.values[base + d];
+            for (let d = 0; d < dim; d++) centroid[d] += vals[base + d] * scale[d] + min[d];
         }
         for (let d = 0; d < dim; d++) centroid[d] /= matches.length;
         entry.embedding = Array.from(centroid);
@@ -1424,6 +1425,9 @@ function importGeoJSON(geojson) {
         } else if (gt && grid) {
             // Multiple points → reconstitute as label with pixel_coords + centroid embedding
             const pixel_coords = [];
+            // Dequantize inline: real = vals*scale[d] + min[d] (identity for float legacy).
+            const { scale, min } = window.getDequant(window.localVectors);
+            const vals = window.localVectors.values;
             const centroid = new Float32Array(dim);
             let maxDistSq = 0;
             let validCount = 0;
@@ -1438,7 +1442,7 @@ function importGeoJSON(geojson) {
                 sumLat += lat;
                 sumLon += lon;
                 const base = idx * dim;
-                for (let d = 0; d < dim; d++) centroid[d] += window.localVectors.values[base + d];
+                for (let d = 0; d < dim; d++) centroid[d] += vals[base + d] * scale[d] + min[d];
                 validCount++;
             }
 
@@ -1453,7 +1457,7 @@ function importGeoJSON(geojson) {
                 let s = 0;
                 const base = idx * dim;
                 for (let d = 0; d < dim; d++) {
-                    const diff = window.localVectors.values[base + d] - centroid[d];
+                    const diff = vals[base + d] * scale[d] + min[d] - centroid[d];
                     s += diff * diff;
                 }
                 if (s > maxDistSq) maxDistSq = s;
@@ -1504,10 +1508,12 @@ function importGeoJSON(geojson) {
             lbl.matchCount = matches.length;
             lbl.pixelCount = matches.length;
             if (matches.length > 0) {
+                const { scale, min } = window.getDequant(window.localVectors);
+                const vals = window.localVectors.values;
                 const centroid = new Float32Array(dim);
                 for (const m of matches) {
                     const base = m.vectorIndex * dim;
-                    for (let d = 0; d < dim; d++) centroid[d] += window.localVectors.values[base + d];
+                    for (let d = 0; d < dim; d++) centroid[d] += vals[base + d] * scale[d] + min[d];
                 }
                 for (let d = 0; d < dim; d++) centroid[d] /= matches.length;
                 lbl.embedding = Array.from(centroid);
