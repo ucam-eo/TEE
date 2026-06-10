@@ -95,7 +95,7 @@ def _get_provider(viewport_name):
 
 
 # Zarr utilities shared with tessera_eval.server
-from tessera_eval.zarr_utils import get_zarr, probe_zarr_coverage, read_region_chunked
+from tessera_zarr_utils import get_zarr, probe_zarr_coverage, read_region_chunked
 
 
 # ---------- Zarr / NPY mosaic fetching ----------
