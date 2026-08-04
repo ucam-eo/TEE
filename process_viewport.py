@@ -20,6 +20,7 @@ import time as _time
 import traceback
 import argparse
 import logging
+import fcntl
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 
@@ -58,6 +59,14 @@ NUM_ZOOM_LEVELS = 6
 _provider_instance = None  # cached client (GeoTessera or VQTessera) for this process
 _provider_kind = None      # 'geotessera' or 'vqtessera', for log lines
 
+# Cross-process lock guarding GeoTessera's registry (parquet) download. Without
+# it, concurrent process_viewport.py invocations each see no local cache and
+# redundantly re-download the same ~350MB registry file at once. flock is
+# released automatically if the holder dies/is killed, so there's no stale-lock
+# cleanup to worry about; a wedged holder is still bounded by the pipeline's
+# own subprocess timeout (see PipelineRunner.run_script).
+_REGISTRY_LOCK_PATH = DATA_DIR / 'registry_init.lock'
+
 
 def _get_provider(viewport_name):
     """Return a cached embeddings client for this process.
@@ -75,7 +84,16 @@ def _get_provider(viewport_name):
     t0 = _time.monotonic()
     vq = get_viewport_vq_config(viewport_name) if viewport_name else None
     if vq is None:
-        _provider_instance = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
+        # Serialize registry init across concurrent processes so only the
+        # first one actually downloads it; the rest reuse GeoTessera's own
+        # on-disk cache (~/.cache/geotessera/registry.parquet) once it lands.
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with open(_REGISTRY_LOCK_PATH, 'w') as lockfile:
+            fcntl.flock(lockfile, fcntl.LOCK_EX)
+            try:
+                _provider_instance = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
+            finally:
+                fcntl.flock(lockfile, fcntl.LOCK_UN)
         _provider_kind = 'geotessera'
         logger.info("GeoTessera initialized in %.1fs", _time.monotonic() - t0)
     else:

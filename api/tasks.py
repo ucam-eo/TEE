@@ -3,6 +3,7 @@
 import logging
 import subprocess
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from lib.pipeline import PipelineRunner
 from lib.progress_tracker import ProgressTracker
@@ -13,6 +14,14 @@ logger = logging.getLogger(__name__)
 # Module-level task state (same as Flask version)
 tasks = {}
 tasks_lock = threading.Lock()
+
+# Cap concurrent pipeline subprocesses. Bulk viewport imports used to spawn
+# one unmanaged thread (and one process_viewport.py subprocess) per viewport
+# with no limit — importing dozens at once caused a thundering herd against
+# the GeoTessera registry download and left most stuck mid-pipeline. Excess
+# requests now queue here instead of all launching at once.
+MAX_CONCURRENT_PIPELINES = 5
+_pipeline_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_PIPELINES)
 
 
 def trigger_data_download_and_processing(viewport_name, years=None):
@@ -63,5 +72,4 @@ def trigger_data_download_and_processing(viewport_name, years=None):
     progress = ProgressTracker(f"{viewport_name}_pipeline")
     progress.update("starting", "Starting pipeline...", 0, 100)
 
-    thread = threading.Thread(target=download_and_process, daemon=True)
-    thread.start()
+    _pipeline_executor.submit(download_and_process)

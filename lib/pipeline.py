@@ -287,8 +287,17 @@ class PipelineRunner:
                 return True
             return False
 
-        # Run subprocess (writes progress directly to {vp}_pipeline_progress.json)
-        success, error = self.stage_1_process_viewport(viewport_name, years_str or "")
+        # Run subprocess (writes progress directly to {vp}_pipeline_progress.json).
+        # Anything that escapes stage_1_process_viewport (e.g. subprocess.TimeoutExpired
+        # from a wedged process_viewport.py) must still leave a terminal status in the
+        # progress file — otherwise the frontend polls a "processing" state that will
+        # never change, since the subprocess is gone and nothing else is watching it.
+        try:
+            success, error = self.stage_1_process_viewport(viewport_name, years_str or "")
+        except Exception as e:
+            logger.error(f"[PIPELINE] Unexpected error running stage 1 for '{viewport_name}': {e}", exc_info=True)
+            self.progress.error(f"Pipeline crashed: {type(e).__name__}: {e}")
+            raise
         if not success:
             self.progress.error(f"Processing failed: {error}")
             return False, error
