@@ -31,6 +31,17 @@ for arg in "$@"; do
     case "$arg" in
         --local) LOCAL_MODE=true ;;
         --install-torch|--no-tunnel) EXTRA_ARGS="$EXTRA_ARGS $arg" ;;
+        --*)
+            # An unrecognized flag (e.g. a typo like "--local.") must not
+            # silently fall through to the REMOTE case below — ssh would
+            # then treat it as a "-l" style option and fail with a cryptic
+            # usage dump instead of a clear error pointing at the typo.
+            echo "Unknown option: $arg" >&2
+            echo "Usage: $0 <server> [--install-torch] [--no-tunnel]" >&2
+            echo "       $0 --local                     # all local" >&2
+            echo "       $0 --local <server>             # local Django + GPU tunnel" >&2
+            exit 1
+            ;;
         *) if [[ -z "$REMOTE" ]]; then REMOTE="$arg"; fi ;;
     esac
 done

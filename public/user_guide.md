@@ -414,6 +414,7 @@ error. The most common causes:
 | `Address already in use` | Something else is already using port 8001 or 8002 (maybe an earlier attempt still running) | Run `./shutdown.sh` first, then try again |
 | Nothing printed, script exits immediately | You ran it from outside the `TEE` folder | `cd` into the `TEE` folder you cloned in Step 1, then re-run |
 | `Migration FAILED`, or the page loads but shows `OperationalError: no such table: auth_user` | The database hasn't been set up yet — this happens on a brand-new checkout, or an older checkout from before this step was automated | Run `venv/bin/python manage.py migrate` from inside the `TEE` folder, then retry. If you're on an older checkout, `git pull` first to get the version of `deploy-compute.sh` that does this automatically. |
+| `unknown option --` followed by an `ssh` usage message, and the page won't load | A typo in the flag (e.g. `--local.` with a stray period, or any misspelled `--` option) was silently read as a remote server name instead of being rejected | Double-check the command matches exactly: `./scripts/deploy-compute.sh --local` (no trailing punctuation). On an older checkout, `git pull` first — newer versions reject unrecognized `--` flags with a clear error instead of passing them to `ssh`. |
 
 ### Option B: Remote GPU Server
 
