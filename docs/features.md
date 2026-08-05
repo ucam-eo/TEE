@@ -155,14 +155,19 @@ an entry sets the active label's code, name and colour.
 | **JSON** | Any | Full round-trip (embeddings, vertices, metadata) |
 | **GeoJSON** | Any | Vector polygons (d3-contour vectorisation of pixel sets) |
 | **ESRI Shapefile (ZIP)** | Manual labelling | GIS-compatible polygons |
+| **CSV (points)** | Manual labelling | One row per label (name, code, type, lat, lon, pixel count) — for GEE/ArcGIS point import or a spreadsheet |
+| **KML** | Manual labelling | One styled Placemark per label (Point or Polygon, matching label colour) — export-only |
 | **Map (JPG)** | Explore / auto-label | Screenshot of satellite view with overlays |
 
 Export button turns red when there are unsaved changes.
 
 ### Import
 
-JSON, GeoJSON, or ESRI Shapefile ZIP. Polygons are re-rasterised to the
-current viewport's pixel grid on import.
+JSON, GeoJSON, CSV, or ESRI Shapefile ZIP. Polygons are re-rasterised to
+the current viewport's pixel grid on import. CSV import expects a header
+row with lat/lon columns (`lat`/`lon`, `latitude`/`longitude`, or `x`/`y`)
+plus optional `name`/`code` columns; rows sharing a name are grouped into
+one label. KML is export-only.
 
 ### Label sharing
 

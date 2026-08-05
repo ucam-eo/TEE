@@ -183,7 +183,7 @@ A **label** is a named group of pixels that you've identified as belonging to th
 There are three ways to create labels:
 - **Auto-labelling** — run K-means clustering, then promote the clusters you want (see [Auto-Labelling](#auto-labelling-k-means-clustering))
 - **Manual pins and polygons** — place individual points or draw areas on the map (see [Manual Labelling](#manual-labelling))
-- **Import** — load labels from a previously exported JSON or Shapefile
+- **Import** — load labels from a previously exported JSON, CSV, or Shapefile
 
 Once you have labels, you can:
 
@@ -192,7 +192,7 @@ Once you have labels, you can:
 | **Show or hide** a label on the map | Click the eye icon next to the label name |
 | **Delete** a label | Click the **trash** icon or **×** next to it |
 | **See coverage across years** | Click the **clock icon** next to a label — it shows how many similar pixels exist in each year |
-| **Import** labels from a file | Click **Import** and select a JSON, GeoJSON, or ESRI Shapefile (.zip) |
+| **Import** labels from a file | Click **Import** and select a JSON, GeoJSON, CSV, or ESRI Shapefile (.zip) |
 | **Export** labels | Click **Export** — see formats below |
 
 Labels are saved in your browser's local storage, so they persist across page reloads and are tied to the viewport name. However, **local storage is volatile** — it can be cleared by browser updates, clearing browsing data, or switching browsers. Always save your work by exporting regularly. The **Export** button turns red when you have unsaved changes as a reminder.
@@ -216,8 +216,12 @@ The export menu offers different formats depending on which mode you're in:
 | **JSON** | Re-import into TEE (includes embeddings and all metadata) |
 | **GeoJSON** | GIS-compatible polygons |
 | **ESRI Shapefile (ZIP)** | Standard GIS interchange format — can be opened in QGIS, ArcGIS, etc. Can also be used as ground truth for validation. |
+| **CSV (points)** | One row per label (name, code, type, lat, lon, pixel count) — the simplest way into Google Earth Engine (`ee.FeatureCollection` from a CSV of lat/lon) or ArcGIS's **Add XY Data**, or just to open in a spreadsheet |
+| **KML** | One Placemark per label, coloured to match its label colour — opens directly in Google Earth, and both ArcGIS and Google Earth Engine can import KML |
 
-> **How export works:** When you export pixel labels (from auto-labelling or similarity search), TEE automatically converts them from a raster (grid of coloured pixels) to vector polygons (outlines). This keeps the exported files compact — a label covering 50,000 pixels becomes a few polygon shapes rather than 50,000 individual points. When you import the file back into TEE, the polygons are converted back to pixels.
+> **How export works:** When you export pixel labels (from auto-labelling or similarity search), TEE automatically converts them from a raster (grid of coloured pixels) to vector polygons (outlines) for the GeoJSON, Shapefile, and KML formats. This keeps the exported files compact — a label covering 50,000 pixels becomes a few polygon shapes rather than 50,000 individual points. When you import the file back into TEE, the polygons are converted back to pixels. CSV export is the exception: it's deliberately points-only, one row per label at its representative location, rather than the full polygon outline — use GeoJSON, Shapefile, or KML if you need the exact shape.
+>
+> **CSV import** expects a header row with latitude/longitude columns (`lat`/`lon`, `latitude`/`longitude`, or `x`/`y`) and, optionally, `name` and `code` columns. Multiple rows sharing the same name are grouped back into a single label, the same way GeoJSON import works. KML is export-only — TEE cannot import KML files back in.
 
 ### Sharing Labels
 

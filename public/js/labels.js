@@ -1248,6 +1248,8 @@ function exportManualLabels() {
         <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('json')" title="Export labels as JSON with embeddings">JSON (full)</button>
         <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('geojson')" title="Export labels as GeoJSON points">GeoJSON</button>
         <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('shapefile')" title="Export labels as ESRI Shapefile">ESRI Shapefile (ZIP)</button>
+        <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('csv')" title="Export one point per label (lat/lon columns) — for Google Earth Engine, ArcGIS Add XY Data, or a spreadsheet">CSV (points)</button>
+        <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="doExportManualLabels('kml')" title="Export labels as KML for Google Earth / GEE / ArcGIS">KML</button>
         <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="document.getElementById('labelling-export-menu').style.display='none'; exportMapAsJPG()" title="Save current map view as image">Map (JPG)</button>
     `;
     btn.parentElement.style.position = 'relative';
@@ -1288,7 +1290,89 @@ async function doExportManualLabels(format) {
         downloadFile(JSON.stringify(geojson, null, 2), `manual-labels-${window.currentViewportName || 'export'}.geojson`, 'application/geo+json');
     } else if (format === 'shapefile') {
         exportManualLabelsShapefile();
+    } else if (format === 'csv') {
+        exportManualLabelsCSV();
+    } else if (format === 'kml') {
+        await exportManualLabelsKML();
     }
+}
+
+// One row per label (not per exploded polygon feature) using each label's
+// own representative lat/lon -- point labels get their actual pin, polygon
+// and pixel_coords labels get their stored centroid. This is deliberately a
+// pure-point format: it's the simplest way into GEE (explicit lat/lon
+// columns avoid needing to parse the .geo column GEE's own CSV export
+// produces) or ArcGIS's "Add XY Data" -- use GeoJSON or Shapefile if you
+// need the full polygon shapes, not just label locations.
+function exportManualLabelsCSV() {
+    const header = ['name', 'code', 'type', 'lat', 'lon', 'pixel_count'];
+    const csvEscape = (v) => {
+        if (v === null || v === undefined) return '';
+        const s = String(v);
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const rows = manualLabels.map(l => [
+        l.name, l.code || '', l.type, l.lat, l.lon, l.matchCount || l.pixelCount || ''
+    ].map(csvEscape).join(','));
+    const csv = [header.join(','), ...rows].join('\n');
+    downloadFile(csv, `manual-labels-${window.currentViewportName || 'export'}.csv`, 'text/csv');
+}
+
+// Minimal dependency-free GeoJSON -> KML converter (Point + Polygon only,
+// matching what expandLabelToFeatures() produces). No CDN library needed --
+// KML placemarks are simple enough to write directly.
+function _kmlColor(hexColor) {
+    // KML wants aabbggrr (alpha, then BGR, reversed byte order from #RRGGBB).
+    const hex = (hexColor || '#3388ff').replace('#', '');
+    if (hex.length !== 6) return 'ff3388ff';
+    const r = hex.slice(0, 2), g = hex.slice(2, 4), b = hex.slice(4, 6);
+    return 'ff' + b + g + r;
+}
+
+function _kmlEscape(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function geojsonToKML(featureCollection) {
+    const placemarks = featureCollection.features.map(f => {
+        const props = f.properties || {};
+        const name = _kmlEscape(props.name || 'label');
+        const color = _kmlColor(props.color);
+        const styleId = 'style-' + Math.abs(name.split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0));
+        let geom;
+        if (f.geometry.type === 'Point') {
+            const [lon, lat] = f.geometry.coordinates;
+            geom = `<Point><coordinates>${lon},${lat},0</coordinates></Point>`;
+        } else if (f.geometry.type === 'Polygon') {
+            const ring = f.geometry.coordinates[0].map(c => `${c[0]},${c[1]},0`).join(' ');
+            geom = `<Polygon><outerBoundaryIs><LinearRing><coordinates>${ring}</coordinates></LinearRing></outerBoundaryIs></Polygon>`;
+        } else {
+            return '';
+        }
+        return `
+    <Style id="${styleId}"><IconStyle><color>${color}</color></IconStyle><PolyStyle><color>${color}</color><fill>1</fill></PolyStyle><LineStyle><color>${color}</color></LineStyle></Style>
+    <Placemark>
+      <name>${name}</name>
+      <styleUrl>#${styleId}</styleUrl>
+      <ExtendedData>${props.code ? `<Data name="code"><value>${_kmlEscape(props.code)}</value></Data>` : ''}</ExtendedData>
+      ${geom}
+    </Placemark>`;
+    }).join('');
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${_kmlEscape('manual-labels-' + (window.currentViewportName || 'export'))}</name>${placemarks}
+  </Document>
+</kml>`;
+}
+
+async function exportManualLabelsKML() {
+    await ensureD3Contour();
+    const features = manualLabels.flatMap(l => expandLabelToFeatures(l));
+    const kml = geojsonToKML({ type: 'FeatureCollection', features });
+    downloadFile(kml, `manual-labels-${window.currentViewportName || 'export'}.kml`, 'application/vnd.google-earth.kml+xml');
 }
 
 function downloadFile(content, filename, mimeType) {
@@ -1361,8 +1445,10 @@ function importManualLabels(file) {
                 }
             } else if (ext === 'zip') {
                 importShapefile(e.target.result);
+            } else if (ext === 'csv') {
+                importCSV(e.target.result);
             } else {
-                alert('Unsupported file format. Use .json, .geojson, or .zip (shapefile).');
+                alert('Unsupported file format. Use .json, .geojson, .csv, or .zip (shapefile).');
             }
         } catch (err) {
             console.error('[IMPORT]', err);
@@ -1375,6 +1461,77 @@ function importManualLabels(file) {
     } else {
         reader.readAsText(file);
     }
+}
+
+// Minimal RFC4180-ish parser: handles quoted fields, escaped quotes ("" ),
+// and commas/newlines inside quotes.
+function _parseCSVRows(text) {
+    const rows = [];
+    let row = [];
+    let field = '';
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQuotes) {
+            if (c === '"') {
+                if (text[i + 1] === '"') { field += '"'; i++; }
+                else inQuotes = false;
+            } else field += c;
+        } else {
+            if (c === '"') inQuotes = true;
+            else if (c === ',') { row.push(field); field = ''; }
+            else if (c === '\n' || c === '\r') {
+                if (c === '\r' && text[i + 1] === '\n') i++;
+                row.push(field);
+                field = '';
+                if (row.length > 1 || row[0] !== '') rows.push(row);
+                row = [];
+            } else field += c;
+        }
+    }
+    if (field !== '' || row.length > 0) { row.push(field); rows.push(row); }
+    return rows;
+}
+
+// Imports a CSV of point labels (as produced by exportManualLabelsCSV, GEE's
+// point export, or ArcGIS "Add XY Data"). Requires lat/lon columns (any of
+// lat/latitude/y and lon/lng/long/longitude/x); name/code columns are
+// optional. Delegates to importGeoJSON so multiple rows sharing the same
+// name reconstitute into one clustered label, same as GeoJSON import.
+function importCSV(text) {
+    const rows = _parseCSVRows(text);
+    if (rows.length < 2) {
+        alert('CSV file has no data rows.');
+        return;
+    }
+    const header = rows[0].map(h => h.trim().toLowerCase());
+    const latIdx = header.findIndex(h => ['lat', 'latitude', 'y'].includes(h));
+    const lonIdx = header.findIndex(h => ['lon', 'lng', 'long', 'longitude', 'x'].includes(h));
+    if (latIdx === -1 || lonIdx === -1) {
+        alert('CSV must have latitude/longitude columns (e.g. "lat"/"lon" or "latitude"/"longitude").');
+        return;
+    }
+    const nameIdx = header.findIndex(h => ['name', 'label'].includes(h));
+    const codeIdx = header.findIndex(h => h === 'code');
+
+    const features = [];
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (row.length < 2 || (row.length === 1 && row[0].trim() === '')) continue;
+        const lat = parseFloat(row[latIdx]);
+        const lon = parseFloat(row[lonIdx]);
+        if (!isFinite(lat) || !isFinite(lon)) continue;
+        const props = { name: (nameIdx >= 0 && row[nameIdx]) ? row[nameIdx] : 'Imported' };
+        if (codeIdx >= 0 && row[codeIdx]) props.code = row[codeIdx];
+        features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: props });
+    }
+
+    if (features.length === 0) {
+        alert('No valid rows found in CSV.');
+        return;
+    }
+
+    importGeoJSON({ type: 'FeatureCollection', features });
 }
 
 function importGeoJSON(geojson) {
