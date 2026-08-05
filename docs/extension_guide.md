@@ -124,14 +124,16 @@ The evaluation pipeline supports multiple classifiers.  All ML now runs on the
 `api/views/evaluation.py` is a thin HTTP proxy and `lib/evaluation_engine.py`
 is a backward-compatibility shim — neither contains the classifier factory.
 
-To add a new classifier, work in `tessera_eval` (the package shipped from
-`packages/tessera-eval/`), then add the colour and checkbox in TEE's frontend.
+To add a new classifier, work in `tessera_eval` — its own repository,
+`ucam-eo/tessera-eval` (see [tessera-packages.md](tessera-packages.md)),
+not vendored in this repo — then add the colour and checkbox in TEE's
+frontend.
 
 **Example:** Adding a Gradient Boosted Trees classifier via LightGBM.
 
 ### Step 1: Add to tessera_eval/classify.py
 
-In `packages/tessera-eval/tessera_eval/classify.py`, update `make_classifier()`:
+In `tessera_eval/classify.py` (in the `tessera-eval` repo), update `make_classifier()`:
 
 ```python
 def make_classifier(name, params=None):

@@ -3,6 +3,20 @@
 Complete feature catalogue for the Tessera Embeddings Explorer, grouped by
 functional area.
 
+**New to TEE?** In one sentence: TEE lets you explore, label, and classify
+land cover using [Tessera](https://geotessera.org) embeddings — a
+128-dimensional numerical fingerprint computed for every 10m × 10m pixel on
+Earth's surface, from Sentinel-2 satellite imagery. Pixels with similar
+embeddings tend to be the same kind of land cover, even when they're far
+apart geographically, so most of what TEE does boils down to comparing
+these fingerprints in different ways: finding similar pixels, clustering
+them into labels, or training a classifier on them. A **viewport** is the
+5km × 5km (or 10km × 10km for Postcard, see §17) area a user is currently
+working with; TEE downloads and processes embeddings for one viewport at a
+time. See the top-level [README](../README.md) for a quick start and the
+[User Guide](../public/user_guide.md) for step-by-step, end-user-facing
+instructions — this document is the deeper, developer-facing reference.
+
 ---
 
 ## 1. Viewer
@@ -201,6 +215,12 @@ chosen by the user:
   classification schema
 - Estimated labelled-pixel count returned from polygon area
 - GeoJSON overlay rendered on Panel 2, capped at 10 000 features
+- **No shapefile handy?** TEE ships `austria.zip` — Austrian INVEKOS crop
+  field data (42,789 polygons, 17 crop classes) — downloadable from the
+  Validation tab or directly at `/sample-data/austria.zip`. Use field
+  `HabUK` (not `Crop`, `Habitat`, or `NVC` — see the [User
+  Guide](../public/user_guide.md#worked-example-austriazip) for a full
+  worked example including a spatial train/test split).
 
 ### Streaming evaluation
 
@@ -269,24 +289,56 @@ Re-running with different classifiers uses the in-memory cache
 ## 8. Data Pipeline
 
 **Viewports** — 5 km × 5 km areas of interest; user-defined bounding box.
+Each viewport is processed independently, one year at a time, by a
+standalone subprocess (`process_viewport.py`) — not part of the Django
+request cycle, so a slow or failed fetch can't tie up a web worker.
+
+**Embeddings client.** `VQTessera` (the `tessera-vq` "bolt-on" package,
+see [architecture.md](architecture.md) for the full picture) is the
+standard client for every viewport — it replaced plain `GeoTessera` as the
+origin-fetch path entirely (previously an opt-in "fast path"; now
+unconditional). It talks HTTP to `TESSERA_VQ_URL`: the public,
+per-IP-rate-limited nginx gateway by default (so local dev and self-hosted
+Docker deployments reach it with no SSH tunnel needed), or a direct
+unthrottled backdoor when running co-located with the bolt-on on the
+production host. `GeoTessera` itself is still used, deliberately, in two
+places: the coverage-probe endpoint (a lightweight registry lookup, no
+embedding fetch) and ML evaluation on `tee-compute` (full precision, no
+compression — evaluation quality matters more there than fetch speed).
 
 **Per-year processing:**
 
-1. **Fetch mosaic** — probe the Zarr store at `dl2.geotessera.org` via
-   `tessera_eval.zarr_utils.get_zarr()`; if coverage exists, stream the
-   bounding box in chunks with `read_region_chunked`; otherwise fall
-   back to per-tile NPY downloads via `geotessera.fetch_mosaic_for_region`.
+1. **Fetch mosaic** — request a "quantized structure" (per-tile codebooks
+   + index maps, ~5-6x smaller than raw embeddings) from the bolt-on via
+   `fetch_quantized_structure`, then reconstruct it locally into a full
+   `(H, W, 128)` float32 mosaic. Falls back to a plain per-pixel NPY fetch
+   (still via the same `VQTessera` client) if the quantized-structure
+   endpoint has no coverage for that bbox/year.
 2. **Create pyramids** — percentile-normalise bands 0–2 to uint8, write
-   a 6-level PNG pyramid with affine-transform metadata.
+   a 6-level PNG pyramid with affine-transform metadata. This is what the
+   viewer's satellite-style basemap panels actually show.
 3. **Extract vectors** — quantise all 128 bands to uint8 with
    per-dimension min/max, save compressed embeddings + pixel coords +
-   metadata.
+   metadata. When the quantized-structure fetch succeeded, *also* save the
+   compact codebooks+indices bundle directly (no re-quantisation) — the
+   browser prefers this smaller format when present, falling back to the
+   uint8 mosaic otherwise.
 4. **Compute UMAP** — 2D UMAP projection from the embeddings, cached for
    viewer use.
 
 **Progress tracking.** Single JSON progress file per viewport written by
 the subprocess (`ProgressTracker`); polled by the frontend every 500 ms;
-monotonically increasing percent; no forwarding layer.
+monotonically increasing percent; no forwarding layer. The orchestrator
+(`lib/pipeline.py`) guarantees a terminal `complete`/`error` status even if
+the subprocess wait itself fails (e.g. it hangs and hits its own timeout) —
+failures always surface as a visible error rather than an indefinite
+"processing" spinner.
+
+**Concurrency.** Pipeline subprocesses are capped at 5 concurrent runs
+(`api/tasks.py`, a `ThreadPoolExecutor`) — importing many viewports at once
+queues rather than launching dozens of subprocesses simultaneously, which
+previously could overwhelm the origin fetch and starve every import at
+once.
 
 **Cancellation.** SIGTERM to the subprocess, SIGKILL fallback after 2 s;
 followed by automatic cleanup of partial output directories.
@@ -315,6 +367,14 @@ Pyramid level mapping collapses six pyramid levels across zooms 0–15.
 
 **Optional authentication.** Auth activates automatically as soon as one
 Django user exists; with no users, TEE runs in demo mode (read-only).
+
+**Landing chooser.** First-time, unauthenticated visitors hitting `/` see
+a three-way choice — Sign in / Continue in demo mode / Postcard (§17) —
+rather than dropping straight into the full Viewport Manager, which would
+otherwise show every existing viewport before a new visitor has any
+context for what they're looking at. Once a session exists (logged in, or
+auth disabled entirely), `/` skips the chooser and goes straight to the
+Viewport Manager, same as before.
 
 **Roles:**
 
@@ -418,14 +478,26 @@ year).
 | `api/views/share.py` | Label sharing |
 | `api/views/enrolment.py` | User creation |
 | `api/views/vector_data.py` | Raw vector file serving |
-| `api/views/config.py` | Static files, health, config |
+| `api/views/config.py` | Static files, health, config, landing-chooser routing |
+| `api/views/postcard.py` | Postcard: unauthenticated, rate-limited "fun demo" endpoint (§17) |
 
 **`lib/`** — pure-function backend libraries (config paths, viewport
 utils, pipeline orchestration, progress tracker, tile rendering).
 
-**`packages/tessera-eval/`** — framework-independent ML library (no
-Django imports) installable standalone; provides the `tee-compute` Flask
-server.
+### External Tessera-family packages
+
+None of these are vendored in this repo — all four are installed as
+ordinary pip/git dependencies (`requirements.txt`), each with its own
+GitHub repository and independent version tag. Understanding what each
+one is for makes it much easier to tell, when something breaks, whether
+the bug is in TEE's own code or in one of these:
+
+| Package | Repo | What it does | Used by |
+|---------|------|---------------|---------|
+| **`geotessera`** | `ucam-eo/geotessera` | Foundational Python client for Tessera embeddings — downloads/serves the raw 128-dim per-pixel embedding tiles from Tessera's public data store, full precision, no compression. | ML evaluation (`tee-compute`, deliberately full-precision); the coverage-probe endpoint; the historical origin of TEE's pipeline, now superseded there by `tessera-vq` (see §8) |
+| **`tessera-zarr-utils`** | `ucam-eo/tessera-zarr-utils` | Fast zarr-based region reader for GeoTessera data (`get_zarr`, `probe_zarr_coverage`, `read_region_chunked`), with cross-UTM-zone EPSG:4326 merging — extracted out of `tessera-eval` into its own package. | Actively used inside `tee-compute`'s evaluation server. **Not** reachable from TEE's own viewport pipeline any more — `process_viewport.py` still imports it, but since `VQTessera` became the unconditional embeddings client there, the code path that would call it (`gt.GeoTessera(...)`) never runs; left in place as known dead code rather than removed |
+| **`tessera-vq`** | `sk818/tessera-vq` | The "VQ bolt-on": compresses Tessera embeddings by replacing raw 128-dim floats with small per-tile codebooks + index maps (vector quantization). `VQTessera`, its plug-compatible client (same `fetch_mosaic_for_region`-shaped interface as `GeoTessera`), is the standard way TEE fetches embeddings for every viewport (see §8). The server half runs on `tee.cl.cam.ac.uk`, reachable via a public rate-limited nginx gateway or, co-located, a direct unthrottled backdoor. |  `process_viewport.py`, `api/embeddings_provider.py`, `api/views/postcard.py` |
+| **`tessera-eval`** | `ucam-eo/tessera-eval` | Framework-independent ML library: classifier/regressor factories, learning-curve machinery, spatial train/test splitting, and the `tee-compute` Flask server itself. Deliberately fetches embeddings via plain `geotessera` (full precision) rather than `tessera-vq` — evaluation quality matters more than fetch speed, and there's no responsiveness requirement for a batch training run. | The whole of §7 (Validation / ML Evaluation), `scripts/tee_evaluate.py` |
 
 **Testing:**
 
@@ -490,3 +562,54 @@ request.
 2. Handler in `evaluation.js` `handleStreamEvent()`
 3. Add to `TestNDJSONEventSchema.BACKEND_EVENTS` in
    `test_refactoring_guards.py`
+
+---
+
+## 17. Postcard
+
+A narrow, deliberately "just for fun" feature: pick anywhere on Earth and
+get a downloadable image of that patch of land, generated from its real
+Tessera embeddings — something to use as a wallpaper or print. It exists
+partly to make TEE more approachable (no account, no viewport-creation
+concepts needed) and partly to show off what embeddings look like without
+any explanation required.
+
+**Where it lives.** `public/postcard.html` — a fully standalone page
+(its own Leaflet map, its own Nominatim city search, no dependency on
+`viewport_selector.html`). Reachable from the landing chooser (§10), a
+header link on the main Viewport Manager page, and directly at
+`/postcard.html`.
+
+**How it works:**
+
+1. Search for a city (same Nominatim geocoding as viewport creation) or
+   click the map directly. A 10km × 10km frame follows the cursor and
+   locks in on click — click elsewhere to reposition, same interaction
+   as positioning a new viewport.
+2. "Generate Postcard" posts the frame's center point to
+   `POST /api/postcard/generate`, which fetches one year of embeddings for
+   a 10km area around it, crops the result down to exactly that area
+   (the bolt-on generally returns more than requested — rounded out to
+   whole tiles — so this crop matters; see `_center_crop` in
+   `api/views/postcard.py`), and renders the first 3 embedding dimensions
+   directly as an RGB JPEG (percentile-stretched per channel — the same
+   technique the viewer's own satellite pyramid tiles use). No PCA: it
+   was tried and read as garish, arbitrary color.
+3. The 1000×1000px result (10km at Tessera's native 10m/pixel resolution)
+   is returned directly — nothing is written to disk, no viewport object
+   is created, nothing persists after the request completes.
+
+**Unauthenticated by design.** `/api/postcard/generate` is deliberately
+*not* in `WRITE_ENDPOINTS` (`api/middleware.py`), so demo-mode users can
+reach it without logging in — unlike real viewport creation, which is
+gated. Per-IP rate limited instead (in-memory, 5 requests / 10 minutes by
+default, `POSTCARD_RATE_LIMIT_MAX` / `POSTCARD_RATE_LIMIT_WINDOW_SECONDS`)
+since it's reachable by anyone.
+
+**Known limitation.** The reconstructed mosaic isn't perfectly aligned to
+true north — source tiles reprojected onto an axis-aligned canvas leave
+real content as a very slightly rotated parallelogram with a thin
+nodata-padding sliver at one edge. This is inherent to
+`reconstruct_from_structure()` in `tessera-vq` (confirmed present in
+regular viewports' own satellite tiles too, not specific to Postcard) —
+not something the crop step can fix on its own.

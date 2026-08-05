@@ -32,7 +32,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 try:
     import numpy as np
     from affine import Affine
-    import geotessera as gt
 except ImportError as e:
     print(f"IMPORT ERROR: {e}", file=sys.stderr)
     traceback.print_exc(file=sys.stderr)
@@ -105,11 +104,7 @@ def _get_provider(viewport_name):
     return _provider_instance
 
 
-# Zarr utilities shared with tessera_eval.server
-from tessera_zarr_utils import get_zarr, probe_zarr_coverage, read_region_chunked
-
-
-# ---------- Zarr / NPY mosaic fetching ----------
+# ---------- NPY mosaic fetching ----------
 
 
 def _fetch_mosaic_npy(tessera, bounds, year, progress_fn=None):
@@ -527,8 +522,8 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
                  progress=None, year_idx=0, num_years=1):
     """Process a single year: fetch mosaic -> pyramids -> vectors.
 
-    Tries zarr first (fast, no local cache needed), probes coverage, then
-    falls back to the NPY path via fetch_mosaic_for_region().
+    Tries the VQ quantized-structure fast path first, falls back to a plain
+    NPY fetch via fetch_mosaic_for_region().
 
     All data stays in memory; no intermediate GeoTIFF files are created.
 
@@ -554,15 +549,15 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         return (year, True, "already exists")
 
     # --- FETCH MOSAIC ---
-    # Three paths, tried in order:
+    # Two paths, tried in order:
     #   1. QS fast path: VQTessera + the upstream's public
     #      fetch_quantized_structure → reconstruct_from_structure. Gives us
     #      the per-tile structure for the new browser format AND a tile-aligned
     #      mosaic in one round-trip; transform math comes from upstream so it
     #      can't drift.
-    #   2. Zarr fast path: GeoTessera + zarr store. Skipped for VQTessera (it
-    #      would bypass tessera entirely) and gated by TEE_DISABLE_ZARR.
-    #   3. NPY path: tessera.fetch_mosaic_for_region — works for both clients.
+    #   2. NPY path: tessera.fetch_mosaic_for_region. Used when the QS fetch
+    #      fails for a transient reason (VQTessera is the only client now,
+    #      so this is always a VQTessera NPY fetch, not a GeoTessera one).
     _progress(1, f"[{year}] Fetching mosaic...")
     print(f"  [{year}] Fetching mosaic...")
     t0 = _time.monotonic()
@@ -597,29 +592,9 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
             qs = None
 
     if qs is None:
-        # Legacy: zarr-first, NPY fallback.
-        # TEE_DISABLE_ZARR=1 forces the slower NPY path (stopgap for zarr issues).
-        # The zarr fast path bypasses ``tessera`` and reads geotessera's zarr
-        # store directly, so it must be disabled for VQTessera.
-        is_geotessera = isinstance(tessera, gt.GeoTessera)
-        disable_zarr = (
-            os.environ.get("TEE_DISABLE_ZARR", "").lower() in ("1", "true", "yes")
-            or not is_geotessera
-        )
-        gtz = None if disable_zarr else get_zarr()
-        use_zarr = False
-        if not is_geotessera:
-            print(f"  [{year}] VQTessera (no fetch_quantized_structure on client — using NPY)")
-        elif disable_zarr:
-            print(f"  [{year}] Zarr disabled (TEE_DISABLE_ZARR), using NPY path")
-        elif gtz is not None:
-            use_zarr = probe_zarr_coverage(gtz, bounds, year)
-            if use_zarr:
-                print(f"  [{year}] Using zarr (fast path)")
-            else:
-                print(f"  [{year}] Zarr probe returned NaN, falling back to NPY")
-        else:
-            print(f"  [{year}] Using NPY path (zarr unavailable)")
+        # QS fetch failed for a transient reason (see except Exception above) --
+        # fall back to a plain NPY fetch via the same VQTessera client.
+        print(f"  [{year}] Using NPY path")
 
         max_retries = 3
         mosaic = None
@@ -628,14 +603,10 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
 
         for attempt in range(1, max_retries + 1):
             try:
-                if use_zarr:
-                    _progress(5, f"[{year}] Reading from zarr...")
-                    mosaic, transform, crs = read_region_chunked(gtz, bounds, year)
-                else:
-                    def _npy_progress(pct, msg):
-                        _progress(pct, f"[{year}] {msg}")
-                    mosaic, transform, crs = _fetch_mosaic_npy(
-                        tessera, bounds, year, progress_fn=_npy_progress)
+                def _npy_progress(pct, msg):
+                    _progress(pct, f"[{year}] {msg}")
+                mosaic, transform, crs = _fetch_mosaic_npy(
+                    tessera, bounds, year, progress_fn=_npy_progress)
                 break
             except Exception as e:
                 err_str = str(e)
@@ -655,9 +626,8 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
             return (year, False, "fetch failed")
 
         elapsed = _time.monotonic() - t0
-        path_label = "zarr" if use_zarr else "NPY"
         height, width = mosaic.shape[:2]
-        print(f"  [{year}] Fetched {width}x{height} mosaic via {path_label} ({elapsed:.1f}s)")
+        print(f"  [{year}] Fetched {width}x{height} mosaic via NPY ({elapsed:.1f}s)")
     else:
         height, width = mosaic.shape[:2]
 
@@ -672,9 +642,8 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         # convert all-NaN -> all-zero and surface as the misleading "all-zero
         # embeddings" error in the UI.
         if np.all(np.isnan(mosaic)):
-            kind = 'vqtessera' if _provider_kind == 'vqtessera' else 'geotessera'
             msg = (f"No embeddings available for this region in {year} "
-                   f"(upstream {kind} returned no coverage for bbox {bounds})")
+                   f"(upstream vqtessera returned no coverage for bbox {bounds})")
             print(f"  [{year}] {msg}")
             del mosaic
             gc.collect()
@@ -712,8 +681,8 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         print(f"  [{year}] Creating vectors...")
         all_embeddings = mosaic.reshape(-1, EMBEDDING_DIM)
 
-        # Zero-fill NaN nodata before extraction. Reprojection (zarr path) and
-        # edge tiles leave NaN at the mosaic corners; NaN can't be quantised
+        # Zero-fill NaN nodata before extraction. Reprojection and edge tiles
+        # leave NaN at the mosaic corners; NaN can't be quantised
         # (it propagates through min/max -> every value casts to 0) and can't be
         # stored in JSON the browser will accept (JS JSON.parse rejects literal
         # NaN). Matches the NPY path's nodata handling. In-place is safe — the
@@ -842,11 +811,6 @@ def main():
     init_secs = _time.monotonic() - t_init
     label = "VQTessera" if _provider_kind == 'vqtessera' else "GeoTessera"
     print(f"  {label} ready ({init_secs:.1f}s)")
-
-    # Pre-warm zarr instance — only relevant on the GeoTessera path. The
-    # VQTessera fast path fetches via the bolt-on and ignores zarr/NPY.
-    if _provider_kind != 'vqtessera':
-        get_zarr()
 
     progress.update("processing", f"Processing {len(years_to_process)} year(s)...", percent=3)
 

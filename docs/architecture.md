@@ -271,7 +271,8 @@ The pipeline is optimized for large evaluations (e.g., Austria: 40 tiles,
 
 ### tessera_eval library
 
-The ML library (`packages/tessera-eval/tessera_eval/`) is framework-independent:
+The ML library lives in its own repository (`ucam-eo/tessera-eval`,
+installed as a normal pip/git dependency — not vendored under this repo):
 
 | Module | Purpose |
 |--------|---------|
@@ -280,14 +281,23 @@ The ML library (`packages/tessera-eval/tessera_eval/`) is framework-independent:
 | `rasterize.py` | `rasterize_shapefile` (with optional pre-fitted LabelEncoder) |
 | `data.py` | `load_embeddings_for_shapefile` (tile-by-tile with CRS reprojection) |
 | `unet.py` | `extract_labelled_patches`, `TinyUNet`, `train_unet_on_patches` |
-| `zarr_utils.py` | Singleton zarr store instance, coverage probing, chunked region reading |
 | `server.py` | Flask compute server (`tee-compute` CLI) |
+
+Zarr region reading (`get_zarr`, `probe_zarr_coverage`) now comes from the
+separate `tessera-zarr-utils` package, imported by `server.py` — see
+[tessera-packages.md](tessera-packages.md) for the full picture of how
+`tessera-eval`, `tessera-zarr-utils`, `tessera-vq`, and `geotessera`
+relate to each other and to TEE.
 
 The library has **no Django imports**. It can be installed standalone:
 ```bash
-pip install tessera-eval[server]
+pip install "tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git"
 tee-compute --hosted https://tee.cl.cam.ac.uk
 ```
+The `[server]` extra is required — a plain `pip install tessera-eval`
+omits Flask and `tee-compute` won't start (see
+[tessera-packages.md §4](tessera-packages.md#4-a-real-bug-as-a-worked-example-the-missing-server-extra)
+for the story of how TEE itself hit exactly this).
 
 ---
 
@@ -449,15 +459,6 @@ TEE/
 │   ├── progress_tracker.py     Progress JSON persistence
 │   ├── tile_renderer.py        Slippy map tile rendering
 │   └── evaluation_engine.py    Shim — re-exports from tessera_eval
-│
-├── packages/tessera-eval/tessera_eval/
-│   ├── evaluate.py             Learning curves, k-fold CV
-│   ├── classify.py             Classifiers, regressors, spatial features
-│   ├── rasterize.py            Shapefile rasterization
-│   ├── data.py                 Tile-by-tile embedding loading
-│   ├── unet.py                 U-Net patches, training, prediction
-│   ├── zarr_utils.py           Zarr store singleton, coverage, chunked reads
-│   └── server.py               tee-compute Flask server
 │
 ├── scripts/
 │   ├── deploy-compute.sh       Start tee-compute (--local for Django too)

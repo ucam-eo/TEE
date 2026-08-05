@@ -34,6 +34,7 @@ With TEE you can:
 - [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
 - [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
 - [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, confusion matrix, spatial splits, worked example, Create Map, CLI
+- [Postcard](#postcard) — a fun, no-account image generator
 - [Data Privacy](#data-privacy)
 - [Reference](#reference) — mouse controls, keyboard shortcuts, tips
 
@@ -41,9 +42,17 @@ With TEE you can:
 
 ## Quick Start
 
+Opening TEE for the first time without an account shows a three-way
+choice: **Sign in**, **Continue in demo mode** (browse existing viewports,
+no account needed), or **Postcard** (see [Path 4](#path-4-just-want-a-fun-image)
+below — no account, nothing saved, just a fun image). Once you have a
+session (signed in, or demo mode already chosen), TEE goes straight to the
+Viewport Manager from then on.
+
 ### Path 1: Explore a location
 
-1. Open TEE — you'll see the **Viewport Manager** with a map
+1. Open TEE — you'll see the **Viewport Manager** with a map (after the
+   sign-in/demo/Postcard choice above, if this is your first visit)
 2. Click **Create New Viewport**, search for a place (or click on the map), choose which years to process, and click **Create**
 3. Processing takes a few minutes. When it finishes, click **Open**
 4. **Double-click** any pixel on the map — TEE will instantly highlight every similar location in the area, coloured by how similar they are
@@ -64,6 +73,15 @@ With TEE you can:
 4. Click **Run Evaluation** — TEE will train each classifier and show you learning curves and a confusion matrix so you can see how well the embeddings distinguish your habitat classes
 
 > **Try it:** TEE ships `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). [Download it](/sample-data/austria.zip), upload it, select field **"HabUK"**, year **2024**, and click Run. See [Worked Example: austria.zip](#worked-example-austriazip) for a full walkthrough, including a spatial train/test split.
+
+### Path 4: Just want a fun image?
+
+1. From the opening choice screen, click **Postcard** (or open `/postcard.html` directly, or use the 🌍 link in the Viewport Manager header)
+2. Search for a place, or click the map to position the 10km × 10km frame
+3. Click **Generate Postcard** and download the result
+
+No account needed, and nothing is saved — see [Postcard](#postcard) below for
+details.
 
 ---
 
@@ -315,12 +333,12 @@ The hosted TEE website only serves map tiles and satellite imagery — it does n
 
 There are several ways to run the compute server, depending on your situation:
 
-| Mode | What you run | UI comes from | ML runs on | Best for |
-|------|-------------|--------------|-----------|----------|
-| **Hosted only** | Nothing — just use the website | tee.cl.cam.ac.uk | No ML available | Exploring and labelling (no evaluation) |
-| **Remote GPU** | SSH tunnel to a GPU server | tee.cl.cam.ac.uk (proxied) | GPU server | Large datasets, fast training |
-| **Local + GPU** | Django on laptop + SSH tunnel | Your laptop | GPU server | Local viewports + GPU evaluation |
-| **All local** | Django + tee-compute on laptop | Your laptop | Your laptop | Fully offline, small datasets |
+| Mode | Setup guide | What you run | UI comes from | ML runs on | Best for |
+|------|:-----------:|-------------|--------------|-----------|----------|
+| **Hosted only** | — | Nothing — just use the website | tee.cl.cam.ac.uk | No ML available | Exploring and labelling (no evaluation) |
+| **All local** | [Option A](#option-a-all-local) | Django + tee-compute on laptop | Your laptop | Your laptop | Trying it out — no GPU, no SSH, no server |
+| **Remote GPU** | [Option B](#option-b-remote-gpu-server) | SSH tunnel to a GPU server | tee.cl.cam.ac.uk (proxied) | GPU server | Large datasets, fast training |
+| **Local + GPU** | [Option C](#option-c-local-ui-remote-gpu) | Django on laptop + SSH tunnel | Your laptop | GPU server | Local viewports + GPU evaluation |
 
 | What the component does | Hosted server | Your compute server |
 |------------------------|:------------:|:------------------:|
@@ -333,16 +351,79 @@ There are several ways to run the compute server, depending on your situation:
 | Classifier training and evaluation | | ✓ |
 | Trained model download | | ✓ |
 
-### Setting Up a GPU Server
+### Which Option Do You Need?
 
-You need Python installed on the GPU server (and on your laptop too, if you plan to use the `--local` modes). The deploy script handles the rest — cloning the code, installing dependencies, and creating an SSH tunnel back to your laptop.
+- **Just want to try evaluation — no GPU, no SSH, no server?** Use **Option A: All Local**, below. You do not need an SSH key, a remote machine, or a "server administrator" for this — skip straight past Option B, none of it applies to you.
+- **Have SSH access to a machine with a GPU** (your own server, a lab machine, a cloud VM you've set up) and want faster training? Use **Option B: Remote GPU Server**.
+- **Want the hosted website's UI, but GPU evaluation?** Use **Option C: Local UI, Remote GPU** — a light combination of A and B.
+
+### Option A: All Local
+
+Everything — the web interface and the compute server — runs on your own
+laptop. Nothing to configure, no SSH keys, no account, no third party
+involved.
+
+**Step 1: Get the code and set up Python** (one-time)
+
+```bash
+git clone https://github.com/ucam-eo/TEE.git
+cd TEE
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+```
+
+This downloads TEE's source code and installs everything it needs into a
+local Python environment (`venv/`) inside the folder you just cloned. It
+can take a few minutes the first time. If you've never used a terminal
+before, see [How to open a terminal](https://tutorials.codebar.io/command-line/introduction/tutorial.html)
+for a beginner-friendly guide.
+
+**Step 2: Start it**
+
+Run this from inside the `TEE` folder you just created:
+
+```bash
+./scripts/deploy-compute.sh --local
+```
+
+**What success looks like** — you should see:
+
+```
+=== Starting Django on localhost:8001 ===
+  Django OK (PID: 12345)
+  Starting tee-compute on localhost:8002
+  tee-compute OK (PID: 12346)
+
+    Open http://localhost:8001
+```
+
+Then open **http://localhost:8001** and go to **Validation > Evaluate**.
+
+**If you see `Django FAILED` or `tee-compute FAILED`** instead, the script
+names a log file to check (e.g. `logs/compute_server.log`, inside your
+`TEE` folder) — open it and look at the last few lines for the actual
+error. The most common causes:
+
+| What the log shows | What it means | Fix |
+|---|---|---|
+| `ModuleNotFoundError: No module named '...'` | Step 1's `pip install` didn't finish, or you ran the script from a different terminal/folder than where you created `venv/` | Re-run `venv/bin/pip install -r requirements.txt` from inside the `TEE` folder, then retry |
+| `Address already in use` | Something else is already using port 8001 or 8002 (maybe an earlier attempt still running) | Run `./shutdown.sh` first, then try again |
+| Nothing printed, script exits immediately | You ran it from outside the `TEE` folder | `cd` into the `TEE` folder you cloned in Step 1, then re-run |
+
+### Option B: Remote GPU Server
+
+Use this if you have SSH access to a machine with a GPU you want training
+to run on — your own server, a lab machine, a cloud VM, anything you can
+`ssh` into. **"The server administrator" below just means whoever
+controls SSH access to *that specific machine*** — if it's your own cloud
+VM, that's you; otherwise it's whoever manages accounts on it (IT support,
+a lab manager, etc.). It is not a fixed TEE project contact — TEE doesn't
+provide or manage GPU servers for you.
 
 **Step 0: Open a terminal on your laptop**
 
 - **Mac**: press Cmd+Space, type "Terminal", press Enter
 - **Windows**: press Win+X, select "Windows PowerShell", or install [Windows Terminal](https://learn.microsoft.com/en-us/windows/terminal/install)
-
-If you've never used a terminal before, see [How to open a terminal](https://tutorials.codebar.io/command-line/introduction/tutorial.html) for a beginner-friendly guide.
 
 **Step 1: Get SSH access to the server**
 
@@ -354,11 +435,13 @@ If you see "No such file", generate one (you'll be asked for a passphrase — ch
 ```bash
 ssh-keygen
 ```
-Then send your public key to the server administrator:
+Then print your public key:
 ```bash
 cat ~/.ssh/id_rsa.pub
 ```
-Ask them to add it to `~/.ssh/authorized_keys` on the server so you can log in without a password.
+Send that output to whoever controls the server (see note above), and ask
+them to add it to `~/.ssh/authorized_keys` on that machine so you can log
+in without a password. If it's your own machine, add it yourself.
 
 **Step 2: Configure SSH for easy access**
 
@@ -389,7 +472,10 @@ exit
 
 **Step 5: Deploy and start**
 
-Run the deploy script from your laptop. It will connect to the server, pull the latest code, install dependencies, and start the compute server with an SSH tunnel back to your laptop:
+Run the deploy script from your laptop (not over SSH — from your own
+terminal). It connects to the server, pulls the latest code, installs
+dependencies, and starts the compute server with an SSH tunnel back to
+your laptop:
 
 ```bash
 ./scripts/deploy-compute.sh gpu-box
@@ -401,17 +487,29 @@ Then open **http://localhost:8001** in your browser.
 
 > **PyTorch note:** If you want to use the U-Net classifier (which benefits from a GPU), add `--install-torch` to the deploy command the first time, e.g. `./scripts/deploy-compute.sh --install-torch gpu-box`. The script auto-detects your GPU's CUDA version. If it installs the wrong version, see [Fixing PyTorch CUDA version mismatch](#fixing-pytorch-cuda-version-mismatch) at the end of this section.
 
+### Option C: Local UI, Remote GPU
+
+Complete Option B's one-time server setup first (Steps 0–4), then run:
+
+```bash
+./scripts/deploy-compute.sh --local gpu-box
+```
+
+This starts Django on your laptop (so viewport creation and labelling
+work locally) while evaluation runs on the remote GPU machine over an SSH
+tunnel — the "Local + GPU" row in the table above.
+
 ---
 
-### Deploy Commands
+### Deploy Commands Reference
 
 All modes use a single script: `./scripts/deploy-compute.sh`
 
 | Command | Mode | When to use |
 |---------|------|-------------|
-| `deploy-compute.sh gpu-box` | Remote GPU | Most common — GPU evaluation, UI proxied from tee.cl |
-| `deploy-compute.sh --local gpu-box` | Local + GPU | Local viewports and labelling + GPU evaluation |
-| `deploy-compute.sh --local` | All local | Fully offline, everything on your laptop |
+| `deploy-compute.sh --local` | All local (Option A) | No GPU, no SSH — try it out |
+| `deploy-compute.sh gpu-box` | Remote GPU (Option B) | GPU evaluation, UI proxied from tee.cl |
+| `deploy-compute.sh --local gpu-box` | Local UI + GPU (Option C) | Local viewports/labelling + GPU evaluation |
 | `deploy-compute.sh gpu-box --no-tunnel` | Deploy only | Update code on server without starting evaluation |
 
 In all cases, open **http://localhost:8001** in your browser after running the command.
@@ -425,7 +523,9 @@ In all cases, open **http://localhost:8001** in your browser after running the c
 | `Connection refused` | The compute server isn't running. Re-run the deploy script. |
 | `Cannot reach hosted server` | Check your internet connection: `curl https://tee.cl.cam.ac.uk/health` |
 | `No GeoTessera tiles found` | Not all years have coverage everywhere. Try year **2025** (the widest coverage). |
-| `ModuleNotFoundError` | Dependencies aren't installed. Run: `pip install -e "$HOME/TEE/packages/tessera-eval[server]"` |
+| `ModuleNotFoundError` (All Local) | Dependencies aren't installed, or you're not running from inside the `TEE` folder. From inside it: `venv/bin/pip install -r requirements.txt` |
+| `ModuleNotFoundError` (Remote GPU) | Dependencies aren't installed on the server. Run: `ssh gpu-box '~/TEE/venv/bin/pip install -r ~/TEE/requirements.txt'` |
+| Script exits immediately with no output | You ran `deploy-compute.sh` from outside the `TEE` folder — `cd` into it first |
 | SSH keeps disconnecting | Add `-o ServerAliveInterval=60` to your SSH config to send keep-alive signals. |
 | `Address already in use` on the server | Another process is using the port. Try a different one: `ssh -L 8001:localhost:5050 gpu-box '~/TEE/venv/bin/tee-compute --port 5050'` |
 | `Could not resolve hostname gpu-box` | Make sure you've added the server to your `~/.ssh/config` file (Step 2 above). |
@@ -724,6 +824,42 @@ print(aggregate)
 ```
 
 Progress messages (like "downloading tile 3 of 40") are printed separately and won't appear in your results file.
+
+---
+
+## Postcard
+
+A small, separate feature for turning any patch of Earth into a
+downloadable image — no account, and nothing is saved on the server.
+
+**How to use it:**
+
+1. Open `/postcard.html` directly, click **Postcard** on the opening
+   choice screen, or use the 🌍 **Postcard** link in the Viewport
+   Manager's header
+2. Search for a city or place, or click the map — a 10km × 10km frame
+   follows your cursor and locks in when you click. Click elsewhere to
+   reposition it, the same way you'd position a new viewport
+3. Click **Generate Postcard**. This fetches one year of Tessera
+   embeddings for that area and renders them as an image — it can take a
+   little while (usually under a minute, occasionally up to a few
+   minutes for a location nobody has requested before). Click **Cancel**
+   if you don't want to wait
+4. Download the result — a 1000×1000 pixel JPEG, real Tessera data at
+   native 10m/pixel resolution, not upscaled
+
+**What you're actually looking at:** the first 3 of the embedding's 128
+dimensions, mapped directly to red/green/blue and contrast-stretched —
+the same technique TEE's own satellite-style map tiles use. It's not a
+literal photo; it's a visualisation of what a machine learning model
+"sees" when it looks at that patch of land, which is why colours can look
+striking or unusual rather than naturalistic.
+
+**Why it can be slow, and why retrying helps:** the first request for a
+brand-new location has to fetch and process real satellite data, which
+can occasionally take a few minutes. If it times out, just try again —
+the server keeps working even after your browser gives up waiting, and
+caches the result, so a retry is usually much faster.
 
 ---
 

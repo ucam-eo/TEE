@@ -11,21 +11,28 @@ django-cors-headers>=4.0.0
 waitress>=3.0.0
 
 # Geospatial processing
+# geotessera: no longer used by process_viewport.py's own pipeline (VQTessera,
+# below, is the standard client there now) -- kept for the coverage-probe
+# endpoint (api/views/viewports.py) and scripts/tee_evaluate.py, both of which
+# use it directly.
 geotessera>=0.9.0
-# Standalone GeoTessera zarr region reader (cross-UTM-zone EPSG:4326 merge);
-# used by process_viewport's zarr fast path. Extracted from tessera-eval.
-tessera-zarr-utils[geotessera] @ git+https://github.com/ucam-eo/tessera-zarr-utils.git@v0.1.0
-# Tessera VQ bolt-on (plug-compatible drop-in for GeoTessera; per-viewport fast
-# path with residual VQ). See deployment_plan.md and api/embeddings_provider.py.
-# v0.3.2 trims core deps to numpy + affine; everything else (Flask, sklearn,
-# pandas, …) is behind extras tessera-vq[server] / [sweep] which TEE doesn't
-# need — only the client surface is used.
+# Tessera VQ bolt-on client (VQTessera) -- the standard embeddings client for
+# every viewport (process_viewport.py, api/embeddings_provider.py,
+# api/views/postcard.py), not an opt-in fast path. See docs/architecture.md
+# and api/embeddings_provider.py. v0.3.2 trims core deps to numpy + affine;
+# everything else (Flask, sklearn, pandas, …) is behind extras
+# tessera-vq[server] / [sweep] which TEE doesn't need — only the client
+# surface is used.
 tessera-vq @ git+https://github.com/sk818/tessera-vq.git@v0.5.5
 # tessera-eval: habitat/land-cover classifier evaluation on Tessera embeddings.
 # Its own repo (extracted from this tree); used by lib/evaluation_engine,
-# scripts/tee_evaluate, and the tee-compute server. (zarr_utils now comes from
-# tessera-zarr-utils above.)
-tessera-eval @ git+https://github.com/ucam-eo/tessera-eval.git@v1.2.0
+# scripts/tee_evaluate, and the tee-compute server. Deliberately fetches via
+# plain geotessera (full precision), not VQTessera -- see docs/features.md §14.
+# The [server] extra pulls in flask/waitress/requests (tee-compute itself)
+# plus geotessera + tessera-zarr-utils (its embedding-fetch path) -- these are
+# NOT in tessera-eval's base dependencies, so plain `tessera-eval` (no extra)
+# silently omits flask and tee-compute fails on a genuinely fresh install.
+tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.2.0
 numpy>=1.24.0
 rasterio>=1.3.0
 Pillow>=10.0.0

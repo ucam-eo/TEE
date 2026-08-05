@@ -15,8 +15,10 @@ across years, and evaluate classifiers against ground-truth shapefiles.
 | Document | Description |
 |---|---|
 | [architecture.md](architecture.md) | System architecture, panel layout, module graph, state management, dependencies, testing, deployment |
+| [features.md](features.md) | Complete feature catalogue, grouped by functional area |
 | [frontend_api.md](frontend_api.md) | JavaScript API reference for all 8 ES modules, data structures, frontend→backend call map |
 | [backend_api.md](backend_api.md) | Python HTTP endpoints, library modules, standalone scripts |
+| [tessera-packages.md](tessera-packages.md) | How TEE's four external Tessera-family dependencies (`geotessera`, `tessera-zarr-utils`, `tessera-vq`, `tessera-eval`) relate to each other, what each provides, and how their requirements actually resolve |
 | [extension_guide.md](extension_guide.md) | Recipes for adding panels, classifiers, data sources, endpoints, label types — with checklist |
 | [label-format.md](label-format.md) | Label serialisation spec: JSON + GeoJSON export formats, CRS conventions, localStorage schema |
 | [examples/](examples/README.md) | Ready-to-edit custom classification-schema templates (JSON + tab-indented text) |
@@ -37,7 +39,7 @@ across years, and evaluate classifiers against ground-truth shapefiles.
 - **Create Map** — generate a GeoTIFF classification raster from any trained classifier
 - **Export** labels as JSON, GeoJSON, or ESRI Shapefile (pixel labels vectorized to polygons via d3-contour); download trained models
 - **Label sharing** — contribute to the Tessera global habitat directory (private) or share with other users (public)
-- **Zarr embedding store** — pulls from `dl2.geotessera.org` zarr where available, falls back to per-tile NPY downloads
+- **VQ embeddings client** — `tessera-vq` (the "VQ bolt-on") is the standard way TEE fetches embeddings for every viewport, replacing per-tile GeoTessera/zarr downloads; see [tessera-packages.md](tessera-packages.md)
 
 ---
 
@@ -51,7 +53,6 @@ TEE/
   api/views/                 Django view modules (HTTP endpoints)
   api/urls.py                URL routing
   lib/                       Pure-function backend libraries (paths, viewport ops, tile rendering, pipeline)
-  packages/tessera-eval/     Standalone ML library used by the tee-compute server
   process_viewport.py        Pipeline script (subprocess) — fetches tiles → pyramids → vectors
   scripts/deploy-compute.sh  Start tee-compute (use --local for Django + tee-compute on localhost)
   docs/                      This documentation
@@ -61,5 +62,7 @@ The frontend is vanilla JavaScript with no build step.  Modules communicate
 through `window.*` properties bridged via `Object.defineProperty`.  The backend
 is Django served by Waitress WSGI; ML evaluation runs on a separate Flask
 service (`tee-compute`) which Django proxies on `/api/evaluation/*`.  A
-background pipeline downloads embedding tiles via the GeoTessera library
-(zarr-first, NPY fallback) and builds pyramids + vector data.
+background pipeline downloads embedding tiles via `tessera-vq` (falling back
+to a plain per-pixel fetch on failure) and builds pyramids + vector data —
+see [tessera-packages.md](tessera-packages.md) for how that and the other
+three Tessera-family dependencies fit together.
