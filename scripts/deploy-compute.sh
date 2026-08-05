@@ -101,6 +101,13 @@ if [[ "$LOCAL_MODE" == true ]]; then
     PYTHON="$SCRIPT_DIR/venv/bin/python3"
     TEE_COMPUTE="$SCRIPT_DIR/venv/bin/tee-compute"
 
+    echo "--- Applying database migrations ---"
+    (cd "$SCRIPT_DIR" && "$PYTHON" manage.py migrate --noinput >> "$LOG_DIR/web_server.log" 2>&1)
+    if [[ $? -ne 0 ]]; then
+        echo "  Migration FAILED — check $LOG_DIR/web_server.log"
+        exit 1
+    fi
+
     echo "=== Starting Django on localhost:8001 ==="
     $PYTHON -m waitress --host=0.0.0.0 --port=8001 --threads=16 --channel-timeout=7200 tee_project.wsgi:application \
         >> "$LOG_DIR/web_server.log" 2>&1 &

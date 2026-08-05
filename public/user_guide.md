@@ -413,6 +413,7 @@ error. The most common causes:
 | `ModuleNotFoundError: No module named '...'` | Step 1's `pip install` didn't finish, or you ran the script from a different terminal/folder than where you created `venv/` | Re-run `venv/bin/pip install -r requirements.txt` from inside the `TEE` folder, then retry |
 | `Address already in use` | Something else is already using port 8001 or 8002 (maybe an earlier attempt still running) | Run `./shutdown.sh` first, then try again |
 | Nothing printed, script exits immediately | You ran it from outside the `TEE` folder | `cd` into the `TEE` folder you cloned in Step 1, then re-run |
+| `Migration FAILED`, or the page loads but shows `OperationalError: no such table: auth_user` | The database hasn't been set up yet — this happens on a brand-new checkout, or an older checkout from before this step was automated | Run `venv/bin/python manage.py migrate` from inside the `TEE` folder, then retry. If you're on an older checkout, `git pull` first to get the version of `deploy-compute.sh` that does this automatically. |
 
 ### Option B: Remote GPU Server
 
