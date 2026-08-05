@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TEE Postcard</title>
+    <title>TESSERA Postcard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
     <style>
         * { box-sizing: border-box; }
@@ -177,7 +177,7 @@
     <div id="map"></div>
 
     <div class="panel">
-        <h1>🌍 TEE Postcard</h1>
+        <h1>🌍 TESSERA Postcard</h1>
         <p class="subtitle">
             Pick a place and position the 10km × 10km frame to get a
             one-of-a-kind image of your patch of Earth.
@@ -201,7 +201,7 @@
         <div id="status"></div>
         <div id="progressTrack"><div class="bar"></div></div>
 
-        <footer><a href="/">&larr; Back to TEE</a></footer>
+        <footer><a href="/">&larr; Back to TEE</a> &middot; <a href="https://geotessera.org" target="_blank" rel="noopener">What is TESSERA</a></footer>
     </div>
 
     <div id="resultOverlay">
@@ -255,8 +255,8 @@
 
         function initMap() {
             map = L.map('map').setView([20, 0], 3);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: '© Esri World Imagery',
                 maxZoom: 19,
             }).addTo(map);
 
