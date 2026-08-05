@@ -4,6 +4,7 @@ import json
 import logging
 import time as _time
 
+from django.conf import settings
 from django.http import JsonResponse
 
 from lib.viewport_utils import (
@@ -140,81 +141,13 @@ def viewport_info(request, viewport_name):
     try:
         viewport = read_viewport_file(viewport_name)
         viewport['name'] = viewport_name
-        # Include the VQ config so the frontend can show/hide the residual panel.
-        vq = get_viewport_vq_config(viewport_name)
-        viewport['fast_path'] = vq is not None
-        if vq is not None:
-            viewport['vq'] = vq
+        # Every viewport now processes via VQTessera, so the residual panel is
+        # always available; expose the effective (t, k, k2, m) either way.
+        viewport['fast_path'] = True
+        viewport['vq'] = get_viewport_vq_config(viewport_name) or dict(settings.TESSERA_VQ_DEFAULTS)
         return JsonResponse({'success': True, 'viewport': viewport})
     except FileNotFoundError:
         return JsonResponse({'success': False, 'error': f'Viewport {viewport_name} not found'}, status=404)
-
-
-def residual_histogram(request, viewport_name):
-    """Return the VQ residual histogram for a fast-path viewport.
-
-    GET ?year=YYYY[&n_bins=64]
-
-    Body: ``{success, histogram: {n_pixels, bin_edges, counts, stats:
-    {mean, p10, p50, p90, p99}}}`` — direct passthrough of
-    ``VQTessera.fetch_residual_histogram``. 400 if the viewport isn't fast-path
-    or ``year`` is missing/invalid; 404 if the viewport doesn't exist.
-    """
-    try:
-        validate_viewport_name(viewport_name)
-    except ValueError as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=400)
-
-    ok, denied = check_viewport_owner(request, viewport_name)
-    if not ok:
-        return denied
-
-    try:
-        viewport = read_viewport_file(viewport_name)
-    except FileNotFoundError:
-        return JsonResponse({'success': False, 'error': f'Viewport {viewport_name} not found'}, status=404)
-
-    if get_viewport_vq_config(viewport_name) is None:
-        return JsonResponse({'success': False, 'error': 'Viewport is not using the VQ fast path'}, status=400)
-
-    try:
-        year = int(request.GET.get('year', ''))
-    except (TypeError, ValueError):
-        return JsonResponse({'success': False, 'error': 'year query parameter required'}, status=400)
-    try:
-        n_bins = int(request.GET.get('n_bins', '64'))
-    except (TypeError, ValueError):
-        n_bins = 64
-    if not (4 <= n_bins <= 1024):
-        return JsonResponse({'success': False, 'error': 'n_bins must be between 4 and 1024'}, status=400)
-
-    from api.embeddings_provider import get_embeddings_provider
-    client = get_embeddings_provider(viewport_name)
-    bbox = viewport['bounds_tuple']  # (min_lon, min_lat, max_lon, max_lat)
-
-    try:
-        hist = client.fetch_residual_histogram(bbox, year, n_bins)
-    except Exception as e:
-        logger.error('residual_histogram fetch failed for %s/%s: %s', viewport_name, year, e)
-        return JsonResponse({'success': False, 'error': str(e)}, status=502)
-
-    # Defensively coerce numpy arrays / numpy scalars to plain Python types so
-    # Django's JSON encoder doesn't choke.
-    def _py(obj):
-        if hasattr(obj, 'tolist'):
-            return obj.tolist()
-        if isinstance(obj, dict):
-            return {k: _py(v) for k, v in obj.items()}
-        if isinstance(obj, (list, tuple)):
-            return [_py(v) for v in obj]
-        if hasattr(obj, 'item'):  # numpy scalar
-            try:
-                return obj.item()
-            except Exception:
-                return obj
-        return obj
-
-    return JsonResponse({'success': True, 'histogram': _py(hist)})
 
 
 def switch_viewport(request):
@@ -809,9 +742,9 @@ def is_ready(request, viewport_name):
             else:
                 message = "Creating pyramids..."
 
-        # Expose the VQ fast-path flag so the viewer can decide whether to
-        # show the residual histogram panel.
-        fast_path = get_viewport_vq_config(viewport_name) is not None
+        # Every viewport now processes via VQTessera, so the residual
+        # histogram panel is always available.
+        fast_path = True
 
         return JsonResponse({
             'ready': is_ready_flag,

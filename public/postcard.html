@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TEE Postcard</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f6fa;
+            margin: 0;
+            padding: 24px 16px 60px;
+            display: flex;
+            justify-content: center;
+        }
+        .card {
+            width: 100%;
+            max-width: 480px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+            padding: 28px;
+        }
+        h1 {
+            font-size: 20px;
+            margin: 0 0 6px;
+            color: #222;
+        }
+        p.subtitle {
+            font-size: 13px;
+            color: #777;
+            margin: 0 0 22px;
+            line-height: 1.5;
+        }
+        .search-wrap { position: relative; margin-bottom: 14px; }
+        input#citySearch {
+            width: 100%;
+            padding: 11px 14px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            outline: none;
+        }
+        input#citySearch:focus { border-color: #667eea; }
+        #results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-top: 4px;
+            max-height: 220px;
+            overflow-y: auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            z-index: 10;
+            display: none;
+        }
+        .result-item {
+            padding: 9px 14px;
+            font-size: 13px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .result-item:last-child { border-bottom: none; }
+        .result-item:hover { background: #f5f6ff; }
+        #selectedLabel {
+            font-size: 13px;
+            color: #444;
+            margin-bottom: 14px;
+            min-height: 18px;
+        }
+        button#generateBtn {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button#generateBtn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 14px;
+            font-size: 13px;
+            text-align: center;
+            color: #666;
+            min-height: 18px;
+        }
+        #status.error { color: #d32f2f; }
+        #resultWrap {
+            margin-top: 18px;
+            text-align: center;
+            display: none;
+        }
+        #resultImg {
+            width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+        }
+        a#downloadLink {
+            display: inline-block;
+            margin-top: 12px;
+            color: #667eea;
+            font-size: 13px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid #ddd;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        footer {
+            text-align: center;
+            margin-top: 18px;
+        }
+        footer a { font-size: 12px; color: #999; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🌍 TEE Postcard</h1>
+        <p class="subtitle">
+            Pick a place. TEE fetches its Tessera embeddings and turns the first 3
+            principal components into a one-of-a-kind image — your patch of Earth
+            as a machine learning model sees it. Nothing is saved.
+        </p>
+
+        <div class="search-wrap">
+            <input type="text" id="citySearch" placeholder="Search for a city or place...">
+            <div id="results"></div>
+        </div>
+        <div id="selectedLabel"></div>
+
+        <button id="generateBtn" disabled onclick="generatePostcard()">Generate Postcard</button>
+
+        <div id="status"></div>
+
+        <div id="resultWrap">
+            <img id="resultImg" alt="Postcard">
+            <br>
+            <a id="downloadLink" download="tee-postcard.jpg">Download JPG &darr;</a>
+        </div>
+
+        <footer>
+            <a href="/">&larr; Back to TEE</a>
+        </footer>
+    </div>
+
+    <script>
+        let selected = null; // { lat, lon, label }
+        let debounceTimer = null;
+        let currentObjectUrl = null;
+
+        const searchInput = document.getElementById('citySearch');
+        const resultsEl = document.getElementById('results');
+        const generateBtn = document.getElementById('generateBtn');
+        const statusEl = document.getElementById('status');
+        const selectedLabel = document.getElementById('selectedLabel');
+        const resultWrap = document.getElementById('resultWrap');
+        const resultImg = document.getElementById('resultImg');
+        const downloadLink = document.getElementById('downloadLink');
+
+        searchInput.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            const query = searchInput.value.trim();
+            selected = null;
+            generateBtn.disabled = true;
+            if (query.length < 2) {
+                hideResults();
+                return;
+            }
+            debounceTimer = setTimeout(() => fetchGeocode(query), 300);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.search-wrap')) hideResults();
+        });
+
+        async function fetchGeocode(query) {
+            try {
+                const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`;
+                const response = await fetch(url, { headers: { 'User-Agent': 'TEE Postcard' } });
+                const results = await response.json();
+                renderResults(results);
+            } catch (e) {
+                hideResults();
+            }
+        }
+
+        function renderResults(results) {
+            if (!results || results.length === 0) {
+                hideResults();
+                return;
+            }
+            resultsEl.innerHTML = results.map((r, i) =>
+                `<div class="result-item" data-index="${i}">${r.display_name}</div>`
+            ).join('');
+            resultsEl.style.display = 'block';
+            resultsEl.querySelectorAll('.result-item').forEach((el, i) => {
+                el.addEventListener('click', () => selectResult(results[i]));
+            });
+        }
+
+        function hideResults() {
+            resultsEl.style.display = 'none';
+        }
+
+        function selectResult(r) {
+            selected = { lat: parseFloat(r.lat), lon: parseFloat(r.lon), label: r.display_name };
+            searchInput.value = r.display_name;
+            selectedLabel.textContent = `${selected.lat.toFixed(4)}, ${selected.lon.toFixed(4)}`;
+            hideResults();
+            generateBtn.disabled = false;
+        }
+
+        async function generatePostcard() {
+            if (!selected) return;
+            generateBtn.disabled = true;
+            resultWrap.style.display = 'none';
+            statusEl.className = '';
+            statusEl.innerHTML = '<span class="spinner"></span>Fetching embeddings and rendering...';
+
+            try {
+                const resp = await fetch('/api/postcard/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat: selected.lat, lon: selected.lon }),
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.error || `Request failed (${resp.status})`);
+                }
+
+                const blob = await resp.blob();
+                if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+                currentObjectUrl = URL.createObjectURL(blob);
+                resultImg.src = currentObjectUrl;
+                downloadLink.href = currentObjectUrl;
+                resultWrap.style.display = 'block';
+                statusEl.textContent = '';
+            } catch (e) {
+                statusEl.className = 'error';
+                statusEl.textContent = e.message || 'Generation failed';
+            } finally {
+                generateBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

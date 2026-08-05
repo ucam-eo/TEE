@@ -2,13 +2,14 @@ from django.urls import path
 from .auth_views import auth_login, auth_logout, auth_change_password, auth_status
 from .views.viewports import (list_viewports, current_viewport, viewport_info,
     switch_viewport, create_viewport, delete_viewport, add_years, available_years, is_ready,
-    embedding_coverage, residual_histogram)
+    embedding_coverage)
 from .views.pipeline import operations_progress, cancel_processing
 from .views.vector_data import serve_vector_data
 from .views.config import get_config
 from .views.evaluation import upload_shapefile, clear_shapefiles, run_evaluation, cancel_evaluation, finish_classifier, train_models, download_model, create_map, download_map, compute_health
 from .views.share import submit_share, list_shares, download_share
 from .views.enrolment import create_enrolled_user, list_enrolled_users, disable_enrolled_user
+from .views.postcard import generate_postcard
 
 urlpatterns = [
     # Auth
@@ -27,7 +28,6 @@ urlpatterns = [
     path('viewports/<str:viewport_name>/available-years', available_years),
     path('viewports/<str:viewport_name>/is-ready', is_ready),
     path('viewports/<str:viewport_name>/cancel-processing', cancel_processing),
-    path('viewports/<str:viewport_name>/residual-histogram', residual_histogram),
     path('viewports/embedding-coverage', embedding_coverage),
     # Pipeline
     path('operations/progress/<str:operation_id>', operations_progress),
@@ -35,6 +35,8 @@ urlpatterns = [
     path('vector-data/<str:viewport>/<str:year>/<str:filename>', serve_vector_data),
     # Config
     path('config', get_config),
+    # Postcard (fun, unauthenticated, rate-limited — see api/views/postcard.py)
+    path('postcard/generate', generate_postcard),
     # Evaluation — proxied to tee-compute
     path('evaluation/health', compute_health),
     path('evaluation/upload-shapefile', upload_shapefile),

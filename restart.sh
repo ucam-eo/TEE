@@ -84,6 +84,9 @@ else
         exit 1
     fi
 
+    # VQ embeddings: reaches the tessera-vq bolt-on via its public, rate-limited
+    # nginx gateway (TESSERA_VQ_URL, see tee_project/settings/base.py) -- no
+    # SSH tunnel needed, that's the whole point of the public gateway.
     echo "  tee-compute on $HOST:$COMPUTE_PORT (eval)"
     $TEE_COMPUTE --hosted "http://localhost:8001" --host "$HOST" --port $COMPUTE_PORT \
         >> "$LOG_DIR/compute_server.log" 2>&1 &

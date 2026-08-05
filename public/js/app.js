@@ -261,10 +261,6 @@ function evaluateDependencies() {
         _reevaluateQueued = false;
         evaluateDependencies();
     }
-
-    // VQ residual histogram visibility depends on viewportStatus.fast_path.
-    // Re-entrant: the panel skips refetch if (viewport, year) hasn't changed.
-    if (window.refreshResidualHistogram) window.refreshResidualHistogram();
 }
 
 // Poll /api/viewports/{name}/is-ready and update viewportStatus

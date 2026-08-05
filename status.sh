@@ -42,7 +42,10 @@ echo ""
 
 # Services
 echo "Services:"
-if pgrep -f "python.*waitress.*tee_project\|python.*manage.py.*runserver" >/dev/null 2>&1; then
+# Two separate pgrep calls, not one pattern joined with \| -- BSD/macOS pgrep
+# treats \| as a literal in its basic regex, not alternation (GNU-only
+# extension), so a joined pattern silently matches nothing on macOS.
+if pgrep -f "python.*waitress.*tee_project" >/dev/null 2>&1 || pgrep -f "python.*manage.py.*runserver" >/dev/null 2>&1; then
     echo "  Web server:  running"
 else
     echo "  Web server:  stopped"

@@ -4,7 +4,7 @@
 
 # TEE: Tessera Embeddings Explorer
 
-**v1.2.1** | [User Guide](public/user_guide.md) | [Docker Hub](https://hub.docker.com/r/sk818/tee)
+**v1.3.0** | [User Guide](public/user_guide.md) | [Docker Hub](https://hub.docker.com/r/sk818/tee)
 
 A web-based tool for exploring and classifying land cover from Sentinel-2 satellite imagery using [Tessera](https://geotessera.org) embeddings.
 

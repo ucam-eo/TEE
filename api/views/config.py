@@ -7,6 +7,7 @@ import subprocess
 from django.http import JsonResponse, FileResponse, Http404
 
 from lib.config import DATA_DIR, APP_DIR
+from api.middleware import auth_enabled
 
 # Compute git version once at startup
 try:
@@ -25,11 +26,34 @@ PUBLIC_DIR = APP_DIR / 'public'
 
 
 def serve_index(request):
-    """Serve the viewport selector HTML."""
-    index_file = PUBLIC_DIR / 'viewport_selector.html'
+    """Serve the landing chooser (anonymous, auth enabled) or the viewport
+    selector directly (logged in, or no-auth/single-user mode).
+
+    The chooser (Sign in / Demo mode / Postcard) only applies to first-time,
+    unauthenticated visitors -- once you have a session, '/' drops you
+    straight into the app as before.
+    """
+    if auth_enabled() and not request.user.is_authenticated:
+        index_file = PUBLIC_DIR / 'landing.html'
+    else:
+        index_file = PUBLIC_DIR / 'viewport_selector.html'
     if not index_file.exists():
         raise Http404
     return FileResponse(index_file.open('rb'), content_type='text/html')
+
+
+def serve_sample_data(request):
+    """Serve the bundled austria.zip sample ground-truth shapefile for evaluation.
+
+    Lives at the repo/image root (not public/) — see the "Try it" callout on
+    the Validation tab and the Validation section of the user guide.
+    """
+    file_path = APP_DIR / 'austria.zip'
+    if not file_path.exists():
+        raise Http404
+    response = FileResponse(file_path.open('rb'), content_type='application/zip')
+    response['Content-Disposition'] = 'attachment; filename="austria.zip"'
+    return response
 
 
 def serve_static(request, path):

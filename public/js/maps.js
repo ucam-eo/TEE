@@ -385,7 +385,6 @@ function createMaps() {
 async function switchEmbeddingYear(year) {
     console.log(`📅 Switching to year ${year}`);
     window.currentEmbeddingYear = year.toString();
-    if (window.refreshResidualHistogram) window.refreshResidualHistogram();
 
     // Remove old layer
     if (window.maps.embedding.hasLayer(window.embeddingLayer)) {

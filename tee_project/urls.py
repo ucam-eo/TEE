@@ -1,10 +1,11 @@
 from django.contrib import admin
 from django.urls import path, include, re_path
-from api.views.config import serve_index, serve_static
+from api.views.config import serve_index, serve_static, serve_sample_data
 from api.views.tiles import get_tile, get_bounds, tile_health
 
 urlpatterns = [
     path('', serve_index),
+    path('sample-data/austria.zip', serve_sample_data),
     path('health', include('api.urls_health')),
     path('api/', include('api.urls')),
     path('admin/', admin.site.urls),

@@ -113,12 +113,19 @@ LOGGING = {
 }
 
 # ── Tessera VQ bolt-on ──────────────────────────────────────────────────────
-# Per-viewport fast path: opted in at viewport creation time. The bolt-on runs
-# on 127.0.0.1:8000 (systemd unit `tessera-vq.service`). All values overridable
-# via env vars for production. Defaults are the study-recommended RVQ config:
-# t=512, k1=20, k2=256, L2 (~1.77 B/px = 72x int8, downstream-lossless; see the
-# tessera-vq tech note). Larger k1 or t=1024 cost downstream accuracy for little gain.
-TESSERA_VQ_URL = os.environ.get("TESSERA_VQ_URL", "http://127.0.0.1:8000")
+# The standard embeddings client for every viewport (see api/embeddings_provider.py
+# and process_viewport.py::_get_provider). The bolt-on (systemd unit
+# `tessera-vq.service`) runs on michael/tee.cl.cam.ac.uk, bound to 127.0.0.1:8010,
+# and is fronted by nginx on :8000 for public, per-IP rate-limited access (see
+# deploy/README.md). Default here is that public gateway -- correct for local dev
+# and any self-hosted deployment not co-located with the bolt-on. The co-located
+# production TEE container overrides this to the unthrottled direct backdoor
+# (http://127.0.0.1:8010) via scripts/manage.sh -- no SSH tunnel is needed in
+# either case. All values overridable via env vars for production. Defaults are
+# the study-recommended RVQ config: t=512, k1=20, k2=256, L2 (~1.77 B/px = 72x
+# int8, downstream-lossless; see the tessera-vq tech note). Larger k1 or t=1024
+# cost downstream accuracy for little gain.
+TESSERA_VQ_URL = os.environ.get("TESSERA_VQ_URL", "http://tee.cl.cam.ac.uk:8000")
 TESSERA_VQ_DEFAULTS = {
     "t":  int(os.environ.get("TESSERA_VQ_DEFAULT_T",  "512")),
     "k":  int(os.environ.get("TESSERA_VQ_DEFAULT_K",  "20")),

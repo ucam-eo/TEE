@@ -667,6 +667,8 @@
                         &middot;
                         <a href="/user_guide.html" target="_blank" rel="noopener" style="color: #fff; text-decoration: none;">User Guide</a>
                         &middot;
+                        <a href="/postcard.html" target="_blank" rel="noopener" style="color: #fff; text-decoration: none;">🌍 Postcard</a>
+                        &middot;
                         <a href="#" onclick="openFeedback(); return false;" style="color: #fff; text-decoration: none;">Feedback</a>
                     </div>
                 </div>
@@ -752,34 +754,21 @@
                             📍 <strong>Or click on the map</strong> to create a 5km × 5km viewport centered at that location
                         </div>
 
-                        <!-- VQ fast path (tessera-vq bolt-on) — experimental, off by default -->
-                        <div id="fastPathSection" style="margin-bottom: 12px; padding: 10px; background: #fff8e1; border-radius: 6px; border-left: 3px solid #ff9800;">
-                            <label style="display: flex; align-items: center; font-weight: 600; font-size: 13px; cursor: pointer;">
-                                <input type="checkbox" id="fastPath"
-                                       style="width: 16px; height: 16px; margin-right: 8px; cursor: pointer;">
-                                Fast path (Tessera VQ)
-                                <span style="margin-left: 8px; padding: 1px 6px; font-size: 10px; font-weight: 700;
-                                             color: #b26900; background: #ffe082; border-radius: 3px; letter-spacing: 0.5px;">
-                                    EXPERIMENTAL
-                                </span>
-                            </label>
-                            <div style="font-size: 11px; color: #555; margin-top: 4px;">
-                                Opt-in: fetches quantised embeddings via the
-                                <a href="https://github.com/sk818/tessera-vq" target="_blank" rel="noopener"
-                                   style="color: #667eea;">tessera-vq</a>
-                                bolt-on. Defaults: RVQ with <code>t=64, k1=k2=256, L2</code>; tune in Advanced.
-                            </div>
+                        <!-- Embeddings are always fetched pre-quantised via tessera-vq; this
+                             just exposes the codebook parameters for viewports that want
+                             something other than the standard tuning. -->
+                        <div id="vqParamsSection" style="margin-bottom: 12px;">
                             <button type="button" id="vqAdvancedBtn" onclick="toggleVqAdvanced()"
-                                    style="margin-top: 6px; background: none; border: none; color: #667eea; cursor: pointer; text-decoration: underline; padding: 0; font-size: 12px;">
-                                Advanced ▾
+                                    style="background: none; border: none; color: #667eea; cursor: pointer; text-decoration: underline; padding: 0; font-size: 12px;">
+                                Embedding compression parameters ▾
                             </button>
-                            <div id="vqAdvanced" style="display: none; margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 12px;">
+                            <div id="vqAdvanced" style="display: none; margin-top: 8px; padding: 10px; background: #f5f6fa; border-radius: 6px; font-size: 12px;">
                                 <div style="display: grid; grid-template-columns: auto 1fr; gap: 6px 8px; align-items: center;">
                                     <label for="vqT">t  (tile dim)</label>
-                                    <input type="number" id="vqT" value="64" min="1" max="1024"
+                                    <input type="number" id="vqT" value="512" min="1" max="1024"
                                            style="width: 90px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
                                     <label for="vqK1">k1 (1st codebook)</label>
-                                    <input type="number" id="vqK1" value="256" min="1" max="65536"
+                                    <input type="number" id="vqK1" value="20" min="1" max="65536"
                                            style="width: 90px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
                                     <label for="vqK2">k2 (2nd codebook, RVQ)</label>
                                     <input type="number" id="vqK2" value="256" min="1" max="65536"
@@ -890,10 +879,28 @@
                         <h4 style="margin:12px 0 6px; color:#333; font-size:13px;">How to run evaluation</h4>
 
                         <div style="padding:10px; border:1px solid #e0e0e0; border-radius:6px; background:#f8f9ff;">
+                            <p style="margin:0 0 8px; color:#666; font-size:11px;">
+                                <strong>Everything on your laptop</strong> (no GPU server needed):<br>
+                                <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./scripts/deploy-compute.sh --local</code>
+                            </p>
                             <p style="margin:0; color:#666; font-size:11px;">
-                                Start an SSH tunnel to your compute server:<br>
-                                <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./scripts/deploy-compute.sh gpu-box</code><br>
+                                <strong>Or offload to a GPU server</strong> via SSH tunnel:<br>
+                                <code style="background:#eee; padding:1px 4px; border-radius:3px; font-size:10px;">./scripts/deploy-compute.sh gpu-box</code>
+                            </p>
+                            <p style="margin:8px 0 0; color:#666; font-size:11px;">
                                 Then click Evaluate below.
+                            </p>
+                        </div>
+
+                        <h4 style="margin:12px 0 6px; color:#333; font-size:13px;">Don't have a shapefile handy?</h4>
+                        <div style="padding:10px; border:1px solid #e0e0e0; border-radius:6px; background:#f8f9ff;">
+                            <p style="margin:0; color:#666; font-size:11px;">
+                                Try TEE with <strong>austria.zip</strong> — Austrian INVEKOS crop field data
+                                (42,789 polygons, 17 crop classes). Upload it, select field
+                                <strong>"HabUK"</strong>, year <strong>2024</strong>, and click Run.
+                            </p>
+                            <p style="margin:6px 0 0;">
+                                <a href="/sample-data/austria.zip" download="austria.zip" style="color:#667eea; font-size:11px;">Download austria.zip (8 MB) &darr;</a>
                             </p>
                         </div>
 
@@ -1559,7 +1566,7 @@
             return selected.sort();
         }
 
-        // ── VQ fast-path controls ────────────────────────────────────────────
+        // ── VQ embedding-compression parameters ──────────────────────────────
         function toggleVqAdvanced() {
             const adv = document.getElementById('vqAdvanced');
             const btn = document.getElementById('vqAdvancedBtn');
@@ -1581,12 +1588,15 @@
         }
 
         function getVqFormConfig() {
-            // Returns { fast_path: bool, vq: {t,k,k2,m} | undefined } shaped
-            // for the create-viewport POST body. k2 is omitted when m=cosine.
-            const fastPath = document.getElementById('fastPath').checked;
-            if (!fastPath) return { fast_path: false };
-            const t  = parseInt(document.getElementById('vqT').value)  || 64;
-            const k  = parseInt(document.getElementById('vqK1').value) || 256;
+            // Embeddings always fetch pre-quantised via tessera-vq; the backend
+            // applies its own standard RVQ tuning unless this panel was opened,
+            // so this only sends { fast_path: true, vq } as an explicit override
+            // when the user actually customised the compression parameters.
+            // Returns {} otherwise. k2 is omitted when m=cosine.
+            const adv = document.getElementById('vqAdvanced');
+            if (!adv || adv.style.display === 'none') return {};
+            const t  = parseInt(document.getElementById('vqT').value)  || 512;
+            const k  = parseInt(document.getElementById('vqK1').value) || 20;
             const m  = document.getElementById('vqM').value;
             const k2Raw = parseInt(document.getElementById('vqK2').value);
             const k2 = (m === 'cosine' || isNaN(k2Raw)) ? null : k2Raw;

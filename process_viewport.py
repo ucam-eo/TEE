@@ -20,7 +20,6 @@ import time as _time
 import traceback
 import argparse
 import logging
-import fcntl
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 
@@ -42,7 +41,7 @@ except ImportError as e:
 try:
     from lib.viewport_utils import get_active_viewport, get_viewport_vq_config
     from lib.progress_tracker import ProgressTracker
-    from lib.config import DATA_DIR, EMBEDDINGS_DIR, PYRAMIDS_DIR, VECTORS_DIR, pyramid_exists
+    from lib.config import EMBEDDINGS_DIR, PYRAMIDS_DIR, VECTORS_DIR, pyramid_exists
 except ImportError as e:
     print(f"LIB IMPORT ERROR: {e}", file=sys.stderr)
     traceback.print_exc(file=sys.stderr)
@@ -56,59 +55,53 @@ NUM_ZOOM_LEVELS = 6
 
 # ---------- Module-level caches ----------
 
-_provider_instance = None  # cached client (GeoTessera or VQTessera) for this process
-_provider_kind = None      # 'geotessera' or 'vqtessera', for log lines
-
-# Cross-process lock guarding GeoTessera's registry (parquet) download. Without
-# it, concurrent process_viewport.py invocations each see no local cache and
-# redundantly re-download the same ~350MB registry file at once. flock is
-# released automatically if the holder dies/is killed, so there's no stale-lock
-# cleanup to worry about; a wedged holder is still bounded by the pipeline's
-# own subprocess timeout (see PipelineRunner.run_script).
-_REGISTRY_LOCK_PATH = DATA_DIR / 'registry_init.lock'
+_provider_instance = None  # cached VQTessera client for this process
+_provider_kind = None      # always 'vqtessera' now; kept for the log lines below
 
 
 def _get_provider(viewport_name):
     """Return a cached embeddings client for this process.
 
-    process_viewport.py handles exactly one viewport per invocation, so the
-    choice of plain ``GeoTessera`` vs ``VQTessera`` (the fast path) is fixed
-    for the process lifetime. A cached singleton avoids the 28s GeoTessera
-    registry download per year (only relevant on the plain path; VQTessera
-    has no registry).
+    VQTessera (the tessera-vq bolt-on) is now the standard embeddings client
+    for every viewport -- it has replaced GeoTessera as the origin fetch path,
+    not just an opt-in accelerator. This is what lets save_vectors_rvq's dual
+    write (``if qs is not None``) produce the compact browser bundle for every
+    viewport unconditionally, instead of only ones that opted into the fast
+    path. A viewport's stored ``_config.json`` still supplies custom t/k/k2/m
+    if tuned at creation time; otherwise the study-recommended RVQ defaults
+    apply (t=512, k1=20, k2=256, L2).
+
+    process_viewport.py handles exactly one viewport per invocation, so a
+    cached singleton avoids re-constructing the client per year.
     """
     global _provider_instance, _provider_kind
     if _provider_instance is not None:
         return _provider_instance
 
     t0 = _time.monotonic()
+    from tessera_vq.client import VQTessera
     vq = get_viewport_vq_config(viewport_name) if viewport_name else None
     if vq is None:
-        # Serialize registry init across concurrent processes so only the
-        # first one actually downloads it; the rest reuse GeoTessera's own
-        # on-disk cache (~/.cache/geotessera/registry.parquet) once it lands.
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        with open(_REGISTRY_LOCK_PATH, 'w') as lockfile:
-            fcntl.flock(lockfile, fcntl.LOCK_EX)
-            try:
-                _provider_instance = gt.GeoTessera(embeddings_dir=str(EMBEDDINGS_DIR))
-            finally:
-                fcntl.flock(lockfile, fcntl.LOCK_UN)
-        _provider_kind = 'geotessera'
-        logger.info("GeoTessera initialized in %.1fs", _time.monotonic() - t0)
-    else:
-        from tessera_vq.client import VQTessera
-        url = os.environ.get("TESSERA_VQ_URL", "http://127.0.0.1:8000")
-        timeout = float(os.environ.get("TESSERA_VQ_TIMEOUT_SECONDS", "120"))
-        _provider_instance = VQTessera(
-            server_url=url, t=vq['t'], k=vq['k'], m=vq['m'],
-            timeout=timeout, k2=vq['k2'],
-        )
-        _provider_kind = 'vqtessera'
-        logger.info(
-            "VQTessera initialized in %.1fs (t=%d k=%d k2=%s m=%s url=%s)",
-            _time.monotonic() - t0, vq['t'], vq['k'], vq['k2'], vq['m'], url,
-        )
+        vq = {
+            't':  int(os.environ.get("TESSERA_VQ_DEFAULT_T", "512")),
+            'k':  int(os.environ.get("TESSERA_VQ_DEFAULT_K", "20")),
+            'k2': int(os.environ.get("TESSERA_VQ_DEFAULT_K2", "256")),
+            'm':  os.environ.get("TESSERA_VQ_DEFAULT_M", "euclidean"),
+        }
+    # Public, rate-limited gateway by default -- correct for local dev and any
+    # deployment not co-located with the bolt-on. The co-located production
+    # container overrides this to the direct backdoor (see deploy/README.md).
+    url = os.environ.get("TESSERA_VQ_URL", "http://tee.cl.cam.ac.uk:8000")
+    timeout = float(os.environ.get("TESSERA_VQ_TIMEOUT_SECONDS", "120"))
+    _provider_instance = VQTessera(
+        server_url=url, t=vq['t'], k=vq['k'], m=vq['m'],
+        timeout=timeout, k2=vq['k2'],
+    )
+    _provider_kind = 'vqtessera'
+    logger.info(
+        "VQTessera initialized in %.1fs (t=%d k=%d k2=%s m=%s url=%s)",
+        _time.monotonic() - t0, vq['t'], vq['k'], vq['k2'], vq['m'], url,
+    )
     return _provider_instance
 
 

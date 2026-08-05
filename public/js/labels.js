@@ -646,6 +646,12 @@ function updateManualClassThreshold(className, newThreshold) {
     const classLabels = getClassLabels(className);
     for (const label of classLabels) {
         label.threshold = newThreshold;
+        // Promoted clusters carry the frozen K-means pixel membership, which
+        // rebuildClassOverlay always prefers over a threshold search. Once the
+        // user drags the slider they're asking for threshold-driven matching,
+        // so drop the frozen set and let the similarity search (which already
+        // uses label.embedding + threshold) take over.
+        if (label.pixel_coords) label.pixel_coords = null;
     }
 
     // Debounce the expensive search+overlay to one per animation frame

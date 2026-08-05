@@ -264,7 +264,7 @@ async function uploadShapefile(file) {
     } catch (e) {
         const msg = e.message || String(e);
         if (msg.includes('string did not match') || msg.includes('Failed to fetch')) {
-            status.textContent = 'Upload failed — is the compute server running? Run: ./scripts/deploy-compute.sh gpu-box';
+            status.textContent = 'Upload failed — is the compute server running? Run: ./scripts/deploy-compute.sh --local (or gpu-box for a GPU server)';
         } else {
             status.textContent = 'Upload error: ' + msg;
         }

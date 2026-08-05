@@ -33,7 +33,7 @@ With TEE you can:
 - [Manual Labelling](#manual-labelling) — pins, polygons, similarity expansion
 - [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
 - [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
-- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, confusion matrix, spatial splits, Create Map, CLI
+- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, confusion matrix, spatial splits, worked example, Create Map, CLI
 - [Data Privacy](#data-privacy)
 - [Reference](#reference) — mouse controls, keyboard shortcuts, tips
 
@@ -63,7 +63,7 @@ With TEE you can:
 3. Choose a class field (the column in your shapefile that contains the habitat names), select a year, and tick the classifiers you want to test
 4. Click **Run Evaluation** — TEE will train each classifier and show you learning curves and a confusion matrix so you can see how well the embeddings distinguish your habitat classes
 
-> **Try it:** The repository includes `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). Upload it, select field **"Crop"**, year **2024**, and click Run.
+> **Try it:** TEE ships `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). [Download it](/sample-data/austria.zip), upload it, select field **"HabUK"**, year **2024**, and click Run. See [Worked Example: austria.zip](#worked-example-austriazip) for a full walkthrough, including a spatial train/test split.
 
 ---
 
@@ -589,6 +589,29 @@ To get a more honest evaluation, you can draw **separate geographic regions** fo
 - Your bounding boxes are saved when you use Generate Config / Upload Config
 
 > **Tip:** For a meaningful spatial cross-validation, make sure the train and test regions are geographically separated — for example, train on the north and test on the south, or train on lowland and test on upland areas.
+
+### Worked Example: austria.zip
+
+TEE ships a ready-to-use sample dataset — [download austria.zip](/sample-data/austria.zip) — so you can try a full evaluation, including a spatial split, without needing your own shapefile.
+
+**What's in it:** 42,789 agricultural field polygons from Austria's INVEKOS system (the EU farm-subsidy declarations), just east of Vienna — roughly 16.36°E–17.05°E, 48.06°N–48.48°N. The original 153 German crop-type declarations have been grouped into 17 broader crop classes.
+
+**Which field to use:** the shapefile carries several attribute columns; use **`HabUK`** as the class field (or the equivalent `HabUKcode`, if you prefer short codes like `AC01`):
+
+| Column | Contents | Use for evaluation? |
+|--------|----------|---------------------|
+| `HabUK` | 17 crop-group names (e.g. "Legume", "Corn", "Winter Grain") | **Yes** — this is the intended class field |
+| `HabUKcode` | Same 17 groups, as short codes `AC01`–`AC17` | Yes, if you prefer codes to names |
+| `Habitat` / `NVC` | 153 raw German crop declarations (unsimplified) | Not recommended for a first run — too fine-grained, many classes have very few fields |
+
+The 17 classes are unevenly sized (from 150 fields for `AC06` Sunflower up to 10,874 for `AC04` Winter Grain) — a realistic test of how classifiers handle class imbalance. The **sqrt-proportional** sampling strategy (the default) is a reasonable starting point.
+
+**Doing a spatial split:** field boundaries reflect real farm/parcel layout, so nearby fields often share the same crop due to local rotation and farm management — exactly the kind of spatial autocorrelation the [Spatial Train/Test Split](#spatial-traintest-split-optional) feature above is for. The dataset is wider east–west (~0.69°) than north–south (~0.42°), so a simple east/west split works well:
+
+1. Upload `austria.zip` — its polygons appear as red outlines on the satellite map, roughly centred around 16.7°E, 48.27°N
+2. Select **Train area (blue)** and draw a rectangle over the **western half** of the red outlines (up to about 16.7°E)
+3. Select **Test area (yellow)** and draw a rectangle over the **eastern half** (from about 16.7°E onward), covering the full north–south extent
+4. Run the evaluation — compare the resulting accuracy against a run with no spatial split (random split) on the same data. Expect the spatial-split numbers to be somewhat lower — that's the honest estimate; a big gap between the two indicates the random split was overly optimistic due to autocorrelation
 
 ### Understanding the Learning Curve
 
