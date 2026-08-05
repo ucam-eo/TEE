@@ -1265,6 +1265,7 @@ async function doExportManualLabels(format) {
         const data = {
             viewport: window.currentViewportName,
             year: window.currentEmbeddingYear,
+            embedding_version: window.localVectors?.metadata?.dataset_version || null,
             schema: window.activeSchemaMode,
             labels: manualLabels.map(l => ({
                 name: l.name,
@@ -2173,6 +2174,7 @@ function exportSavedLabels() {
     const data = {
         viewport: window.currentViewportName,
         year: window.currentEmbeddingYear,
+        embedding_version: window.localVectors?.metadata?.dataset_version || null,
         labels: savedLabels.map(l => {
             const {pixels, visible, _clusterInfo, ...meta} = l;
             if (hideLocations) {

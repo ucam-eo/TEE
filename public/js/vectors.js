@@ -336,6 +336,7 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
             crs: 'EPSG:4326',
             geotransform: vqMeta.geotransform,
             kind: vqMeta.kind,
+            dataset_version: vqMeta.dataset_version,
             dim_min: Array.from(dimMin),
             dim_max: Array.from(dimMax),
             vq: {

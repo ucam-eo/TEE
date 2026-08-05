@@ -205,7 +205,7 @@ The export menu offers different formats depending on which mode you're in:
 
 | Format | What it's for |
 |--------|---------------|
-| **Labels (JSON)** | Re-import into TEE later |
+| **Labels (JSON)** | Re-import into TEE later — includes the embedding year and Tessera dataset version (e.g. "1.0") the labels were made against |
 | **Labels (GeoJSON)** | Open in QGIS or other GIS tools |
 | **Map (JPG)** | A screenshot of the satellite view with label overlays — good for presentations |
 
@@ -213,7 +213,7 @@ The export menu offers different formats depending on which mode you're in:
 
 | Format | What it's for |
 |--------|---------------|
-| **JSON** | Re-import into TEE (includes embeddings and all metadata) |
+| **JSON** | Re-import into TEE (includes embeddings, the embedding year, the Tessera dataset version, and all metadata) |
 | **GeoJSON** | GIS-compatible polygons |
 | **ESRI Shapefile (ZIP)** | Standard GIS interchange format — can be opened in QGIS, ArcGIS, etc. Can also be used as ground truth for validation. |
 | **CSV (points)** | One row per label (name, code, type, lat, lon, pixel count) — the simplest way into Google Earth Engine (`ee.FeatureCollection` from a CSV of lat/lon) or ArcGIS's **Add XY Data**, or just to open in a spreadsheet |

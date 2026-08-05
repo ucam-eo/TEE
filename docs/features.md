@@ -152,7 +152,7 @@ an entry sets the active label's code, name and colour.
 
 | Format | Mode | Content |
 |--------|------|---------|
-| **JSON** | Any | Full round-trip (embeddings, vertices, metadata) |
+| **JSON** | Any | Full round-trip (embeddings, vertices, metadata, embedding year, Tessera dataset version) |
 | **GeoJSON** | Any | Vector polygons (d3-contour vectorisation of pixel sets) |
 | **ESRI Shapefile (ZIP)** | Manual labelling | GIS-compatible polygons |
 | **CSV (points)** | Manual labelling | One row per label (name, code, type, lat, lon, pixel count) — for GEE/ArcGIS point import or a spreadsheet |

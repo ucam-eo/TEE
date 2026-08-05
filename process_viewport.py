@@ -300,7 +300,7 @@ def write_pyramid_levels(rgb, transform, crs, output_dir):
 # ---------- Vector helpers (ported from extract_vectors.py) ----------
 
 def save_vectors(quantized, coords, dim_min, dim_max, transform, height, width,
-                 viewport_id, year, output_dir):
+                 viewport_id, year, output_dir, dataset_version=None):
     """Save quantized vectors, coordinates, and metadata.
 
     Args:
@@ -314,6 +314,8 @@ def save_vectors(quantized, coords, dim_min, dim_max, transform, height, width,
         viewport_id: viewport name string
         year: year int
         output_dir: Path to year-specific vectors directory
+        dataset_version: Tessera dataset release (e.g. "1.0", "1.1") these
+            embeddings came from, per tessera_vq.client.VQTessera.fetch_dataset_version.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -366,6 +368,7 @@ def save_vectors(quantized, coords, dim_min, dim_max, transform, height, width,
     # Tag the legacy format explicitly so the browser can branch on metadata.kind
     # without having to detect it from file presence.
     metadata["kind"] = "uint8"
+    metadata["dataset_version"] = dataset_version
     metadata_file = output_dir / "metadata.json"
     with open(metadata_file, 'w') as f:
         json.dump(metadata, f, indent=2)
@@ -432,7 +435,7 @@ def _assemble_indices_from_tiles(qs, attr_name, out_h, out_w):
     return full
 
 
-def save_vectors_rvq(qs, transform, viewport_id, year, output_dir):
+def save_vectors_rvq(qs, transform, viewport_id, year, output_dir, dataset_version=None):
     """Save VQ structure (codebooks + indices + metadata) for the browser.
 
     Replaces the ~28 MB uint8 mosaic + pixel_coords with a ~5 MB codebook-and-
@@ -440,6 +443,8 @@ def save_vectors_rvq(qs, transform, viewport_id, year, output_dir):
     ``QuantizedStructure`` returned by ``tessera_vq.client.fetch_quantized_structure``;
     ``transform`` is the affine returned by ``reconstruct_from_structure`` so
     we never recompute it ourselves and never drift from upstream.
+    ``dataset_version`` is the Tessera dataset release (e.g. "1.0", "1.1")
+    these embeddings came from, per ``VQTessera.fetch_dataset_version``.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -503,6 +508,7 @@ def save_vectors_rvq(qs, transform, viewport_id, year, output_dir):
         'n_tile_rows': n_tile_rows,
         'n_tile_cols': n_tile_cols,
         'metric': qs.metric,
+        'dataset_version': dataset_version,
     }
     with open(output_dir / 'vq_metadata.json', 'w') as f:
         json.dump(vq_meta, f, indent=2)
@@ -561,6 +567,15 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
     _progress(1, f"[{year}] Fetching mosaic...")
     print(f"  [{year}] Fetching mosaic...")
     t0 = _time.monotonic()
+
+    # Cached on the VQTessera client instance, so this is one extra HTTP GET
+    # per process (not per year) -- best-effort provenance, never blocks the fetch.
+    dataset_version = None
+    if hasattr(tessera, 'fetch_dataset_version'):
+        try:
+            dataset_version = tessera.fetch_dataset_version()
+        except Exception as e:
+            print(f"  [{year}] Could not fetch dataset version: {e}")
 
     qs = None
     if _provider_kind == 'vqtessera' and hasattr(tessera, 'fetch_quantized_structure'):
@@ -709,7 +724,8 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
 
         _progress(80, f"[{year}] Saving vectors...")
         save_vectors(quantized, coords, dim_min, dim_max, transform,
-                     height, width, viewport_id, year, year_vectors_dir)
+                     height, width, viewport_id, year, year_vectors_dir,
+                     dataset_version=dataset_version)
         del quantized, coords, dim_min, dim_max
 
         # Path A dual-write: when we came via the VQ fast path, also persist
@@ -718,7 +734,8 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         # kind='vq'|'rvq' in vq_metadata.json and switches over; Phase 3 will
         # then drop the legacy uint8 emission above.
         if qs is not None:
-            save_vectors_rvq(qs, transform, viewport_id, year, year_vectors_dir)
+            save_vectors_rvq(qs, transform, viewport_id, year, year_vectors_dir,
+                              dataset_version=dataset_version)
     else:
         print(f"  [{year}] Vectors already exist, skipping")
 
