@@ -132,4 +132,4 @@ TESSERA_VQ_DEFAULTS = {
     "k2": int(os.environ.get("TESSERA_VQ_DEFAULT_K2", "256")),
     "m":  os.environ.get("TESSERA_VQ_DEFAULT_M", "euclidean"),
 }
-TESSERA_VQ_TIMEOUT_SECONDS = float(os.environ.get("TESSERA_VQ_TIMEOUT_SECONDS", "120"))
+TESSERA_VQ_TIMEOUT_SECONDS = float(os.environ.get("TESSERA_VQ_TIMEOUT_SECONDS", "300"))

@@ -92,7 +92,7 @@ def _get_provider(viewport_name):
     # deployment not co-located with the bolt-on. The co-located production
     # container overrides this to the direct backdoor (see deploy/README.md).
     url = os.environ.get("TESSERA_VQ_URL", "http://tee.cl.cam.ac.uk:8000")
-    timeout = float(os.environ.get("TESSERA_VQ_TIMEOUT_SECONDS", "120"))
+    timeout = float(os.environ.get("TESSERA_VQ_TIMEOUT_SECONDS", "300"))
     _provider_instance = VQTessera(
         server_url=url, t=vq['t'], k=vq['k'], m=vq['m'],
         timeout=timeout, k2=vq['k2'],

@@ -21,7 +21,11 @@ from django.http import HttpResponse, JsonResponse
 logger = logging.getLogger(__name__)
 
 KM_PER_DEGREE = 111.32  # matches public/viewport_selector.html's kmToDegrees
-POSTCARD_SIZE_KM = 5.0
+# 10km rather than the original 5km: same 10m/pixel native resolution, but
+# 1000x1000 real pixels instead of 500x500 -- genuinely more detail, not just
+# a bigger upscale of the same source data. Slower to fetch (more tiles), but
+# worth it for image quality.
+POSTCARD_SIZE_KM = 10.0
 POSTCARD_YEAR = 2024
 
 RATE_LIMIT_MAX = int(os.environ.get("POSTCARD_RATE_LIMIT_MAX", "5"))
@@ -178,8 +182,9 @@ def generate_postcard(request):
     rgb = _embeddings_to_rgb(mosaic)
 
     from PIL import Image as PILImage
+    img = PILImage.fromarray(rgb, mode='RGB')
     buf = io.BytesIO()
-    PILImage.fromarray(rgb, mode='RGB').save(buf, format='JPEG', quality=92)
+    img.save(buf, format='JPEG', quality=95)
     buf.seek(0)
 
     response = HttpResponse(buf.read(), content_type='image/jpeg')

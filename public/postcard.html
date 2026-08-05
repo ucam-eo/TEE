@@ -155,6 +155,7 @@
             max-height: 70vh;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+            image-rendering: pixelated; /* crisp if ever displayed above native size */
         }
         #resultCard a, #resultCard button {
             display: inline-block;
@@ -178,8 +179,8 @@
     <div class="panel">
         <h1>🌍 TEE Postcard</h1>
         <p class="subtitle">
-            Pick a place and position the 5km × 5km frame, just like creating a
-            viewport, and get a one-of-a-kind image of your patch of Earth.
+            Pick a place and position the 10km × 10km frame to get a
+            one-of-a-kind image of your patch of Earth.
         </p>
 
         <div class="search-wrap">
@@ -214,7 +215,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
     <script>
-        const FRAME_SIZE_KM = 5;
+        const FRAME_SIZE_KM = 10;
         const KM_PER_DEGREE = 111.32; // matches public/viewport_selector.html's kmToDegrees
 
         let map = null;
@@ -333,7 +334,7 @@
                 const secs = Math.floor((Date.now() - start) / 1000);
                 statusEl.textContent = secs < 5
                     ? 'Fetching embeddings and rendering...'
-                    : `Fetching embeddings and rendering... ${secs}s (usually under a minute for a new location)`;
+                    : `Fetching embeddings and rendering... ${secs}s (usually less than 5 minutes for a new location)`;
             };
             tick();
             progressTimer = setInterval(tick, 1000);
