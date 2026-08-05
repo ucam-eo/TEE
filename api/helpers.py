@@ -295,19 +295,20 @@ def check_viewport_owner(request, viewport_name):
     """Check if the current user is admin or owner of the viewport.
 
     Returns (True, None) if authorized, (False, JsonResponse 403) if not.
-    Viewports without _config.json (legacy) are allowed for anyone.
+    Viewports without _config.json (legacy) are denied for non-superusers
+    since ownership cannot be verified.
     """
     if request.user.is_superuser:
         return True, None
     current_user = request.user.username if request.user.is_authenticated else None
     config_file = VIEWPORTS_DIR / f'{viewport_name}_config.json'
     if not config_file.exists():
-        return True, None
+        return False, JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
     try:
         with open(config_file) as f:
             cfg = json.load(f)
     except Exception:
-        return True, None
+        return False, JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
     owner = cfg.get('created_by')
     if not owner or owner == current_user:
         return True, None
