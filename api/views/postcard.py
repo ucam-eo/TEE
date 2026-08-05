@@ -86,6 +86,33 @@ def _embeddings_to_rgb(mosaic):
     return rgb
 
 
+POSTCARD_PIXELS = round(POSTCARD_SIZE_KM * 1000 / 10)  # native resolution is 10m/pixel
+
+
+def _center_crop(mosaic, target_px=POSTCARD_PIXELS):
+    """Center-crop the reconstructed mosaic down to ~POSTCARD_SIZE_KM square.
+
+    reconstruct_from_structure() returns whatever tile-aligned region the
+    bolt-on actually fetched (t=512px ~= 5.12km per tile) -- generally larger
+    than the 5km bbox we asked for, sometimes 2-4x wider/taller, since tiles
+    get rounded out to their full extent.
+
+    This can't be cropped via the returned affine transform: its pixel scale
+    is derived by dividing our (small) requested bbox span by the (large)
+    tile-rounded pixel count, so it doesn't reflect the true ~10m/pixel
+    ground resolution (confirmed independently against an existing
+    viewport's own vq_metadata.json: stated pixel_size_meters=10 but the
+    geotransform implies ~2.5m/pixel) -- inverting it just maps our bbox
+    back to the full array, a no-op. A center crop at the known true
+    resolution is the robust fix; it assumes the bolt-on centers the
+    tile-rounded fetch on the request, which holds in practice.
+    """
+    h, w = mosaic.shape[:2]
+    top = max(0, (h - target_px) // 2)
+    left = max(0, (w - target_px) // 2)
+    return mosaic[top:top + min(target_px, h), left:left + min(target_px, w)]
+
+
 def generate_postcard(request):
     """POST {lat, lon} -> JPEG. Unauthenticated (demo mode); rate limited per-IP."""
     if request.method != 'POST':
@@ -120,6 +147,7 @@ def generate_postcard(request):
         client = get_embeddings_provider(None)
         qs = client.fetch_quantized_structure(bbox=bbox, year=POSTCARD_YEAR)
         mosaic, _transform, _crs = reconstruct_from_structure(qs)
+        mosaic = _center_crop(mosaic)
     except NoCoverageError as e:
         logger.info('postcard: no coverage for lat=%s lon=%s: %s', lat, lon, e)
         return JsonResponse(
