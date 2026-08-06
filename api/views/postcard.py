@@ -199,6 +199,13 @@ def generate_postcard(request):
         'output_shape': [out_h, out_w],
         'crop_width_px': POSTCARD_WIDTH_PX,
         'crop_height_px': POSTCARD_HEIGHT_PX,
+        # Requested bbox + the mosaic's real geo-anchor (None pre-0.5.7 bolt-on),
+        # so the browser can crop to where the bbox actually sits in the
+        # (larger, tile-rounded) reconstructed mosaic instead of assuming it's
+        # centred there -- see postcard.html's cropOffsetFromOrigin. qs.origin
+        # is (origin_lon, origin_lat, dx, dy); see QuantizedStructure.origin.
+        'bbox': list(bbox),
+        'origin': list(qs.origin) if qs.origin is not None else None,
     }
     body = _pack_vq_bundle(meta, arrays)
     return HttpResponse(body, content_type='application/octet-stream')

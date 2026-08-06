@@ -379,7 +379,7 @@
         // Reconstructed postcard data, kept in memory so "change colours" and
         // editing the message never need another network request -- see
         // generatePostcard() for how this gets populated.
-        let currentFloatMosaic = null; // Float32Array(cropH * cropW * dim), center-cropped
+        let currentFloatMosaic = null; // Float32Array(cropH * cropW * dim), cropped to bbox
         let currentMosaicW = 0, currentMosaicH = 0, currentDim = 0;
         let currentBaseImageData = null; // last percentile-stretched render, pre-message-text
 
@@ -409,11 +409,38 @@
             return { meta, arrays };
         }
 
-        // Center-crop a flat (outH*outW*dim) float mosaic to (targetH, targetW),
-        // mirroring the server's old _center_crop (now done here instead).
-        function cropFloatMosaic(mosaic, outH, outW, dim, targetH, targetW) {
-            const top = Math.max(0, Math.floor((outH - targetH) / 2));
-            const left = Math.max(0, Math.floor((outW - targetW) / 2));
+        // Where does the requested bbox's own top-left corner (lon0, lat1) land
+        // in the full reconstructed mosaic's pixel grid? ``origin`` is
+        // (origin_lon, origin_lat, dx, dy) for the mosaic's pixel (0, 0) -- the
+        // real transform geotessera/read_region computed server-side, propagated
+        // through meta.origin (tessera-vq >=0.5.7's QuantizedStructure.origin;
+        // see tessera_vq.client.reconstruct_from_structure). Clamped into
+        // [0, outDim - targetDim] the same way the old center-crop was, so a
+        // bbox that pokes past the mosaic's edge (tile-rounding is generous but
+        // not unlimited) still yields a full-size, in-bounds crop.
+        //
+        // Without this (pre-0.5.7 bolt-on, meta.origin is null), the true
+        // anchor is unknown -- the mosaic generally covers more ground than the
+        // bbox because read_region() rounds fetches out to whole source tiles,
+        // and that expansion isn't symmetric around the bbox, so guessing
+        // "center" is the least-wrong fallback, not a correct one. See
+        // cropFloatMosaic's fallback branch.
+        function cropOffsetFromOrigin(origin, bbox, outH, outW, targetH, targetW) {
+            const [originLon, originLat, dx, dy] = origin;
+            const [lon0, , , lat1] = bbox; // west, south, east, north
+            let left = Math.round((lon0 - originLon) / dx);
+            let top = Math.round((lat1 - originLat) / dy);
+            left = Math.max(0, Math.min(left, outW - targetW));
+            top = Math.max(0, Math.min(top, outH - targetH));
+            return { top, left };
+        }
+
+        // Crop a flat (outH*outW*dim) float mosaic to (targetH, targetW) at
+        // ``offset`` ({top, left}); with no offset, falls back to the old
+        // geometric center-crop (mirroring the server's old _center_crop).
+        function cropFloatMosaic(mosaic, outH, outW, dim, targetH, targetW, offset) {
+            const top = offset ? offset.top : Math.max(0, Math.floor((outH - targetH) / 2));
+            const left = offset ? offset.left : Math.max(0, Math.floor((outW - targetW) / 2));
             const cropH = Math.min(targetH, outH), cropW = Math.min(targetW, outW);
             const cropped = new Float32Array(cropH * cropW * dim);
             for (let y = 0; y < cropH; y++) {
@@ -590,8 +617,13 @@
                     idx1: arrays.indices1, cb1Float, idx2, cb2Float, outH, outW,
                     nTileCols: meta.n_tile_cols, t: meta.tile_size, k1: meta.k1, k2: meta.k2, dim,
                 });
+                const offset = meta.origin
+                    ? cropOffsetFromOrigin(
+                          meta.origin, meta.bbox, outH, outW, meta.crop_height_px, meta.crop_width_px
+                      )
+                    : null;
                 const cropped = cropFloatMosaic(
-                    fullMosaic, outH, outW, dim, meta.crop_height_px, meta.crop_width_px
+                    fullMosaic, outH, outW, dim, meta.crop_height_px, meta.crop_width_px, offset
                 );
                 currentFloatMosaic = cropped.data;
                 currentMosaicW = cropped.width;
