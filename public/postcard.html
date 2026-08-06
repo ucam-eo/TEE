@@ -189,6 +189,9 @@
 </head>
 <body>
     <div id="map"></div>
+    <button id="basemap-toggle" onclick="toggleBasemap()"
+            style="position: absolute; top: 16px; right: 16px; z-index: 1000; padding: 10px 16px; background: #667eea; color: white; border: none; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.25); font-size: 13px; font-weight: 600; cursor: pointer;">
+    </button>
 
     <div class="panel">
         <h1>🌍 TESSERA Postcard</h1>
@@ -267,12 +270,44 @@
             document.getElementById('instruction').textContent = '📍 Click elsewhere to reposition the frame';
         }
 
-        function initMap() {
-            map = L.map('map').setView([20, 0], 3);
-            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        // Same two options as viewport_selector.html's basemap-select, plus
+        // localStorage persistence, but named for what they actually are here
+        // (that page's "Bing Satellite" option is this same Esri layer).
+        const basemaps = {
+            esri: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: '© Esri World Imagery',
                 maxZoom: 19,
-            }).addTo(map);
+            }),
+            osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19,
+            }),
+        };
+        // Button always shows the label of what it will switch TO, not the
+        // current state -- "obvious button" beats a same-state dropdown label.
+        const basemapButtonLabel = { esri: '🗺️ Switch to map', osm: '🛰️ Switch to satellite' };
+        let currentBasemap = null;
+        let currentBasemapType = null;
+
+        function switchBasemap(type) {
+            if (currentBasemap) map.removeLayer(currentBasemap);
+            currentBasemap = basemaps[type];
+            currentBasemap.addTo(map);
+            currentBasemap.bringToBack();
+            currentBasemapType = type;
+            document.getElementById('basemap-toggle').textContent = basemapButtonLabel[type];
+            localStorage.setItem('postcardBasemap', type);
+        }
+
+        function toggleBasemap() {
+            switchBasemap(currentBasemapType === 'esri' ? 'osm' : 'esri');
+        }
+
+        function initMap() {
+            map = L.map('map').setView([20, 0], 3);
+
+            const savedBasemap = localStorage.getItem('postcardBasemap') || 'esri';
+            switchBasemap(savedBasemap);
 
             map.on('click', (e) => placeFrame(e.latlng.lat, e.latlng.lng));
 
@@ -589,6 +624,7 @@
         window.cancelGeneration = cancelGeneration;
         window.changeColours = changeColours;
         window.closeResult = closeResult;
+        window.toggleBasemap = toggleBasemap;
 
         initMap();
     </script>
