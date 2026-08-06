@@ -1352,6 +1352,10 @@
         <!-- Evaluation functions are in js/evaluation.js -->
 
     <!-- Extracted JS modules -->
+    <!-- vq_reconstruct.js has no script tag of its own; it's a pure decode/
+         reconstruct module imported by vectors.js (and by postcard.html).
+         This preload just gives the browser an early fetch hint for it. -->
+    <link rel="modulepreload" href="js/vq_reconstruct.js">
     <script type="module" src="js/schema.js"></script>
     <script type="module" src="js/evaluation.js"></script>
     <script type="module" src="js/vectors.js"></script>

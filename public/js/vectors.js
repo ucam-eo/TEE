@@ -1,6 +1,8 @@
 // vectors.js — Vector data management, client-side search, explorer visualization
 // Extracted from viewer.html as an ES module.
 
+import { decodeCodebook, indicesArrayFromParsed, reconstructFloatMosaic } from './vq_reconstruct.js';
+
 // ── State (module-private, exposed on window via defineProperty) ──
 
 let localVectors = null;
@@ -145,34 +147,6 @@ function parseNpy(buffer) {
 // stay identical. Phase 4 will skip the re-quantise round-trip with a
 // codebook-distance LUT.
 
-function _decodeCodebook(uint8Buf, scalesBuf, nTiles, k, dim) {
-    // uint8Buf shape: (nTiles, k, dim); scalesBuf shape: (nTiles, dim, 2).
-    // Decode each entry to float using the per-tile per-dim (min, max).
-    const out = new Float32Array(nTiles * k * dim);
-    for (let t = 0; t < nTiles; t++) {
-        const scaleBase = t * dim * 2;
-        const tileBase = t * k * dim;
-        for (let i = 0; i < k; i++) {
-            const inBase = tileBase + i * dim;
-            for (let d = 0; d < dim; d++) {
-                const mn = scalesBuf[scaleBase + d * 2];
-                const mx = scalesBuf[scaleBase + d * 2 + 1];
-                const span = (mx - mn) || 1.0;
-                out[inBase + d] = mn + (uint8Buf[inBase + d] / 255.0) * span;
-            }
-        }
-    }
-    return out;
-}
-
-function _indicesArrayFromParsed(parsed) {
-    // Respect npy dtype — k > 256 produces uint16, otherwise uint8.
-    if (parsed.dtype === '<u2' || parsed.dtype === '>u2' || parsed.dtype === 'u2') {
-        return new Uint16Array(parsed.rawData);
-    }
-    return new Uint8Array(parsed.rawData);
-}
-
 async function downloadVectorDataVq(viewport, year, vqMeta) {
     const base = `/api/vector-data/${viewport}/${year}`;
     const isRvq = vqMeta.kind === 'rvq';
@@ -249,40 +223,20 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
 
         const cb1Uint8 = new Uint8Array(cb1Parsed.rawData);
         const cb1Scales = new Float32Array(cb1ScalesParsed.rawData);
-        const cb1Float = _decodeCodebook(cb1Uint8, cb1Scales, nTiles, k1, dim);
-        const idx1 = _indicesArrayFromParsed(idx1Parsed);
+        const cb1Float = decodeCodebook(cb1Uint8, cb1Scales, nTiles, k1, dim);
+        const idx1 = indicesArrayFromParsed(idx1Parsed);
         let cb2Float = null, idx2 = null;
         if (isRvq) {
             const cb2Uint8 = new Uint8Array(cb2Parsed.rawData);
             const cb2Scales = new Float32Array(cb2ScalesParsed.rawData);
-            cb2Float = _decodeCodebook(cb2Uint8, cb2Scales, nTiles, k2, dim);
-            idx2 = _indicesArrayFromParsed(idx2Parsed);
+            cb2Float = decodeCodebook(cb2Uint8, cb2Scales, nTiles, k2, dim);
+            idx2 = indicesArrayFromParsed(idx2Parsed);
         }
 
         // Reconstruct full float mosaic via codebook lookup.
-        const floatMosaic = new Float32Array(numPixels * dim);
-        for (let py = 0; py < outH; py++) {
-            const tileRow = Math.floor(py / t);
-            for (let px = 0; px < outW; px++) {
-                const pixel = py * outW + px;
-                const tileCol = Math.floor(px / t);
-                const tileId = tileRow * nTileCols + tileCol;
-                const i1 = idx1[pixel];
-                const cb1Off = tileId * k1 * dim + i1 * dim;
-                const outOff = pixel * dim;
-                if (cb2Float) {
-                    const i2 = idx2[pixel];
-                    const cb2Off = tileId * k2 * dim + i2 * dim;
-                    for (let d = 0; d < dim; d++) {
-                        floatMosaic[outOff + d] = cb1Float[cb1Off + d] + cb2Float[cb2Off + d];
-                    }
-                } else {
-                    for (let d = 0; d < dim; d++) {
-                        floatMosaic[outOff + d] = cb1Float[cb1Off + d];
-                    }
-                }
-            }
-        }
+        const floatMosaic = reconstructFloatMosaic({
+            idx1, cb1Float, idx2, cb2Float, outH, outW, nTileCols, t, k1, k2, dim
+        });
 
         setProgress(80, 'Quantising to uint8...');
 

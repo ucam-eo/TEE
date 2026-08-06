@@ -150,13 +150,27 @@
             overflow: auto;
             text-align: center;
         }
-        #resultImg {
+        #resultCanvas {
             max-width: 100%;
-            max-height: 70vh;
+            max-height: 65vh;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.15);
             image-rendering: pixelated; /* crisp if ever displayed above native size */
         }
+        #messageInput {
+            display: block;
+            width: 100%;
+            max-width: 400px;
+            margin: 12px auto 0;
+            padding: 9px 12px;
+            font-size: 13px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            outline: none;
+            text-align: center;
+            box-sizing: border-box;
+        }
+        #messageInput:focus { border-color: #667eea; }
         #resultCard a, #resultCard button {
             display: inline-block;
             margin-top: 14px;
@@ -179,7 +193,7 @@
     <div class="panel">
         <h1>🌍 TESSERA Postcard</h1>
         <p class="subtitle">
-            Pick a place and position the 10km × 10km frame to get a
+            Pick a place and position the 10km × 6km frame to get a
             one-of-a-kind image of your patch of Earth.
         </p>
 
@@ -206,33 +220,33 @@
 
     <div id="resultOverlay">
         <div id="resultCard">
-            <img id="resultImg" alt="Postcard">
-            <br>
-            <a id="downloadLink" download="tee-postcard.jpg">Download JPG &darr;</a>
-            <button onclick="closeResult()">Close</button>
+            <canvas id="resultCanvas"></canvas>
+            <input type="text" id="messageInput" placeholder="Write a message..." maxlength="80">
+            <div>
+                <button id="changeColoursBtn" onclick="changeColours()">🎨 Change colours</button>
+                <a id="downloadLink" download="tee-postcard.jpg">Download JPG &darr;</a>
+                <button onclick="closeResult()">Close</button>
+            </div>
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <script>
-        const FRAME_SIZE_KM = 10;
+    <script type="module">
+        import { decodeCodebook, reconstructFloatMosaic } from '/js/vq_reconstruct.js';
+
+        const FRAME_WIDTH_KM = 10;
+        const FRAME_HEIGHT_KM = 6;
         const KM_PER_DEGREE = 111.32; // matches public/viewport_selector.html's kmToDegrees
 
         let map = null;
         let previewBox = null;
         let placed = null; // { lat, lon }
-        let currentObjectUrl = null;
-
-        function kmToDegrees(km, latitude) {
-            return {
-                latOffset: km / KM_PER_DEGREE,
-                lngOffset: km / (KM_PER_DEGREE * Math.cos(latitude * Math.PI / 180)),
-            };
-        }
+        let currentLocationLabel = '';
 
         function frameBounds(lat, lon) {
-            const o = kmToDegrees(FRAME_SIZE_KM / 2, lat);
-            return [[lat - o.latOffset, lon - o.lngOffset], [lat + o.latOffset, lon + o.lngOffset]];
+            const latOffset = (FRAME_HEIGHT_KM / 2) / KM_PER_DEGREE;
+            const lngOffset = (FRAME_WIDTH_KM / 2) / (KM_PER_DEGREE * Math.cos(lat * Math.PI / 180));
+            return [[lat - latOffset, lon - lngOffset], [lat + latOffset, lon + lngOffset]];
         }
 
         function showPreview(lat, lon) {
@@ -246,9 +260,9 @@
 
         function placeFrame(lat, lon, label) {
             placed = { lat, lon };
+            currentLocationLabel = label || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
             showPreview(lat, lon);
-            document.getElementById('selectedLabel').textContent =
-                label || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+            document.getElementById('selectedLabel').textContent = currentLocationLabel;
             document.getElementById('generateBtn').disabled = false;
             document.getElementById('instruction').textContent = '📍 Click elsewhere to reposition the frame';
         }
@@ -318,12 +332,163 @@
             searchInput.value = r.display_name.split(',').slice(0, 2).join(',').trim();
             hideResults();
             map.setView([lat, lon], 12);
-            placeFrame(lat, lon, r.display_name);
+            // Message defaults to what's now sitting in the search box, not the
+            // full geocoder display_name (too long for a postcard caption).
+            placeFrame(lat, lon, searchInput.value);
         }
 
         // --- Generate ---
         let progressTimer = null;
         let currentAbortController = null;
+
+        // Reconstructed postcard data, kept in memory so "change colours" and
+        // editing the message never need another network request -- see
+        // generatePostcard() for how this gets populated.
+        let currentFloatMosaic = null; // Float32Array(cropH * cropW * dim), center-cropped
+        let currentMosaicW = 0, currentMosaicH = 0, currentDim = 0;
+        let currentBaseImageData = null; // last percentile-stretched render, pre-message-text
+
+        // [4B big-endian header length][UTF-8 JSON header][raw array bytes, in
+        // header['arrays'] order] -- the wire format written by
+        // api/views/postcard.py::_pack_vq_bundle.
+        function unpackVqBundle(buffer) {
+            const view = new DataView(buffer);
+            const headerLen = view.getUint32(0, false);
+            const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 4, headerLen)));
+            const ctorByDtype = { uint8: Uint8Array, uint16: Uint16Array, float32: Float32Array };
+            let offset = 4 + headerLen;
+            const arrays = {};
+            for (const spec of meta.arrays) {
+                const Ctor = ctorByDtype[spec.dtype];
+                if (!Ctor) throw new Error(`Unknown dtype in postcard bundle: ${spec.dtype}`);
+                const count = spec.shape.reduce((a, b) => a * b, 1);
+                const byteLength = count * Ctor.BYTES_PER_ELEMENT;
+                // TypedArray views must start at an offset that's a multiple of
+                // their element size; arrays are packed back-to-back with no
+                // padding, so realign via a copying slice() when needed.
+                arrays[spec.name] = (offset % Ctor.BYTES_PER_ELEMENT === 0)
+                    ? new Ctor(buffer, offset, count)
+                    : new Ctor(buffer.slice(offset, offset + byteLength));
+                offset += byteLength;
+            }
+            return { meta, arrays };
+        }
+
+        // Center-crop a flat (outH*outW*dim) float mosaic to (targetH, targetW),
+        // mirroring the server's old _center_crop (now done here instead).
+        function cropFloatMosaic(mosaic, outH, outW, dim, targetH, targetW) {
+            const top = Math.max(0, Math.floor((outH - targetH) / 2));
+            const left = Math.max(0, Math.floor((outW - targetW) / 2));
+            const cropH = Math.min(targetH, outH), cropW = Math.min(targetW, outW);
+            const cropped = new Float32Array(cropH * cropW * dim);
+            for (let y = 0; y < cropH; y++) {
+                const srcStart = ((top + y) * outW + left) * dim;
+                cropped.set(mosaic.subarray(srcStart, srcStart + cropW * dim), y * cropW * dim);
+            }
+            return { data: cropped, width: cropW, height: cropH };
+        }
+
+        function percentile(sorted, p) {
+            const idx = (p / 100) * (sorted.length - 1);
+            const lo = Math.floor(idx), hi = Math.ceil(idx);
+            if (lo === hi) return sorted[lo];
+            return sorted[lo] * (hi - idx) + sorted[hi] * (idx - lo);
+        }
+
+        // 2nd-98th percentile stretch per channel -- same technique as the
+        // server used to use (api/views/postcard.py::_embeddings_to_rgb,
+        // itself matching process_viewport.py's percentile_normalize()), just
+        // ported to JS so "change colours" can re-render without a new fetch.
+        function percentileStretchToRGB(mosaic, w, h, dim, bands) {
+            const imageData = new ImageData(w, h);
+            const pixels = imageData.data;
+            const n = w * h;
+            for (let c = 0; c < 3; c++) {
+                const bandIdx = bands[c];
+                const values = [];
+                for (let i = 0; i < n; i++) {
+                    const v = mosaic[i * dim + bandIdx];
+                    if (!Number.isNaN(v)) values.push(v);
+                }
+                if (values.length === 0) continue;
+                values.sort((a, b) => a - b);
+                const p2 = percentile(values, 2), p98 = percentile(values, 98);
+                const span = p98 - p2;
+                for (let i = 0; i < n; i++) {
+                    let v = mosaic[i * dim + bandIdx];
+                    if (Number.isNaN(v)) v = p2;
+                    v = Math.min(Math.max(v, p2), p98);
+                    pixels[i * 4 + c] = span === 0 ? 0 : Math.round((v - p2) / span * 255);
+                }
+            }
+            for (let i = 0; i < n; i++) pixels[i * 4 + 3] = 255;
+            return imageData;
+        }
+
+        function drawMessageBar(ctx, w, h, message) {
+            const text = (message || '').trim();
+            if (!text) return;
+            const fontSize = Math.max(20, Math.round(w * 0.032));
+            const padding = Math.round(fontSize * 0.8);
+            const barHeight = fontSize + padding * 2;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+            ctx.fillRect(0, h - barHeight, w, barHeight);
+            ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, w / 2, h - barHeight / 2, w - padding * 2);
+        }
+
+        // Redraws the canvas from the last percentile-stretched render + the
+        // current message text -- cheap, so this runs on every keystroke.
+        function drawPostcardCanvas() {
+            if (!currentBaseImageData) return;
+            const canvas = document.getElementById('resultCanvas');
+            canvas.width = currentBaseImageData.width;
+            canvas.height = currentBaseImageData.height;
+            const ctx = canvas.getContext('2d');
+            ctx.putImageData(currentBaseImageData, 0, 0);
+            drawMessageBar(ctx, canvas.width, canvas.height, document.getElementById('messageInput').value);
+        }
+
+        // Re-renders from the already-reconstructed mosaic with the given R/G/B
+        // embedding bands -- no network request, so instant.
+        function renderCurrentPostcard(bands) {
+            if (!currentFloatMosaic) return;
+            currentBaseImageData = percentileStretchToRGB(
+                currentFloatMosaic, currentMosaicW, currentMosaicH, currentDim, bands
+            );
+            drawPostcardCanvas();
+        }
+
+        document.getElementById('messageInput').addEventListener('input', drawPostcardCanvas);
+
+        // 3 distinct random indices among the 128 embedding dims, for "change colours".
+        function randomBands() {
+            const picked = new Set();
+            while (picked.size < 3) picked.add(Math.floor(Math.random() * 128));
+            return Array.from(picked);
+        }
+
+        function changeColours() {
+            renderCurrentPostcard(randomBands());
+        }
+
+        document.getElementById('downloadLink').addEventListener('click', (e) => {
+            e.preventDefault();
+            const canvas = document.getElementById('resultCanvas');
+            canvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'tee-postcard.jpg';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 'image/jpeg', 0.95);
+        });
 
         function startProgress() {
             const statusEl = document.getElementById('status');
@@ -371,11 +536,36 @@
                     const err = await resp.json().catch(() => ({}));
                     throw new Error(err.error || `Request failed (${resp.status})`);
                 }
-                const blob = await resp.blob();
-                if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
-                currentObjectUrl = URL.createObjectURL(blob);
-                document.getElementById('resultImg').src = currentObjectUrl;
-                document.getElementById('downloadLink').href = currentObjectUrl;
+                const { meta, arrays } = unpackVqBundle(await resp.arrayBuffer());
+
+                const dim = meta.embedding_dim;
+                const [outH, outW] = meta.output_shape;
+                const nTiles = meta.n_tile_rows * meta.n_tile_cols;
+                const cb1Float = decodeCodebook(
+                    arrays.codebooks1_uint8, arrays.codebooks1_scales, nTiles, meta.k1, dim
+                );
+                let cb2Float = null, idx2 = null;
+                if (meta.kind === 'rvq') {
+                    cb2Float = decodeCodebook(
+                        arrays.codebooks2_uint8, arrays.codebooks2_scales, nTiles, meta.k2, dim
+                    );
+                    idx2 = arrays.indices2;
+                }
+                const fullMosaic = reconstructFloatMosaic({
+                    idx1: arrays.indices1, cb1Float, idx2, cb2Float, outH, outW,
+                    nTileCols: meta.n_tile_cols, t: meta.tile_size, k1: meta.k1, k2: meta.k2, dim,
+                });
+                const cropped = cropFloatMosaic(
+                    fullMosaic, outH, outW, dim, meta.crop_height_px, meta.crop_width_px
+                );
+                currentFloatMosaic = cropped.data;
+                currentMosaicW = cropped.width;
+                currentMosaicH = cropped.height;
+                currentDim = dim;
+
+                const messageInput = document.getElementById('messageInput');
+                messageInput.value = currentLocationLabel;
+                renderCurrentPostcard([0, 1, 2]); // default bands, matches the original look
                 document.getElementById('resultOverlay').style.display = 'flex';
                 statusEl.textContent = '';
             } catch (e) {
@@ -391,6 +581,14 @@
         function closeResult() {
             document.getElementById('resultOverlay').style.display = 'none';
         }
+
+        // Module scripts don't put top-level bindings on window automatically,
+        // and the buttons above use plain onclick="..." attributes (matching
+        // this codebase's usual window.* bridging pattern -- see labels.js).
+        window.generatePostcard = generatePostcard;
+        window.cancelGeneration = cancelGeneration;
+        window.changeColours = changeColours;
+        window.closeResult = closeResult;
 
         initMap();
     </script>
