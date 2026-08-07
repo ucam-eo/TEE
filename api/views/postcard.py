@@ -101,16 +101,47 @@ def _client_ip(request):
 
 
 def _check_rate_limit(ip):
-    """Return (allowed, retry_after_seconds)."""
+    """Return (allowed, retry_after_seconds, slot).
+
+    On success, a slot is reserved immediately (the timestamp is recorded
+    before generation even starts, not after it succeeds) so that several
+    concurrent requests from the same IP can't all sneak past the limit
+    while the first one is still in flight. `slot` is that timestamp,
+    handed back so the caller can undo the reservation with
+    _release_rate_limit() if the request goes on to fail for reasons that
+    aren't the user's fault -- see generate_postcard's TimeoutError/Exception
+    handlers. `slot` is None when the request was rejected outright.
+    """
     now = time.monotonic()
     with _rate_lock:
         timestamps = [t for t in _rate_state.get(ip, []) if now - t < RATE_LIMIT_WINDOW_SECONDS]
         if len(timestamps) >= RATE_LIMIT_MAX:
             retry_after = int(RATE_LIMIT_WINDOW_SECONDS - (now - timestamps[0]))
-            return False, max(retry_after, 1)
+            _rate_state[ip] = timestamps
+            return False, max(retry_after, 1), None
         timestamps.append(now)
         _rate_state[ip] = timestamps
-        return True, 0
+        return True, 0, now
+
+
+def _release_rate_limit(ip, slot):
+    """Undo a reservation made by _check_rate_limit.
+
+    Used when generation fails for an infra-side reason that the error
+    message itself invites a retry for (cold-fetch timeout, bolt-on
+    hiccup) -- without this, a user who does exactly what we told them to
+    do ("try again, it's often faster the second time") burns through
+    their whole quota on failed attempts, never gets a postcard, and is
+    right to feel wrongly rate-limited. Not used for NoCoverageError or bad
+    input: those are cheap, don't invite a same-spot retry, and leaving
+    them counted stops free-form probing.
+    """
+    if slot is None:
+        return
+    with _rate_lock:
+        timestamps = _rate_state.get(ip)
+        if timestamps and slot in timestamps:
+            timestamps.remove(slot)
 
 
 def _bbox_from_center(lat, lon, width_km=POSTCARD_WIDTH_KM, height_km=POSTCARD_HEIGHT_KM):
@@ -156,7 +187,7 @@ def generate_postcard(request):
         return JsonResponse({'error': 'POST required'}, status=405)
 
     ip = _client_ip(request)
-    allowed, retry_after = _check_rate_limit(ip)
+    allowed, retry_after, rate_slot = _check_rate_limit(ip)
     if not allowed:
         response = JsonResponse(
             {'error': f'Rate limit exceeded — try again in {retry_after}s.'},
@@ -220,8 +251,11 @@ def generate_postcard(request):
         # timeout even though coverage genuinely exists (e.g. central London).
         # Distinct from NoCoverageError -- don't call this "no coverage",
         # and a retry is often fast since the origin fetch may have warmed
-        # the bolt-on's cache regardless of the client giving up.
+        # the bolt-on's cache regardless of the client giving up. We just
+        # told the user to retry, so don't let that retry eat into their
+        # rate limit -- see _release_rate_limit.
         logger.warning('postcard: timed out for lat=%s lon=%s: %s', lat, lon, e)
+        _release_rate_limit(ip, rate_slot)
         return JsonResponse(
             {'error': 'Request timed out fetching embeddings — this can happen for busy areas '
                       'on the first fetch. Try again, it\'s often faster the second time.'},
@@ -229,8 +263,11 @@ def generate_postcard(request):
         )
     except Exception as e:
         # Anything else (bolt-on 500ing, network errors, etc.) -- log the real
-        # exception server-side, surface a generic but honest message.
+        # exception server-side, surface a generic but honest message. Same
+        # reasoning as the TimeoutError branch above: don't charge the quota
+        # for a failure that wasn't the user's fault.
         logger.warning('postcard: generation failed for lat=%s lon=%s: %s', lat, lon, e)
+        _release_rate_limit(ip, rate_slot)
         return JsonResponse(
             {'error': 'Generation failed — please try again.'},
             status=502,
