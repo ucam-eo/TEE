@@ -72,9 +72,31 @@ _rate_state = {}  # ip -> list[request timestamps within the current window]
 
 
 def _client_ip(request):
+    """Best-effort real client IP for the per-IP rate limiter below.
+
+    Prefers X-Real-IP: nginx sets it unconditionally (proxy_set_header
+    X-Real-IP $remote_addr *overwrites* -- see the live config on tee.cl),
+    so a client can't spoof it by sending their own X-Real-IP header.
+
+    Falls back to the *last* entry of X-Forwarded-For, not the first.
+    nginx's proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for
+    *appends* to whatever a client already sent, so trusting the first
+    entry let anyone bypass the rate limit entirely by sending a
+    different fake X-Forwarded-For value on every request -- confirmed
+    empirically: the same real client got bucketed under N different
+    "IPs" this way, each getting its own fresh quota. The last entry is
+    always the one nginx itself appended (nginx is the only proxy hop
+    here), so it can't be spoofed the same way.
+
+    Falls back to REMOTE_ADDR last, for local dev with no proxy in front
+    (deploy-compute.sh --local), where neither header is present at all.
+    """
+    real_ip = request.META.get('HTTP_X_REAL_IP')
+    if real_ip:
+        return real_ip.strip()
     forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
     if forwarded:
-        return forwarded.split(',')[0].strip()
+        return forwarded.split(',')[-1].strip()
     return request.META.get('REMOTE_ADDR', 'unknown')
 
 
