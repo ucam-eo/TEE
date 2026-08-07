@@ -382,6 +382,19 @@
         let currentFloatMosaic = null; // Float32Array(cropH * cropW * dim), cropped to bbox
         let currentMosaicW = 0, currentMosaicH = 0, currentDim = 0;
         let currentBaseImageData = null; // last percentile-stretched render, pre-message-text
+        // Fixed on-screen size (meta.crop_width_px/crop_height_px, the 10:6
+        // postcard frame). currentMosaicW/H (above) is the *data* crop's real
+        // pixel size, which generally isn't 10:6 shaped itself -- geotessera's
+        // mosaic uses a fixed per-pixel step in degrees, not metres, so a
+        // "width" pixel and a "height" pixel don't cover equal ground away
+        // from the equator (confirmed: ~7.3m vs ~11.9m per pixel at
+        // Cambridgeshire's latitude, cos(52 deg) ~= 0.62). drawPostcardCanvas
+        // resamples the native-size render onto this fixed display size, the
+        // same way any image viewer fits non-square-pixel raster data to a
+        // display -- the crop itself already covers the full accurate bbox on
+        // both axes (see cropRegionFromOrigin); this is purely how it's
+        // presented, not a change to what data was fetched or cropped.
+        let currentDisplayW = 0, currentDisplayH = 0;
 
         // [4B big-endian header length][UTF-8 JSON header][raw array bytes, in
         // header['arrays'] order] -- the wire format written by
@@ -540,15 +553,29 @@
             ctx.fillText(text, w / 2, h - barHeight / 2, w - padding * 2);
         }
 
-        // Redraws the canvas from the last percentile-stretched render + the
-        // current message text -- cheap, so this runs on every keystroke.
+        // Offscreen canvas holding the last render at its *native* (non-10:6)
+        // pixel size -- reused across redraws instead of reallocated each time.
+        let _nativeCanvas = null;
+
+        // Redraws the visible canvas from the last percentile-stretched render
+        // + the current message text -- cheap, so this runs on every
+        // keystroke. Resamples from currentBaseImageData's native size up/down
+        // onto the fixed currentDisplayW x currentDisplayH (10:6) frame via
+        // drawImage, which is a standard bilinear resize -- see
+        // currentDisplayW's comment for why the native size isn't 10:6 shaped
+        // to begin with.
         function drawPostcardCanvas() {
             if (!currentBaseImageData) return;
+            if (!_nativeCanvas) _nativeCanvas = document.createElement('canvas');
+            _nativeCanvas.width = currentBaseImageData.width;
+            _nativeCanvas.height = currentBaseImageData.height;
+            _nativeCanvas.getContext('2d').putImageData(currentBaseImageData, 0, 0);
+
             const canvas = document.getElementById('resultCanvas');
-            canvas.width = currentBaseImageData.width;
-            canvas.height = currentBaseImageData.height;
+            canvas.width = currentDisplayW;
+            canvas.height = currentDisplayH;
             const ctx = canvas.getContext('2d');
-            ctx.putImageData(currentBaseImageData, 0, 0);
+            ctx.drawImage(_nativeCanvas, 0, 0, currentDisplayW, currentDisplayH);
             drawMessageBar(ctx, canvas.width, canvas.height, document.getElementById('messageInput').value);
         }
 
@@ -666,6 +693,8 @@
                 currentMosaicW = cropped.width;
                 currentMosaicH = cropped.height;
                 currentDim = dim;
+                currentDisplayW = meta.crop_width_px;
+                currentDisplayH = meta.crop_height_px;
 
                 const messageInput = document.getElementById('messageInput');
                 messageInput.value = currentLocationLabel;
