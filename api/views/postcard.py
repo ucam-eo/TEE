@@ -31,34 +31,35 @@ logger = logging.getLogger(__name__)
 KM_PER_DEGREE = 111.32  # matches public/viewport_selector.html's kmToDegrees
 # 10km x 6km (postcard aspect ratio) rather than a square. Same 10m/pixel
 # native resolution as before, just a wider-than-tall frame. The browser
-# crops the (larger, tile-aligned) reconstructed mosaic down to this after
-# decoding -- see postcard.html's crop step.
+# crops the (larger) reconstructed mosaic down to this after decoding --
+# see postcard.html's crop step.
 POSTCARD_WIDTH_KM = 10.0
 POSTCARD_HEIGHT_KM = 6.0
 POSTCARD_YEAR = 2024
 # Native resolution is 10m/pixel.
 POSTCARD_WIDTH_PX = round(POSTCARD_WIDTH_KM * 1000 / 10)
 POSTCARD_HEIGHT_PX = round(POSTCARD_HEIGHT_KM * 1000 / 10)
-# Deliberately its own (small) VQ tile size, NOT settings.TESSERA_VQ_DEFAULTS'
-# t=512: read_region() rounds the fetch out to whole geotessera source tiles,
-# giving a mosaic bigger than requested but generally well under 2x512=1024px
-# tall (confirmed empirically: 941-978px for real 6km-tall requests) -- so
-# truncating to a t=512 multiple throws away nearly half the height (only
-# out_h=512 < the 600px crop target survives), which forced the crop offset
-# to clamp to 0 regardless of the real bbox position (see cropOffsetFromOrigin
-# in postcard.html) and produced postcards anchored several km off.
+# postcard used to need its own (smaller) VQ tile size, NOT
+# settings.TESSERA_VQ_DEFAULTS' t=512 -- read_region() rounds the fetch out
+# to whole geotessera source tiles, and reconstruct_from_structure used to
+# truncate the mosaic down to (full_h // t) * t before this pulled the last
+# row/col of tiles back to the true edge instead (tessera-vq >=0.6.0). At
+# t=512 that truncation could throw away nearly half the height for a
+# 6km-tall request (confirmed: out_h=512 < the 600px crop target for a real
+# bbox measuring full_h=978), forcing the crop offset to clamp into the
+# wrong position. A smaller t reduced how much truncation lost, at the cost
+# of far more independently-fit per-tile codebooks -- k1/k2 are refit from
+# scratch per tile with no cross-tile consistency, so more/smaller tiles
+# means more visible seams where adjacent tiles disagree on colour/exposure
+# (confirmed: t=256 measured ~53% higher discontinuity right at tile
+# boundaries than elsewhere, visible as a grid overlaid on the image).
 #
-# t=256 keeps worst-case truncation loss to <256px (<2.56km) instead of
-# <512px (<5.12km), which cleared out_h/out_w for both real bboxes that
-# exposed this bug, with comfortable margin (768/1792 vs the 600/1000
-# target). A much smaller t (e.g. 100) clears it with more margin still, but
-# was rejected empirically: it multiplies the tile count ~26x (512/100
-# squared) vs t=256's ~7x, and a real request at t=100 didn't return within
-# a 2-minute test (each tile needs its own k-means fit); t=256 returned in
-# ~69s cold, within the postcard UI's own "usually less than 5 minutes"
-# framing, and the bolt-on's response cache makes repeat requests for the
-# same spot near-instant (~0.1s) regardless of t.
-POSTCARD_TILE_PX = 256
+# Now that reconstruct_from_structure never truncates -- out_h is always the
+# real fetched extent -- that headroom problem is gone regardless of t
+# (re-confirmed on the same bboxes: hundreds of px of slack at t=512), so
+# postcard no longer needs its own tile size at all. Back to the site
+# default, which also has far fewer seams (fewer, bigger tiles) and is
+# faster to compute.
 
 RATE_LIMIT_MAX = int(os.environ.get("POSTCARD_RATE_LIMIT_MAX", "5"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("POSTCARD_RATE_LIMIT_WINDOW_SECONDS", "600"))
@@ -154,25 +155,18 @@ def generate_postcard(request):
     bbox = _bbox_from_center(lat, lon)
 
     try:
-        from django.conf import settings
-
-        from api.embeddings_provider import build_vq_client_from_config
+        from api.embeddings_provider import get_embeddings_provider
         from tessera_vq.client import NoCoverageError, n_tiles_along
         from process_viewport import _quantise_codebook, _assemble_indices_from_tiles
 
-        # Same k/k2/m as the site-wide default, but t=POSTCARD_TILE_PX -- see
-        # that constant's comment for why postcard can't reuse t=512 here.
-        vq_config = dict(settings.TESSERA_VQ_DEFAULTS, t=POSTCARD_TILE_PX)
-        client = build_vq_client_from_config(vq_config)
+        client = get_embeddings_provider(None)
         qs = client.fetch_quantized_structure(bbox=bbox, year=POSTCARD_YEAR)
 
         t = qs.tile_size
         full_h, full_w = int(qs.mosaic_shape[0]), int(qs.mosaic_shape[1])
         # The *exact* full mosaic, not floor-truncated to a tile_size multiple --
         # tessera-vq >=0.6.0 pulls the last row/col of tiles back to end exactly
-        # at full_h/full_w instead of dropping that remainder (see
-        # POSTCARD_TILE_PX's comment for why that mattered so much here: a
-        # crop target that's a large fraction of the fetched mosaic). See
+        # at full_h/full_w instead of dropping that remainder. See
         # _assemble_indices_from_tiles's docstring for why this is safe for
         # already-created viewports too, not just postcard.
         out_h, out_w = full_h, full_w

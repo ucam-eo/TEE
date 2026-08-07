@@ -1,10 +1,9 @@
 """Tests for process_viewport.py's _assemble_indices_from_tiles: the tile-drop
 fix (tessera-vq >=0.6.0's pulled-back last tile, not a dropped remainder strip).
 
-See api/views/postcard.py's POSTCARD_TILE_PX comment and save_vectors_rvq's
-comment in process_viewport.py for the bug this closes: a mosaic not an exact
-multiple of tile_size used to silently lose its last row/col of real,
-finite-valued embedding data.
+See save_vectors_rvq's comment in process_viewport.py for the bug this
+closes: a mosaic not an exact multiple of tile_size used to silently lose
+its last row/col of real, finite-valued embedding data.
 """
 
 from __future__ import annotations
