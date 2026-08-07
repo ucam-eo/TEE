@@ -410,44 +410,61 @@
         }
 
         // Where does the requested bbox's own top-left corner (lon0, lat1) land
-        // in the full reconstructed mosaic's pixel grid? ``origin`` is
-        // (origin_lon, origin_lat, dx, dy) for the mosaic's pixel (0, 0) -- the
-        // real transform geotessera/read_region computed server-side, propagated
-        // through meta.origin (tessera-vq >=0.5.7's QuantizedStructure.origin;
-        // see tessera_vq.client.reconstruct_from_structure). Clamped into
-        // [0, outDim - targetDim] the same way the old center-crop was, so a
-        // bbox that pokes past the mosaic's edge (tile-rounding is generous but
-        // not unlimited) still yields a full-size, in-bounds crop.
+        // in the full reconstructed mosaic's pixel grid, and how much of the
+        // nominal (targetH, targetW) crop actually fits from there? ``origin``
+        // is (origin_lon, origin_lat, dx, dy) for the mosaic's pixel (0, 0) --
+        // the real transform geotessera/read_region computed server-side,
+        // propagated through meta.origin (tessera-vq >=0.5.7's
+        // QuantizedStructure.origin; see tessera_vq.client.reconstruct_from_structure).
         //
-        // Without this (pre-0.5.7 bolt-on, meta.origin is null), the true
-        // anchor is unknown -- the mosaic generally covers more ground than the
-        // bbox because read_region() rounds fetches out to whole source tiles,
-        // and that expansion isn't symmetric around the bbox, so guessing
-        // "center" is the least-wrong fallback, not a correct one. See
-        // cropFloatMosaic's fallback branch.
-        function cropOffsetFromOrigin(origin, bbox, outH, outW, targetH, targetW) {
+        // Deliberately does NOT clamp the *position* backward to guarantee the
+        // full nominal size, the way an earlier version of this function did
+        // (and the still-current center-crop fallback below does). That
+        // seemed reasonable but produced postcards anchored several km off:
+        // read_region()'s tile-rounding padding is asymmetric and tied to
+        // wherever the geotessera source-tile grid happens to fall, not
+        // evenly split around the request, so the "room to grow" a backward
+        // clamp assumes is often mostly on the wrong side (confirmed
+        // empirically: one real bbox had 407px of desired top offset but only
+        // 168px of headroom before the bottom truncation edge -- clamping the
+        // position to fit dumped the crop ~2.85km north of the true corner).
+        // Clamping the *size* down instead keeps the anchor exact and only
+        // shows less ground than requested when the mosaic genuinely doesn't
+        // extend far enough -- a smaller, correctly-placed postcard beats a
+        // full-size, wrongly-placed one.
+        function cropRegionFromOrigin(origin, bbox, outH, outW, targetH, targetW) {
             const [originLon, originLat, dx, dy] = origin;
             const [lon0, , , lat1] = bbox; // west, south, east, north
-            let left = Math.round((lon0 - originLon) / dx);
-            let top = Math.round((lat1 - originLat) / dy);
-            left = Math.max(0, Math.min(left, outW - targetW));
-            top = Math.max(0, Math.min(top, outH - targetH));
-            return { top, left };
+            const trueLeft = Math.round((lon0 - originLon) / dx);
+            const trueTop = Math.round((lat1 - originLat) / dy);
+            // Position clamp only guards against reading outside the mosaic's
+            // own array bounds (e.g. if tile-rounding fell short of the
+            // request on this side entirely) -- not against undersizing.
+            const left = Math.max(0, Math.min(trueLeft, outW - 1));
+            const top = Math.max(0, Math.min(trueTop, outH - 1));
+            const width = Math.max(1, Math.min(targetW, outW - left));
+            const height = Math.max(1, Math.min(targetH, outH - top));
+            return { top, left, width, height };
         }
 
-        // Crop a flat (outH*outW*dim) float mosaic to (targetH, targetW) at
-        // ``offset`` ({top, left}); with no offset, falls back to the old
-        // geometric center-crop (mirroring the server's old _center_crop).
-        function cropFloatMosaic(mosaic, outH, outW, dim, targetH, targetW, offset) {
-            const top = offset ? offset.top : Math.max(0, Math.floor((outH - targetH) / 2));
-            const left = offset ? offset.left : Math.max(0, Math.floor((outW - targetW) / 2));
-            const cropH = Math.min(targetH, outH), cropW = Math.min(targetW, outW);
+        // Crop a flat (outH*outW*dim) float mosaic to (cropH, cropW) at (top, left).
+        function cropFloatMosaic(mosaic, outW, dim, top, left, cropH, cropW) {
             const cropped = new Float32Array(cropH * cropW * dim);
             for (let y = 0; y < cropH; y++) {
                 const srcStart = ((top + y) * outW + left) * dim;
                 cropped.set(mosaic.subarray(srcStart, srcStart + cropW * dim), y * cropW * dim);
             }
             return { data: cropped, width: cropW, height: cropH };
+        }
+
+        // Pre-0.5.7 bolt-on (meta.origin is null): the true anchor is unknown,
+        // so fall back to the old geometric center-crop (mirroring the
+        // server's old _center_crop) -- known-approximate, but the least-wrong
+        // guess available without an origin to work from.
+        function centerCropRegion(outH, outW, targetH, targetW) {
+            const top = Math.max(0, Math.floor((outH - targetH) / 2));
+            const left = Math.max(0, Math.floor((outW - targetW) / 2));
+            return { top, left, height: Math.min(targetH, outH), width: Math.min(targetW, outW) };
         }
 
         function percentile(sorted, p) {
@@ -617,13 +634,13 @@
                     idx1: arrays.indices1, cb1Float, idx2, cb2Float, outH, outW,
                     nTileCols: meta.n_tile_cols, t: meta.tile_size, k1: meta.k1, k2: meta.k2, dim,
                 });
-                const offset = meta.origin
-                    ? cropOffsetFromOrigin(
+                const region = meta.origin
+                    ? cropRegionFromOrigin(
                           meta.origin, meta.bbox, outH, outW, meta.crop_height_px, meta.crop_width_px
                       )
-                    : null;
+                    : centerCropRegion(outH, outW, meta.crop_height_px, meta.crop_width_px);
                 const cropped = cropFloatMosaic(
-                    fullMosaic, outH, outW, dim, meta.crop_height_px, meta.crop_width_px, offset
+                    fullMosaic, outW, dim, region.top, region.left, region.height, region.width
                 );
                 currentFloatMosaic = cropped.data;
                 currentMosaicW = cropped.width;

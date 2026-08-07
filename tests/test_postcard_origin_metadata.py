@@ -1,11 +1,13 @@
 """Tests for api/views/postcard.py's bbox/origin metadata (the fix for postcard
 images landing at the wrong spot -- see requirements.txt's tessera-vq pin and
-tessera-vq's QuantizedStructure.origin, propagated end-to-end starting v0.5.7).
+tessera-vq's QuantizedStructure.origin, propagated end-to-end starting v0.5.7)
+and its dedicated small VQ tile size (POSTCARD_TILE_PX -- see that constant's
+comment in postcard.py for the truncation bug it fixes).
 
-Doesn't spin up Django (no DJANGO_SETTINGS_MODULE / DB needed): generate_postcard
-only touches django.conf.settings inside get_embeddings_provider(), which these
-tests stub out directly, and django.http.{HttpResponse,JsonResponse} don't need
-settings configured to import or construct.
+Doesn't spin up a full Django app (no DB, no INSTALLED_APPS): generate_postcard
+only touches django.conf.settings for TESSERA_VQ_DEFAULTS/URL/TIMEOUT, which
+settings.configure() below supplies directly, and django.http.{HttpResponse,
+JsonResponse} don't need more than that to import or construct.
 """
 
 import json
@@ -15,8 +17,16 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from django.conf import settings
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+if not settings.configured:
+    settings.configure(
+        TESSERA_VQ_URL="http://test",
+        TESSERA_VQ_TIMEOUT_SECONDS=300.0,
+        TESSERA_VQ_DEFAULTS={"t": 512, "k": 20, "k2": 256, "m": "euclidean"},
+    )
 
 from tessera_vq.client import QuantizedStructure  # noqa: E402
 
@@ -63,19 +73,25 @@ def _unpack_header(body_bytes):
 
 
 def _generate(monkeypatch, *, lat, lon, origin):
-    """Call generate_postcard with fetch_quantized_structure stubbed to return
+    """Call generate_postcard with build_vq_client_from_config stubbed to return
     a structure whose bbox is postcard.py's own _bbox_from_center(lat, lon) and
-    whose origin is the given value -- returns the decoded meta dict."""
+    whose origin is the given value. Returns (meta, bbox, vq_config) where
+    vq_config is whatever dict postcard.py actually passed to
+    build_vq_client_from_config -- lets tests assert on the tile size used,
+    not just the response."""
     bbox = postcard._bbox_from_center(lat, lon)
     struct_ = _make_structure(bbox, origin)
+    captured_config = {}
 
     class _FakeClient:
         def fetch_quantized_structure(self, bbox, year):  # noqa: ARG002
             return struct_
 
-    monkeypatch.setattr(
-        "api.embeddings_provider.get_embeddings_provider", lambda _name: _FakeClient()
-    )
+    def _fake_build(vq_config):
+        captured_config.update(vq_config)
+        return _FakeClient()
+
+    monkeypatch.setattr("api.embeddings_provider.build_vq_client_from_config", _fake_build)
     # Rate limiter is in-process global state keyed by IP; give each test its
     # own IP so tests don't interfere with each other's 5-requests/10min cap.
     request = _FakeRequest(lat, lon)
@@ -83,7 +99,7 @@ def _generate(monkeypatch, *, lat, lon, origin):
 
     resp = postcard.generate_postcard(request)
     assert resp.status_code == 200
-    return _unpack_header(resp.content), bbox
+    return _unpack_header(resp.content), bbox, captured_config
 
 
 def test_generate_postcard_ships_bbox_and_origin_when_present(
@@ -91,7 +107,7 @@ def test_generate_postcard_ships_bbox_and_origin_when_present(
 ) -> None:
     """meta.bbox matches the requested bbox; meta.origin round-trips qs.origin."""
     origin = (-0.014, 50.081, 0.00009, -0.00009)
-    meta, bbox = _generate(monkeypatch, lat=52.2099, lon=0.1823, origin=origin)
+    meta, bbox, _config = _generate(monkeypatch, lat=52.2099, lon=0.1823, origin=origin)
     assert meta["bbox"] == pytest.approx(list(bbox))
     assert meta["origin"] == pytest.approx(list(origin))
 
@@ -102,6 +118,45 @@ def test_generate_postcard_ships_null_origin_for_pre_057_server(
     """A structure with no origin (pre-0.5.7 bolt-on) ships meta.origin = null,
     so the browser's cropOffsetFromOrigin is skipped in favour of the old
     center-crop fallback -- not a crash, not a fabricated offset."""
-    meta, bbox = _generate(monkeypatch, lat=52.2099, lon=0.1823, origin=None)
+    meta, bbox, _config = _generate(monkeypatch, lat=52.2099, lon=0.1823, origin=None)
     assert meta["bbox"] == pytest.approx(list(bbox))
     assert meta["origin"] is None
+
+
+def test_generate_postcard_requests_its_own_small_tile_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """postcard.py must request t=POSTCARD_TILE_PX, NOT the site-wide
+    TESSERA_VQ_DEFAULTS['t'] (512 in this test's settings, matching production).
+
+    Regression guard for the bug where inheriting t=512 let tile-size
+    truncation throw away nearly half of a 6km-tall mosaic (real bboxes
+    measured full_h=941-978px, truncating to a single 512px tile), forcing
+    postcard.html's crop offset to clamp to 0 and anchoring the image several
+    km from the requested location. t must stay small enough that this
+    doesn't recur; k/k2/m should still come from the site default.
+    """
+    _meta, _bbox, config = _generate(monkeypatch, lat=52.2099, lon=0.1823, origin=None)
+    assert config["t"] == postcard.POSTCARD_TILE_PX
+    assert config["t"] < settings.TESSERA_VQ_DEFAULTS["t"]
+    # k/k2/m still come from the site default -- only t is postcard-specific.
+    assert config["k"] == settings.TESSERA_VQ_DEFAULTS["k"]
+    assert config["k2"] == settings.TESSERA_VQ_DEFAULTS["k2"]
+    assert config["m"] == settings.TESSERA_VQ_DEFAULTS["m"]
+
+
+def test_postcard_tile_size_clears_crop_target_for_measured_worst_case() -> None:
+    """POSTCARD_TILE_PX must keep out_h/out_w >= the crop target even for the
+    smallest full_h/full_w actually observed against the live bolt-on for a
+    real 6km-tall postcard bbox (941px, near Cambridge) -- see
+    POSTCARD_TILE_PX's comment for how this was measured. A regression here
+    means the truncation bug (see the test above) is back for real requests,
+    not just in principle.
+    """
+    measured_worst_full_h = 941
+    measured_worst_full_w = 1909
+    t = postcard.POSTCARD_TILE_PX
+    out_h = (measured_worst_full_h // t) * t
+    out_w = (measured_worst_full_w // t) * t
+    assert out_h >= postcard.POSTCARD_HEIGHT_PX
+    assert out_w >= postcard.POSTCARD_WIDTH_PX

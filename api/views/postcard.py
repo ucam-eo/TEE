@@ -39,6 +39,26 @@ POSTCARD_YEAR = 2024
 # Native resolution is 10m/pixel.
 POSTCARD_WIDTH_PX = round(POSTCARD_WIDTH_KM * 1000 / 10)
 POSTCARD_HEIGHT_PX = round(POSTCARD_HEIGHT_KM * 1000 / 10)
+# Deliberately its own (small) VQ tile size, NOT settings.TESSERA_VQ_DEFAULTS'
+# t=512: read_region() rounds the fetch out to whole geotessera source tiles,
+# giving a mosaic bigger than requested but generally well under 2x512=1024px
+# tall (confirmed empirically: 941-978px for real 6km-tall requests) -- so
+# truncating to a t=512 multiple throws away nearly half the height (only
+# out_h=512 < the 600px crop target survives), which forced the crop offset
+# to clamp to 0 regardless of the real bbox position (see cropOffsetFromOrigin
+# in postcard.html) and produced postcards anchored several km off.
+#
+# t=256 keeps worst-case truncation loss to <256px (<2.56km) instead of
+# <512px (<5.12km), which cleared out_h/out_w for both real bboxes that
+# exposed this bug, with comfortable margin (768/1792 vs the 600/1000
+# target). A much smaller t (e.g. 100) clears it with more margin still, but
+# was rejected empirically: it multiplies the tile count ~26x (512/100
+# squared) vs t=256's ~7x, and a real request at t=100 didn't return within
+# a 2-minute test (each tile needs its own k-means fit); t=256 returned in
+# ~69s cold, within the postcard UI's own "usually less than 5 minutes"
+# framing, and the bolt-on's response cache makes repeat requests for the
+# same spot near-instant (~0.1s) regardless of t.
+POSTCARD_TILE_PX = 256
 
 RATE_LIMIT_MAX = int(os.environ.get("POSTCARD_RATE_LIMIT_MAX", "5"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("POSTCARD_RATE_LIMIT_WINDOW_SECONDS", "600"))
@@ -134,11 +154,16 @@ def generate_postcard(request):
     bbox = _bbox_from_center(lat, lon)
 
     try:
-        from api.embeddings_provider import get_embeddings_provider
+        from django.conf import settings
+
+        from api.embeddings_provider import build_vq_client_from_config
         from tessera_vq.client import NoCoverageError
         from process_viewport import _quantise_codebook, _assemble_indices_from_tiles
 
-        client = get_embeddings_provider(None)
+        # Same k/k2/m as the site-wide default, but t=POSTCARD_TILE_PX -- see
+        # that constant's comment for why postcard can't reuse t=512 here.
+        vq_config = dict(settings.TESSERA_VQ_DEFAULTS, t=POSTCARD_TILE_PX)
+        client = build_vq_client_from_config(vq_config)
         qs = client.fetch_quantized_structure(bbox=bbox, year=POSTCARD_YEAR)
 
         t = qs.tile_size
