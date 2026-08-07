@@ -208,13 +208,7 @@
         <div id="instruction">📍 Or click on the map to place the frame</div>
         <div id="selectedLabel"></div>
 
-        <div style="display:flex; gap:8px;">
-            <button id="generateBtn" disabled onclick="generatePostcard()" style="flex:1;">Generate Postcard</button>
-            <button id="cancelBtn" onclick="cancelGeneration()"
-                    style="display:none; padding:0 16px; background:#eee; color:#444; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer;">
-                Cancel
-            </button>
-        </div>
+        <button id="generateBtn" disabled onclick="generatePostcard()" style="width:100%;">Generate Postcard</button>
         <div id="status"></div>
         <div id="progressTrack"><div class="bar"></div></div>
 
@@ -374,7 +368,6 @@
 
         // --- Generate ---
         let progressTimer = null;
-        let currentAbortController = null;
 
         // Reconstructed postcard data, kept in memory so "change colours" and
         // editing the message never need another network request -- see
@@ -620,7 +613,6 @@
         function startProgress() {
             const statusEl = document.getElementById('status');
             document.getElementById('progressTrack').style.display = 'block';
-            document.getElementById('cancelBtn').style.display = 'inline-block';
             const start = Date.now();
             const tick = () => {
                 const secs = Math.floor((Date.now() - start) / 1000);
@@ -636,21 +628,17 @@
             clearInterval(progressTimer);
             progressTimer = null;
             document.getElementById('progressTrack').style.display = 'none';
-            document.getElementById('cancelBtn').style.display = 'none';
         }
 
-        function cancelGeneration() {
-            if (currentAbortController) currentAbortController.abort();
-            // Aborting only stops *this browser* from waiting -- the server
-            // can't interrupt a request already in flight, so the abandoned
-            // generation keeps running to completion regardless and would
-            // otherwise still cost this IP a rate-limit slot on top of
-            // whatever gets retried next. Best-effort, fire-and-forget
-            // (keepalive so it survives even if the user navigates away
-            // right after cancelling); nothing useful to do if it fails.
-            fetch('/api/postcard/cancel', { method: 'POST', keepalive: true }).catch(() => {});
-        }
-
+        // No cancel button: a request in flight already reserved a rate-limit
+        // slot, and Django/waitress can't interrupt it server-side once
+        // started, so a client-side "cancel" can't stop the real cost of
+        // generating -- it can only hide the wait, which just invites
+        // cancel-and-retry loops that burn through the quota without ever
+        // producing a postcard (confirmed live: real IPs firing 5+ requests
+        // within tens of seconds, far faster than a genuine multi-minute
+        // wait allows). The Generate button stays disabled for the whole
+        // request instead, so at most one attempt is in flight at a time.
         async function generatePostcard() {
             if (!placed) return;
             const btn = document.getElementById('generateBtn');
@@ -659,13 +647,11 @@
             statusEl.className = '';
             startProgress();
 
-            currentAbortController = new AbortController();
             try {
                 const resp = await fetch('/api/postcard/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ lat: placed.lat, lon: placed.lon }),
-                    signal: currentAbortController.signal,
                 });
                 if (!resp.ok) {
                     const err = await resp.json().catch(() => ({}));
@@ -710,10 +696,9 @@
                 document.getElementById('resultOverlay').style.display = 'flex';
                 statusEl.textContent = '';
             } catch (e) {
-                statusEl.className = e.name === 'AbortError' ? '' : 'error';
-                statusEl.textContent = e.name === 'AbortError' ? 'Cancelled.' : (e.message || 'Generation failed');
+                statusEl.className = 'error';
+                statusEl.textContent = e.message || 'Generation failed';
             } finally {
-                currentAbortController = null;
                 stopProgress();
                 btn.disabled = false;
             }
@@ -727,7 +712,6 @@
         // and the buttons above use plain onclick="..." attributes (matching
         // this codebase's usual window.* bridging pattern -- see labels.js).
         window.generatePostcard = generatePostcard;
-        window.cancelGeneration = cancelGeneration;
         window.changeColours = changeColours;
         window.closeResult = closeResult;
         window.toggleBasemap = toggleBasemap;

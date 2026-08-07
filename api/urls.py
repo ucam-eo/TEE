@@ -9,7 +9,7 @@ from .views.config import get_config
 from .views.evaluation import upload_shapefile, clear_shapefiles, run_evaluation, cancel_evaluation, finish_classifier, train_models, download_model, create_map, download_map, compute_health
 from .views.share import submit_share, list_shares, download_share
 from .views.enrolment import create_enrolled_user, list_enrolled_users, disable_enrolled_user
-from .views.postcard import generate_postcard, cancel_postcard
+from .views.postcard import generate_postcard
 
 urlpatterns = [
     # Auth
@@ -37,7 +37,6 @@ urlpatterns = [
     path('config', get_config),
     # Postcard (fun, unauthenticated, rate-limited — see api/views/postcard.py)
     path('postcard/generate', generate_postcard),
-    path('postcard/cancel', cancel_postcard),
     # Evaluation — proxied to tee-compute
     path('evaluation/health', compute_health),
     path('evaluation/upload-shapefile', upload_shapefile),

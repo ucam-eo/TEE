@@ -160,52 +160,6 @@ def test_release_rate_limit_is_a_noop_for_none_slot():
     assert postcard._rate_state.get("6.6.6.6", []) == []
 
 
-def test_release_latest_rate_limit_frees_exactly_one_slot():
-    """Regression: a browser that Cancels a still-pending generate request
-    used to still have that abandoned attempt (which keeps running
-    server-side -- Django/waitress can't interrupt it) count against their
-    quota once it finished. Releasing the most recent reservation undoes
-    that specific cost without touching earlier, genuinely-used slots."""
-    postcard._rate_state.clear()
-    ip = "4.4.4.1"
-    for _ in range(postcard.RATE_LIMIT_MAX):
-        postcard._check_rate_limit(ip)
-    assert _quota_used(ip) == postcard.RATE_LIMIT_MAX
-
-    postcard._release_latest_rate_limit(ip)
-    assert _quota_used(ip) == postcard.RATE_LIMIT_MAX - 1
-    allowed, _retry_after, _slot = postcard._check_rate_limit(ip)
-    assert allowed is True  # exactly one retry freed up
-
-
-def test_release_latest_rate_limit_is_a_noop_with_no_reservations():
-    """Cancelling before any request has ever reserved a slot for this IP
-    (or after the window has already emptied it) must not raise."""
-    postcard._rate_state.clear()
-    postcard._release_latest_rate_limit("4.4.4.2")  # must not raise
-    assert postcard._rate_state.get("4.4.4.2", []) == []
-
-
-def test_cancel_postcard_endpoint_releases_a_slot():
-    """End-to-end: POST /api/postcard/cancel (cancel_postcard) is what
-    postcard.html's cancelGeneration actually calls -- exercise the view
-    itself, not just the helper it wraps."""
-    postcard._rate_state.clear()
-    ip = "4.4.4.3"
-    for _ in range(postcard.RATE_LIMIT_MAX):
-        postcard._check_rate_limit(ip)
-    assert _quota_used(ip) == postcard.RATE_LIMIT_MAX
-
-    resp = postcard.cancel_postcard(SimpleNamespace(method="POST", META={"REMOTE_ADDR": ip}))
-    assert resp.status_code == 200
-    assert _quota_used(ip) == postcard.RATE_LIMIT_MAX - 1
-
-
-def test_cancel_postcard_rejects_non_post():
-    resp = postcard.cancel_postcard(SimpleNamespace(method="GET", META={}))
-    assert resp.status_code == 405
-
-
 def _fake_client_raising(exc):
     class _FakeClient:
         def fetch_quantized_structure(self, bbox, year):  # noqa: ARG002
