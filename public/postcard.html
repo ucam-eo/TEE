@@ -632,7 +632,8 @@
                 }
                 const fullMosaic = reconstructFloatMosaic({
                     idx1: arrays.indices1, cb1Float, idx2, cb2Float, outH, outW,
-                    nTileCols: meta.n_tile_cols, t: meta.tile_size, k1: meta.k1, k2: meta.k2, dim,
+                    nTileRows: meta.n_tile_rows, nTileCols: meta.n_tile_cols,
+                    t: meta.tile_size, k1: meta.k1, k2: meta.k2, dim,
                 });
                 const region = meta.origin
                     ? cropRegionFromOrigin(

@@ -415,22 +415,32 @@ def _quantise_codebook(cb):
 def _assemble_indices_from_tiles(qs, attr_name, out_h, out_w):
     """Stitch per-tile (n_tiles, t, t) indices into a flat (out_h, out_w) array.
 
-    Only tiles whose pixel range lies entirely within the truncated mosaic
-    [0, out_h) × [0, out_w) are written; edge tiles that would extend past
-    out_h/out_w are silently dropped to match reconstruct_from_structure's
-    behaviour. Missing tiles leave their pixels at 0 (safe — the corresponding
-    codebook lookup is also at 0, so the recovered embedding is the dim_min
-    vector for that tile, which we never reference since indices.shape only
-    spans the tile-aligned region anyway).
+    ``out_h``/``out_w`` must be the *exact* full mosaic dims (``qs.mosaic_shape``),
+    not floor-truncated to a tile_size multiple. Tiles are placed via
+    tessera_vq.client's n_tiles_along/tile_pixel_offset (tessera-vq >=0.6.0):
+    fixed t-stride, except the last row/col of tiles is pulled back to end
+    exactly at out_h/out_w instead of a remainder strip going uncovered --
+    mirrors tessera_vq.client.reconstruct_from_structure.
+
+    Callers that persist the result (save_vectors_rvq) only affect *newly
+    created* viewports this way -- already-written files on disk keep whatever
+    out_h/out_w/n_tile_rows/n_tile_cols they were built with (always an exact
+    t multiple, from the pre-0.6.0 floor-based scheme this replaces), and the
+    browser's reconstructFloatMosaic (public/js/vq_reconstruct.js) reads both
+    correctly: the pulled-back-last-tile rule provably reduces to plain
+    ``idx * t`` whenever out_h/out_w is already a t multiple, so old viewports
+    aren't affected by this change at all.
     """
+    from tessera_vq.client import n_tiles_along, tile_pixel_offset
+
     per_tile = getattr(qs, attr_name)              # (n_tiles, t, t) uint8/16
     t = qs.tile_size
     full = np.zeros((out_h, out_w), dtype=per_tile.dtype)
+    rows, cols = n_tiles_along(out_h, t), n_tiles_along(out_w, t)
     for i in range(per_tile.shape[0]):
         r, c = int(qs.positions[i, 0]), int(qs.positions[i, 1])
-        row_off, col_off = r * t, c * t
-        if row_off + t > out_h or col_off + t > out_w:
-            continue  # edge tile outside the truncated mosaic
+        row_off = tile_pixel_offset(r, rows, out_h, t)
+        col_off = tile_pixel_offset(c, cols, out_w, t)
         full[row_off:row_off + t, col_off:col_off + t] = per_tile[i]
     return full
 
@@ -446,16 +456,25 @@ def save_vectors_rvq(qs, transform, viewport_id, year, output_dir, dataset_versi
     ``dataset_version`` is the Tessera dataset release (e.g. "1.0", "1.1")
     these embeddings came from, per ``VQTessera.fetch_dataset_version``.
     """
+    from tessera_vq.client import n_tiles_along
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     t = qs.tile_size
     full_h, full_w = int(qs.mosaic_shape[0]), int(qs.mosaic_shape[1])
-    out_h = (full_h // t) * t
-    out_w = (full_w // t) * t
+    # Exact full mosaic, not floor-truncated to a tile_size multiple -- see
+    # _assemble_indices_from_tiles's docstring. Existing on-disk viewports are
+    # unaffected (this only runs when creating a new one); this was
+    # deliberately left as the pre-0.6.0 truncated behaviour for a while
+    # after tessera-vq's tiling fix landed, since viewports here are 5km
+    # square and the truncation loss (well under one tile) wasn't worth
+    # touching without checking -- now fixed for newly-created viewports too.
+    out_h, out_w = full_h, full_w
     is_rvq = qs.codebooks2 is not None
 
-    # Per-pixel indices at the truncated tile-aligned shape; tile_id derived
-    # in the browser as (py // t, px // t).
+    # Per-pixel indices at the full mosaic shape; tile_id derived in the
+    # browser (public/js/vq_reconstruct.js::tileIndexForPixel) from
+    # (n_tile_rows/cols, output_shape, tile_size) below.
     idx1 = _assemble_indices_from_tiles(qs, 'indices1', out_h, out_w)
     _save_npy_gz(output_dir / 'indices1.npy.gz', idx1)
     if is_rvq:
@@ -472,8 +491,8 @@ def save_vectors_rvq(qs, transform, viewport_id, year, output_dir, dataset_versi
         _save_npy_gz(output_dir / 'codebooks2_uint8.npy.gz', cb2_u8)
         _save_npy_gz(output_dir / 'codebooks2_scales.npy.gz', cb2_scales)
 
-    n_tile_rows = full_h // t
-    n_tile_cols = full_w // t
+    n_tile_rows = n_tiles_along(full_h, t)
+    n_tile_cols = n_tiles_along(full_w, t)
     tile_index = {
         'tile_size': t,
         'n_tiles': int(qs.codebooks1.shape[0]),
@@ -493,7 +512,7 @@ def save_vectors_rvq(qs, transform, viewport_id, year, output_dir, dataset_versi
         'viewport_id': viewport_id,
         'kind': 'rvq' if is_rvq else 'vq',
         'mosaic_shape': [full_h, full_w],         # full reprojected shape
-        'output_shape': [out_h, out_w],           # tile-aligned, where indices live
+        'output_shape': [out_h, out_w],           # == mosaic_shape now (no truncation); where indices live
         'num_total_pixels': out_h * out_w,
         'embedding_dim': qs.codebooks1.shape[-1],
         'pixel_size_meters': 10,
@@ -558,9 +577,10 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
     # Two paths, tried in order:
     #   1. QS fast path: VQTessera + the upstream's public
     #      fetch_quantized_structure → reconstruct_from_structure. Gives us
-    #      the per-tile structure for the new browser format AND a tile-aligned
-    #      mosaic in one round-trip; transform math comes from upstream so it
-    #      can't drift.
+    #      the per-tile structure for the new browser format AND the full
+    #      (real full_h x full_w, not tile-multiple-truncated -- see
+    #      tessera-vq >=0.6.0) reconstructed mosaic in one round-trip;
+    #      transform math comes from upstream so it can't drift.
     #   2. NPY path: tessera.fetch_mosaic_for_region. Used when the QS fetch
     #      fails for a transient reason (VQTessera is the only client now,
     #      so this is always a VQTessera NPY fetch, not a GeoTessera one).
@@ -646,10 +666,13 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
     else:
         height, width = mosaic.shape[:2]
 
-    # The QS path already raised NoCoverageError for empty/all-NaN responses
-    # and its mosaic is tile-aligned by construction. Both the legacy NaN
-    # heuristic and the bbox crop below would break tile-alignment, so skip
-    # them when we came via QS.
+    # The QS path already raised NoCoverageError for empty/all-NaN responses,
+    # and its mosaic's dimensions are exactly what save_vectors_rvq's own
+    # tile-index assembly will use (see _assemble_indices_from_tiles -- it no
+    # longer needs an exact tile_size multiple, tessera-vq >=0.6.0 covers any
+    # full_h/full_w correctly). Both the legacy NaN heuristic and the bbox
+    # crop below would desync the mosaic from that tile grid, so skip them
+    # when we came via QS.
     if qs is None:
         # No-coverage detection: a fully-NaN mosaic means the upstream provider
         # (typically the tessera-vq bolt-on) has no data for this bbox/year.

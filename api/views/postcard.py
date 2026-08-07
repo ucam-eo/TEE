@@ -157,7 +157,7 @@ def generate_postcard(request):
         from django.conf import settings
 
         from api.embeddings_provider import build_vq_client_from_config
-        from tessera_vq.client import NoCoverageError
+        from tessera_vq.client import NoCoverageError, n_tiles_along
         from process_viewport import _quantise_codebook, _assemble_indices_from_tiles
 
         # Same k/k2/m as the site-wide default, but t=POSTCARD_TILE_PX -- see
@@ -168,7 +168,14 @@ def generate_postcard(request):
 
         t = qs.tile_size
         full_h, full_w = int(qs.mosaic_shape[0]), int(qs.mosaic_shape[1])
-        out_h, out_w = (full_h // t) * t, (full_w // t) * t
+        # The *exact* full mosaic, not floor-truncated to a tile_size multiple --
+        # tessera-vq >=0.6.0 pulls the last row/col of tiles back to end exactly
+        # at full_h/full_w instead of dropping that remainder (see
+        # POSTCARD_TILE_PX's comment for why that mattered so much here: a
+        # crop target that's a large fraction of the fetched mosaic). See
+        # _assemble_indices_from_tiles's docstring for why this is safe for
+        # already-created viewports too, not just postcard.
+        out_h, out_w = full_h, full_w
         is_rvq = qs.codebooks2 is not None
 
         idx1 = _assemble_indices_from_tiles(qs, 'indices1', out_h, out_w)
@@ -218,8 +225,8 @@ def generate_postcard(request):
         'tile_size': t,
         'k1': int(qs.k1),
         'k2': int(qs.k2) if is_rvq else None,
-        'n_tile_rows': full_h // t,
-        'n_tile_cols': full_w // t,
+        'n_tile_rows': n_tiles_along(full_h, t),
+        'n_tile_cols': n_tiles_along(full_w, t),
         'embedding_dim': int(qs.codebooks1.shape[-1]),
         'output_shape': [out_h, out_w],
         'crop_width_px': POSTCARD_WIDTH_PX,
@@ -227,7 +234,7 @@ def generate_postcard(request):
         # Requested bbox + the mosaic's real geo-anchor (None pre-0.5.7 bolt-on),
         # so the browser can crop to where the bbox actually sits in the
         # (larger, tile-rounded) reconstructed mosaic instead of assuming it's
-        # centred there -- see postcard.html's cropOffsetFromOrigin. qs.origin
+        # centred there -- see postcard.html's cropRegionFromOrigin. qs.origin
         # is (origin_lon, origin_lat, dx, dy); see QuantizedStructure.origin.
         'bbox': list(bbox),
         'origin': list(qs.origin) if qs.origin is not None else None,

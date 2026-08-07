@@ -216,6 +216,7 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
         const k1 = vqMeta.k1;
         const k2 = vqMeta.k2 || 0;
         const [outH, outW] = vqMeta.output_shape;
+        const nTileRows = vqMeta.n_tile_rows;
         const nTileCols = vqMeta.n_tile_cols;
         const dim = vqMeta.embedding_dim || 128;
         const nTiles = tileIndex.n_tiles;
@@ -235,7 +236,7 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
 
         // Reconstruct full float mosaic via codebook lookup.
         const floatMosaic = reconstructFloatMosaic({
-            idx1, cb1Float, idx2, cb2Float, outH, outW, nTileCols, t, k1, k2, dim
+            idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim
         });
 
         setProgress(80, 'Quantising to uint8...');

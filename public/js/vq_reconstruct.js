@@ -34,17 +34,44 @@ export function indicesArrayFromParsed(parsed) {
     return new Uint8Array(parsed.rawData);
 }
 
+// Which tile index along one axis covers pixel p, given n tiles total and the
+// axis's true (fullDim, t)? Mirrors tessera_vq's tile_pixel_offset inverse
+// (see tessera_vq.sweep / tessera_vq.client, tessera-vq >=0.6.0): fixed
+// t-stride, except the last tile is pulled back to end exactly at fullDim
+// instead of a remainder strip going uncovered when fullDim isn't itself a
+// multiple of t. Pixels in the resulting overlap between the last two tiles
+// resolve to the *last* tile here, matching how the per-pixel index arrays
+// were assembled server-side (later tile positions overwrite earlier ones
+// for shared pixels -- see tessera_vq.sweep.quantize_window_for_serving /
+// _assemble_indices_from_tiles in process_viewport.py).
+function tileIndexForPixel(p, n, fullDim, t) {
+    if (p >= fullDim - t) return n - 1;
+    return Math.floor(p / t);
+}
+
 // Reconstructs a full (outH*outW, dim) float32 mosaic via per-pixel codebook
 // lookup: codebooks1[tileId][idx1[pixel]] (+ codebooks2[tileId][idx2[pixel]]
 // for RVQ). idx1/idx2 are flat (outH*outW) tile-local index arrays; cb1Float/
 // cb2Float are flat (nTiles*k*dim) decoded codebooks (see decodeCodebook).
-export function reconstructFloatMosaic({ idx1, cb1Float, idx2, cb2Float, outH, outW, nTileCols, t, k1, k2, dim }) {
+//
+// nTileRows/nTileCols + outH/outW must all come from the *same* source
+// (meta.n_tile_rows/n_tile_cols/output_shape from a postcard bundle, or
+// vqMeta's equivalents for a persisted viewport) -- tileIndexForPixel's rule
+// only pulls the last tile back when outH/outW isn't itself a multiple of t.
+// Viewports written before tessera-vq 0.6.0's tiling fix (process_viewport.py
+// ::save_vectors_rvq) always have output_shape as an *exact* t multiple (the
+// old (full_h // t) * t truncation), so this reduces to plain
+// Math.floor(p / t) for them automatically -- no separate code path needed,
+// old viewports keep reading correctly and only newly-created ones (or a
+// postcard, which is never persisted) actually exercise the pulled-back
+// last tile.
+export function reconstructFloatMosaic({ idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim }) {
     const floatMosaic = new Float32Array(outH * outW * dim);
     for (let py = 0; py < outH; py++) {
-        const tileRow = Math.floor(py / t);
+        const tileRow = tileIndexForPixel(py, nTileRows, outH, t);
         for (let px = 0; px < outW; px++) {
             const pixel = py * outW + px;
-            const tileCol = Math.floor(px / t);
+            const tileCol = tileIndexForPixel(px, nTileCols, outW, t);
             const tileId = tileRow * nTileCols + tileCol;
             const i1 = idx1[pixel];
             const cb1Off = tileId * k1 * dim + i1 * dim;
