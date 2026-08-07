@@ -144,6 +144,35 @@ def _release_rate_limit(ip, slot):
             timestamps.remove(slot)
 
 
+def _release_latest_rate_limit(ip):
+    """Release ip's single most-recently-reserved slot, if any.
+
+    Used by cancel_postcard, below, when the browser explicitly cancels a
+    still-pending generate request -- see postcard.html's cancelGeneration.
+    Django/waitress can't interrupt a request already in flight, so the
+    abandoned generation keeps running server-side to completion regardless
+    of the client giving up on it; without this, that abandoned attempt
+    still costs the user a slot exactly as if they'd waited for it, on top
+    of whatever they retry with next. Confirmed live (tee.cl, 2026-08-07):
+    real distinct IPs firing 5+ generate requests within tens of seconds --
+    far faster than the multi-minute generation time allows for someone
+    actually waiting out each attempt -- matching cancel-then-immediately-
+    retry, not a rate-limiter bug.
+
+    Best-effort and approximate by construction: the client has no request
+    id to name its own slot precisely, so this releases whichever slot is
+    newest for ip at the moment the cancel arrives. If a fresh request
+    reserved a new slot in the brief gap between the browser aborting and
+    this call landing, that newer slot is released instead of the actually-
+    abandoned one -- errs generous (one extra request allowed through),
+    never restrictive, which is the safe direction for a rate limiter.
+    """
+    with _rate_lock:
+        timestamps = _rate_state.get(ip)
+        if timestamps:
+            timestamps.pop()
+
+
 def _bbox_from_center(lat, lon, width_km=POSTCARD_WIDTH_KM, height_km=POSTCARD_HEIGHT_KM):
     """Same center -> bounds math as kmToDegrees() in viewport_selector.html."""
     half_w, half_h = width_km / 2, height_km / 2
@@ -294,3 +323,20 @@ def generate_postcard(request):
     }
     body = _pack_vq_bundle(meta, arrays)
     return HttpResponse(body, content_type='application/octet-stream')
+
+
+def cancel_postcard(request):
+    """POST, empty body -- best-effort release of the caller's own most recent
+    rate-limit reservation. Called by postcard.html's cancelGeneration when the
+    user clicks Cancel on a still-pending generate request; see
+    _release_latest_rate_limit for why this exists (the abandoned generation
+    keeps running server-side regardless -- this only stops it from also
+    costing the user their quota). Always 200s: releasing is inherently
+    best-effort, and there's nothing a client could usefully do with a
+    failure here.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    ip = _client_ip(request)
+    _release_latest_rate_limit(ip)
+    return JsonResponse({'ok': True})

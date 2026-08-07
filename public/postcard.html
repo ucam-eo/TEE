@@ -641,6 +641,14 @@
 
         function cancelGeneration() {
             if (currentAbortController) currentAbortController.abort();
+            // Aborting only stops *this browser* from waiting -- the server
+            // can't interrupt a request already in flight, so the abandoned
+            // generation keeps running to completion regardless and would
+            // otherwise still cost this IP a rate-limit slot on top of
+            // whatever gets retried next. Best-effort, fire-and-forget
+            // (keepalive so it survives even if the user navigates away
+            // right after cancelling); nothing useful to do if it fails.
+            fetch('/api/postcard/cancel', { method: 'POST', keepalive: true }).catch(() => {});
         }
 
         async function generatePostcard() {
