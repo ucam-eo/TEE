@@ -410,33 +410,54 @@
         }
 
         // Where does the requested bbox's own top-left corner (lon0, lat1) land
-        // in the full reconstructed mosaic's pixel grid, and how much of the
-        // nominal (targetH, targetW) crop actually fits from there? ``origin``
-        // is (origin_lon, origin_lat, dx, dy) for the mosaic's pixel (0, 0) --
-        // the real transform geotessera/read_region computed server-side,
-        // propagated through meta.origin (tessera-vq >=0.5.7's
+        // in the full reconstructed mosaic's pixel grid, and how big a crop
+        // (in pixels) actually covers the bbox's own span from there?
+        // ``origin`` is (origin_lon, origin_lat, dx, dy) for the mosaic's
+        // pixel (0, 0) -- the real transform geotessera/read_region computed
+        // server-side, propagated through meta.origin (tessera-vq >=0.5.7's
         // QuantizedStructure.origin; see tessera_vq.client.reconstruct_from_structure).
         //
-        // Deliberately does NOT clamp the *position* backward to guarantee the
-        // full nominal size, the way an earlier version of this function did
-        // (and the still-current center-crop fallback below does). That
-        // seemed reasonable but produced postcards anchored several km off:
-        // read_region()'s tile-rounding padding is asymmetric and tied to
-        // wherever the geotessera source-tile grid happens to fall, not
-        // evenly split around the request, so the "room to grow" a backward
-        // clamp assumes is often mostly on the wrong side (confirmed
-        // empirically: one real bbox had 407px of desired top offset but only
-        // 168px of headroom before the bottom truncation edge -- clamping the
-        // position to fit dumped the crop ~2.85km north of the true corner).
-        // Clamping the *size* down instead keeps the anchor exact and only
-        // shows less ground than requested when the mosaic genuinely doesn't
-        // extend far enough -- a smaller, correctly-placed postcard beats a
-        // full-size, wrongly-placed one.
-        function cropRegionFromOrigin(origin, bbox, outH, outW, targetH, targetW) {
+        // The crop's pixel size is derived from the bbox's own geographic span
+        // divided by the *real* dx/dy on each axis independently, NOT a fixed
+        // pixel count assuming exactly 10m/pixel isotropically
+        // (meta.crop_width_px/crop_height_px, still used by the no-origin
+        // fallback below). The mosaic's actual resolution isn't exactly
+        // 10m/pixel on either axis and isn't the same on both: dx (longitude)
+        // covers less ground per pixel than dy (latitude) away from the
+        // equator, since geotessera's degree-based pixel step is fixed but a
+        // degree of longitude is shorter than a degree of latitude by
+        // cos(lat) -- confirmed on one real bbox at ~52N, dx/dy implied
+        // ~7.29m/11.93m per pixel, not 10m/10m. A fixed 1000x600px target
+        // there covered only 7.29km x 7.16km of the requested 10km x 6km --
+        // short on the long (east) edge. Deriving width/height from each
+        // axis's own dx/dy fixes that regardless of how anisotropic the
+        // mosaic's pixels are: this crop simply *is* the requested bbox.
+        //
+        // The *position* clamp (not the size) still deliberately does NOT
+        // clamp backward to guarantee a full nominal size, the way an earlier
+        // version of this function did (and the still-current center-crop
+        // fallback below does). That seemed reasonable but produced postcards
+        // anchored several km off: read_region()'s tile-rounding padding is
+        // asymmetric and tied to wherever the geotessera source-tile grid
+        // happens to fall, not evenly split around the request, so the "room
+        // to grow" a backward clamp assumes is often mostly on the wrong side
+        // (confirmed empirically: one real bbox had 407px of desired top
+        // offset but only 168px of headroom before the bottom truncation
+        // edge -- clamping the position to fit dumped the crop ~2.85km north
+        // of the true corner). Clamping the *size* down instead keeps the
+        // anchor exact and only shows less ground than requested when the
+        // mosaic genuinely doesn't extend far enough -- a smaller,
+        // correctly-placed postcard beats a full-size, wrongly-placed one.
+        function cropRegionFromOrigin(origin, bbox, outH, outW) {
             const [originLon, originLat, dx, dy] = origin;
-            const [lon0, , , lat1] = bbox; // west, south, east, north
+            const [lon0, lat0, lon1, lat1] = bbox; // west, south, east, north
             const trueLeft = Math.round((lon0 - originLon) / dx);
             const trueTop = Math.round((lat1 - originLat) / dy);
+            // Exact pixel extent of the bbox's own span on each axis, using
+            // that axis's own real per-pixel resolution -- this crop *is*
+            // the requested 10km x 6km box, full stop.
+            const targetW = Math.round((lon1 - lon0) / dx);
+            const targetH = Math.round((lat1 - lat0) / Math.abs(dy));
             // Position clamp only guards against reading outside the mosaic's
             // own array bounds (e.g. if tile-rounding fell short of the
             // request on this side entirely) -- not against undersizing.
@@ -636,9 +657,7 @@
                     t: meta.tile_size, k1: meta.k1, k2: meta.k2, dim,
                 });
                 const region = meta.origin
-                    ? cropRegionFromOrigin(
-                          meta.origin, meta.bbox, outH, outW, meta.crop_height_px, meta.crop_width_px
-                      )
+                    ? cropRegionFromOrigin(meta.origin, meta.bbox, outH, outW)
                     : centerCropRegion(outH, outW, meta.crop_height_px, meta.crop_width_px);
                 const cropped = cropFloatMosaic(
                     fullMosaic, outW, dim, region.top, region.left, region.height, region.width
