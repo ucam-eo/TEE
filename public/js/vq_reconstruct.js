@@ -49,10 +49,25 @@ function tileIndexForPixel(p, n, fullDim, t) {
     return Math.floor(p / t);
 }
 
-// Reconstructs a full (outH*outW, dim) float32 mosaic via per-pixel codebook
-// lookup: codebooks1[tileId][idx1[pixel]] (+ codebooks2[tileId][idx2[pixel]]
-// for RVQ). idx1/idx2 are flat (outH*outW) tile-local index arrays; cb1Float/
+// Reconstructs a (outH*outW, dim) float32 mosaic -- or, if `crop` is given,
+// just the {top, left, height, width} rectangle of it -- via per-pixel
+// codebook lookup: codebooks1[tileId][idx1[pixel]] (+ codebooks2[tileId]
+// [idx2[pixel]] for RVQ). idx1/idx2 are still the *full* flat (outH*outW)
+// tile-local index arrays either way (they're cheap: 1-2 bytes/pixel, not
+// dim*4) -- only the float output is ever restricted to the crop. cb1Float/
 // cb2Float are flat (nTiles*k*dim) decoded codebooks (see decodeCodebook).
+//
+// The crop option exists because outH*outW can be far bigger than any
+// caller actually wants: geotessera's read_region() rounds a bbox fetch out
+// to whole source tiles, so a real postcard bbox can come back needing an
+// output_shape like 2030x2040 -- reconstructing that in full is
+// 2030*2040*128*4 bytes, ~2GB, and allocating that in one contiguous
+// Float32Array reliably threw "Array buffer allocation failed" on
+// memory-constrained (mostly mobile) browsers in production, even though
+// postcard.html only ever keeps a ~1000x600px crop of it afterward. Pass
+// `crop` to skip ever materializing the discarded majority of the mosaic.
+// Omit it (every other caller -- the main viewer's full-mosaic downloads)
+// for the original full-mosaic behaviour.
 //
 // nTileRows/nTileCols + outH/outW must all come from the *same* source
 // (meta.n_tile_rows/n_tile_cols/output_shape from a postcard bundle, or
@@ -65,17 +80,23 @@ function tileIndexForPixel(p, n, fullDim, t) {
 // old viewports keep reading correctly and only newly-created ones (or a
 // postcard, which is never persisted) actually exercise the pulled-back
 // last tile.
-export function reconstructFloatMosaic({ idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim }) {
-    const floatMosaic = new Float32Array(outH * outW * dim);
-    for (let py = 0; py < outH; py++) {
+export function reconstructFloatMosaic({ idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim, crop }) {
+    const top = crop ? crop.top : 0;
+    const left = crop ? crop.left : 0;
+    const cropH = crop ? crop.height : outH;
+    const cropW = crop ? crop.width : outW;
+    const floatMosaic = new Float32Array(cropH * cropW * dim);
+    for (let ly = 0; ly < cropH; ly++) {
+        const py = top + ly;
         const tileRow = tileIndexForPixel(py, nTileRows, outH, t);
-        for (let px = 0; px < outW; px++) {
-            const pixel = py * outW + px;
+        for (let lx = 0; lx < cropW; lx++) {
+            const px = left + lx;
+            const pixel = py * outW + px; // still indexes into the *full* idx1/idx2
             const tileCol = tileIndexForPixel(px, nTileCols, outW, t);
             const tileId = tileRow * nTileCols + tileCol;
             const i1 = idx1[pixel];
             const cb1Off = tileId * k1 * dim + i1 * dim;
-            const outOff = pixel * dim;
+            const outOff = (ly * cropW + lx) * dim;
             if (cb2Float) {
                 const i2 = idx2[pixel];
                 const cb2Off = tileId * k2 * dim + i2 * dim;
