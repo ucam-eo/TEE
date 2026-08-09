@@ -83,7 +83,7 @@
             min-height: 16px;
         }
         button#generateBtn {
-            width: 100%;
+            flex: 1;
             padding: 11px;
             background: #667eea;
             color: white;
@@ -94,6 +94,19 @@
             cursor: pointer;
         }
         button#generateBtn:disabled { background: #ccc; cursor: not-allowed; }
+        #feedbackLink {
+            display: flex;
+            align-items: center;
+            padding: 0 14px;
+            background: #eee;
+            color: #444;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        #feedbackLink:hover { background: #e2e2e2; }
 
         #status {
             margin-top: 12px;
@@ -208,7 +221,10 @@
         <div id="instruction">📍 Or click on the map to place the frame</div>
         <div id="selectedLabel"></div>
 
-        <button id="generateBtn" disabled onclick="generatePostcard()" style="width:100%;">Generate Postcard</button>
+        <div style="display:flex; gap:8px;">
+            <button id="generateBtn" disabled onclick="generatePostcard()">Generate Postcard</button>
+            <a id="feedbackLink" href="mailto:sk818@cam.ac.uk?subject=TEE%20postcard%20feedback">Feedback</a>
+        </div>
         <div id="status"></div>
         <div id="progressTrack"><div class="bar"></div></div>
 
