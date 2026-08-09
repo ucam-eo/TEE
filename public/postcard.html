@@ -198,6 +198,7 @@
         }
         #resultCard a { background: #667eea; color: white; }
         #resultCard button { background: #eee; color: #444; }
+        #resultCard button:disabled { color: #999; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -237,13 +238,16 @@
             <input type="text" id="messageInput" placeholder="Write a message..." maxlength="80">
             <div>
                 <button id="changeColoursBtn" onclick="changeColours()">🎨 Change colours</button>
+                <button id="animateBtn" onclick="generateGif()">🎞️ Animate</button>
                 <a id="downloadLink" download="tee-postcard.jpg">Download JPG &darr;</a>
+                <a id="downloadGifLink" download="tee-postcard.gif" style="display:none;">Download GIF &darr;</a>
                 <button onclick="closeResult()">Close</button>
             </div>
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="/js/vendor/gif.js"></script>
     <script type="module">
         import { decodeCodebook, reconstructFloatMosaic } from '/js/vq_reconstruct.js';
 
@@ -601,6 +605,63 @@
             renderCurrentPostcard(randomBands());
         }
 
+        // 7 frames x 3s = 21s. Each frame is a fresh random 3-band render of
+        // the *already-reconstructed* mosaic (same randomBands()/renderCurrentPostcard
+        // as "change colours") -- no new fetch, just re-encoding what's in memory.
+        const GIF_FRAME_COUNT = 7;
+        const GIF_FRAME_DELAY_MS = 3000;
+        let gifBlobUrl = null;
+
+        async function generateGif() {
+            if (!currentFloatMosaic) return;
+            const animateBtn = document.getElementById('animateBtn');
+            const changeBtn = document.getElementById('changeColoursBtn');
+            const downloadGifLink = document.getElementById('downloadGifLink');
+            const canvas = document.getElementById('resultCanvas');
+            // The animation is a side effect -- restore whatever was on screen
+            // before, rather than leaving the postcard on a random last frame.
+            const savedImageData = currentBaseImageData;
+
+            animateBtn.disabled = true;
+            changeBtn.disabled = true;
+            downloadGifLink.style.display = 'none';
+            if (gifBlobUrl) { URL.revokeObjectURL(gifBlobUrl); gifBlobUrl = null; }
+            animateBtn.textContent = 'Animating... 0%';
+
+            const gif = new GIF({
+                workers: 2,
+                quality: 10,
+                width: currentDisplayW,
+                height: currentDisplayH,
+                workerScript: '/js/vendor/gif.worker.js',
+            });
+
+            for (let i = 0; i < GIF_FRAME_COUNT; i++) {
+                renderCurrentPostcard(randomBands());
+                gif.addFrame(canvas, { copy: true, delay: GIF_FRAME_DELAY_MS });
+                animateBtn.textContent = `Animating... ${Math.round(((i + 1) / GIF_FRAME_COUNT) * 50)}%`;
+                // Yield a tick so each frame actually paints and the tab stays
+                // responsive, instead of one long blocking loop.
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+
+            currentBaseImageData = savedImageData;
+            drawPostcardCanvas();
+
+            gif.on('progress', (p) => {
+                animateBtn.textContent = `Encoding... ${50 + Math.round(p * 50)}%`;
+            });
+            gif.on('finished', (blob) => {
+                gifBlobUrl = URL.createObjectURL(blob);
+                downloadGifLink.href = gifBlobUrl;
+                downloadGifLink.style.display = 'inline-block';
+                animateBtn.disabled = false;
+                changeBtn.disabled = false;
+                animateBtn.textContent = '🎞️ Animate';
+            });
+            gif.render();
+        }
+
         document.getElementById('downloadLink').addEventListener('click', (e) => {
             e.preventDefault();
             const canvas = document.getElementById('resultCanvas');
@@ -724,6 +785,7 @@
         // this codebase's usual window.* bridging pattern -- see labels.js).
         window.generatePostcard = generatePostcard;
         window.changeColours = changeColours;
+        window.generateGif = generateGif;
         window.closeResult = closeResult;
         window.toggleBasemap = toggleBasemap;
 
