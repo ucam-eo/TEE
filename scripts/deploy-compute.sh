@@ -82,7 +82,12 @@ sleep 1
 
 if [[ -n "$REMOTE" ]]; then
     echo "=== Deploying to $REMOTE ==="
-    ssh "$REMOTE" "cd ~/$REMOTE_DIR && git pull && $VENV/bin/pip install -q --upgrade geotessera && $VENV/bin/pip install -q --upgrade 'tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.0.0' 2>&1 || true"
+    # requirements.txt (xgboost, scikit-learn, ...) was never installed here
+    # before -- only geotessera/tessera-eval got an explicit upgrade below --
+    # so anything declared solely in requirements.txt (xgboost, confirmed
+    # live: ModuleNotFoundError: No module named 'xgboost') was only present
+    # if someone had happened to pip install it by hand at some point.
+    ssh "$REMOTE" "cd ~/$REMOTE_DIR && git pull && $VENV/bin/pip install -q --upgrade -r requirements.txt && $VENV/bin/pip install -q --upgrade geotessera && $VENV/bin/pip install -q --upgrade 'tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.2.4' 2>&1 || true"
 
     if [[ "$EXTRA_ARGS" == *"--install-torch"* ]]; then
         if ssh "$REMOTE" "nvidia-smi" &>/dev/null; then
