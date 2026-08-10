@@ -229,7 +229,7 @@
         <div id="status"></div>
         <div id="progressTrack"><div class="bar"></div></div>
 
-        <footer><a href="/viewport_selector.html">&larr; TEE demo mode</a> &middot; <a href="https://geotessera.org" target="_blank" rel="noopener">What is TESSERA</a></footer>
+        <footer><a href="/viewport_selector.html">&larr; Explore</a> &middot; <a href="https://geotessera.org" target="_blank" rel="noopener">What am I seeing?</a></footer>
     </div>
 
     <div id="resultOverlay">
@@ -605,11 +605,11 @@
             renderCurrentPostcard(randomBands());
         }
 
-        // 7 frames x 3s = 21s. Each frame is a fresh random 3-band render of
+        // 10 frames x 2s = 20s. Each frame is a fresh random 3-band render of
         // the *already-reconstructed* mosaic (same randomBands()/renderCurrentPostcard
         // as "change colours") -- no new fetch, just re-encoding what's in memory.
-        const GIF_FRAME_COUNT = 7;
-        const GIF_FRAME_DELAY_MS = 3000;
+        const GIF_FRAME_COUNT = 10;
+        const GIF_FRAME_DELAY_MS = 2000;
         let gifBlobUrl = null;
 
         async function generateGif() {
@@ -640,9 +640,13 @@
                 renderCurrentPostcard(randomBands());
                 gif.addFrame(canvas, { copy: true, delay: GIF_FRAME_DELAY_MS });
                 animateBtn.textContent = `Animating... ${Math.round(((i + 1) / GIF_FRAME_COUNT) * 50)}%`;
-                // Yield a tick so each frame actually paints and the tab stays
-                // responsive, instead of one long blocking loop.
-                await new Promise((resolve) => setTimeout(resolve, 0));
+                // Pace the on-screen preview to match GIF_FRAME_DELAY_MS -- the
+                // *encoded* GIF always had the right per-frame delay (each
+                // frame's real duration once played back), but capturing them
+                // with no real pause between paints made the live preview flash
+                // through all frames almost instantly, not a faithful preview
+                // of the animation being built.
+                await new Promise((resolve) => setTimeout(resolve, GIF_FRAME_DELAY_MS));
             }
 
             currentBaseImageData = savedImageData;
