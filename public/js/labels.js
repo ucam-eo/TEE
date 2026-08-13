@@ -184,6 +184,54 @@ async function showManualLabelTimeline(className) {
     }
 }
 
+// ── IndexedDB store for manual labels ──
+// Promoted auto-label clusters store every matched pixel (label.pixel_coords) to
+// preserve exact k-means membership, so a handful of large clusters on a real
+// viewport can run to several MB each. That blew straight through localStorage's
+// ~5-10MB/origin cap (shared across every viewport ever labelled in this browser),
+// silently truncating "Promote All" partway through. IndexedDB's quota is tied to
+// available disk space instead (mirrors the VectorCache pattern in vectors.js).
+const LabelStore = {
+    DB_NAME: 'tee_label_store',
+    STORE_NAME: 'manual_labels',
+    _db: null,
+
+    async open() {
+        if (this._db) return this._db;
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open(this.DB_NAME, 1);
+            req.onupgradeneeded = () => {
+                const db = req.result;
+                if (!db.objectStoreNames.contains(this.STORE_NAME)) {
+                    db.createObjectStore(this.STORE_NAME);
+                }
+            };
+            req.onsuccess = () => { this._db = req.result; resolve(this._db); };
+            req.onerror = () => reject(req.error);
+        });
+    },
+
+    async get(viewport) {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(this.STORE_NAME, 'readonly');
+            const req = tx.objectStore(this.STORE_NAME).get(viewport);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => reject(req.error);
+        });
+    },
+
+    async put(viewport, labels) {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(this.STORE_NAME, 'readwrite');
+            tx.objectStore(this.STORE_NAME).put(labels, viewport);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    },
+};
+
 // ===== MANUAL LABEL STATE =====
 let manualLabels = [];       // [{id, name, color, code, type:'point'|'similarity'|'polygon', lat, lon, embedding, threshold, visible, matchCount, vertices}]
 let currentManualLabel = null; // {name, color, code}
@@ -300,7 +348,7 @@ function _syncClassColor(className, color) {
     renderManualLabelsList();
 }
 
-function restoreManualLabelState() {
+async function restoreManualLabelState() {
     // Clear any stale overlays from prior viewport (handles bfcache restore)
     for (const [cls, entry] of Object.entries(manualClassOverlays)) {
         if (entry.layerGroup && window.maps.rgb) {
@@ -340,13 +388,33 @@ function restoreManualLabelState() {
             }
         } catch(e) { /* ignore */ }
     }
-    // Restore manual labels
-    const savedLabelsStr = localStorage.getItem('manualLabels_' + window.currentViewportName);
-    if (savedLabelsStr) {
-        try {
-            manualLabels = JSON.parse(savedLabelsStr);
+    // Restore manual labels from IndexedDB. One-time migration: earlier versions
+    // kept this under localStorage['manualLabels_<viewport>'] -- pull it in on
+    // first read (then clear it, since it's often multi-MB and was itself
+    // eating into the same quota every other localStorage key in this origin
+    // shares) so nobody's existing labels vanish when this store moved.
+    try {
+        let stored = await LabelStore.get(window.currentViewportName);
+        if (!stored) {
+            const legacyKey = 'manualLabels_' + window.currentViewportName;
+            const legacyStr = localStorage.getItem(legacyKey);
+            if (legacyStr) {
+                try {
+                    stored = JSON.parse(legacyStr);
+                    await LabelStore.put(window.currentViewportName, stored);
+                } catch (e) {
+                    console.error('[LABELS] Failed to migrate legacy localStorage labels:', e);
+                    stored = null;
+                }
+                localStorage.removeItem(legacyKey);
+            }
+        }
+        if (stored) {
+            manualLabels = stored;
             manualLabelIdCounter = manualLabels.reduce((max, l) => Math.max(max, l.id), 0);
-        } catch(e) { manualLabels = []; }
+        }
+    } catch (e) {
+        console.error('[LABELS] Failed to load manual labels:', e);
     }
     renderManualLabelsList();
     // Rebuild overlays on window.maps.rgb for restored labels
@@ -544,9 +612,24 @@ function rebuildManualOverlays() {
     }
 }
 
+let _storageQuotaWarned = false;
+
 function saveManualLabelsToStorage() {
     if (!window.currentViewportName) return;
-    localStorage.setItem('manualLabels_' + window.currentViewportName, JSON.stringify(manualLabels));
+    // Fire-and-forget: none of the 8 call sites need to block on the write
+    // completing (matches the old synchronous-looking localStorage call). If the
+    // write still somehow fails (e.g. disk actually full), the in-memory label +
+    // UI update the caller is in the middle of already ran -- only durability
+    // across a reload is at risk, and we tell the user that once.
+    LabelStore.put(window.currentViewportName, manualLabels).catch((e) => {
+        console.error('[LABELS] Failed to persist manual labels to IndexedDB:', e);
+        if (!_storageQuotaWarned) {
+            _storageQuotaWarned = true;
+            alert('Browser storage is full, so labels can no longer be saved for offline/reload persistence. '
+                + 'They will still work for the rest of this session (exports, overlays, classification), but a page reload will lose anything added from here on. '
+                + 'Export your labels now to be safe.');
+        }
+    });
 }
 
 function markExportDirty() {
@@ -709,6 +792,13 @@ function renderManualLabelsList() {
         const first = labels[0];
         const isMulti = labels.length > 1;
         const hasEmbedding = labels.some(l => l.embedding != null);
+        // Promoted auto-label clusters carry frozen, exact k-means pixel membership
+        // (label.pixel_coords) rather than a live threshold search. The slider is
+        // meaningless for them -- worse, touching it makes updateManualClassThreshold()
+        // discard pixel_coords and switch the class over to threshold-driven matching,
+        // silently losing the exact cluster membership. Only offer it for classes that
+        // are actually threshold-based (plain similarity-search labels).
+        const isExactMatch = labels.some(l => l.pixel_coords);
         const pxCount = first.matchCount || 0;
         const threshold = first.threshold || 0;
         const codeTag = first.code ? `<code style="font-size: 10px; color: #667eea; background: #f0f0ff; padding: 1px 4px; border-radius: 2px; margin-right: 2px;">${first.code}</code>` : '';
@@ -721,7 +811,7 @@ function renderManualLabelsList() {
 
         // Slider (shared for entire class)
         let sliderHtml = '';
-        if (hasEmbedding) {
+        if (hasEmbedding && !isExactMatch) {
             sliderHtml = `<input type="range" min="0" max="35" value="${threshold}" style="width: 60px; cursor: pointer; vertical-align: middle;" oninput="updateManualClassThreshold('${jsName}', parseFloat(this.value)); this.nextElementSibling.textContent=this.value">
                  <span style="font-size: 10px; color: #666; min-width: 20px;">${threshold}</span>`;
         }
