@@ -354,6 +354,30 @@
             border-color: #28a745;
             color: #28a745;
         }
+        .validation-drop-zone.uploading {
+            border-color: #667eea;
+            color: #667eea;
+            cursor: wait;
+            pointer-events: none; /* real shapefiles can take a while; block a second upload mid-flight */
+        }
+        .validation-drop-zone.uploading::before {
+            content: "";
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
+            vertical-align: -2px;
+            border: 2px solid rgba(102, 126, 234, 0.3);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: val-drop-zone-spin 0.8s linear infinite;
+        }
+        @keyframes val-drop-zone-spin {
+            to { transform: rotate(360deg); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .validation-drop-zone.uploading::before { animation: none; }
+        }
         .validation-checkboxes {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -748,8 +772,10 @@
         <!-- Similarity group (greyed out when vectors not ready) -->
         <div id="similarity-controls" class="toolbar-group" style="opacity: 0.4;">
             <label style="margin: 0; font-size: 13px;">Similarity:</label>
+            <button id="threshold-decrement-btn" onclick="stepThreshold(-1)" style="padding: 2px 8px; background: #555; color: white; border: 1px solid #666; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600;" title="Decrease by 1" disabled>&minus;</button>
             <input type="range" id="similarity-threshold" min="0" max="35" value="12" style="width: 120px; cursor: pointer;" oninput="updateThresholdDisplay()" disabled />
-            <span id="threshold-display" style="background: rgba(0,0,0,0.3); padding: 3px 7px; border-radius: 3px; font-size: 13px; min-width: 36px; text-align: center;">12.00</span>
+            <button id="threshold-increment-btn" onclick="stepThreshold(1)" style="padding: 2px 8px; background: #555; color: white; border: 1px solid #666; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600;" title="Increase by 1" disabled>+</button>
+            <span id="threshold-display" onclick="editThresholdValue()" style="background: rgba(0,0,0,0.3); padding: 3px 7px; border-radius: 3px; font-size: 13px; min-width: 36px; text-align: center; cursor: pointer;" title="Click to type an exact value">12.00</span>
             <button id="clear-similarity-btn" style="padding: 4px 10px; background: #555; color: white; border: 1px solid #666; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;" onclick="clearExplorerResults(); clearCrossPanelMarkers();" title="Clear similarity search results">Clear</button>
         </div>
 
@@ -821,13 +847,15 @@
                 <button id="help-close-btn" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px; color: #666;" title="Close">&#10005;</button>
             </div>
             <div style="line-height: 1.8; color: #444;">
-                <div><b>Left-click</b> anywhere to locate a point</div>
-                <div><b>Left-click drag</b> to pan the map</div>
-                <div><b>Scroll</b> to zoom in/out</div>
-                <div><b>Double-click</b> for similarity search. Use the similarity slider to change the selected region.</div>
-                <div><b>Right-click drag</b> to rotate (PCA/UMAP pane)</div>
-                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;"><b>Segmentation:</b> Use the <b>k</b> slider and <b>Segment</b> to auto-cluster the viewport. Clusters are temporary previews. Click <b>&#8599;</b> on a cluster row to promote it to a permanent saved label, or <b>Promote All</b> to save them all. Promoted labels support timeline analysis and re-matching.</div>
-                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">Use <b>Export</b> / <b>Import</b> to save labels to your desktop or load them from a local file.</div>
+                <div data-modes="explore,change-detection,labelling,validation"><b>Left-click</b> anywhere to locate a point</div>
+                <div data-modes="explore,change-detection,labelling,validation"><b>Left-click drag</b> to pan the map</div>
+                <div data-modes="explore,change-detection,labelling,validation"><b>Scroll</b> to zoom in/out</div>
+                <div data-modes="explore,labelling"><b>Double-click</b> for similarity search. Use the similarity slider to change the selected region.</div>
+                <div data-modes="explore,labelling"><b>Right-click drag</b> to rotate (PCA/UMAP pane)</div>
+                <div data-modes="labelling" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;"><b>Segmentation:</b> Use the <b>k</b> slider and <b>Segment</b> to auto-cluster the viewport. Clusters are temporary previews. Click <b>&#8599;</b> on a cluster row to promote it to a permanent saved label, or <b>Promote All</b> to save them all. Promoted labels support timeline analysis and re-matching.</div>
+                <div data-modes="labelling" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">Use <b>Export</b> / <b>Import</b> to save labels to your desktop or load them from a local file.</div>
+                <div data-modes="change-detection" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">The <b>Change Distribution</b> and <b>Change Heatmap</b> panels compare the two years selected above. Redder tiles changed more.</div>
+                <div data-modes="validation" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">Upload a ground-truth shapefile, map its class field, then run an evaluation to score labels against it. Progress, learning curves and the confusion matrix appear in the panels to the right.</div>
                 <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; text-align: center;"><a href="/user_guide.html" target="_blank" style="color: #667eea; text-decoration: none; font-weight: 600;">Open full User Guide &rarr;</a></div>
             </div>
         </div>

@@ -162,6 +162,8 @@ const dependencyRegistry = [
         onReady: () => {
             console.log('[DEP] label-controls: vectors ready, enabling controls');
             document.getElementById('similarity-threshold').disabled = false;
+            document.getElementById('threshold-decrement-btn').disabled = false;
+            document.getElementById('threshold-increment-btn').disabled = false;
             document.getElementById('similarity-controls').style.opacity = '1';
             document.getElementById('label-controls-bar').style.opacity = '1';
             if (window.savedLabels.length > 0) {
@@ -180,6 +182,8 @@ const dependencyRegistry = [
         },
         onNotReady: () => {
             document.getElementById('similarity-threshold').disabled = true;
+            document.getElementById('threshold-decrement-btn').disabled = true;
+            document.getElementById('threshold-increment-btn').disabled = true;
             document.getElementById('similarity-controls').style.opacity = '0.4';
             document.getElementById('label-controls-bar').style.opacity = '0.4';
             document.querySelectorAll('#label-controls-bar button').forEach(b => b.disabled = true);

@@ -220,6 +220,12 @@ async function uploadShapefile(file) {
     status.textContent = 'Uploading...';
     status.style.color = '#888';
     dropZone.classList.remove('uploaded');
+    // Real survey shapefiles (thousands of polygons) can take a visible
+    // moment to upload+parse -- the drop zone otherwise just sits there
+    // looking idle the whole time, easy to miss the small status text and
+    // assume nothing happened. .uploading also blocks a second drop/click
+    // from starting an overlapping upload.
+    dropZone.classList.add('uploading');
 
     const formData = new FormData();
     formData.append('file', file);
@@ -269,6 +275,11 @@ async function uploadShapefile(file) {
             status.textContent = 'Upload error: ' + msg;
         }
         status.style.color = '#dc3545';
+    } finally {
+        // Runs on every exit path (success, the early return on a non-OK
+        // response, and the catch above) so a failed/errored upload doesn't
+        // leave the drop zone permanently stuck looking busy.
+        dropZone.classList.remove('uploading');
     }
 }
 
