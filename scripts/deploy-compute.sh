@@ -101,8 +101,23 @@ if [[ -n "$REMOTE" ]]; then
     fi
 
     echo "--- Killing old tee-compute on $REMOTE ---"
-    ssh "$REMOTE" "kill -9 \$(pgrep -f 'python.*tee-compute') 2>/dev/null || true; kill -9 \$(lsof -t -i :$REMOTE_PORT) 2>/dev/null || true; sleep 1"
+    ssh "$REMOTE" "kill -9 \$(pgrep -f 'python.*tee-compute') 2>/dev/null; kill -9 \$(lsof -t -i :$REMOTE_PORT) 2>/dev/null; sleep 1; exit 0"
     sleep 2
+
+    # The kills above are best-effort (no process to kill isn't an error) but
+    # previously any failure -- e.g. a zombie still holding the socket, or a
+    # permissions mismatch -- was swallowed by `|| true` and the script sailed
+    # on to start a new tee-compute anyway, which then collided with the old
+    # one still bound to the port ("already occupied" for whoever connects
+    # next). Verify the port actually came free before continuing.
+    REMAINING="$(ssh "$REMOTE" "lsof -t -i :$REMOTE_PORT" 2>/dev/null || true)"
+    if [[ -n "$REMAINING" ]]; then
+        echo "  ERROR: port $REMOTE_PORT on $REMOTE is still occupied (PID(s): $REMAINING) after the kill attempt."
+        echo "  The old tee-compute was not replaced -- starting a new one now would collide with it."
+        echo "  SSH in and investigate manually, e.g.: ssh $REMOTE 'lsof -i :$REMOTE_PORT'"
+        exit 1
+    fi
+    echo "  Port $REMOTE_PORT confirmed free."
 
     if [[ "$EXTRA_ARGS" == *"--no-tunnel"* ]]; then
         echo "=== Done (no tunnel requested) ==="

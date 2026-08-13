@@ -1773,6 +1773,54 @@ function updateThresholdDisplay() {
     }
 }
 
+// 36 discrete positions across a 120px track (~3px/step) is hard to land on
+// precisely, especially on a trackpad -- +/- buttons and click-to-type give
+// exact control without needing pixel-perfect dragging.
+function stepThreshold(delta) {
+    const slider = document.getElementById('similarity-threshold');
+    if (slider.disabled) return;
+    const min = parseInt(slider.min, 10);
+    const max = parseInt(slider.max, 10);
+    const next = Math.max(min, Math.min(max, parseInt(slider.value, 10) + delta));
+    slider.value = next;
+    updateThresholdDisplay();
+}
+
+function editThresholdValue() {
+    const slider = document.getElementById('similarity-threshold');
+    const display = document.getElementById('threshold-display');
+    if (slider.disabled) return;
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.id = 'threshold-display'; // so commit() can find it back by the same id
+    input.min = slider.min;
+    input.max = slider.max;
+    input.step = '1';
+    input.value = slider.value;
+    input.style.cssText = display.style.cssText;
+    input.style.width = '46px';
+    input.style.cursor = 'text';
+    display.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const commit = () => {
+        const min = parseInt(slider.min, 10);
+        const max = parseInt(slider.max, 10);
+        let v = parseInt(input.value, 10);
+        if (Number.isNaN(v)) v = parseInt(slider.value, 10);
+        slider.value = Math.max(min, Math.min(max, v));
+        input.replaceWith(display);
+        updateThresholdDisplay();
+    };
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        if (e.key === 'Escape') { input.value = slider.value; commit(); }
+    });
+}
+
 // ===== PERSISTENT LABEL SYSTEM =====
 // Global variables for label management
 let savedLabels = [];  // Array of label objects (stored in localStorage)
@@ -2752,15 +2800,31 @@ document.addEventListener('DOMContentLoaded', () => {
     })();
 
     // Help button toggle
+    // Hide help-popup sections that don't apply to the current panel mode --
+    // e.g. don't advertise double-click similarity search while in
+    // Validation, where that feature doesn't exist. setPanelLayout() (in
+    // maps.js) keeps window.currentPanelMode up to date on every mode switch,
+    // so this always reflects what's actually on screen right now.
+    function updateHelpPopupForMode() {
+        const mode = window.currentPanelMode || 'explore';
+        document.querySelectorAll('#help-popup [data-modes]').forEach((el) => {
+            el.style.display = el.dataset.modes.split(',').includes(mode) ? '' : 'none';
+        });
+    }
+    window.updateHelpPopupForMode = updateHelpPopupForMode;
+
     function toggleHelpPopup() {
         const popup = document.getElementById('help-popup');
-        popup.style.display = popup.style.display === 'block' ? 'none' : 'block';
+        const showing = popup.style.display !== 'block';
+        if (showing) updateHelpPopupForMode();
+        popup.style.display = showing ? 'block' : 'none';
     }
     document.getElementById('help-btn').addEventListener('click', toggleHelpPopup);
     document.getElementById('help-close-btn').addEventListener('click', toggleHelpPopup);
 
     // Show help popup on first visit
     if (!localStorage.getItem('helpShown')) {
+        updateHelpPopupForMode();
         document.getElementById('help-popup').style.display = 'block';
         localStorage.setItem('helpShown', '1');
     }
@@ -3245,6 +3309,8 @@ window.importGeoJSON = importGeoJSON;
 window.importLabelsJSON = importLabelsJSON;
 window.importShapefile = importShapefile;
 window.updateThresholdDisplay = updateThresholdDisplay;
+window.stepThreshold = stepThreshold;
+window.editThresholdValue = editThresholdValue;
 
 // Persistent labels
 window.persistLabels = persistLabels;
