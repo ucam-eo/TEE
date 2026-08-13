@@ -761,15 +761,31 @@ function handleManualPinDrop(lat, lon) {
     window.rebuildClassOverlay(window.currentManualLabel.name);
 }
 function calculatePixelBounds(lat, lon) {
-    // Each pixel is 10m x 10m
-    // 1 degree latitude = ~111.32 km = 111320 m
-    // 1 degree longitude = ~111.32 * cos(latitude) km at that latitude
-    const latPerMeter = 1 / 111320;
-    const lonPerMeter = 1 / (111320 * Math.cos(lat * Math.PI / 180));
-
-    const pixelSizeMeters = 10;  // 10m x 10m pixel
-    const latOffset = pixelSizeMeters * latPerMeter / 2;
-    const lonOffset = pixelSizeMeters * lonPerMeter / 2;
+    // Half a pixel's angular footprint in each direction. Use the current
+    // viewport's actual per-pixel grid step (geotransform gt.a = deg lon/px,
+    // gt.e = deg lat/px -- the same values used to place this pixel's own
+    // centre) rather than assuming a fixed 10m ground size and reverse-
+    // projecting it through a spherical-Earth formula. The two don't actually
+    // agree: at this dataset's latitudes the spherical approximation is off
+    // by ~15-40% per axis (checked against a real viewport's geotransform),
+    // narrower than the true grid step in one axis and wider in the other.
+    // Pixels rendered from the approximation then don't tile the real grid --
+    // gaps or overlap accumulate pixel over pixel, invisible at low zoom but
+    // showing up as periodic hatching/banding once individual pixels are big
+    // enough on screen to see it (public/js/vectors.js's DirectCanvasLayer).
+    const gt = window.localVectors && window.localVectors.metadata && window.localVectors.metadata.geotransform;
+    let latOffset, lonOffset;
+    if (gt) {
+        lonOffset = Math.abs(gt.a) / 2;
+        latOffset = Math.abs(gt.e) / 2;
+    } else {
+        // Fallback for the rare call before any vector data has loaded.
+        const latPerMeter = 1 / 111320;
+        const lonPerMeter = 1 / (111320 * Math.cos(lat * Math.PI / 180));
+        const pixelSizeMeters = 10;
+        latOffset = pixelSizeMeters * latPerMeter / 2;
+        lonOffset = pixelSizeMeters * lonPerMeter / 2;
+    }
 
     return [
         [lat - latOffset, lon - lonOffset],  // Southwest

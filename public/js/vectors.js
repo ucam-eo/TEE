@@ -1152,9 +1152,6 @@ class DirectCanvasLayer extends L.Layer {
         }
         ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, 0.700)`;
 
-        // Draw each pixel with overlap to eliminate banding from rounding errors
-        const OVERLAP = 1.0;  // Pixels overlap by 1px to hide seams from coordinate rounding
-
         for (const match of this.matches) {
             const matchBounds = window.calculatePixelBounds(match.lat, match.lon);
             const sw = map.latLngToContainerPoint(matchBounds[0]);
@@ -1167,11 +1164,22 @@ class DirectCanvasLayer extends L.Layer {
 
             visibleCount++;
 
-            // Calculate exact bounds without rounding, let canvas handle rendering
-            const x = sw.x - OVERLAP;
-            const y = ne.y - OVERLAP;
-            const width = ne.x - sw.x + 2 * OVERLAP;
-            const height = sw.y - ne.y + 2 * OVERLAP;
+            // Snap to whole device pixels, rounding each edge outward (floor the
+            // low edge, ceil the high edge). A fixed-px overlap used to sit here
+            // instead, but a constant screen-px pad can't track how many screen
+            // pixels a source pixel actually covers -- fine (over-generous, even
+            // bleeding into a neighbouring class's fill) at low zoom where a
+            // pixel is only a few screen px wide, but far too thin at high zoom
+            // where one pixel can span 15-20+ screen px: the leftover sub-pixel
+            // rounding drift between independently-projected neighbours then
+            // shows through as a periodic hatch of gaps. Flooring/ceiling instead
+            // of padding by a constant means two adjacent same-cluster pixels'
+            // rects always share their common boundary regardless of zoom, with
+            // no dependence on an arbitrary constant and no bleed into neighbours.
+            const x = Math.floor(sw.x);
+            const y = Math.floor(ne.y);
+            const width = Math.ceil(ne.x) - x;
+            const height = Math.ceil(sw.y) - y;
 
             // Only draw if size is reasonable (avoid zero/negative sizes)
             if (width > 0.1 && height > 0.1) {
