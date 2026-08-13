@@ -83,11 +83,21 @@ sleep 1
 if [[ -n "$REMOTE" ]]; then
     echo "=== Deploying to $REMOTE ==="
     # requirements.txt (xgboost, scikit-learn, ...) was never installed here
-    # before -- only geotessera/tessera-eval got an explicit upgrade below --
-    # so anything declared solely in requirements.txt (xgboost, confirmed
-    # live: ModuleNotFoundError: No module named 'xgboost') was only present
-    # if someone had happened to pip install it by hand at some point.
-    ssh "$REMOTE" "cd ~/$REMOTE_DIR && git pull && $VENV/bin/pip install -q --upgrade -r requirements.txt && $VENV/bin/pip install -q --upgrade geotessera && $VENV/bin/pip install -q --upgrade 'tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.2.7' 2>&1 || true"
+    # before -- only tessera-eval got an explicit upgrade below -- so
+    # anything declared solely in requirements.txt (xgboost, confirmed live:
+    # ModuleNotFoundError: No module named 'xgboost') was only present if
+    # someone had happened to pip install it by hand at some point.
+    # geotessera used to get the same explicit-upgrade treatment here, but
+    # requirements.txt now pins it to a specific git commit (source.coop
+    # switch, no PyPI release yet -- see requirements.txt's comment); a bare
+    # `pip install --upgrade geotessera` run straight after would resolve
+    # against PyPI and silently downgrade it back to 0.9.0 on every deploy,
+    # undoing the pin. Only tessera-eval still needs its own explicit upgrade
+    # here since IT pulls in a plain (unpinned-by-us) geotessera as one of
+    # its own dependencies -- pip installing tessera-eval alone wouldn't
+    # necessarily bump geotessera's version to what requirements.txt already
+    # pinned, since requirements.txt's install already ran first.
+    ssh "$REMOTE" "cd ~/$REMOTE_DIR && git pull && $VENV/bin/pip install -q --upgrade -r requirements.txt && $VENV/bin/pip install -q --upgrade 'tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.2.7' 2>&1 || true"
 
     if [[ "$EXTRA_ARGS" == *"--install-torch"* ]]; then
         if ssh "$REMOTE" "nvidia-smi" &>/dev/null; then

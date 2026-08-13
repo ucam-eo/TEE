@@ -14,8 +14,14 @@ waitress>=3.0.0
 # geotessera: no longer used by process_viewport.py's own pipeline (VQTessera,
 # below, is the standard client there now) -- kept for the coverage-probe
 # endpoint (api/views/viewports.py) and scripts/tee_evaluate.py, both of which
-# use it directly.
-geotessera>=0.9.0
+# use it directly. Pinned to a commit on main (PR ucam-eo/geotessera#357,
+# merged 2026-08-13) rather than PyPI: that PR switches embedding downloads
+# to source.coop (fronted by Cloudflare, notably faster) and adds v1.1/v2
+# dataset-version support -- confirmed working end-to-end against a real
+# viewport bbox (registry.load_blocks_for_region + fetch_embedding, all of
+# v1/v1.1/v2). Not yet released to PyPI (still 0.9.0 there as of this pin) --
+# switch back to a plain PyPI floor once a release is cut.
+geotessera @ git+https://github.com/ucam-eo/geotessera.git@2a52eefcb07988129df2e48cfa5abd694e58b75c
 # Tessera VQ bolt-on client (VQTessera) -- the standard embeddings client for
 # every viewport (process_viewport.py, api/embeddings_provider.py,
 # api/views/postcard.py), not an opt-in fast path. See docs/architecture.md
