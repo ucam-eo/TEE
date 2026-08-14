@@ -304,6 +304,15 @@ Panel 6 hosts the auto-labelling UI — a dropdown at the top switches between *
 
 The clusters are **temporary previews** — you review them, name the ones that correspond to real habitat types, and "promote" them to saved labels. Clusters you don't want can simply be ignored.
 
+Once a cluster is promoted, its row in the **Labels** column gets a few small icons:
+
+| Icon | Meaning |
+|------|---------|
+| ◎ | Set this as the **active label** |
+| 🕓 | Show a **coverage timeline** for this label across all available years |
+| 🗑️ | **Delete** the label |
+| 👁 (below the row) | **Toggle visibility** on the map — greys out to 🙈 when hidden |
+
 ![K-means controls: adjust k, then click Go](images/ui_seg_controls.png)
 
 | Step | What to do |
