@@ -338,20 +338,27 @@ async function updateYearCoverage(geojson) {
         const data = await resp.json();
         const coverage = data.coverage || {};
 
-        const sel = document.getElementById('val-year-select');
-        const currentVal = sel.value;
-        Array.from(sel.options).forEach(opt => {
-            const tiles = coverage[opt.value] || 0;
-            opt.disabled = tiles === 0;
-            opt.textContent = tiles > 0 ? `${opt.value} (${tiles} tiles)` : `${opt.value} (no coverage)`;
-        });
-        // If current selection has no coverage, pick the first available
-        if (sel.selectedOptions[0] && sel.selectedOptions[0].disabled) {
-            const first = Array.from(sel.options).find(o => !o.disabled);
-            if (first) sel.value = first.value;
-        }
+        _annotateYearSelectCoverage(document.getElementById('val-train-year-select'), coverage);
+        _annotateYearSelectCoverage(document.getElementById('val-test-year-select'), coverage);
     } catch (e) {
         console.warn('Failed to check year coverage:', e);
+    }
+}
+
+// Annotates one <select>'s options with tile-coverage counts and disables
+// years with no coverage at all. Shared by both the train-year and
+// test-year selects (see updateYearCoverage above).
+function _annotateYearSelectCoverage(sel, coverage) {
+    if (!sel) return;
+    Array.from(sel.options).forEach(opt => {
+        const tiles = coverage[opt.value] || 0;
+        opt.disabled = tiles === 0;
+        opt.textContent = tiles > 0 ? `${opt.value} (${tiles} tiles)` : `${opt.value} (no coverage)`;
+    });
+    // If current selection has no coverage, pick the first available
+    if (sel.selectedOptions[0] && sel.selectedOptions[0].disabled) {
+        const first = Array.from(sel.options).find(o => !o.disabled);
+        if (first) sel.value = first.value;
     }
 }
 
@@ -553,14 +560,24 @@ function handleStreamEvent(ev) {
             valTotalLabelledPixels = pixels;
             updateMaxTrainPctHint();
             const stats = ev.stats || {};
+            const yearNote = (ev.train_year && ev.test_year && ev.train_year !== ev.test_year)
+                ? ` Trained ${ev.train_year} → tested ${ev.test_year}.`
+                : '';
             initResultsTable(ev.classifiers, currentLargeAreaTask || 'classification');
             setResultsStatus(
-                `${pixels.toLocaleString()} labelled pixels from ${stats.tiles_with_data || '?'}/${stats.tile_count || '?'} tiles. Running learning curve...`
+                `${pixels.toLocaleString()} labelled pixels from ${stats.tiles_with_data || '?'}/${stats.tile_count || '?'} tiles.${yearNote} Running learning curve...`
             );
         }
 
         if (ev.spatial_split) {
             lastChartData.spatial_split = true;
+            lastChartData.train_count = ev.train_count;
+            lastChartData.test_count = ev.test_count;
+        }
+        lastChartData.train_year = ev.train_year;
+        lastChartData.test_year = ev.test_year;
+        if (ev.year_split) {
+            lastChartData.year_split = true;
             lastChartData.train_count = ev.train_count;
             lastChartData.test_count = ev.test_count;
         }
@@ -648,7 +665,10 @@ function handleStreamEvent(ev) {
         const suffix = nClasses > 0
             ? ` \u2014 ${pixels.toLocaleString()} pixels, ${nClasses} classes`
             : ` \u2014 ${pixels.toLocaleString()} pixels`;
-        status.textContent = `Done in ${ev.elapsed_seconds}s${suffix}`;
+        const yearSuffix = (ev.train_year && ev.test_year && ev.train_year !== ev.test_year)
+            ? ` \u2014 trained ${ev.train_year} \u2192 tested ${ev.test_year}`
+            : '';
+        status.textContent = `Done in ${ev.elapsed_seconds}s${suffix}${yearSuffix}`;
         status.style.color = '#28a745';
         const dlBtnH = document.getElementById('val-download-btn');
         if (dlBtnH) dlBtnH.disabled = false;  // always enable — trains on click
@@ -1289,7 +1309,12 @@ function generateConfig() {
         "_classifiers_available": "nn, rf, xgboost, mlp, spatial_mlp, spatial_mlp_5x5, unet",
         "regressors": regressors,
         "_regressors_available": "nn_reg, rf_reg, mlp_reg, xgboost_reg",
-        "years": [parseInt(document.getElementById('val-year-select').value) || 2024],
+        // The CLI config format (consumed by scripts/tee_evaluate.py, which loops
+        // a list of years -- one full single-year eval per year) predates the
+        // train/test-year split and isn't train/test-split-aware. Source this
+        // from the training year, the closest existing analog, rather than
+        // inventing new CLI-config semantics as part of this change.
+        "years": [parseInt(document.getElementById('val-train-year-select').value) || 2024],
         "_years_available": "2017-2025 (coverage varies by region)",
         "max_training_samples": parseInt(document.getElementById('val-max-train-large').value.replace(/,/g, '')) || 200000,
         "_max_training_samples": "max random points sampled from labelled polygons for pixel classifiers",
@@ -1427,7 +1452,8 @@ async function runLargeAreaEvaluation() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 field: field,
-                year: parseInt(document.getElementById('val-year-select').value) || 2024,
+                train_year: parseInt(document.getElementById('val-train-year-select').value) || 2024,
+                test_year: parseInt(document.getElementById('val-test-year-select').value) || 2024,
                 classifiers: classifiers,
                 classifier_params: params,
                 max_training_samples: parseInt(document.getElementById('val-max-train-large').value.replace(/,/g, '')) || 200000,
@@ -1783,10 +1809,15 @@ function applyConfig(config) {
         }
     }
 
-    // Set year
+    // Set year. The config format isn't train/test-split-aware (see
+    // generateConfig's "years" comment) -- both selects default to the same
+    // uploaded value.
     if (config.years && config.years.length > 0) {
-        const yearSel = document.getElementById('val-year-select');
-        if (yearSel) yearSel.value = String(config.years[0]);
+        const yearVal = String(config.years[0]);
+        const trainYearSel = document.getElementById('val-train-year-select');
+        const testYearSel = document.getElementById('val-test-year-select');
+        if (trainYearSel) trainYearSel.value = yearVal;
+        if (testYearSel) testYearSel.value = yearVal;
     }
 
     // Set classifiers — uncheck all, then check the ones in config
