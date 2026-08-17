@@ -596,7 +596,7 @@ Validation answers the question: **"How well can machine learning distinguish my
 | 2 | 1 | Drag and drop one or more `.zip` shapefiles onto the upload area. (You can upload multiple files; click **Clear** to start over.) |
 | 3 | 2 | Check the satellite panel — your polygons should appear as red outlines on the map |
 | 4 | 3 | Review the class table — it shows each habitat class and how many polygons/pixels it contains |
-| 5 | 1 | Select the **Class field** (the column in your shapefile that contains habitat names) and the **Year** of satellite data to use |
+| 5 | 1 | Select the **Class field** (the column in your shapefile that contains habitat names) and the **Year of training** / **Year of test** satellite data to use (see [Train/Test Years](#traintest-years-optional) below — leave both at the same value for a standard single-year evaluation) |
 | 6 | 1 | Tick the **Classifiers** you want to test. Click the **...** button next to each one to see and adjust its parameters. Click **+** to add a variant with different settings (see [Hyperparameter Variants](#hyperparameter-variants)). |
 | 7 | 1 | Adjust **Max pixel samples** (how many random points to sample from your polygons), **Sampling** strategy (how to distribute points across classes), and **Max patches** (for spatial classifiers) |
 | 8 | 1 | *(Optional)* Set up a **Spatial split** — draw separate train and test regions on the map to avoid spatial autocorrelation (see [Spatial Train/Test Split](#spatial-traintest-split-optional)) |
@@ -704,6 +704,27 @@ To get a more honest evaluation, you can draw **separate geographic regions** fo
 - Your bounding boxes are saved when you use Generate Config / Upload Config
 
 > **Tip:** For a meaningful spatial cross-validation, make sure the train and test regions are geographically separated — for example, train on the north and test on the south, or train on lowland and test on upland areas.
+
+### Train/Test Years (optional)
+
+By default, **Year of training** and **Year of test** are both set to the same year, and evaluation works exactly as described above — one year's embeddings, split into train/test either randomly or by the spatial regions you draw.
+
+Set them to *different* years to test **temporal robustness**: train a classifier on one year's embeddings and score it against a different year's embeddings at the same locations. This answers a different question than the spatial split above — not "does this generalise to a new place?" but "does this still work in a different year?" (e.g. after a drought, a land-management change, or just normal year-to-year variation in the satellite data).
+
+![Year of training and Year of test selectors](images/validation_train_test_year.png)
+
+**How it combines with the spatial split:**
+
+| Spatial split drawn? | What happens |
+|-----------------------|---------------|
+| No | Every labelled point is used **both** as a training example (at the training year) and as a test example (re-fetched at the test year) — the most direct read on "does training transfer to another year?" |
+| Yes | The train region uses the training year as before; only the **test region** (yellow rectangles) is re-fetched at the test year. Train and test stay geographically separated *and* temporally separated. |
+
+Since a different test year needs its own embeddings fetch, expect evaluation to take a bit longer than a same-year run — TEE fetches training-year embeddings as usual, then a second time for the test year, before the learning curve starts (you'll see this as a "Fetching test-year (…) embeddings…" status line). The results panel and final status line label runs with different years clearly, e.g. "trained 2024 → tested 2023".
+
+> **Tip:** A noticeably lower F1 when testing on a different year than you trained on is a meaningful signal in itself — it quantifies how much the satellite embeddings (or the habitat itself) actually changed between those years, similar to how the gap between random-split and spatial-split accuracy quantifies spatial autocorrelation.
+
+> **Generate Config / Upload Config:** the downloaded config file doesn't yet distinguish training and test years — uploading a saved config sets both selectors to the same saved value.
 
 ### Worked Example: austria.zip
 
