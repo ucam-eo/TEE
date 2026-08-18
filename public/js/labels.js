@@ -1625,6 +1625,21 @@ function importCSV(text) {
     importGeoJSON({ type: 'FeatureCollection', features });
 }
 
+// GeoJSON/CSV properties are arbitrary user data -- `name`/`label` can be a
+// number, boolean, null, or missing entirely, not just a string. Every label
+// name downstream (renderManualLabelsList, addManualLabel, etc.) assumes
+// it's always a real string and calls .replace()/other string methods on it
+// directly -- confirmed live (Louis Driver): a non-string name/label
+// property crashed import with "className.replace is not a function".
+// Coerce explicitly here, once, at the point features enter the app, rather
+// than defensively guarding every downstream call site.
+function _geoJsonLabelName(props) {
+    const raw = (props.name !== undefined && props.name !== null && props.name !== '')
+        ? props.name
+        : props.label;
+    return (raw !== undefined && raw !== null && raw !== '') ? String(raw) : 'Imported';
+}
+
 function importGeoJSON(geojson) {
     const gt = window.localVectors ? window.localVectors.metadata.geotransform : null;
     const grid = window.localVectors ? window.localVectors.gridLookup : null;
@@ -1638,7 +1653,7 @@ function importGeoJSON(geojson) {
         const props = feature.properties || {};
         const geom = feature.geometry;
         if (!geom) continue;
-        const name = props.name || props.label || 'Imported';
+        const name = _geoJsonLabelName(props);
 
         if (geom.type === 'Point') {
             if (!pointGroups.has(name)) {
@@ -1742,7 +1757,7 @@ function importGeoJSON(geojson) {
 
     // Import polygon features (unchanged)
     for (const { props, geom } of polygonFeatures) {
-        const name = props.name || props.label || 'Imported';
+        const name = _geoJsonLabelName(props);
         const color = props.color || window.SEG_PALETTE[colorIdx % window.SEG_PALETTE.length];
         colorIdx++;
         const ring = geom.coordinates[0];
