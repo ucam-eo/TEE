@@ -1672,15 +1672,26 @@ function importGeoJSON(geojson) {
 
     let count = 0;
 
-    // Import grouped points: single point → point label, multiple → label with pixel_coords
+    // Import grouped points: every point becomes its own point-type label,
+    // same as a manually-placed pin. When several points share a class name
+    // this makes the class behave exactly like one built by hand-clicking
+    // pins: all points shown on the map, and the class-level similarity
+    // slider works (rebuildClassOverlay already does a multi-embedding
+    // search across every label in a class). Previously multi-point groups
+    // were merged into a single frozen-membership "similarity" label
+    // (centroid embedding + pixel_coords snapshot of just those points),
+    // which silently disabled the slider (isExactMatch in
+    // renderManualLabelsList) and showed classified-pixel blobs instead of
+    // the imported points themselves -- reported by Louis Driver for a CSV
+    // of multiple ground-truth points per class (from Miranda), where the
+    // expected/desired behavior is seed points + expandable similarity
+    // search, not a frozen exact-match cluster.
     let colorIdx = 0;
     for (const [name, group] of pointGroups) {
         const color = group.color || window.SEG_PALETTE[colorIdx % window.SEG_PALETTE.length];
         colorIdx++;
 
-        if (group.points.length === 1) {
-            // Single point label
-            const { lon, lat } = group.points[0];
+        for (const { lon, lat } of group.points) {
             const entry = {
                 name, color, code: group.code, type: 'point',
                 lat, lon, embedding: null, threshold: 0, matchCount: 0
@@ -1691,67 +1702,6 @@ function importGeoJSON(geojson) {
             }
             addManualLabel(entry);
             count++;
-        } else if (gt && grid) {
-            // Multiple points → reconstitute as label with pixel_coords + centroid embedding
-            const pixel_coords = [];
-            // Dequantize inline: real = vals*scale[d] + min[d] (identity for float legacy).
-            const { scale, min } = window.getDequant(window.localVectors);
-            const vals = window.localVectors.values;
-            const centroid = new Float32Array(dim);
-            let maxDistSq = 0;
-            let validCount = 0;
-            let sumLat = 0, sumLon = 0;
-
-            for (const { lon, lat } of group.points) {
-                const px = Math.trunc((lon - gt.c) / gt.a);
-                const py = Math.trunc((lat - gt.f) / gt.e);
-                const idx = window.gridLookupIndex(grid, px, py);
-                if (idx < 0) continue;
-                pixel_coords.push(px, py);
-                sumLat += lat;
-                sumLon += lon;
-                const base = idx * dim;
-                for (let d = 0; d < dim; d++) centroid[d] += vals[base + d] * scale[d] + min[d];
-                validCount++;
-            }
-
-            if (validCount === 0) continue;
-
-            for (let d = 0; d < dim; d++) centroid[d] /= validCount;
-
-            // Compute threshold (max L2 distance from centroid)
-            for (let i = 0; i < pixel_coords.length; i += 2) {
-                const idx = window.gridLookupIndex(grid, pixel_coords[i], pixel_coords[i + 1]);
-                if (idx < 0) continue;
-                let s = 0;
-                const base = idx * dim;
-                for (let d = 0; d < dim; d++) {
-                    const diff = vals[base + d] * scale[d] + min[d] - centroid[d];
-                    s += diff * diff;
-                }
-                if (s > maxDistSq) maxDistSq = s;
-            }
-
-            const entry = {
-                name, color, code: group.code, type: 'similarity',
-                lat: sumLat / validCount, lon: sumLon / validCount,
-                embedding: Array.from(centroid),
-                threshold: Math.sqrt(maxDistSq),
-                matchCount: validCount,
-                pixelCount: validCount,
-                pixel_coords
-            };
-            addManualLabel(entry);
-            count++;
-        } else {
-            // No vectors loaded — import each point individually
-            for (const { lon, lat } of group.points) {
-                addManualLabel({
-                    name, color, code: group.code, type: 'point',
-                    lat, lon, embedding: null, threshold: 0, matchCount: 0
-                });
-                count++;
-            }
         }
     }
 
