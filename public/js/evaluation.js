@@ -340,6 +340,7 @@ async function updateYearCoverage(geojson) {
 
         _annotateYearSelectCoverage(document.getElementById('val-train-year-select'), coverage);
         _annotateYearSelectCoverage(document.getElementById('val-test-year-select'), coverage);
+        _annotateYearSelectCoverage(document.getElementById('val-map-year-select'), coverage);
     } catch (e) {
         console.warn('Failed to check year coverage:', e);
     }
@@ -351,6 +352,10 @@ async function updateYearCoverage(geojson) {
 function _annotateYearSelectCoverage(sel, coverage) {
     if (!sel) return;
     Array.from(sel.options).forEach(opt => {
+        // Skip non-year placeholder options (e.g. Map year's "Same as
+        // training year", value="") -- they don't correspond to a real
+        // year to look up coverage for, and must never be disabled.
+        if (!opt.value) return;
         const tiles = coverage[opt.value] || 0;
         opt.disabled = tiles === 0;
         opt.textContent = tiles > 0 ? `${opt.value} (${tiles} tiles)` : `${opt.value} (no coverage)`;
@@ -1161,6 +1166,12 @@ async function createMap() {
         fetch(evalUrl('cancel'), { method: 'POST' }).catch(() => {});
     };
 
+    // Empty value ("Same as training year", the default) omits map_year
+    // entirely -- the backend then uses the model's own training year,
+    // today's existing behavior, unchanged for anyone who doesn't touch this.
+    const mapYearRaw = document.getElementById('val-map-year-select').value;
+    const mapYear = mapYearRaw ? parseInt(mapYearRaw) : null;
+
     try {
         const resp = await fetch(evalUrl('create-map'), {
             method: 'POST',
@@ -1168,6 +1179,7 @@ async function createMap() {
             body: JSON.stringify({
                 classifier: pixelClf,
                 map_bboxes: mapBboxes,
+                ...(mapYear ? { map_year: mapYear } : {}),
             }),
             signal: evalAbortController.signal,
         });
@@ -1208,7 +1220,10 @@ async function createMap() {
                         showResultsPanel(`Map area ${ev.bbox_idx + 1}: chunk ${ev.chunk}/${ev.total_chunks}`);
                     } else if (ev.event === 'map_ready') {
                         readyMaps.push(ev);
-                        status.textContent = `Map area ${ev.bbox_idx + 1} ready (${ev.width}x${ev.height} pixels)`;
+                        const yearNote = (ev.train_year && ev.map_year && ev.train_year !== ev.map_year)
+                            ? ` — trained ${ev.train_year}, mapped ${ev.map_year}`
+                            : '';
+                        status.textContent = `Map area ${ev.bbox_idx + 1} ready (${ev.width}x${ev.height} pixels)${yearNote}`;
                         status.style.color = '#28a745';
                     } else if (ev.event === 'done') {
                         // Download all ready maps

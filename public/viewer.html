@@ -1007,6 +1007,21 @@
                     </div>
                 </div>
 
+                <div>
+                    <label>Map year <span style="font-weight:normal; color:#888;">(Create Map only)</span></label>
+                    <select id="val-map-year-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;" title="Predict the trained model against a different year's embeddings when generating a map -- e.g. train on 2025, map 2018, to look for change over time. Pure inference: no ground truth needed, nothing gets scored. Leave as 'Same as training year' for the usual behavior.">
+                        <option value="" selected>Same as training year</option>
+                        <option value="2018">2018</option>
+                        <option value="2019">2019</option>
+                        <option value="2020">2020</option>
+                        <option value="2021">2021</option>
+                        <option value="2022">2022</option>
+                        <option value="2023">2023</option>
+                        <option value="2024">2024</option>
+                        <option value="2025">2025</option>
+                    </select>
+                </div>
+
                 <div style="display:flex; gap:6px;">
                     <button id="val-run-btn" class="validation-run-btn" disabled style="flex:1;" title="Run evaluation on selected classifiers">Run Evaluation</button>
                     <button id="val-create-map-btn" class="validation-run-btn" disabled style="flex:1;" title="Train on all labels and predict every pixel in green map areas. Requires map bounding boxes and a prior evaluation run.">Create Map</button>
