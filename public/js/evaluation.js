@@ -1559,7 +1559,10 @@ function appendResultsRow(pct, classifiers, ev) {
     let cells = `<td style="padding:6px; font-size:12px;">${labelStr}</td>`;
     for (const name of _resultsTableModels) {
         const m = classifiers[name] || {};
-        const val = m.mean_f1;
+        // initResultsTable already labels this column R² vs F1 by task --
+        // read the metric that actually matches (regression events never
+        // carry mean_f1, so this used to just show "—" for every row).
+        const val = currentLargeAreaTask === 'regression' ? m.mean_r2 : m.mean_f1;
         cells += `<td style="text-align:right; padding:6px;">${val !== undefined ? val.toFixed(4) : '—'}</td>`;
     }
     tr.innerHTML = cells;
