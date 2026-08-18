@@ -791,14 +791,15 @@ After running an evaluation, you can generate a **classification map** — a Geo
 
 1. In the **Spatial split** dropdown, select **Map area (green)** and draw one or more rectangles covering the area you want to classify
 2. Make sure you've already run an evaluation (so the training data is cached)
-3. Click **Create Map** (the green button next to Run Evaluation)
-4. TEE trains the selected classifier on all available labels, then predicts every pixel inside the green rectangles
-5. The resulting GeoTIFF downloads automatically to your computer
+3. *(Optional)* Set **Map year** if you want to predict on a different year than the model was trained on — see [Mapping a Different Year](#mapping-a-different-year-cross-year-inference) below
+4. Click **Create Map** (the green button next to Run Evaluation)
+5. TEE trains the selected classifier on all available labels, then predicts every pixel inside the green rectangles
+6. The resulting GeoTIFF downloads automatically to your computer
 
 **What you get:**
 - A single-band GeoTIFF file (one pixel = one habitat class)
 - Pixel values are class IDs (1, 2, 3, ...) with 0 meaning "no data"
-- Class names are stored as metadata tags in the file (`class_1`, `class_2`, etc.)
+- Class names are stored as metadata tags in the file (`class_1`, `class_2`, etc.), along with `train_year` and `map_year`
 - The coordinate system matches the source satellite tiles (typically UTM)
 - Compressed with LZ4 for small file sizes
 
@@ -806,6 +807,24 @@ After running an evaluation, you can generate a **classification map** — a Geo
 - Only pixel-based classifiers are supported for map generation (k-NN, Random Forest, XGBoost, MLP). The spatial classifiers need neighbourhood features at every pixel, which would be prohibitively slow for dense prediction.
 - Very large areas are processed in chunks, so country-scale maps will take some time.
 - You must have run an evaluation first, so TEE has cached training vectors and labels.
+
+### Mapping a Different Year (Cross-Year Inference)
+
+By default, **Map year** is set to "Same as training year" — the map uses whichever year you trained the model on. Set it to a *different* year to run the trained model as pure inference against that year's embeddings instead, without retraining anything.
+
+![Map year selector, set to a different year than training](images/validation_map_year.png)
+
+This answers a different question than [Train/Test Years](#traintest-years-optional) above. That feature *scores* a classifier against held-out ground truth from a different year, at the same labelled points — an evaluation exercise, producing an F1/R² number. Cross-year mapping doesn't score anything: there's no ground truth involved for the map year at all, just a trained model applied to a new year's embeddings across a whole area, producing an actual map.
+
+**The use case this is for:** train a classifier on this year's data (e.g. 2025) to identify land-use classes, then apply it to a past year's embeddings (e.g. 2018) to see whether the area covered by those classes has changed over time — path erosion, solar panel installations, deforestation, and similar change-detection questions where you want "classify with today's best model, but look backward or forward in time."
+
+**How to use it:**
+1. Train and validate a model as normal (Run Evaluation), on whichever year has your best/most relevant labels
+2. Draw your green **Map area** rectangles as usual
+3. Set **Map year** to the year you want to see mapped
+4. Click **Create Map** — the status line will show "Trained 2025 — predicting 2018 embeddings..." while it runs, and the downloaded GeoTIFF's `train_year`/`map_year` tags record which is which
+
+> **Interpret with care.** The same habitat can look different in the satellite embeddings from year to year (seasonal timing, weather, sensor changes), so a class boundary that shifts between the training year's map and a cross-year map isn't automatically "real" change — it could be embedding drift instead. Still useful, but the same caveat applies as any classifier applied outside the conditions it was validated under.
 
 **Opening the GeoTIFF in Python:**
 
