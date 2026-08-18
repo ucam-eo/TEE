@@ -460,7 +460,8 @@ function createStreamChart(classifierNames) {
     });
 
     const metric = document.getElementById('val-metric-select').value;
-    const metricLabel = metric === 'weighted' ? 'Weighted F1' : 'Macro F1';
+    const isRegressionRun = currentLargeAreaTask === 'regression';
+    const metricLabel = isRegressionRun ? 'R\u00b2' : (metric === 'weighted' ? 'Weighted F1' : 'Macro F1');
 
     valChart = new Chart(ctx, {
         type: 'line',
@@ -494,7 +495,9 @@ function createStreamChart(classifierNames) {
                     grid: { color: 'rgba(255,255,255,0.08)' },
                 },
                 y: {
-                    min: 0, max: 1,
+                    // R\u00b2 (unlike F1) can go negative for a bad model -- don't
+                    // force a [0,1] floor/ceiling, let it autoscale down.
+                    min: isRegressionRun ? undefined : 0, max: isRegressionRun ? undefined : 1,
                     title: { display: true, text: metricLabel, color: '#aaa' },
                     ticks: { color: '#aaa' },
                     grid: { color: 'rgba(255,255,255,0.08)' },
@@ -538,8 +541,13 @@ function hideFinishButtons() {
 function handleStreamEvent(ev) {
     const status = document.getElementById('val-status');
     const metric = document.getElementById('val-metric-select').value;
-    const meanKey = metric === 'weighted' ? 'mean_f1w' : 'mean_f1';
-    const stdKey = metric === 'weighted' ? 'std_f1w' : 'std_f1';
+    // Live progress-during-run chart: regression has no macro/weighted split
+    // (that's an F1-only concept), so it always plots R² regardless of the
+    // metric selector -- which is hidden for regression anyway, see
+    // updateMetricSelectVisibility().
+    const isRegressionRun = currentLargeAreaTask === 'regression';
+    const meanKey = isRegressionRun ? 'mean_r2' : (metric === 'weighted' ? 'mean_f1w' : 'mean_f1');
+    const stdKey = isRegressionRun ? 'std_r2' : (metric === 'weighted' ? 'std_f1w' : 'std_f1');
 
     if (ev.event === 'start') {
         stopResultsLog();
@@ -554,9 +562,9 @@ function handleStreamEvent(ev) {
             models_available: [],
         };
         ev.classifiers.forEach(name => {
-            lastChartData.classifiers[name] = {
-                mean_f1: [], std_f1: [], mean_f1w: [], std_f1w: [],
-            };
+            lastChartData.classifiers[name] = (currentLargeAreaTask === 'regression')
+                ? { mean_r2: [], std_r2: [], mean_rmse: [], std_rmse: [], mean_mae: [], std_mae: [] }
+                : { mean_f1: [], std_f1: [], mean_f1w: [], std_f1w: [] };
         });
         createStreamChart(ev.classifiers);
         // Show results table in panel 3 with progress
@@ -609,10 +617,19 @@ function handleStreamEvent(ev) {
         for (const [name, vals] of Object.entries(ev.classifiers)) {
             const acc = lastChartData.classifiers[name];
             if (!acc) continue;
-            acc.mean_f1.push(vals.mean_f1);
-            acc.std_f1.push(vals.std_f1);
-            acc.mean_f1w.push(vals.mean_f1w);
-            acc.std_f1w.push(vals.std_f1w);
+            if (isRegressionRun) {
+                acc.mean_r2.push(vals.mean_r2);
+                acc.std_r2.push(vals.std_r2);
+                acc.mean_rmse.push(vals.mean_rmse);
+                acc.std_rmse.push(vals.std_rmse);
+                acc.mean_mae.push(vals.mean_mae);
+                acc.std_mae.push(vals.std_mae);
+            } else {
+                acc.mean_f1.push(vals.mean_f1);
+                acc.std_f1.push(vals.std_f1);
+                acc.mean_f1w.push(vals.mean_f1w);
+                acc.std_f1w.push(vals.std_f1w);
+            }
 
             const baseIdx = streamDatasetMap[name];
             if (baseIdx !== undefined && valChart) {
@@ -623,7 +640,10 @@ function handleStreamEvent(ev) {
                 const x = trainPx / totalLabels * 100;
                 valChart.data.datasets[baseIdx].data.push({ x, y: mean });
                 valChart.data.datasets[baseIdx + 1].data.push({ x, y: Math.min(1, mean + std) });
-                valChart.data.datasets[baseIdx + 2].data.push({ x, y: Math.max(0, mean - std) });
+                // R² (unlike F1) can go negative for a bad model -- don't floor it at 0.
+                valChart.data.datasets[baseIdx + 2].data.push({
+                    x, y: isRegressionRun ? mean - std : Math.max(0, mean - std)
+                });
             }
         }
         if (valChart) valChart.update();
@@ -665,6 +685,12 @@ function handleStreamEvent(ev) {
         if (!lastChartData) return;
         lastChartData.elapsed_seconds = ev.elapsed_seconds;
         lastChartData.models_available = ev.models_available || [];
+        // renderConfusionMatrix() is what normally sets lastEvalData (for
+        // Export Results), but it only ever runs on the classification-only
+        // 'confusion_matrices' event -- regression never fires that event,
+        // so Export Results silently did nothing after a regression run.
+        // 'done' fires for both tasks, so set it here unconditionally too.
+        lastEvalData = lastChartData;
         const pixels = lastChartData.total_labelled_pixels || 0;
         const nClasses = (lastChartData.classes || []).length;
         const suffix = nClasses > 0
@@ -705,6 +731,10 @@ function handleStreamEvent(ev) {
 
     } else if (ev.event === 'field_start') {
         currentLargeAreaTask = ev.type;
+        // Macro/weighted F1 is a classification-only distinction; regression
+        // always plots R², so the selector would just be a dead control.
+        const metricWrap = document.getElementById('val-metric-select-wrap');
+        if (metricWrap) metricWrap.style.display = (ev.type === 'regression') ? 'none' : '';
         status.dataset.updated = '1';
         status.textContent = `Loading GeoTessera tile index...`;
         startResultsLog();
@@ -765,14 +795,18 @@ function renderChart(data, metric) {
     lastChartData = data;
     if (!metric) metric = document.getElementById('val-metric-select').value;
     const firstClf = Object.values(data.classifiers)[0];
-    const hasWeighted = firstClf && firstClf.mean_f1w;
+    // Shape-based, not currentLargeAreaTask-based: this also runs on session
+    // restore (from localStorage), where that module-scoped variable may not
+    // reflect the restored run's task.
+    const isRegression = !!(firstClf && firstClf.mean_r2 !== undefined);
+    const hasWeighted = !isRegression && firstClf && firstClf.mean_f1w;
     const isWeighted = metric === 'weighted' && hasWeighted;
-    if (metric === 'weighted' && !hasWeighted) {
+    if (!isRegression && metric === 'weighted' && !hasWeighted) {
         document.getElementById('val-metric-select').value = 'macro';
     }
-    const meanKey = isWeighted ? 'mean_f1w' : 'mean_f1';
-    const stdKey = isWeighted ? 'std_f1w' : 'std_f1';
-    const metricLabel = isWeighted ? 'Weighted F1' : 'Macro F1';
+    const meanKey = isRegression ? 'mean_r2' : (isWeighted ? 'mean_f1w' : 'mean_f1');
+    const stdKey = isRegression ? 'std_r2' : (isWeighted ? 'std_f1w' : 'std_f1');
+    const metricLabel = isRegression ? 'R²' : (isWeighted ? 'Weighted F1' : 'Macro F1');
 
     const ctx = document.getElementById('val-chart').getContext('2d');
 
@@ -809,7 +843,8 @@ function renderChart(data, metric) {
         datasets.push({
             label: name + '_lower',
             data: data.training_pcts.map((x, i) => ({
-                x, y: Math.max(0, values[meanKey][i] - values[stdKey][i])
+                // R² (unlike F1) can go negative for a bad model -- don't floor it at 0.
+                x, y: isRegression ? values[meanKey][i] - values[stdKey][i] : Math.max(0, values[meanKey][i] - values[stdKey][i])
             })),
             borderColor: 'transparent',
             backgroundColor: color.fill,
@@ -849,7 +884,7 @@ function renderChart(data, metric) {
                     grid: { color: 'rgba(255,255,255,0.08)' },
                 },
                 y: {
-                    min: 0, max: 1,
+                    min: isRegression ? undefined : 0, max: isRegression ? undefined : 1,
                     title: { display: true, text: metricLabel, color: '#aaa' },
                     ticks: { color: '#aaa' },
                     grid: { color: 'rgba(255,255,255,0.08)' },
