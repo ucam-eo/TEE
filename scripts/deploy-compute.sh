@@ -97,7 +97,18 @@ if [[ -n "$REMOTE" ]]; then
     # its own dependencies -- pip installing tessera-eval alone wouldn't
     # necessarily bump geotessera's version to what requirements.txt already
     # pinned, since requirements.txt's install already ran first.
-    ssh "$REMOTE" "cd ~/$REMOTE_DIR && git pull && $VENV/bin/pip install -q --upgrade -r requirements.txt && $VENV/bin/pip install -q --upgrade 'tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.2.7' 2>&1 || true"
+    # The tessera-eval spec below used to be hardcoded to a literal git tag
+    # (@v1.2.7) here, separately from requirements.txt's own pin -- so every
+    # time requirements.txt's pin was bumped (as it was here, to v1.3.0, for
+    # the train/test-year feature), this line silently reinstalled the OLD
+    # hardcoded version right after the line above had just installed the
+    # correct one, undoing the bump on every single deploy. Extract the spec
+    # from requirements.txt itself instead, so it can't drift out of sync
+    # again -- the second install still needs to exist for the reason in the
+    # comment above (ensuring tessera-eval's own geotessera pin actually
+    # takes), just not with its own separate, staleness-prone version string.
+    TESSERA_EVAL_SPEC="$(grep '^tessera-eval\[server\]' requirements.txt)"
+    ssh "$REMOTE" "cd ~/$REMOTE_DIR && git pull && $VENV/bin/pip install -q --upgrade -r requirements.txt && $VENV/bin/pip install -q --upgrade '$TESSERA_EVAL_SPEC' 2>&1 || true"
 
     if [[ "$EXTRA_ARGS" == *"--install-torch"* ]]; then
         if ssh "$REMOTE" "nvidia-smi" &>/dev/null; then
