@@ -38,7 +38,7 @@ tessera-vq @ git+https://github.com/sk818/tessera-vq.git@v0.6.4
 # plus geotessera + tessera-zarr-utils (its embedding-fetch path) -- these are
 # NOT in tessera-eval's base dependencies, so plain `tessera-eval` (no extra)
 # silently omits flask and tee-compute fails on a genuinely fresh install.
-tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.5.2
+tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.5.3
 numpy>=1.24.0
 rasterio>=1.3.0
 Pillow>=10.0.0
