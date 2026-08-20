@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # Build (and push) the TEE production Docker image.
 #
+# Prefer `gh workflow run docker-build.yml` instead of running this locally --
+# it does the exact same build, but on a native linux/amd64 GitHub-hosted
+# runner, so it never needs QEMU emulation the way this script does when run
+# from an Apple Silicon Mac (michael/tee.cl is amd64; the Mac is arm64).
+# Free for this repo since ucam-eo/TEE is public. Use this script directly
+# only when CI isn't an option (offline, debugging the build itself, etc).
+#
 # Always cross-builds for linux/amd64 (the deploy servers) regardless of the
 # host architecture, so building on an Apple Silicon Mac no longer produces an
 # arm64 image that the amd64 servers cannot pull. The git version is baked into

@@ -1,0 +1,47 @@
+name: Build and push Docker image
+
+# Manual trigger only, matching the existing deliberate build/deploy cadence
+# (see scripts/build-image.sh, which this mirrors exactly) -- deploying to
+# tee.cl.cam.ac.uk is still a separate, manual step (update-tee.sh on the
+# server). The one thing this changes is *where* the image gets built:
+# ubuntu-latest runners are native linux/amd64, matching michael/tee.cl, so
+# this never needs QEMU emulation the way building amd64 from an Apple
+# Silicon Mac does.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags, needed for `git describe`
+
+      - name: Compute version
+        id: version
+        run: echo "version=$(git describe --tags --always --dirty)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: sk818
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: sk818/tee:stable
+          build-args: |
+            GIT_VERSION=${{ steps.version.outputs.version }}
+
+      - name: Summary
+        run: |
+          echo "Pushed \`sk818/tee:stable\` (${{ steps.version.outputs.version }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy on server: \`sudo bash manage.sh\` -> 7) Update container" >> "$GITHUB_STEP_SUMMARY"
