@@ -27,6 +27,7 @@ function evalUrl(path) {
 // ── State ──
 
 let valChart = null;
+let valScatterChart = null;  // separate canvas from valChart -- predicted-vs-actual, regression only
 let valFieldData = null;
 let valGeoJsonLayer = null;
 let valGeoJsonData = null;
@@ -1643,6 +1644,99 @@ function renderRegressionResults(aggregate) {
         `;
         tbody.appendChild(tr);
     }
+
+    renderRegressionScatter(aggregate);
+}
+
+// Predicted-vs-actual scatter plot, one dataset per model plus a dashed
+// y=x reference line (perfect prediction). aggregate[name].scatter is
+// {y_true, y_pred} -- present only on models that had at least one
+// successful fit at the largest training percentage (see
+// run_learning_curve's docstring, tessera-eval v1.6.0+); older
+// tessera-eval versions simply won't have it, so this quietly no-ops.
+function renderRegressionScatter(aggregate) {
+    const wrap = document.getElementById('val-regression-scatter-wrap');
+    const canvas = document.getElementById('val-regression-scatter-chart');
+    if (!wrap || !canvas) return;
+
+    const modelsWithScatter = Object.entries(aggregate).filter(([, m]) => m.scatter && m.scatter.y_true && m.scatter.y_true.length);
+    if (valScatterChart) { valScatterChart.destroy(); valScatterChart = null; }
+    if (modelsWithScatter.length === 0) {
+        wrap.style.display = 'none';
+        return;
+    }
+    wrap.style.display = '';
+
+    let lo = Infinity, hi = -Infinity;
+    const datasets = modelsWithScatter.map(([name, m]) => {
+        const color = getVariantColor(name);
+        const points = m.scatter.y_true.map((yt, i) => {
+            const yp = m.scatter.y_pred[i];
+            if (yt < lo) lo = yt;
+            if (yt > hi) hi = yt;
+            if (yp < lo) lo = yp;
+            if (yp > hi) hi = yp;
+            return { x: yt, y: yp };
+        });
+        return {
+            label: getVariantLabel(name),
+            data: points,
+            backgroundColor: color.line.replace('1)', '0.55)'),
+            borderColor: color.line,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+            showLine: false,
+        };
+    });
+
+    // y=x reference line, drawn across the full data range.
+    const pad = (hi - lo) * 0.05 || 1;
+    datasets.push({
+        label: 'Perfect prediction (y=x)',
+        data: [{ x: lo - pad, y: lo - pad }, { x: hi + pad, y: hi + pad }],
+        borderColor: 'rgba(200,200,200,0.6)',
+        borderDash: [6, 4],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        showLine: true,
+        fill: false,
+    });
+
+    const ctx = canvas.getContext('2d');
+    valScatterChart = new Chart(ctx, {
+        type: 'scatter',
+        data: { datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { color: '#ddd', boxWidth: 10, font: { size: 11 } },
+                },
+                title: {
+                    display: true,
+                    text: 'Predicted vs Actual',
+                    color: '#eee',
+                    font: { size: 15, weight: 'bold' },
+                },
+            },
+            scales: {
+                x: {
+                    title: { display: true, text: 'Actual', color: '#aaa' },
+                    ticks: { color: '#aaa' },
+                    grid: { color: 'rgba(255,255,255,0.08)' },
+                    min: lo - pad, max: hi + pad,
+                },
+                y: {
+                    title: { display: true, text: 'Predicted', color: '#aaa' },
+                    ticks: { color: '#aaa' },
+                    grid: { color: 'rgba(255,255,255,0.08)' },
+                    min: lo - pad, max: hi + pad,
+                },
+            },
+        },
+    });
 }
 
 // Inline Chart.js plugin: draws ±std error bars on bar charts.
