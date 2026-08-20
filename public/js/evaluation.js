@@ -551,6 +551,27 @@ function handleStreamEvent(ev) {
     const stdKey = isRegressionRun ? 'std_r2' : (metric === 'weighted' ? 'std_f1w' : 'std_f1');
 
     if (ev.event === 'start') {
+        // Don't rely solely on 'field_start' having set this -- it's only
+        // emitted on a cache miss (gated server-side by the tile cache key
+        // changing), so a run that hits the in-memory/disk cache (e.g. same
+        // field/year/sampling as a prior run, just different classifiers)
+        // never sees it, leaving currentLargeAreaTask stuck at whatever the
+        // *previous* run left it at (or null, from runLargeAreaEvaluation's
+        // own reset, on some paths). Confirmed live (Louis Driver): R² and
+        // the learning curve stopped showing in the GUI for every
+        // evaluation after the first one in a session -- this dispatch
+        // used to silently take the classification branch on every
+        // affected run. 'start' is unconditional regardless of cache
+        // state (tessera-eval v1.7.2+ carries task on it directly), so set
+        // it here too rather than trusting event-ordering alone.
+        if (ev.task) currentLargeAreaTask = ev.task;
+        // Same cache-hit-skips-field_start issue as above -- redo the
+        // metric-selector visibility here too rather than trusting it was
+        // already set correctly for *this* run's task.
+        if (ev.task) {
+            const metricWrap = document.getElementById('val-metric-select-wrap');
+            if (metricWrap) metricWrap.style.display = (ev.task === 'regression') ? 'none' : '';
+        }
         stopResultsLog();
         lastChartData = {
             training_pcts: [],
@@ -563,9 +584,14 @@ function handleStreamEvent(ev) {
             models_available: [],
         };
         ev.classifiers.forEach(name => {
+            // _x: the actual "% of labelled pixels used for training" value
+            // plotted for each point, parallel to the metric arrays below --
+            // NOT the same as lastChartData.training_pcts (the nominal
+            // requested pct). See the 'progress' handler for why these two
+            // can differ, and renderChart for why that difference matters.
             lastChartData.classifiers[name] = (currentLargeAreaTask === 'regression')
-                ? { mean_r2: [], std_r2: [], mean_rmse: [], std_rmse: [], mean_mae: [], std_mae: [] }
-                : { mean_f1: [], std_f1: [], mean_f1w: [], std_f1w: [] };
+                ? { mean_r2: [], std_r2: [], mean_rmse: [], std_rmse: [], mean_mae: [], std_mae: [], _x: [] }
+                : { mean_f1: [], std_f1: [], mean_f1w: [], std_f1w: [], _x: [] };
         });
         createStreamChart(ev.classifiers);
         // Show results table in panel 3 with progress
@@ -618,6 +644,16 @@ function handleStreamEvent(ev) {
         for (const [name, vals] of Object.entries(ev.classifiers)) {
             const acc = lastChartData.classifiers[name];
             if (!acc) continue;
+            // Both use same denominator: total labelled pixels. Computed once
+            // per classifier per pct (not just when a chart happens to be
+            // live) and stored in acc._x so it stays parallel to the metric
+            // arrays -- renderChart (the metric-switch rebuild path) reads
+            // this back instead of recomputing/guessing, which is what used
+            // to cause rebuilt points and freshly-streamed points to land at
+            // different x positions on the same chart (Louis Driver).
+            const trainPx = (name === 'unet') ? ev.unet_train_count : ev.pixel_train_count;
+            const x = trainPx / totalLabels * 100;
+            acc._x.push(x);
             if (isRegressionRun) {
                 acc.mean_r2.push(vals.mean_r2);
                 acc.std_r2.push(vals.std_r2);
@@ -636,9 +672,6 @@ function handleStreamEvent(ev) {
             if (baseIdx !== undefined && valChart) {
                 const mean = vals[meanKey];
                 const std = vals[stdKey];
-                // Both use same denominator: total labelled pixels
-                const trainPx = (name === 'unet') ? ev.unet_train_count : ev.pixel_train_count;
-                const x = trainPx / totalLabels * 100;
                 valChart.data.datasets[baseIdx].data.push({ x, y: mean });
                 valChart.data.datasets[baseIdx + 1].data.push({ x, y: Math.min(1, mean + std) });
                 // R² (unlike F1) can go negative for a bad model -- don't floor it at 0.
@@ -819,9 +852,20 @@ function renderChart(data, metric) {
         const color = getVariantColor(name);
         streamDatasetMap[name] = datasets.length;
 
+        // Use each classifier's own recorded x positions (actual % of
+        // labelled pixels used, per point -- see the 'progress' handler)
+        // rather than the nominal data.training_pcts. Those two can differ
+        // (rounding, and unet vs pixel-count classifiers use different
+        // denominators at "the same" pct), and mixing them here is what
+        // caused rebuilt points (metric-switch) to land at a different x
+        // than freshly-streamed live points on the same chart. Fall back to
+        // training_pcts for older exported/localStorage sessions saved
+        // before per-classifier _x existed.
+        const xs = values._x || data.training_pcts;
+
         datasets.push({
             label: getVariantLabel(name),
-            data: data.training_pcts.map((x, i) => ({ x, y: values[meanKey][i] })),
+            data: xs.map((x, i) => ({ x, y: values[meanKey][i] })),
             borderColor: color.line,
             backgroundColor: 'transparent',
             borderWidth: 2.5,
@@ -832,7 +876,7 @@ function renderChart(data, metric) {
 
         datasets.push({
             label: name + '_upper',
-            data: data.training_pcts.map((x, i) => ({
+            data: xs.map((x, i) => ({
                 x, y: Math.min(1, values[meanKey][i] + values[stdKey][i])
             })),
             borderColor: 'transparent',
@@ -843,7 +887,7 @@ function renderChart(data, metric) {
 
         datasets.push({
             label: name + '_lower',
-            data: data.training_pcts.map((x, i) => ({
+            data: xs.map((x, i) => ({
                 // R² (unlike F1) can go negative for a bad model -- don't floor it at 0.
                 x, y: isRegression ? values[meanKey][i] - values[stdKey][i] : Math.max(0, values[meanKey][i] - values[stdKey][i])
             })),
