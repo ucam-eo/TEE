@@ -625,3 +625,70 @@ class TestLargeAreaEvaluation:
         assert "back-btn" in all_script_text, (
             "Back button must be disabled during evaluation"
         )
+
+
+# ──────────────────────────────────────────────────
+# 13. Inline handler / module scope reachability
+#     <script type="module"> function declarations are module-scoped, not
+#     global -- inline onclick/oninput/onchange/... attributes (including
+#     ones built as JS template-literal HTML, e.g. renderXList() functions)
+#     run in *global* scope and can only reach a module function if it's
+#     explicitly exported via `window.fn = fn`. Missing that export lets
+#     the control still visually respond (native browser behaviour, e.g. a
+#     <input type="range"> drags fine on its own) while doing nothing --
+#     the attribute throws a silent ReferenceError before ever reaching the
+#     function body. This is exactly what shipped in the per-class
+#     similarity slider (Louis Driver: slider moves but "remains
+#     functionally at 0") -- onManualClassSliderInput, stepClassThreshold,
+#     and editClassThresholdValue were defined but never exported to
+#     window. A logic-level test of those functions (calling them directly)
+#     passed and did not catch it, since that bypasses the exact seam that
+#     broke -- hence this guard checks the export wiring itself, statically.
+# ──────────────────────────────────────────────────
+
+class TestInlineHandlerGlobalReachability:
+    """Every function invoked from an inline on*="..." attribute that is
+    defined inside a public/js/*.js module file must also be exported to
+    `window` -- otherwise the browser throws a silent ReferenceError the
+    moment the attribute fires."""
+
+    # Handler-call syntax as it appears literally in source text, whether
+    # that's viewer.html markup or a JS template literal building HTML.
+    _ATTR_RE = re.compile(
+        r"\bon(?:click|input|change|blur|focus|keydown|keyup|submit|dblclick)="
+        r"""["']([a-zA-Z_$][a-zA-Z0-9_$]*)\(""",
+    )
+    _WINDOW_EXPORT_RE = re.compile(r"window\.([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=")
+    _FUNC_DEF_RE = re.compile(r"function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(")
+
+    def _referenced_handlers(self, text):
+        return set(self._ATTR_RE.findall(text))
+
+    def test_module_defined_handlers_are_exported(self, html):
+        if not JS_DIR.is_dir():
+            pytest.skip("public/js/ not yet created (pre-extraction)")
+        module_js = "\n".join(
+            js_file.read_text() for js_file in sorted(JS_DIR.glob("*.js"))
+        )
+
+        # Handlers referenced directly in viewer.html markup, plus ones
+        # referenced inside JS template literals that build HTML at runtime
+        # (e.g. renderManualLabelsList()'s generated onclick="..." strings) --
+        # those never appear in viewer.html itself.
+        handlers = self._referenced_handlers(html) | self._referenced_handlers(module_js)
+
+        # Only names actually *defined inside a module file* need an
+        # export: names defined in a plain (non-module) inline <script> in
+        # viewer.html are already global, and browser built-ins (alert,
+        # confirm, ...) aren't defined anywhere in our own source.
+        defined_in_module = set(self._FUNC_DEF_RE.findall(module_js))
+        exported = set(self._WINDOW_EXPORT_RE.findall(module_js))
+
+        missing = sorted((handlers & defined_in_module) - exported)
+        assert not missing, (
+            "Function(s) invoked from an inline on*=\"...\" attribute and "
+            "defined inside a <script type=\"module\"> file, but never "
+            "exported via `window.<name> = <name>` -- the attribute throws "
+            "a silent ReferenceError when it fires, so the control looks "
+            "alive but does nothing: " + ", ".join(missing)
+        )
