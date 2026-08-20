@@ -3410,6 +3410,16 @@ window.removeManualClass = removeManualClass;
 window.removeManualLabel = removeManualLabel;
 window.toggleAllManualLabels = toggleAllManualLabels;
 window.updateManualClassThreshold = updateManualClassThreshold;
+// labels.js loads as a <script type="module"> (see viewer.html), so these
+// top-level function declarations are module-scoped only -- the inline
+// onclick/oninput attributes on the +/- buttons and slider run in global
+// scope and can't see them without an explicit window export. Missing here
+// is exactly why the slider/buttons visually moved but had no effect
+// (Louis Driver: "remains functionally at 0") -- oninput/onclick threw a
+// silent ReferenceError before ever reaching updateManualClassThreshold.
+window.onManualClassSliderInput = onManualClassSliderInput;
+window.stepClassThreshold = stepClassThreshold;
+window.editClassThresholdValue = editClassThresholdValue;
 window.renderManualLabelsList = renderManualLabelsList;
 window.triggerManualClassification = triggerManualClassification;
 window.renderManualClassification = renderManualClassification;
