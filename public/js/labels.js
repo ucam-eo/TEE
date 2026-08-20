@@ -763,6 +763,77 @@ function _applyClassThreshold(className, newThreshold) {
     }
 }
 
+// Locates a class's row in the labels list via the same data-class-count
+// attribute _applyClassThreshold already uses to update the px count --
+// reused here so the +/- buttons and click-to-type value don't need their
+// own separate element-lookup scheme.
+function _manualClassRow(className) {
+    const countEl = document.querySelector(`[data-class-count="${CSS.escape(className)}"]`);
+    return countEl ? countEl.closest('.manual-label-item') : null;
+}
+
+function onManualClassSliderInput(className, sliderEl) {
+    const value = parseFloat(sliderEl.value);
+    updateManualClassThreshold(className, value);
+    const display = sliderEl.parentElement.querySelector('.threshold-display');
+    if (display) display.textContent = value;
+}
+
+// 36 discrete positions across this row's 45px track is even harder to land
+// on than the toolbar's main similarity slider (120px, see stepThreshold) --
+// same fix, same reason: small screen + response lag made dragging to an
+// exact value unreliable (Keshav, 2026-08-19, relaying Louis Driver).
+function stepClassThreshold(className, delta) {
+    const classLabels = getClassLabels(className);
+    if (classLabels.length === 0) return;
+    const current = classLabels[0].threshold || 0;
+    const next = Math.max(0, Math.min(35, current + delta));
+    updateManualClassThreshold(className, next);
+    const row = _manualClassRow(className);
+    if (row) {
+        const slider = row.querySelector('input[type="range"]');
+        const display = row.querySelector('.threshold-display');
+        if (slider) slider.value = next;
+        if (display) display.textContent = next;
+    }
+}
+
+function editClassThresholdValue(className, displayEl) {
+    const classLabels = getClassLabels(className);
+    if (classLabels.length === 0) return;
+    const current = classLabels[0].threshold || 0;
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.max = '35';
+    input.step = '1';
+    input.value = current;
+    input.style.cssText = displayEl.style.cssText;
+    input.style.width = '40px';
+    input.style.cursor = 'text';
+    displayEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const commit = () => {
+        let v = parseFloat(input.value);
+        if (Number.isNaN(v)) v = current;
+        v = Math.max(0, Math.min(35, v));
+        updateManualClassThreshold(className, v);
+        const row = _manualClassRow(className);
+        const slider = row ? row.querySelector('input[type="range"]') : null;
+        if (slider) slider.value = v;
+        displayEl.textContent = v;
+        input.replaceWith(displayEl);
+    };
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        if (e.key === 'Escape') { input.value = current; commit(); }
+    });
+}
+
 function renderManualLabelsList() {
     const container = document.getElementById('manual-labels-list');
     if (!container) return;
@@ -809,11 +880,18 @@ function renderManualLabelsList() {
         const escapedName = className.replace(/'/g, "\\'").replace(/"/g, '&quot;');
         const jsName = className.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
-        // Slider (shared for entire class)
+        // Slider (shared for entire class). +/- buttons and a click-to-type
+        // display give exact control without needing pixel-perfect dragging
+        // -- same rationale/pattern as the toolbar's main similarity slider
+        // (stepThreshold/editThresholdValue), reused here since this one has
+        // the same problem at an even smaller width (small screen + response
+        // lag made it hard to land on a value -- Keshav, 2026-08-19).
         let sliderHtml = '';
         if (hasEmbedding && !isExactMatch) {
-            sliderHtml = `<input type="range" min="0" max="35" value="${threshold}" style="width: 60px; cursor: pointer; vertical-align: middle;" oninput="updateManualClassThreshold('${jsName}', parseFloat(this.value)); this.nextElementSibling.textContent=this.value">
-                 <span style="font-size: 10px; color: #666; min-width: 20px;">${threshold}</span>`;
+            sliderHtml = `<button onclick="stepClassThreshold('${jsName}', -1)" style="padding:0 4px; height:16px; background:#eee; border:1px solid #ccc; border-radius:3px; cursor:pointer; font-size:11px; font-weight:600; line-height:14px;" title="Decrease by 1">&minus;</button>
+                <input type="range" min="0" max="35" value="${threshold}" style="width: 45px; cursor: pointer; vertical-align: middle;" oninput="onManualClassSliderInput('${jsName}', this)">
+                <button onclick="stepClassThreshold('${jsName}', 1)" style="padding:0 4px; height:16px; background:#eee; border:1px solid #ccc; border-radius:3px; cursor:pointer; font-size:11px; font-weight:600; line-height:14px;" title="Increase by 1">+</button>
+                <span class="threshold-display" onclick="editClassThresholdValue('${jsName}', this)" style="font-size: 10px; color: #666; min-width: 20px; cursor: pointer;" title="Click to type an exact value">${threshold}</span>`;
         }
 
         if (isMulti) {
