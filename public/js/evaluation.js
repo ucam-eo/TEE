@@ -799,11 +799,22 @@ function handleStreamEvent(ev) {
         if (lastChartData) {
             lastChartData.aggregate = ev.models;
         }
+        // NOT renderRegressionBarChart/renderClassificationBarChart here:
+        // both destroy() and replace valChart with a *bar* chart on the
+        // same canvas #val-chart the learning curve *line* chart was just
+        // built on over the whole run -- so the aggregate event silently
+        // clobbered the more informative learning curve with a same-titled
+        // ("R2 Score by Model (k-fold CV)") single-bar summary the instant
+        // the run finished. Confirmed live, Louis Driver, 2026-08-21: "it
+        // looks fine [during the run], but when it finishes it presents a
+        // strange graph" -- a box shape, which for a single model is
+        // exactly what a lone bar looks like. Those two functions were
+        // built for an actual standalone k-fold CV flow (see their
+        // hardcoded titles) and aren't otherwise called anywhere in this
+        // file; leaving them defined (unused for large-area runs) rather
+        // than deleting them, since a guard test asserts they exist.
         if (currentLargeAreaTask === 'regression') {
             renderRegressionResults(ev.models);
-            renderRegressionBarChart(ev.models);
-        } else if (currentLargeAreaTask === 'classification') {
-            renderClassificationBarChart(ev.models);
         }
     }
 }

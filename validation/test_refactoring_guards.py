@@ -585,13 +585,43 @@ class TestLargeAreaEvaluation:
         )
 
     def test_classification_bar_chart_function(self, all_script_text):
+        # Kept defined (an actual standalone k-fold CV title is hardcoded
+        # into it) but NOT called for large-area results as of 2026-08-21 --
+        # see test_bar_chart_not_called_from_aggregate_handler below for why.
         assert "renderClassificationBarChart" in all_script_text, (
-            "renderClassificationBarChart must exist for large-area classification results"
+            "renderClassificationBarChart must stay defined even if unused"
         )
 
     def test_regression_bar_chart_function(self, all_script_text):
         assert "renderRegressionBarChart" in all_script_text, (
-            "renderRegressionBarChart must exist for large-area regression results"
+            "renderRegressionBarChart must stay defined even if unused"
+        )
+
+    def test_bar_chart_not_called_from_aggregate_handler(self, all_script_text):
+        # renderRegressionBarChart/renderClassificationBarChart destroy()
+        # and replace valChart with a *bar* chart on the same canvas
+        # (#val-chart) the learning-curve *line* chart was just built on
+        # over the whole run -- calling either from the 'aggregate' handler
+        # (fires once, when a large-area run finishes) silently clobbers
+        # the learning curve with a single-bar summary the instant the run
+        # completes. Confirmed live, Louis Driver, 2026-08-21: "it looks
+        # fine [during the run], but when it finishes it presents a
+        # strange graph" -- a box shape, which for one model is exactly
+        # what a lone bar looks like.
+        i = all_script_text.find("ev.event === 'aggregate'")
+        assert i != -1, "expected an 'aggregate' event handler in evaluation.js"
+        # Bounded to the handler's own block, not the whole file, so this
+        # doesn't just ban the functions outright (they may legitimately
+        # be called elsewhere, e.g. a future standalone k-fold CV UI).
+        handler_block = all_script_text[i:i + 1200]
+        assert "renderRegressionBarChart(" not in handler_block, (
+            "renderRegressionBarChart must not be called from the 'aggregate' "
+            "handler -- it destroys and replaces the learning curve line "
+            "chart with a bar chart the instant a large-area run finishes"
+        )
+        assert "renderClassificationBarChart(" not in handler_block, (
+            "renderClassificationBarChart must not be called from the "
+            "'aggregate' handler -- same reason as renderRegressionBarChart above"
         )
 
     def test_done_handler_null_guard(self, all_script_text):
