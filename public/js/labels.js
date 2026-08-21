@@ -323,6 +323,27 @@ function setCurrentManualLabel() {
     const acp = document.getElementById('active-label-color-picker');
     if (acp) acp.value = color;
     localStorage.setItem(_activeLabelKey(), JSON.stringify(currentManualLabel));
+
+    // "Set" only stages the active label -- it won't appear in the Manual
+    // Labels list below until a point/polygon is actually placed for it,
+    // which looked like the click did nothing (Keshav, 2026-08-21). Flash
+    // the row that DID just change, and briefly confirm on the button
+    // itself (closest to where the user's eyes/cursor already are) rather
+    // than relying on them to notice the row further down the panel.
+    activeEl.classList.remove('active-label-set-flash');
+    void activeEl.offsetWidth; // restart the animation if triggered twice in a row
+    activeEl.classList.add('active-label-set-flash');
+
+    const btn = document.getElementById('manual-label-set-btn');
+    if (btn && !btn.dataset.confirming) {
+        btn.dataset.confirming = '1';
+        const original = btn.textContent;
+        btn.textContent = '✓ Ready';
+        setTimeout(() => {
+            btn.textContent = original;
+            delete btn.dataset.confirming;
+        }, 1200);
+    }
 }
 
 function updateManualLabelColor(color) {

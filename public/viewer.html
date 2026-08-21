@@ -149,6 +149,18 @@
             50% { opacity: 0.5; }
         }
 
+        /* Confirms "Set" actually staged the active label -- see
+           setCurrentManualLabel() in labels.js. The label itself only
+           shows up in the Manual Labels list once a point/polygon is
+           placed, so without this the click looked like it did nothing. */
+        @keyframes active-label-set-flash {
+            0% { background: #d4f8d4; }
+            100% { background: rgba(255,255,255,0.9); }
+        }
+        .active-label-set-flash {
+            animation: active-label-set-flash 1s ease-out;
+        }
+
         .export-btn-highlight {
             background: #ff9800 !important;
             color: #000 !important;
@@ -1216,7 +1228,7 @@
                         <div id="manual-label-swatch" title="Click to choose colour" style="width: 18px; height: 18px; border-radius: 3px; border: 2px solid #666; background: #3cb44b; flex-shrink: 0; cursor: pointer;" onclick="document.getElementById('manual-label-color').click()"></div>
                         <input type="color" id="manual-label-color" value="#3cb44b" style="position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none;" onchange="updateManualLabelColor(this.value)">
                         <input type="text" id="manual-label-name" placeholder="Label name..." value="" style="flex: 1; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; color: #333; min-width: 0;">
-                        <button id="manual-label-set-btn" onclick="setCurrentManualLabel()" style="padding: 4px 10px; background: #667eea; color: white; border: none; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;" title="Create this label">Set</button>
+                        <button id="manual-label-set-btn" onclick="setCurrentManualLabel()" style="padding: 4px 10px; background: #667eea; color: white; border: none; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;" title="Stages this as the active label -- it won't appear below until you Ctrl/Cmd+click the map to place a point">Set</button>
                     </div>
                     <!-- Active label display -->
                     <div id="manual-active-label" style="display: none; padding: 4px 8px; margin: 2px 4px 0; background: rgba(255,255,255,0.9); border-radius: 4px; font-size: 12px; color: #333; flex-shrink: 0;">
