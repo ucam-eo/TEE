@@ -794,3 +794,27 @@ class TestDistanceCacheCorrectness:
             "validation/test_distance_cache.mjs failed:\n"
             f"{result.stdout}\n{result.stderr}"
         )
+
+
+# ──────────────────────────────────────────────────
+# 17. Manual-label DOM sync across mirrored containers
+#     renderManualLabelsList() mirrors identical markup into both
+#     #manual-labels-list and #panel6-labels-list (the auto-label view's
+#     copy of the same list) -- see validation/test_manual_label_dom_sync.mjs
+#     for the actual behavioral test (needs linkedom, an npm devDependency,
+#     to parse/query the rendered HTML -- `npm install` once from the repo
+#     root); this just wires it into `pytest validation/`.
+# ──────────────────────────────────────────────────
+
+class TestManualLabelDomSync:
+    def test_threshold_controls_update_every_mirrored_copy(self):
+        if not (ROOT / "node_modules" / "linkedom").is_dir():
+            pytest.skip("node_modules/linkedom not installed -- run `npm install` from the repo root")
+        result = subprocess.run(
+            ["node", str(ROOT / "validation" / "test_manual_label_dom_sync.mjs")],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, (
+            "validation/test_manual_label_dom_sync.mjs failed:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )

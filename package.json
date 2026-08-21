@@ -1,0 +1,8 @@
+{
+  "name": "blore-validation",
+  "private": true,
+  "description": "Dev dependency for validation/*.mjs tests that need to parse/query rendered HTML (linkedom). No build step, no runtime dependency -- the app itself ships as plain <script> files served directly from public/js/, see public/README.md.",
+  "devDependencies": {
+    "linkedom": "^0.18.13"
+  }
+}

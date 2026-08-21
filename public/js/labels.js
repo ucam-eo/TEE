@@ -788,29 +788,56 @@ function updateManualClassThreshold(className, newThreshold) {
 
 function _applyClassThreshold(className, newThreshold) {
     rebuildClassOverlay(className);
-    // Update px count in-place via data-class-count attribute
-    const countEl = document.querySelector(`[data-class-count="${CSS.escape(className)}"]`);
-    if (countEl) {
+    // Update px count in-place via data-class-count attribute. renderManualLabelsList()
+    // mirrors identical markup into #manual-labels-list *and* #panel6-labels-list (the
+    // auto-label view's copy), so there can be two elements with the same
+    // data-class-count -- querySelectorAll + update every one, not just the first match
+    // (see _manualClassRows for why a single querySelector here is the wrong call).
+    const countEls = document.querySelectorAll(`[data-class-count="${CSS.escape(className)}"]`);
+    if (countEls.length > 0) {
         const classLabels = getClassLabels(className);
         const count = classLabels.length > 0 ? (classLabels[0].matchCount || 0) : 0;
-        countEl.textContent = count + 'px';
+        for (const countEl of countEls) countEl.textContent = count + 'px';
     }
 }
 
-// Locates a class's row in the labels list via the same data-class-count
-// attribute _applyClassThreshold already uses to update the px count --
-// reused here so the +/- buttons and click-to-type value don't need their
-// own separate element-lookup scheme.
-function _manualClassRow(className) {
-    const countEl = document.querySelector(`[data-class-count="${CSS.escape(className)}"]`);
-    return countEl ? countEl.closest('.manual-label-item') : null;
+// Locates a class's row(s) in the labels list via the same data-class-count
+// attribute _applyClassThreshold already uses to update the px count.
+// Plural, and deliberately so: renderManualLabelsList() mirrors identical
+// markup into #manual-labels-list *and* #panel6-labels-list (the auto-label
+// view's copy of the same list), so a className can match two elements in
+// the DOM at once. A single querySelector() here picks whichever copy
+// happens to come first in document order -- which silently updates the
+// *other* (possibly hidden/inactive) copy's slider and display while the
+// one actually on screen stays frozen. Confirmed live (Keshav, 2026-08-21):
+// clicking +/- visibly changed the map (rebuildClassOverlay always reads
+// the real, correctly-updated label.threshold, so that part was never
+// broken) while the slider position and number on screen never moved.
+// Dragging the slider itself was unaffected, since onManualClassSliderInput
+// updates its display via sliderEl.parentElement -- scoped to whichever
+// copy you actually touched, not a global query.
+function _manualClassRows(className) {
+    const countEls = document.querySelectorAll(`[data-class-count="${CSS.escape(className)}"]`);
+    return Array.from(countEls)
+        .map(el => el.closest('.manual-label-item'))
+        .filter(Boolean);
 }
 
 function onManualClassSliderInput(className, sliderEl) {
     const value = parseFloat(sliderEl.value);
     updateManualClassThreshold(className, value);
-    const display = sliderEl.parentElement.querySelector('.threshold-display');
-    if (display) display.textContent = value;
+    // This slider's own display: sliderEl.parentElement scopes correctly to
+    // whichever copy the user is actually dragging (immune to the two-copy
+    // ambiguity _manualClassRows exists for). But the *other* mirrored
+    // copy's slider/display -- if the auto-label view's panel6 copy is
+    // simultaneously in the DOM -- won't move on its own, so sync every
+    // copy explicitly, skipping the one already updated above.
+    for (const row of _manualClassRows(className)) {
+        const slider = row.querySelector('input[type="range"]');
+        if (slider && slider !== sliderEl) slider.value = value;
+        const display = row.querySelector('.threshold-display');
+        if (display) display.textContent = value;
+    }
 }
 
 // 36 discrete positions across this row's 45px track is even harder to land
@@ -823,8 +850,7 @@ function stepClassThreshold(className, delta) {
     const current = classLabels[0].threshold || 0;
     const next = Math.max(0, Math.min(35, current + delta));
     updateManualClassThreshold(className, next);
-    const row = _manualClassRow(className);
-    if (row) {
+    for (const row of _manualClassRows(className)) {
         const slider = row.querySelector('input[type="range"]');
         const display = row.querySelector('.threshold-display');
         if (slider) slider.value = next;
@@ -855,9 +881,19 @@ function editClassThresholdValue(className, displayEl) {
         if (Number.isNaN(v)) v = current;
         v = Math.max(0, Math.min(35, v));
         updateManualClassThreshold(className, v);
-        const row = _manualClassRow(className);
-        const slider = row ? row.querySelector('input[type="range"]') : null;
-        if (slider) slider.value = v;
+        // Update every mirrored copy's slider (see _manualClassRows), not
+        // just whichever the un-scoped lookup happened to find first.
+        // displayEl itself (this specific copy's display, currently
+        // replaced by `input`) is handled directly below rather than via
+        // the loop, since input.replaceWith(displayEl) hasn't run yet --
+        // querying for '.threshold-display' inside its own row would find
+        // nothing until that swap-back happens.
+        for (const row of _manualClassRows(className)) {
+            const slider = row.querySelector('input[type="range"]');
+            if (slider) slider.value = v;
+            const display = row.querySelector('.threshold-display');
+            if (display && display !== displayEl) display.textContent = v;
+        }
         displayEl.textContent = v;
         input.replaceWith(displayEl);
     };
