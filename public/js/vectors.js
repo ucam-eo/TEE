@@ -780,6 +780,85 @@ function localSearchSimilarMulti(embeddings, threshold) {
     return matches;
 }
 
+// Per-pixel minimum squared distance to a set of query embeddings, with no
+// threshold applied -- the distance-only half of localSearchSimilarMulti,
+// split out so a caller can cache the (expensive) distance computation
+// once and re-threshold it (cheap) as many times as it likes. Built for
+// the per-class similarity slider: dragging it only changes the cutoff,
+// never the query embeddings, so the full O(N * dim * numEmbeddings) walk
+// over every pixel only needs to happen when the label set actually
+// changes, not on every drag (Louis Driver, 2026-08-21 -- "there would be
+// less delay/lag when adjusting the threshold sliders").
+//
+// Unlike localSearchSimilarMulti's early-exit `break` on the first
+// matching embedding, this must check every query embedding for every
+// pixel (there's no shortcut to finding a minimum), so it's not simply
+// "the same cost minus the threshold check" -- expect it to run a bit
+// slower than a single already-matching search, in exchange for never
+// needing to repeat that cost while only the threshold changes.
+function localComputeMinDistances(embeddings) {
+    if (!localVectors || embeddings.length === 0) return new Float32Array(0);
+    const N = localVectors.numVectors;
+    const dim = localVectors.dim;
+    const emb = localVectors.values;
+    const { scale, min } = getDequant(localVectors);
+    const qs = embeddings.map(qEmb => {
+        const q = new Float32Array(dim);
+        for (let d = 0; d < dim; d++) q[d] = qEmb[d] - min[d];
+        return q;
+    });
+
+    const dim4 = dim & ~3;
+    const distances = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+        const base = i * dim;
+        let minDist = Infinity;
+        for (let e = 0; e < qs.length; e++) {
+            const q = qs[e];
+            let s = 0;
+            let d = 0;
+            for (; d < dim4; d += 4) {
+                const d0 = emb[base + d]     * scale[d]     - q[d];
+                const d1 = emb[base + d + 1] * scale[d + 1] - q[d + 1];
+                const d2 = emb[base + d + 2] * scale[d + 2] - q[d + 2];
+                const d3 = emb[base + d + 3] * scale[d + 3] - q[d + 3];
+                s += d0*d0 + d1*d1 + d2*d2 + d3*d3;
+            }
+            for (; d < dim; d++) {
+                const diff = emb[base + d] * scale[d] - q[d];
+                s += diff * diff;
+            }
+            if (s < minDist) minDist = s;
+        }
+        distances[i] = minDist;
+    }
+    return distances;
+}
+
+// Re-threshold a distance array from localComputeMinDistances into the
+// same {lat, lon} match shape localSearchSimilarMulti returns -- a single
+// cheap comparison pass, no embedding math, safe to call on every slider
+// tick once distances are cached.
+function localMatchesFromDistances(distances, threshold) {
+    if (!localVectors) return [];
+    const gt = localVectors.metadata.geotransform;
+    const coords = localVectors.coords;
+    const threshSq = threshold * threshold;
+    const matches = [];
+    for (let i = 0; i < distances.length; i++) {
+        if (distances[i] <= threshSq) {
+            const px = coords[i * 2];
+            const py = coords[i * 2 + 1];
+            matches.push({
+                lat: gt.f + py * gt.e,
+                lon: gt.c + px * gt.a,
+                distance: 0
+            });
+        }
+    }
+    return matches;
+}
+
 // ── Cross-Year Vector Helpers ──
 
 // Union search: single pass counts pixels matching ANY of the searches
@@ -1242,6 +1321,8 @@ window.localExtract = localExtract;
 window.localSearchSimilar = localSearchSimilar;
 window.localSearchSimilarMulti = localSearchSimilarMulti;
 window.searchMultiInVectorData = searchMultiInVectorData;
+window.localComputeMinDistances = localComputeMinDistances;
+window.localMatchesFromDistances = localMatchesFromDistances;
 window.loadVectorDataOnly = loadVectorDataOnly;
 window.extractFromData = extractFromData;
 window.clearExplorerResults = clearExplorerResults;

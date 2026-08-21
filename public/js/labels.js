@@ -247,6 +247,15 @@ let manualClassifyDebounceTimer = null;
 // Manual label overlay layers on window.maps.rgb (per-class window.DirectCanvasLayer instances)
 let manualClassOverlays = {};  // {className: {layerGroup, layer}}
 let _classMatchCache = {};     // {className: [{lat, lon}, ...]} cached similarity+polygon matches for Panel 4
+// {className: {fingerprint, distances}} -- per-pixel min-distance-to-label
+// cache, so the threshold slider only re-thresholds already-computed
+// distances instead of re-running the full similarity search on every
+// drag. fingerprint identifies *which set of label embeddings* the cached
+// distances were computed against (sorted label ids) -- self-invalidating
+// on any read (see rebuildClassOverlay), rather than needing to be
+// remembered at every place labels can change, the way _classMatchCache
+// above has to be.
+let _classDistanceCache = {};
 let collapsedClasses = new Set();
 
 // Schema state is in js/schema.js (window.activeSchema, activeSchemaMode)
@@ -440,6 +449,9 @@ function rebuildClassOverlay(className) {
         }
         delete manualClassOverlays[className];
     }
+    // NOT _classDistanceCache here -- this function's own fingerprint check
+    // further down is what decides whether to reuse or recompute it; an
+    // unconditional delete here would defeat that on every call.
     delete _classMatchCache[className];
 
     const classLabels = getClassLabels(className);
@@ -526,16 +538,34 @@ function rebuildClassOverlay(className) {
     // Fall back to similarity search if no stored pixels
     if (!usedStoredPixels && window.localVectors && threshold > 0) {
         const embeddings = [];
+        const contributingIds = [];
         for (const label of classLabels) {
             if (!label.visible) continue;
             if (label.embeddings && label.embeddings.length > 0) {
                 for (const e of label.embeddings) embeddings.push(new Float32Array(e));
+                contributingIds.push(label.id);
             } else if (label.embedding) {
                 embeddings.push(new Float32Array(label.embedding));
+                contributingIds.push(label.id);
             }
         }
         if (embeddings.length > 0) {
-            const matches = window.localSearchSimilarMulti(embeddings, threshold);
+            // Distances only depend on *which labels* contribute embeddings,
+            // not on threshold -- fingerprint on the sorted id list so a
+            // pure threshold change (the common case: dragging the slider)
+            // reuses the cached per-pixel distances instead of re-running
+            // the full O(N * dim * numEmbeddings) search. Any actual change
+            // to the label set (add/remove/promote) changes the
+            // fingerprint and naturally falls through to a fresh compute --
+            // no explicit invalidation to remember at each call site.
+            const fingerprint = contributingIds.slice().sort((a, b) => a - b).join(',');
+            const cached = _classDistanceCache[className];
+            const distances = (cached && cached.fingerprint === fingerprint)
+                ? cached.distances
+                : window.localComputeMinDistances(embeddings);
+            _classDistanceCache[className] = { fingerprint, distances };
+
+            const matches = window.localMatchesFromDistances(distances, threshold);
             totalMatchCount += matches.length;
             if (matches.length > 0) {
                 const canvasLayer = new window.DirectCanvasLayer(matches, window.maps.rgb, color);
@@ -582,6 +612,7 @@ function toggleClassVisibility(className) {
             }
             delete manualClassOverlays[className];
             delete _classMatchCache[className];
+            delete _classDistanceCache[className];
             window.updatePanel4ManualLabels();
         }
     } else if (newState) {
@@ -602,6 +633,7 @@ function rebuildManualOverlays() {
     }
     manualClassOverlays = {};
     _classMatchCache = {};
+    _classDistanceCache = {};
 
     if (!window.localVectors || !window.maps.rgb) return;
 
@@ -668,6 +700,7 @@ function removeManualClass(className) {
         delete manualClassOverlays[className];
     }
     delete _classMatchCache[className];
+    delete _classDistanceCache[className];
     manualLabels = manualLabels.filter(l => l.name !== className);
     saveManualLabelsToStorage();
     renderManualLabelsList();
@@ -689,6 +722,7 @@ function removeManualLabel(id) {
                 delete manualClassOverlays[className];
             }
             delete _classMatchCache[className];
+            delete _classDistanceCache[className];
         } else {
             rebuildClassOverlay(className);
         }

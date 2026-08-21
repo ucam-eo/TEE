@@ -771,3 +771,26 @@ class TestErrorBarChartsDisableAnimation:
             "default grow animation is still interpolating the bar's "
             "drawn height, for about a second after every render."
         )
+
+
+# ──────────────────────────────────────────────────
+# 16. Per-class similarity threshold distance cache
+#     vectors.js::localMatchesFromDistances (re-thresholding a cached
+#     distance array) must return exactly what localSearchSimilarMulti (the
+#     original, always-fresh single-pass search) would have, at every
+#     threshold -- see validation/test_distance_cache.mjs for the actual
+#     behavioral test; this just wires it into `pytest validation/` so it
+#     runs automatically rather than needing someone to remember `node
+#     validation/test_distance_cache.mjs`.
+# ──────────────────────────────────────────────────
+
+class TestDistanceCacheCorrectness:
+    def test_cached_rethreshold_matches_direct_search(self):
+        result = subprocess.run(
+            ["node", str(ROOT / "validation" / "test_distance_cache.mjs")],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, (
+            "validation/test_distance_cache.mjs failed:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )
