@@ -636,10 +636,24 @@ function handleStreamEvent(ev) {
     } else if (ev.event === 'progress') {
         lastChartData.training_pcts.push(ev.pct);
 
-        // Unified x-axis: all classifiers plotted as fraction of total labelled pixels.
-        // Denominator = estimated total labelled pixels from shapefile polygon areas
-        // (computed at upload from polygon area / 100m²). Falls back to patch or sample totals.
-        const totalLabels = valEstimatedLabelledPixels || ev.total_unet_pixels || ev.total_pixels || 1;
+        // Unified x-axis: all classifiers plotted as fraction of total labelled
+        // pixels. Denominator = the real total_labelled_pixels count from this
+        // run's 'start' event -- the backend's own denominator for turning a
+        // nominal pct into a sample size (training_pcts = [1, 3, 5, 10, 20, 30,
+        // 50, 80] in server.py), so trainPx/totalLabels*100 lands exactly on
+        // the nominal pct. valEstimatedLabelledPixels (a rough polygon-area/
+        // 100m² guess made at upload time, before real label extraction) is
+        // only a last-resort fallback for the sliver of time before a run's
+        // 'start' event has set lastChartData.total_labelled_pixels.
+        // Using the upload-time estimate as primary (as this used to) meant
+        // every point's x was off by whatever the estimate diverged from the
+        // real count -- confirmed live, Louis Driver: "x-axis still initially
+        // plots with a misalignment", persisting even on the very first plot
+        // with no rebuild/view-switch involved, so it was never explained by
+        // the rebuild-vs-live desync fixed on 2026-08-20 (that fix was real
+        // but only addressed *consistency* between rebuild and live points,
+        // not whether either was using the right denominator to begin with).
+        const totalLabels = lastChartData.total_labelled_pixels || valEstimatedLabelledPixels || ev.total_unet_pixels || ev.total_pixels || 1;
 
         for (const [name, vals] of Object.entries(ev.classifiers)) {
             const acc = lastChartData.classifiers[name];
@@ -1642,7 +1656,6 @@ function initResultsTable(modelNames, task) {
 
 function appendResultsRow(pct, classifiers, ev) {
     const tbody = document.getElementById('val-results-tbody');
-    const totalLabels = valEstimatedLabelledPixels || (ev && ev.total_unet_pixels) || (ev && ev.total_pixels) || 0;
 
     // Show pixel and patch training counts
     const pixelK = ev && ev.pixel_train_count ? `${(ev.pixel_train_count / 1000).toFixed(1)}K` : '';

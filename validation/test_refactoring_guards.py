@@ -692,3 +692,42 @@ class TestInlineHandlerGlobalReachability:
             "a silent ReferenceError when it fires, so the control looks "
             "alive but does nothing: " + ", ".join(missing)
         )
+
+
+# ──────────────────────────────────────────────────
+# 14. Learning-curve x-axis denominator
+#     The frontend's "% of labelled pixels used for training" x-axis must be
+#     computed against the real total_labelled_pixels from this run's
+#     'start' event, not the rough polygon-area/100m² estimate made at
+#     upload time (before real label extraction). Confirmed live (Louis
+#     Driver, 2026-08-21) that using the estimate first misaligned every
+#     point's x -- e.g. a point trained at the backend's nominal pct=20
+#     (server.py's training_pcts = [1, 3, 5, 10, 20, 30, 50, 80]) landed at
+#     ~8% instead of ~20% on the chart, because the estimate (467K in his
+#     screenshot) was ~2.4x the real total_labelled_pixels (~193K, inferred
+#     from his own trainPx/pct numbers). This happened on the very *first*
+#     plot with no rebuild/metric-switch involved, so it was a different
+#     bug from (and not fixed by) the rebuild-vs-live desync fixed
+#     2026-08-20 -- that fix only made both paths *consistently* wrong.
+# ──────────────────────────────────────────────────
+
+class TestLearningCurveXAxisDenominator:
+    """total_labelled_pixels (real, from 'start') must be tried before
+    valEstimatedLabelledPixels (a rough upload-time guess) wherever the
+    frontend computes a learning-curve point's x position."""
+
+    def test_progress_handler_prefers_real_total_over_estimate(self, all_script_text):
+        # The exact fallback-chain expression from the 'progress' handler --
+        # order matters: lastChartData.total_labelled_pixels must come
+        # before valEstimatedLabelledPixels, not after.
+        assert (
+            "lastChartData.total_labelled_pixels || valEstimatedLabelledPixels"
+            in all_script_text
+        ), (
+            "The learning-curve x-axis denominator must try the real "
+            "total_labelled_pixels (from this run's 'start' event) before "
+            "falling back to valEstimatedLabelledPixels (a rough polygon-area "
+            "estimate from upload time) -- the reverse order silently "
+            "misaligns every point's x position whenever the two totals "
+            "differ, which they generally do."
+        )
