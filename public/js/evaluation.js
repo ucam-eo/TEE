@@ -1861,6 +1861,18 @@ function renderRegressionBarChart(aggregate) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            // errorBarPlugin's afterDraw reads ds.data[i] (the *final* value)
+            // to position its whisker caps, but Chart.js's own bar-growth
+            // animation draws the bar at an *interpolated*, still-growing
+            // height during the ~1s default transition -- so for the whole
+            // animation window the whisker floats above a visibly too-short
+            // bar. Confirmed live (Louis Driver, 2026-08-21) and reproduced
+            // headlessly: a screenshot/glance during that window shows a bar
+            // that looks capped at roughly 80% of its real value with the
+            // correct value only marked by a stray line above it. Disabling
+            // animation removes the window entirely rather than trying to
+            // keep the plugin in sync with an animating value every frame.
+            animation: false,
             plugins: {
                 legend: { display: false },
                 title: {
@@ -1912,6 +1924,12 @@ function renderClassificationBarChart(aggregate) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            // See the identical comment in renderRegressionBarChart: without
+            // this, errorBarPlugin's whisker caps (positioned from the
+            // final data value) float above the bar during Chart.js's
+            // default ~1s grow animation (the bar itself draws at an
+            // interpolated, still-growing height).
+            animation: false,
             plugins: {
                 legend: { display: false },
                 title: {

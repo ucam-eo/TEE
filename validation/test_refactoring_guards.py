@@ -731,3 +731,43 @@ class TestLearningCurveXAxisDenominator:
             "misaligns every point's x position whenever the two totals "
             "differ, which they generally do."
         )
+
+
+# ──────────────────────────────────────────────────
+# 15. Bar-chart-with-error-bars animation
+#     errorBarPlugin (a custom afterDraw hook) positions its whisker caps
+#     from ds.data[i], the dataset's *final* value -- but Chart.js's bar
+#     charts animate their height by default (~1s grow), drawing the bar
+#     itself at an *interpolated*, still-growing height every frame during
+#     that window. The two draw from different sources, so anyone looking
+#     at (or screenshotting) the chart during the animation sees a whisker
+#     floating above a visibly too-short bar. Confirmed live (Louis Driver,
+#     2026-08-21, on the R² bar chart) and reproduced headlessly with
+#     Playwright: a screenshot 300ms after render showed the bar capped at
+#     ~79% of its real value; the fix (animation: false) renders it correct
+#     within 50ms. Every bar chart using errorBarPlugin needs this.
+# ──────────────────────────────────────────────────
+
+class TestErrorBarChartsDisableAnimation:
+    """Every Chart.js bar chart that uses errorBarPlugin must set
+    animation: false, or the plugin's whisker caps visibly desync from the
+    still-animating bar for about a second after every render."""
+
+    def test_every_error_bar_chart_disables_animation(self, all_script_text):
+        # Anchor directly on the `plugins: [errorBarPlugin],` marker itself
+        # (rather than hunting for it within a window from some other
+        # anchor) so this doesn't depend on how much unrelated config
+        # precedes it -- each occurrence starts exactly one chart's
+        # `options: {...}` block, where animation: false should appear
+        # within the first couple hundred characters (right after `options:
+        # {`, give or take an explanatory comment).
+        calls = all_script_text.split("plugins: [errorBarPlugin],")[1:]
+        assert calls, "expected at least one Chart.js call using errorBarPlugin"
+        offenders = [i for i, call in enumerate(calls) if "animation: false" not in call[:2000]]
+        assert not offenders, (
+            "Found a Chart.js bar chart using errorBarPlugin without "
+            "animation: false -- its whisker caps (positioned from the "
+            "final value) will float above the bar while Chart.js's "
+            "default grow animation is still interpolating the bar's "
+            "drawn height, for about a second after every render."
+        )
