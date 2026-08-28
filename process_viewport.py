@@ -445,40 +445,54 @@ def _assemble_indices_from_tiles(qs, attr_name, out_h, out_w):
     return full
 
 
-def save_vectors_rvq(qs, transform, viewport_id, year, output_dir, dataset_version=None):
+def save_vectors_rvq(qs, transform, viewport_id, year, output_dir,
+                     dataset_version=None, crop_window=None):
     """Save VQ structure (codebooks + indices + metadata) for the browser.
 
     Replaces the ~28 MB uint8 mosaic + pixel_coords with a ~5 MB codebook-and-
     indices bundle the browser can decode tile-by-tile. ``qs`` is the
     ``QuantizedStructure`` returned by ``tessera_vq.client.fetch_quantized_structure``;
-    ``transform`` is the affine returned by ``reconstruct_from_structure`` so
-    we never recompute it ourselves and never drift from upstream.
+    ``transform`` is the affine returned by ``reconstruct_from_structure`` -- and,
+    when ``crop_window`` is given, already translated to the crop origin so the
+    persisted geotransform matches the shipped (cropped) index grid.
     ``dataset_version`` is the Tessera dataset release (e.g. "1.0", "1.1")
     these embeddings came from, per ``VQTessera.fetch_dataset_version``.
+
+    ``crop_window`` is ``(row_start, col_start, row_end, col_end)`` in full-
+    mosaic pixel coords -- the viewport-bounds window process_year() clipped the
+    reconstructed mosaic to. The per-tile codebooks and the tile grid stay at
+    the *full* mosaic shape (``qs.mosaic_shape``); only the assembled per-pixel
+    index grid is sliced to the window, and ``crop_offset`` in the metadata
+    lets the browser map a cropped-local pixel back to its global position for
+    the tile-id lookup. Defaults to the whole mosaic (no crop), which keeps
+    output_shape == mosaic_shape and crop_offset == [0, 0] -- identical to the
+    pre-crop format, so old viewports read unchanged.
     """
     from tessera_vq.client import n_tiles_along
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     t = qs.tile_size
+    # Full reprojected mosaic shape -- the reference frame for the tile grid and
+    # the per-tile codebooks, regardless of any crop.
     full_h, full_w = int(qs.mosaic_shape[0]), int(qs.mosaic_shape[1])
-    # Exact full mosaic, not floor-truncated to a tile_size multiple -- see
-    # _assemble_indices_from_tiles's docstring. Existing on-disk viewports are
-    # unaffected (this only runs when creating a new one); this was
-    # deliberately left as the pre-0.6.0 truncated behaviour for a while
-    # after tessera-vq's tiling fix landed, since viewports here are 5km
-    # square and the truncation loss (well under one tile) wasn't worth
-    # touching without checking -- now fixed for newly-created viewports too.
-    out_h, out_w = full_h, full_w
+    row0, col0, row1, col1 = crop_window if crop_window is not None else (0, 0, full_h, full_w)
+    out_h, out_w = row1 - row0, col1 - col0
     is_rvq = qs.codebooks2 is not None
 
-    # Per-pixel indices at the full mosaic shape; tile_id derived in the
-    # browser (public/js/vq_reconstruct.js::tileIndexForPixel) from
-    # (n_tile_rows/cols, output_shape, tile_size) below.
-    idx1 = _assemble_indices_from_tiles(qs, 'indices1', out_h, out_w)
+    # Per-pixel indices assembled at the full mosaic shape, then sliced to the
+    # crop window. Values are tile-local (index into their own tile's codebook)
+    # and unchanged by the slice; the browser recovers each pixel's tile from
+    # crop_offset + its local position against (n_tile_rows/cols, mosaic_shape,
+    # tile_size) -- see public/js/vq_reconstruct.js::tileIndexForPixel.
+    idx1 = np.ascontiguousarray(
+        _assemble_indices_from_tiles(qs, 'indices1', full_h, full_w)[row0:row1, col0:col1]
+    )
     _save_npy_gz(output_dir / 'indices1.npy.gz', idx1)
     if is_rvq:
-        idx2 = _assemble_indices_from_tiles(qs, 'indices2', out_h, out_w)
+        idx2 = np.ascontiguousarray(
+            _assemble_indices_from_tiles(qs, 'indices2', full_h, full_w)[row0:row1, col0:col1]
+        )
         _save_npy_gz(output_dir / 'indices2.npy.gz', idx2)
 
     # uint8-quantised codebooks + per-tile per-dim scales. Per-tile scales add
@@ -511,8 +525,9 @@ def save_vectors_rvq(qs, transform, viewport_id, year, output_dir, dataset_versi
     vq_meta = {
         'viewport_id': viewport_id,
         'kind': 'rvq' if is_rvq else 'vq',
-        'mosaic_shape': [full_h, full_w],         # full reprojected shape
-        'output_shape': [out_h, out_w],           # == mosaic_shape now (no truncation); where indices live
+        'mosaic_shape': [full_h, full_w],         # full reprojected shape -- the tile grid's reference frame
+        'output_shape': [out_h, out_w],           # cropped-to-viewport shape -- where the shipped indices live
+        'crop_offset': [row0, col0],              # cropped-local (row, col) -> global = crop_offset + local
         'num_total_pixels': out_h * out_w,
         'embedding_dim': qs.codebooks1.shape[-1],
         'pixel_size_meters': 10,
@@ -666,19 +681,13 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
     else:
         height, width = mosaic.shape[:2]
 
-    # The QS path already raised NoCoverageError for empty/all-NaN responses,
-    # and its mosaic's dimensions are exactly what save_vectors_rvq's own
-    # tile-index assembly will use (see _assemble_indices_from_tiles -- it no
-    # longer needs an exact tile_size multiple, tessera-vq >=0.6.0 covers any
-    # full_h/full_w correctly). Both the legacy NaN heuristic and the bbox
-    # crop below would desync the mosaic from that tile grid, so skip them
-    # when we came via QS.
     if qs is None:
         # No-coverage detection: a fully-NaN mosaic means the upstream provider
         # (typically the tessera-vq bolt-on) has no data for this bbox/year.
         # Detect *before* the vector path's nan_to_num, which would otherwise
         # convert all-NaN -> all-zero and surface as the misleading "all-zero
-        # embeddings" error in the UI.
+        # embeddings" error in the UI. (The QS path raises NoCoverageError
+        # upstream instead, so this check is NPY-path only.)
         if np.all(np.isnan(mosaic)):
             msg = (f"No embeddings available for this region in {year} "
                    f"(upstream vqtessera returned no coverage for bbox {bounds})")
@@ -687,16 +696,40 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
             gc.collect()
             return (year, False, msg)
 
-        # Crop mosaic to exact viewport bounds (grid tiles may extend beyond ROI)
-        col_start = max(0, int(np.floor((bounds[0] - transform.c) / transform.a)))
-        col_end = min(width, int(np.ceil((bounds[2] - transform.c) / transform.a)))
-        row_start = max(0, int(np.floor((bounds[3] - transform.f) / transform.e)))
-        row_end = min(height, int(np.ceil((bounds[1] - transform.f) / transform.e)))
-        if col_start > 0 or row_start > 0 or col_end < width or row_end < height:
-            mosaic = mosaic[row_start:row_end, col_start:col_end, :]
-            transform = transform * Affine.translation(col_start, row_start)
-            height, width = mosaic.shape[:2]
-            print(f"  [{year}] Cropped to viewport: {width}x{height}")
+    # Crop the mosaic + transform to the exact viewport bounds. Fetched
+    # embedding tiles are ~0.1 deg, so a 5km viewport that straddles a tile
+    # boundary pulls a 2x2 block -- ~4x the linear extent, ~20x the pixels the
+    # ROI actually needs. The VQ fast path used to skip this crop to stay
+    # aligned with the qs tile grid; save_vectors_rvq now takes the same
+    # window (crop_window) and slices its assembled index grid identically,
+    # and the browser derives tile ids from the crop offset + the full
+    # mosaic_shape (see vq_reconstruct.js), so nothing desyncs. Existing
+    # on-disk viewports are untouched -- this only runs on (re)processing.
+    full_h, full_w = height, width
+    col_start = max(0, int(np.floor((bounds[0] - transform.c) / transform.a)))
+    col_end = min(full_w, int(np.ceil((bounds[2] - transform.c) / transform.a)))
+    row_start = max(0, int(np.floor((bounds[3] - transform.f) / transform.e)))
+    row_end = min(full_h, int(np.ceil((bounds[1] - transform.f) / transform.e)))
+    if row_end - row_start < 1 or col_end - col_start < 1:
+        msg = (f"Viewport bounds {bounds} do not overlap the fetched mosaic "
+               f"for {year} (crop window is empty)")
+        print(f"  [{year}] {msg}")
+        del mosaic
+        gc.collect()
+        return (year, False, msg)
+    crop_window = (row_start, col_start, row_end, col_end)
+    if (row_start, col_start) != (0, 0) or (row_end, col_end) != (full_h, full_w):
+        mosaic = mosaic[row_start:row_end, col_start:col_end, :]
+        transform = transform * Affine.translation(col_start, row_start)
+        height, width = mosaic.shape[:2]
+        print(f"  [{year}] Cropped to viewport: {width}x{height} (from {full_w}x{full_h})")
+        if pyramids_ok:
+            # Pyramids on disk were built at the pre-crop (tile-rounded) extent
+            # -- they'd no longer align with the cropped vectors. Force a
+            # rebuild. (For a clean re-process of an existing viewport, delete
+            # the whole year dir so nothing stale is left behind at all.)
+            print(f"  [{year}] Rebuilding pyramids to match the cropped extent")
+            pyramids_ok = False
 
     # --- PYRAMIDS (bands 0-2 -> RGB) ---
     if not pyramids_ok:
@@ -758,7 +791,7 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
         # then drop the legacy uint8 emission above.
         if qs is not None:
             save_vectors_rvq(qs, transform, viewport_id, year, year_vectors_dir,
-                              dataset_version=dataset_version)
+                              dataset_version=dataset_version, crop_window=crop_window)
     else:
         print(f"  [{year}] Vectors already exist, skipping")
 

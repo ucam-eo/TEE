@@ -80,7 +80,13 @@ function tileIndexForPixel(p, n, fullDim, t) {
 // old viewports keep reading correctly and only newly-created ones (or a
 // postcard, which is never persisted) actually exercise the pulled-back
 // last tile.
-export function reconstructFloatMosaic({ idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim, crop }) {
+// `crop` (output sub-window) is unchanged. `srcTop`/`srcLeft`/`fullH`/`fullW`
+// support an idx1/idx2 that is itself a crop of the full tile grid (persisted
+// viewport-bounds clipping, see reconstructQuantisedMosaic): pixel indices stay
+// local to the given idx array, but tile ids resolve at the global position
+// srcTop/srcLeft + local against the full mosaic shape. Defaults make this a
+// no-op -- postcard.html builds an uncropped bundle and is untouched.
+export function reconstructFloatMosaic({ idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim, crop, srcTop = 0, srcLeft = 0, fullH = outH, fullW = outW }) {
     const top = crop ? crop.top : 0;
     const left = crop ? crop.left : 0;
     const cropH = crop ? crop.height : outH;
@@ -88,11 +94,11 @@ export function reconstructFloatMosaic({ idx1, cb1Float, idx2, cb2Float, outH, o
     const floatMosaic = new Float32Array(cropH * cropW * dim);
     for (let ly = 0; ly < cropH; ly++) {
         const py = top + ly;
-        const tileRow = tileIndexForPixel(py, nTileRows, outH, t);
+        const tileRow = tileIndexForPixel(srcTop + py, nTileRows, fullH, t);
         for (let lx = 0; lx < cropW; lx++) {
             const px = left + lx;
-            const pixel = py * outW + px; // still indexes into the *full* idx1/idx2
-            const tileCol = tileIndexForPixel(px, nTileCols, outW, t);
+            const pixel = py * outW + px; // indexes into the given (possibly source-cropped) idx1/idx2
+            const tileCol = tileIndexForPixel(srcLeft + px, nTileCols, fullW, t);
             const tileId = tileRow * nTileCols + tileCol;
             const i1 = idx1[pixel];
             const cb1Off = tileId * k1 * dim + i1 * dim;
@@ -135,10 +141,19 @@ export function reconstructFloatMosaic({ idx1, cb1Float, idx2, cb2Float, outH, o
 // which is about the same total work the old path did across its build +
 // min/max scan + quantise scan (three full N*dim passes, vs two here).
 //
-// Params match reconstructFloatMosaic minus `crop` -- a caller quantising the
-// whole mosaic always wants all of it. Returns { values: Uint8Array(N*dim),
-// dimMin: Float32Array(dim), dimMax: Float32Array(dim) }.
-export function reconstructQuantisedMosaic({ idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim }) {
+// The idx1/idx2 arrays may be a crop of the full tile grid (viewport-bounds
+// clipping in process_viewport.py -- a 5km viewport that straddled a ~0.1deg
+// embedding tile boundary otherwise persists a mosaic several times larger than
+// the ROI). In that case pass cropTop/cropLeft (the crop's global row/col
+// origin) and fullH/fullW (the full mosaic shape the tile grid + n_tile_rows/
+// cols were computed from): the index array is walked with local coords, but
+// each pixel's tile id is resolved at its *global* position. Omit them (or pass
+// 0 / outH / outW) for an uncropped grid -- reduces to the previous behaviour
+// exactly, so existing viewports read byte-identically.
+//
+// Returns { values: Uint8Array(outH*outW*dim), dimMin: Float32Array(dim),
+// dimMax: Float32Array(dim) }.
+export function reconstructQuantisedMosaic({ idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim, cropTop = 0, cropLeft = 0, fullH = outH, fullW = outW }) {
     const numPixels = outH * outW;
     const rvq = !!cb2Float;
 
@@ -146,11 +161,11 @@ export function reconstructQuantisedMosaic({ idx1, cb1Float, idx2, cb2Float, out
     const dimMax = new Float32Array(dim).fill(-Infinity);
 
     // pass 1 -- exact per-dim min/max of the reconstructed values
-    for (let py = 0; py < outH; py++) {
-        const tileRow = tileIndexForPixel(py, nTileRows, outH, t);
-        for (let px = 0; px < outW; px++) {
-            const pixel = py * outW + px;
-            const tileCol = tileIndexForPixel(px, nTileCols, outW, t);
+    for (let ly = 0; ly < outH; ly++) {
+        const tileRow = tileIndexForPixel(cropTop + ly, nTileRows, fullH, t);
+        for (let lx = 0; lx < outW; lx++) {
+            const pixel = ly * outW + lx;
+            const tileCol = tileIndexForPixel(cropLeft + lx, nTileCols, fullW, t);
             const tileId = tileRow * nTileCols + tileCol;
             const cb1Off = (tileId * k1 + idx1[pixel]) * dim;
             if (rvq) {
@@ -175,11 +190,11 @@ export function reconstructQuantisedMosaic({ idx1, cb1Float, idx2, cb2Float, out
 
     // pass 2 -- quantise straight into values
     const values = new Uint8Array(numPixels * dim);
-    for (let py = 0; py < outH; py++) {
-        const tileRow = tileIndexForPixel(py, nTileRows, outH, t);
-        for (let px = 0; px < outW; px++) {
-            const pixel = py * outW + px;
-            const tileCol = tileIndexForPixel(px, nTileCols, outW, t);
+    for (let ly = 0; ly < outH; ly++) {
+        const tileRow = tileIndexForPixel(cropTop + ly, nTileRows, fullH, t);
+        for (let lx = 0; lx < outW; lx++) {
+            const pixel = ly * outW + lx;
+            const tileCol = tileIndexForPixel(cropLeft + lx, nTileCols, fullW, t);
             const tileId = tileRow * nTileCols + tileCol;
             const cb1Off = (tileId * k1 + idx1[pixel]) * dim;
             const outOff = pixel * dim;

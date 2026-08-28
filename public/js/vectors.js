@@ -246,6 +246,12 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
         const dim = vqMeta.embedding_dim || 128;
         const nTiles = tileIndex.n_tiles;
         const numPixels = outH * outW;
+        // output_shape may be a crop of the full tile grid (viewport-bounds
+        // clipping in process_viewport.py). crop_offset + mosaic_shape let the
+        // reconstruction resolve each cropped-local pixel's tile at its global
+        // position. Absent on pre-clip viewports -> no crop (fullH/W == outH/W).
+        const [cropTop, cropLeft] = vqMeta.crop_offset || [0, 0];
+        const [fullH, fullW] = vqMeta.mosaic_shape || vqMeta.output_shape;
 
         const cb1Uint8 = new Uint8Array(cb1Parsed.rawData);
         const cb1Scales = new Float32Array(cb1ScalesParsed.rawData);
@@ -272,7 +278,8 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
         // one cluster.
         setProgress(60, 'Reconstructing + quantising...');
         const { values, dimMin, dimMax } = reconstructQuantisedMosaic({
-            idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim
+            idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim,
+            cropTop, cropLeft, fullH, fullW
         });
 
         // Full-grid pixel coords (matches the legacy save).
