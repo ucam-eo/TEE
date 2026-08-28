@@ -112,3 +112,92 @@ export function reconstructFloatMosaic({ idx1, cb1Float, idx2, cb2Float, outH, o
     }
     return floatMosaic;
 }
+
+// Reconstructs the full (outH*outW, dim) mosaic like reconstructFloatMosaic and
+// quantises it to uint8 in the same shape the rest of vectors.js expects --
+// WITHOUT ever materialising the float mosaic. That float form is
+// outH*outW*dim*4 bytes (~2 GB on a national-park-scale viewport) and was the
+// source of "Array buffer allocation failed" RangeErrors on memory-constrained
+// clients. reconstructFloatMosaic still exists for postcard.html, which only
+// ever reconstructs a small `crop` rectangle.
+//
+// Two walks over the codebooks with a dim-sized scratch instead of one giant
+// allocation:
+//   pass 1 -- exact per-dim min/max of the reconstructed values
+//   pass 2 -- quantise straight into a Uint8Array(outH*outW*dim)
+// The RVQ two-codebook sum is rounded to float32 (Math.fround) so it matches
+// bit-for-bit what reconstructFloatMosaic's Float32Array store produced -- the
+// returned `values` / `dimMin` / `dimMax` are byte-identical to the old
+// reconstructFloatMosaic -> min/max scan -> quantise path (see
+// validation/test_vq_quantised_mosaic.mjs).
+//
+// Peak extra memory: dim floats. Compute: ~2x the reconstruction add-loop,
+// which is about the same total work the old path did across its build +
+// min/max scan + quantise scan (three full N*dim passes, vs two here).
+//
+// Params match reconstructFloatMosaic minus `crop` -- a caller quantising the
+// whole mosaic always wants all of it. Returns { values: Uint8Array(N*dim),
+// dimMin: Float32Array(dim), dimMax: Float32Array(dim) }.
+export function reconstructQuantisedMosaic({ idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim }) {
+    const numPixels = outH * outW;
+    const rvq = !!cb2Float;
+
+    const dimMin = new Float32Array(dim).fill(Infinity);
+    const dimMax = new Float32Array(dim).fill(-Infinity);
+
+    // pass 1 -- exact per-dim min/max of the reconstructed values
+    for (let py = 0; py < outH; py++) {
+        const tileRow = tileIndexForPixel(py, nTileRows, outH, t);
+        for (let px = 0; px < outW; px++) {
+            const pixel = py * outW + px;
+            const tileCol = tileIndexForPixel(px, nTileCols, outW, t);
+            const tileId = tileRow * nTileCols + tileCol;
+            const cb1Off = (tileId * k1 + idx1[pixel]) * dim;
+            if (rvq) {
+                const cb2Off = (tileId * k2 + idx2[pixel]) * dim;
+                for (let d = 0; d < dim; d++) {
+                    const v = Math.fround(cb1Float[cb1Off + d] + cb2Float[cb2Off + d]);
+                    if (v < dimMin[d]) dimMin[d] = v;
+                    if (v > dimMax[d]) dimMax[d] = v;
+                }
+            } else {
+                for (let d = 0; d < dim; d++) {
+                    const v = cb1Float[cb1Off + d];
+                    if (v < dimMin[d]) dimMin[d] = v;
+                    if (v > dimMax[d]) dimMax[d] = v;
+                }
+            }
+        }
+    }
+
+    const dimScale = new Float32Array(dim);
+    for (let d = 0; d < dim; d++) dimScale[d] = (dimMax[d] - dimMin[d]) || 1;
+
+    // pass 2 -- quantise straight into values
+    const values = new Uint8Array(numPixels * dim);
+    for (let py = 0; py < outH; py++) {
+        const tileRow = tileIndexForPixel(py, nTileRows, outH, t);
+        for (let px = 0; px < outW; px++) {
+            const pixel = py * outW + px;
+            const tileCol = tileIndexForPixel(px, nTileCols, outW, t);
+            const tileId = tileRow * nTileCols + tileCol;
+            const cb1Off = (tileId * k1 + idx1[pixel]) * dim;
+            const outOff = pixel * dim;
+            if (rvq) {
+                const cb2Off = (tileId * k2 + idx2[pixel]) * dim;
+                for (let d = 0; d < dim; d++) {
+                    const v = Math.fround(cb1Float[cb1Off + d] + cb2Float[cb2Off + d]);
+                    const q = Math.round((v - dimMin[d]) / dimScale[d] * 255);
+                    values[outOff + d] = q < 0 ? 0 : q > 255 ? 255 : q;
+                }
+            } else {
+                for (let d = 0; d < dim; d++) {
+                    const q = Math.round((cb1Float[cb1Off + d] - dimMin[d]) / dimScale[d] * 255);
+                    values[outOff + d] = q < 0 ? 0 : q > 255 ? 255 : q;
+                }
+            }
+        }
+    }
+
+    return { values, dimMin, dimMax };
+}

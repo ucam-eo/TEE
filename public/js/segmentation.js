@@ -253,7 +253,23 @@ async function runKMeans(k) {
     let embCopy;
     if (sv.BYTES_PER_ELEMENT === 1) {
         const { scale, min } = window.getDequant(segVectors);
-        const f = new Float32Array(sv.length);
+        // N*dim*4 bytes in one contiguous block -- this is the second big
+        // allocation on the VQ path (after the loader), and can hit the
+        // "Array buffer allocation failed" ceiling on a very large viewport.
+        // Probe on failure so we know if this is a real problem in production
+        // (see the VQ-loader plan); still rethrow so the worker's onerror shows
+        // the user a failure rather than a silent hang.
+        let f;
+        try {
+            f = new Float32Array(sv.length);
+        } catch (e) {
+            if (window.reportMemoryPressure) {
+                window.reportMemoryPressure('kmeans-dequant-buffer', {
+                    viewport: segVectors.viewport || null, N, dim, bytes: sv.length * 4,
+                });
+            }
+            throw e;
+        }
         for (let i = 0; i < N; i++) {
             const b = i * dim;
             for (let d = 0; d < dim; d++) f[b + d] = sv[b + d] * scale[d] + min[d];

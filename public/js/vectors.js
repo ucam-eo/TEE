@@ -1,7 +1,7 @@
 // vectors.js — Vector data management, client-side search, explorer visualization
 // Extracted from viewer.html as an ES module.
 
-import { decodeCodebook, indicesArrayFromParsed, reconstructFloatMosaic } from './vq_reconstruct.js';
+import { decodeCodebook, indicesArrayFromParsed, reconstructQuantisedMosaic } from './vq_reconstruct.js';
 
 // ── State (module-private, exposed on window via defineProperty) ──
 
@@ -138,11 +138,36 @@ function parseNpy(buffer) {
 
 // ── Download ──
 
+// Memory-pressure probe. Called when a big contiguous typed-array allocation
+// throws RangeError ("Array buffer allocation failed") on the vector-load or
+// k-means paths, so production logs show whether large viewports on
+// memory-limited clients are still hitting the ceiling after the per-pixel
+// quantise change -- and by how much (viewport pixel count, device memory,
+// per-bucket breakdown where the browser exposes it). Best-effort only:
+// measureUserAgentSpecificMemory is Chromium-only and needs cross-origin
+// isolation, so nothing here may throw or mask the original error.
+function reportMemoryPressure(where, detail) {
+    try {
+        const line = {
+            where, ...detail,
+            deviceMemoryGB: (typeof navigator !== 'undefined' && navigator.deviceMemory) || null,
+            ua: (typeof navigator !== 'undefined' && navigator.userAgent) || null,
+        };
+        console.error('[MEM] allocation pressure at', where, line);
+        if (typeof performance !== 'undefined' && performance.measureUserAgentSpecificMemory) {
+            performance.measureUserAgentSpecificMemory()
+                .then(m => console.error('[MEM] breakdown', where, m))
+                .catch(() => {});
+        }
+    } catch (_) { /* never let instrumentation break the caller */ }
+}
+
 // ── VQ format reader (Path A) ──
 // Reads the codebooks+indices format produced by tessera-vq fast-path
-// viewports, reconstructs a full float32 mosaic, re-quantises to uint8 with
-// global per-dim min/max, and hands the result to the rest of vectors.js in
-// the same shape the legacy uint8 path uses. The bandwidth win is on the
+// viewports, reconstructs the mosaic and quantises it to uint8 with global
+// per-dim min/max (streaming, one pixel at a time -- see
+// reconstructQuantisedMosaic), and hands the result to the rest of vectors.js
+// in the same shape the legacy uint8 path uses. The bandwidth win is on the
 // wire (~5 MB instead of ~28 MB); browser memory + compute paths downstream
 // stay identical. Phase 4 will skip the re-quantise round-trip with a
 // codebook-distance LUT.
@@ -234,40 +259,21 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
             idx2 = indicesArrayFromParsed(idx2Parsed);
         }
 
-        // Reconstruct full float mosaic via codebook lookup.
-        const floatMosaic = reconstructFloatMosaic({
+        // Reconstruct + quantise in one shot. reconstructQuantisedMosaic walks
+        // the codebooks with a dim-sized scratch instead of ever building the
+        // full Float32 mosaic (outH*outW*128*4 -- ~2 GB on a large viewport, and
+        // the source of "Array buffer allocation failed" on memory-limited
+        // clients). Output is byte-identical to the old reconstructFloatMosaic ->
+        // min/max scan -> quantise path: `values` stays compact uint8 + per-dim
+        // dim_min/dim_max in metadata (keeps explore-mode panning light), and
+        // consumers still dequantise on demand via getDequant(). The k-means
+        // worker still rebuilds a transient Float32 buffer from these
+        // (segmentation.js::runKMeans) -- feeding it raw uint8 collapses it to
+        // one cluster.
+        setProgress(60, 'Reconstructing + quantising...');
+        const { values, dimMin, dimMax } = reconstructQuantisedMosaic({
             idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim
         });
-
-        setProgress(80, 'Quantising to uint8...');
-
-        // Keep values compact as uint8 + per-dim min/max (dim_min/dim_max in metadata),
-        // so explore-mode panning stays light (a Float32 mosaic of a large viewport is
-        // ~570 MB and makes panning laggy). Consumers that need real floats dequantise
-        // on demand: the k-means worker rebuilds a transient Float32 buffer from these
-        // (see segmentation.js::runKMeans). NOTE: feeding the worker the raw uint8 buffer
-        // makes it read 1/4-size garbage and collapse to one cluster — it must dequantise.
-        const dimMin = new Float32Array(dim).fill(Infinity);
-        const dimMax = new Float32Array(dim).fill(-Infinity);
-        for (let i = 0; i < numPixels; i++) {
-            const off = i * dim;
-            for (let d = 0; d < dim; d++) {
-                const v = floatMosaic[off + d];
-                if (v < dimMin[d]) dimMin[d] = v;
-                if (v > dimMax[d]) dimMax[d] = v;
-            }
-        }
-        const dimScale = new Float32Array(dim);
-        for (let d = 0; d < dim; d++) dimScale[d] = (dimMax[d] - dimMin[d]) || 1;
-
-        const values = new Uint8Array(numPixels * dim);
-        for (let i = 0; i < numPixels; i++) {
-            const off = i * dim;
-            for (let d = 0; d < dim; d++) {
-                const q = Math.round((floatMosaic[off + d] - dimMin[d]) / dimScale[d] * 255);
-                values[off + d] = q < 0 ? 0 : q > 255 ? 255 : q;
-            }
-        }
 
         // Full-grid pixel coords (matches the legacy save).
         const coords = new Int32Array(numPixels * 2);
@@ -329,6 +335,17 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
         return localVectors;
     } catch (err) {
         console.error('[VECTORS] VQ download failed:', err);
+        // If this is the contiguous-allocation ceiling, log enough to tell
+        // whether a large viewport on a memory-limited client is still a real
+        // problem after the per-pixel quantise change (see the VQ-loader plan).
+        if (err instanceof RangeError || /allocation failed|Array ?[Bb]uffer/.test(err && err.message || '')) {
+            const shape = vqMeta && vqMeta.output_shape;
+            reportMemoryPressure('vq-download', {
+                viewport, year: String(year),
+                output_shape: shape || null,
+                approx_pixels: shape ? shape[0] * shape[1] : null,
+            });
+        }
         if (overlay && status) status.textContent = `Download failed: ${err.message}`;
         throw err;
     }
@@ -1316,6 +1333,7 @@ window.decompressGzip = decompressGzip;
 window.parseNpy = parseNpy;
 window.getDequant = getDequant;
 window.dequantSlice = dequantSlice;
+window.reportMemoryPressure = reportMemoryPressure;
 window.downloadVectorData = downloadVectorData;
 window.localExtract = localExtract;
 window.localSearchSimilar = localSearchSimilar;

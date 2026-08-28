@@ -848,3 +848,44 @@ class TestManualLabelDomSync:
             "validation/test_manual_label_dom_sync.mjs failed:\n"
             f"{result.stdout}\n{result.stderr}"
         )
+
+
+# ──────────────────────────────────────────────────
+# 18. VQ loader must not build the full Float32 mosaic
+#     downloadVectorDataVq used to allocate one Float32Array of
+#     outH*outW*128*4 bytes (~2 GB on a national-park-scale viewport) purely
+#     to re-quantise it back to uint8 -- the "Array buffer allocation failed"
+#     crash. reconstructQuantisedMosaic does the same result with a dim-sized
+#     scratch. validation/test_vq_quantised_mosaic.mjs proves byte-parity;
+#     this locks in that the giant allocation doesn't creep back.
+# ──────────────────────────────────────────────────
+
+class TestVqQuantisedMosaic:
+    def test_quantise_on_reconstruct_is_byte_identical_to_old_path(self):
+        result = subprocess.run(
+            ["node", str(ROOT / "validation" / "test_vq_quantised_mosaic.mjs")],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, (
+            "validation/test_vq_quantised_mosaic.mjs failed:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )
+
+    def test_vectors_js_does_not_call_reconstruct_float_mosaic(self):
+        src = (ROOT / "public" / "js" / "vectors.js").read_text()
+        assert "reconstructFloatMosaic(" not in src and "reconstructFloatMosaic }" not in src, (
+            "downloadVectorDataVq must not call reconstructFloatMosaic -- that "
+            "builds the full Float32 mosaic (outH*outW*128*4 ~= 2 GB on a large "
+            "viewport -- 'Array buffer allocation failed'). Use "
+            "reconstructQuantisedMosaic. reconstructFloatMosaic stays in "
+            "vq_reconstruct.js for postcard.html's small-crop path only."
+        )
+
+    def test_full_float_mosaic_alloc_is_gone_from_the_vq_loader(self):
+        src = (ROOT / "public" / "js" / "vectors.js").read_text()
+        vq_start = src.index("async function downloadVectorDataVq")
+        vq_body = src[vq_start:src.index("\nasync function downloadVectorData(", vq_start)]
+        assert "new Float32Array(numPixels" not in vq_body and "Float32Array(outH" not in vq_body, (
+            "downloadVectorDataVq allocates a Float32Array sized on the pixel "
+            "count again -- that is the OOM this change removed."
+        )
