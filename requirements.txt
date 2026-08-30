@@ -27,7 +27,7 @@ geotessera>=0.10.1
 # everything else (Flask, sklearn, pandas, …) is behind extras
 # tessera-vq[server] / [sweep] which TEE doesn't need — only the client
 # surface is used.
-tessera-vq @ git+https://github.com/sk818/tessera-vq.git@v0.6.4
+tessera-vq @ git+https://github.com/sk818/tessera-vq.git@v0.7.1
 # tessera-eval: habitat/land-cover classifier evaluation on Tessera embeddings.
 # Its own repo (extracted from this tree); used by lib/evaluation_engine,
 # scripts/tee_evaluate, and the tee-compute server. Deliberately fetches via
