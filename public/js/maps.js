@@ -963,6 +963,10 @@ function setPanelLayout(mode) {
     const classifyBtn = document.getElementById('manual-classify-btn');
     if (classifyBtn) classifyBtn.style.display = 'none';
 
+    // Leaving validation while mid-rectangle-draw would otherwise leave
+    // Panel 2 un-pannable (dragging stays disabled) in every other mode.
+    if (mode !== 'validation' && window.exitBboxDrawMode) window.exitBboxDrawMode();
+
     // Mode-specific setup beyond layers
     if (mode === 'labelling') {
         if (waitMsg) waitMsg.style.display = 'none';

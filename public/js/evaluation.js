@@ -2323,6 +2323,7 @@ function clearAllBboxes() {
     // Reset dropdown to placeholder
     const typeSel = document.getElementById('val-bbox-type');
     if (typeSel) typeSel.selectedIndex = 0;
+    setBboxDrawHint(false);
 }
 
 function initBboxDrawing() {
@@ -2345,12 +2346,42 @@ function initBboxDrawing() {
     });
 }
 
+const BBOX_TYPE_LABELS = { train: 'Train', test: 'Test', map: 'Map' };
+
+function setBboxDrawHint(on, type) {
+    const hint = document.getElementById('val-bbox-draw-hint');
+    if (!hint) return;
+    hint.style.display = on ? '' : 'none';
+    if (on) {
+        const name = BBOX_TYPE_LABELS[type] || 'area';
+        hint.innerHTML =
+            `Drawing <strong>${name}</strong> areas — drag on the map to add a rectangle · press ` +
+            `<kbd style="background:#444; border:1px solid #666; border-radius:3px; padding:0 4px;">Esc</kbd> to stop and pan the map`;
+    }
+}
+
+// Fully leave rectangle-draw mode: drop the handler, re-enable panning,
+// reset the cursor + the area-type dropdown + the hint. Safe to call when
+// not drawing.
+function exitBboxDrawMode() {
+    const map = window.maps && window.maps.rgb;
+    if (bboxDrawHandler) {
+        bboxDrawHandler.disable();
+        bboxDrawHandler = null;
+    }
+    if (map) { map.dragging.enable(); map.getContainer().style.cursor = ''; }
+    const typeSel = document.getElementById('val-bbox-type');
+    if (typeSel) typeSel.selectedIndex = 0;
+    setBboxDrawHint(false);
+}
+
 function toggleBboxDraw() {
     const map = window.maps && window.maps.rgb;
     if (bboxDrawHandler) {
         bboxDrawHandler.disable();
         bboxDrawHandler = null;
         if (map) { map.dragging.enable(); map.getContainer().style.cursor = ''; }
+        setBboxDrawHint(false);
         return;
     }
     if (!map || typeof L.Draw === 'undefined') return;
@@ -2366,7 +2397,16 @@ function toggleBboxDraw() {
     map.dragging.disable();
     map.getContainer().style.cursor = 'crosshair';
     bboxDrawHandler.enable();
+    setBboxDrawHint(true, currentBboxType);
 }
+
+// Esc leaves draw mode from anywhere (Leaflet.Draw's own Esc only cancels
+// the in-progress rectangle, it doesn't re-enable map dragging).
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && bboxDrawHandler && window.currentPanelMode === 'validation') {
+        exitBboxDrawMode();
+    }
+});
 
 function hasSpatialBboxes() {
     return spatialBboxes.train.length > 0 || spatialBboxes.test.length > 0;
@@ -2389,6 +2429,7 @@ document.getElementById('val-bbox-type').addEventListener('change', function() {
     if (!this.value) {
         // Placeholder selected — stop drawing, re-enable pan
         if (map) { map.dragging.enable(); map.getContainer().style.cursor = ''; }
+        setBboxDrawHint(false);
         return;
     }
     currentBboxType = this.value;
@@ -2469,6 +2510,7 @@ function restoreValidationState() {
     updateMaxTrainPctHint();
 }
 window.restoreValidationState = restoreValidationState;
+window.exitBboxDrawMode = exitBboxDrawMode;
 
 // ── Hyperparameter variant UI ──
 

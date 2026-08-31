@@ -678,10 +678,11 @@ By default, TEE randomly splits your data into training and testing sets. This i
 To get a more honest evaluation, you can draw **separate geographic regions** for training and testing:
 
 1. In the validation controls, find **Spatial split (optional)**
-2. Select **Train area (blue)** from the dropdown — your cursor changes to a crosshair
-3. Draw one or more rectangles on the satellite map covering your training region (e.g., the northern half of your study area)
+2. Select **Train area (blue)** from the dropdown — your cursor changes to a crosshair and the Satellite panel switches to drawing mode (you can't pan it while drawing)
+3. Drag to draw one or more rectangles on the satellite map covering your training region (e.g., the northern half of your study area). Drawing stays armed so you can add several.
 4. Switch to **Test area (yellow)** and draw rectangles for your test region (e.g., the southern half)
-5. Click **Run Evaluation** — the classifier will only train on data inside the blue boxes and only test on data inside the yellow boxes
+5. Press **Esc** when you're done drawing — this exits drawing mode and restores panning on the Satellite panel. (A reminder is shown under the dropdown while you're drawing.)
+6. Click **Run Evaluation** — the classifier will only train on data inside the blue boxes and only test on data inside the yellow boxes
 
 | Area type | Colour | Purpose |
 |-----------|--------|---------|
@@ -692,6 +693,7 @@ To get a more honest evaluation, you can draw **separate geographic regions** fo
 **How the spatial split works:**
 - If a polygon falls in both a train and a test rectangle, it goes to the training set (training takes priority)
 - Polygons outside all rectangles are ignored
+- **Esc** leaves drawing mode and re-enables panning on the Satellite panel
 - Click any rectangle on the map to delete it; click **Clear** to remove all rectangles
 - If you don't draw any rectangles and click Run, TEE will ask if you want to proceed with a random split
 - Your bounding boxes are saved when you use Generate Config / Upload Config
@@ -785,7 +787,7 @@ predictions = clf.predict(embeddings)  # embeddings shape: (N, 128)
 
 After running an evaluation, you can generate a **classification map** — a GeoTIFF file where every pixel is labelled with a predicted habitat class. You can open this in QGIS or any other GIS software.
 
-1. In the **Spatial split** dropdown, select **Map area (green)** and draw one or more rectangles covering the area you want to classify
+1. In the **Spatial split** dropdown, select **Map area (green)** and drag to draw one or more rectangles covering the area you want to classify, then press **Esc** to leave drawing mode (so you can pan the Satellite panel again)
 2. Make sure you've already run an evaluation (so the training data is cached)
 3. *(Optional)* Set **Map year** if you want to predict on a different year than the model was trained on — see [Mapping a Different Year](#mapping-a-different-year-cross-year-inference) below
 4. Click **Create Map** (the green button next to Run Evaluation)
@@ -967,7 +969,7 @@ usually much faster.
 
 | Key | Action |
 |-----|--------|
-| Escape | Cancel the current polygon drawing |
+| Escape | Cancel the current polygon drawing (Labelling mode); leave spatial-split rectangle drawing and restore panning (Validation mode) |
 | Ctrl+click | Drop a pin at the clicked location (Labelling mode) |
 | Ctrl+double-click | Begin drawing a polygon (Labelling mode) |
 

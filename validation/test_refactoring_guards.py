@@ -985,3 +985,25 @@ class TestMapPreviewOverlay:
             "validation/test_map_preview_overlay.mjs failed:\n"
             f"{result.stdout}\n{result.stderr}"
         )
+
+
+# ──────────────────────────────────────────────────
+# 22. Leaving rectangle-draw mode in Validation
+#     Selecting a Spatial-split area type disables map dragging on Panel 2
+#     and re-arms after each rectangle. Esc (and leaving validation mode)
+#     must fully exit -- re-enable dragging, reset the dropdown, hide the
+#     hint. See validation/test_bbox_draw_escape.mjs.
+# ──────────────────────────────────────────────────
+
+class TestBboxDrawEscape:
+    def test_escape_exits_draw_mode_and_restores_panning(self):
+        if not (ROOT / "node_modules" / "linkedom").is_dir():
+            pytest.skip("node_modules/linkedom not installed -- run `npm install` from the repo root")
+        result = subprocess.run(
+            ["node", str(ROOT / "validation" / "test_bbox_draw_escape.mjs")],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, (
+            "validation/test_bbox_draw_escape.mjs failed:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )
