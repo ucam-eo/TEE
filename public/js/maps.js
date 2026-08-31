@@ -964,8 +964,12 @@ function setPanelLayout(mode) {
     if (classifyBtn) classifyBtn.style.display = 'none';
 
     // Leaving validation while mid-rectangle-draw would otherwise leave
-    // Panel 2 un-pannable (dragging stays disabled) in every other mode.
-    if (mode !== 'validation' && window.exitBboxDrawMode) window.exitBboxDrawMode();
+    // Panel 2 un-pannable (dragging stays disabled) in every other mode;
+    // and drop the floating map-preview widget + its overlays.
+    if (mode !== 'validation') {
+        if (window.exitBboxDrawMode) window.exitBboxDrawMode();
+        if (window.clearMapPreview) window.clearMapPreview();
+    }
 
     // Mode-specific setup beyond layers
     if (mode === 'labelling') {

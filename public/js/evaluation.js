@@ -33,6 +33,7 @@ let valGeoJsonLayer = null;
 let valGeoJsonData = null;
 let valMapPreviewLayers = [];  // L.imageOverlay(s) for Create Map previews on Panel 2
 let valMapPreviewOpacity = 0.75;
+let valMapPreviewCollapsed = false;  // floating legend/opacity widget collapsed?
 
 const CLASS_PALETTE = [
     '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
@@ -1251,18 +1252,19 @@ function addMapPreview(preview) {
 }
 
 function renderMapPreviewControl(legend) {
-    const panel = document.getElementById('map-rgb') && document.getElementById('map-rgb').parentElement;
-    if (!panel) return;
-
+    // A small floating widget on document.body (not inside Panel 2, whose
+    // overflow:hidden clipped it and where it covered the map). Fixed to a
+    // screen corner, draggable by its header, and collapsible.
     let ctl = document.getElementById('val-map-preview-ctl');
     if (!ctl) {
         ctl = document.createElement('div');
         ctl.id = 'val-map-preview-ctl';
         ctl.style.cssText =
-            'position:absolute; left:12px; bottom:12px; z-index:600; background:rgba(0,0,0,0.82);' +
-            'color:#eee; font-size:11px; border-radius:6px; padding:8px 10px; max-width:240px;' +
-            'box-shadow:0 2px 10px rgba(0,0,0,0.4); line-height:1.5;';
-        panel.appendChild(ctl);
+            'position:fixed; right:16px; bottom:16px; z-index:2000; width:186px;' +
+            'background:rgba(20,20,20,0.93); color:#eee; font-size:11px; line-height:1.5;' +
+            'border:1px solid #555; border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.5);' +
+            'overflow:hidden;';
+        document.body.appendChild(ctl);
     }
 
     const esc = (s) => String(s).replace(/[&<>"]/g, c =>
@@ -1283,19 +1285,52 @@ function renderMapPreviewControl(legend) {
     }
 
     ctl.innerHTML =
-        `<div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px;">` +
-        `<strong>Map preview${nMaps > 1 ? ` (${nMaps})` : ''}</strong>` +
-        `<span id="val-map-preview-close" title="Remove preview" style="cursor:pointer; padding:0 4px; font-size:13px;">&times;</span>` +
-        `</div>` +
+        `<div id="val-map-preview-head" style="display:flex; align-items:center; justify-content:space-between;` +
+        ` gap:6px; padding:6px 8px; background:rgba(255,255,255,0.06); cursor:grab; user-select:none;">` +
+        `<strong style="font-weight:600;">Map preview${nMaps > 1 ? ` (${nMaps})` : ''}</strong>` +
+        `<span style="display:flex; gap:8px; align-items:center;">` +
+        `<span id="val-map-preview-toggle" title="Collapse / expand" style="cursor:pointer;">${valMapPreviewCollapsed ? '▸' : '▾'}</span>` +
+        `<span id="val-map-preview-close" title="Remove preview" style="cursor:pointer; font-size:13px;">&times;</span>` +
+        `</span></div>` +
+        `<div id="val-map-preview-body" style="padding:8px; ${valMapPreviewCollapsed ? 'display:none;' : ''}">` +
         `<input id="val-map-preview-opacity" type="range" min="0" max="1" step="0.05" value="${valMapPreviewOpacity}" style="width:100%;">` +
-        (legendHtml ? `<div style="margin-top:6px; display:flex; flex-direction:column; gap:3px;">${legendHtml}</div>` : '') +
-        `<div style="margin-top:6px; color:#aaa;">Preview only — download the GeoTIFF for the full-resolution map.</div>`;
+        (legendHtml ? `<div style="margin-top:6px; display:flex; flex-direction:column; gap:3px; max-height:38vh; overflow:auto;">${legendHtml}</div>` : '') +
+        `<div style="margin-top:6px; color:#aaa;">Preview only — download the GeoTIFF for the full-resolution map.</div>` +
+        `</div>`;
 
     ctl.querySelector('#val-map-preview-close').onclick = clearMapPreview;
+    ctl.querySelector('#val-map-preview-toggle').onclick = () => {
+        valMapPreviewCollapsed = !valMapPreviewCollapsed;
+        renderMapPreviewControl(legend);
+    };
     ctl.querySelector('#val-map-preview-opacity').oninput = (e) => {
         valMapPreviewOpacity = parseFloat(e.target.value);
         for (const l of valMapPreviewLayers) l.setOpacity(valMapPreviewOpacity);
     };
+
+    // Drag by the header. mousemove/mouseup are added per drag and removed
+    // on release, so re-rendering the control doesn't stack listeners.
+    const head = ctl.querySelector('#val-map-preview-head');
+    head.addEventListener('mousedown', (e) => {
+        if (e.target.id === 'val-map-preview-close' || e.target.id === 'val-map-preview-toggle') return;
+        const r = ctl.getBoundingClientRect();
+        const sx = e.clientX, sy = e.clientY, sl = r.left, st = r.top;
+        ctl.style.right = 'auto'; ctl.style.bottom = 'auto';
+        ctl.style.left = sl + 'px'; ctl.style.top = st + 'px';
+        head.style.cursor = 'grabbing';
+        const onMove = (ev) => {
+            ctl.style.left = (sl + ev.clientX - sx) + 'px';
+            ctl.style.top = Math.max(0, st + ev.clientY - sy) + 'px';
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            head.style.cursor = 'grab';
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        e.preventDefault();
+    });
 }
 
 function updateCreateMapButton() {

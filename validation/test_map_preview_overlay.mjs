@@ -58,10 +58,11 @@ global.L = {
 window.maps = { rgb };
 
 const factory = new Function(
-    `let valMapPreviewLayers = [];\nlet valMapPreviewOpacity = 0.75;\n` +
+    `let valMapPreviewLayers = [];\nlet valMapPreviewOpacity = 0.75;\nlet valMapPreviewCollapsed = false;\n` +
     [extract('clearMapPreview'), extract('addMapPreview'), extract('renderMapPreviewControl')].join('\n\n') +
     `\nreturn { clearMapPreview, addMapPreview, renderMapPreviewControl,` +
-    ` layers: () => valMapPreviewLayers, opacity: () => valMapPreviewOpacity };`
+    ` layers: () => valMapPreviewLayers, opacity: () => valMapPreviewOpacity,` +
+    ` collapsed: () => valMapPreviewCollapsed };`
 );
 const api = factory();
 
@@ -84,10 +85,21 @@ ok(rgb._layers.length === 1, 'image overlay added to Panel 2');
 ok(rgb._layers[0].png === 'data:image/png;base64,AAAA', 'overlay uses the preview PNG');
 ok(JSON.stringify(rgb._layers[0].bounds) === '[[48.2,16.6],[48.25,16.65]]', 'overlay uses preview bounds');
 ok(ctl() !== null, 'preview control is created');
+ok(ctl().parentElement === document.body, 'control floats on <body>, not inside a panel');
+ok(/position:fixed/.test(ctl().style.cssText), 'control is position:fixed (not clipped by the panel)');
 ok(/Water/.test(ctl().innerHTML), 'legend lists a class label');
 ok(/Fen &lt;mix&gt;/.test(ctl().innerHTML), 'legend label is HTML-escaped');
 ok(/#4363d8/.test(ctl().innerHTML), 'legend shows the class colour');
 ok(ctl().querySelector('#val-map-preview-opacity') !== null, 'control has an opacity slider');
+ok(ctl().querySelector('#val-map-preview-head') !== null, 'control has a drag header');
+
+// --- collapse toggle hides the body -----------------------------------
+ok(ctl().querySelector('#val-map-preview-body').style.display !== 'none', 'body is expanded by default');
+ctl().querySelector('#val-map-preview-toggle').onclick();
+ok(api.collapsed() === true, 'toggle sets the collapsed flag');
+ok(ctl().querySelector('#val-map-preview-body').style.display === 'none', 'collapsed hides the legend/slider body');
+ctl().querySelector('#val-map-preview-toggle').onclick();
+ok(ctl().querySelector('#val-map-preview-body').style.display !== 'none', 'toggling again re-expands');
 
 // opacity slider drives every overlay
 const slider = ctl().querySelector('#val-map-preview-opacity');

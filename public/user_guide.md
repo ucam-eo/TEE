@@ -810,13 +810,13 @@ After running an evaluation, you can generate a **classification map** — a Geo
 
 #### Map preview
 
-As each map area finishes, TEE also drops a **coloured preview overlay** onto the Satellite panel so you can check the result in place, without downloading the GeoTIFF and opening it in a GIS. A small control appears at the bottom-left of that panel:
+As each map area finishes, TEE also drops a **coloured preview overlay** onto the Satellite panel so you can check the result in place, without downloading the GeoTIFF and opening it in a GIS. A small **floating widget** appears in the bottom-right corner of the window (not on the panel, so it doesn't cover the map) with:
 
 - an **opacity slider** to fade the overlay against the imagery underneath
 - a **legend** — one swatch per class for a classification map, or a colour ramp with the value range for a regression map
-- a **✕** to dismiss it
+- a **▾** to collapse it to just its title bar, and a **✕** to dismiss it
 
-Each green map area you drew gets its own overlay; the control covers all of them at once. Starting another **Create Map** run, or clearing the uploaded shapefiles, removes the previews.
+Drag the widget by its title bar to move it anywhere. Each green map area you drew gets its own overlay; the widget controls all of them at once. Starting another **Create Map** run, clearing the uploaded shapefiles, or leaving Validation mode removes the previews.
 
 The preview is a **downsampled image reprojected to lat/lon**, not the map data itself — colours and edges are approximate, and it's not georeferenced for measurement. The GeoTIFF is still the authoritative output. (The preview needs a compute server running **tee-compute v1.8.2 or newer**; against an older server, map generation is unchanged and no preview appears.)
 
