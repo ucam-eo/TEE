@@ -1485,7 +1485,19 @@ function expandLabelToFeatures(label) {
 
 // ===== EXPORT / IMPORT (Phase 3) =====
 
+// Set while a Map (JPG) export is fetching tiles -- the only export slow
+// enough to be worth cancelling (the rest are synchronous serialisation).
+// While it's set, the Export button reads "✕ Cancel export" and clicking it
+// aborts instead of opening the format menu.
+let _jpgExportAbort = null;
+
 function exportManualLabels() {
+    // Mid-JPG-export: this button is the cancel affordance.
+    if (_jpgExportAbort) {
+        _jpgExportAbort.abort();
+        return;
+    }
+
     if (manualLabels.length === 0) {
         alert('No manual labels to export.');
         return;
@@ -2733,9 +2745,16 @@ async function exportMapAsJPG() {
     // leaves the button reading "Saving..." forever, and a failure in toBlob
     // leaves it disabled too.
     const btnHTML = btn ? btn.innerHTML : null;
-    if (btn) btn.disabled = true;
+    const btnTitle = btn ? btn.title : '';
+    // Left clickable during the export -- clicking it now cancels (see
+    // exportManualLabels). Tile fetching is the only slow part; the abort is
+    // checked between batches.
+    const abort = new AbortController();
+    _jpgExportAbort = abort;
+    if (btn) btn.title = 'Click to cancel the export';
     const MAX_ZOOM = 18;
     const TILE_SZ = 256;
+    const progress = (s) => { if (btn) btn.textContent = `${s}  ✕`; };
 
     try {
         const map = window.maps.rgb;
@@ -2767,7 +2786,7 @@ async function exportMapAsJPG() {
         const viewW = sePoint.x - nwPoint.x;
         const viewH = sePoint.y - nwPoint.y;
 
-        btn.textContent = `Fetching 0/${totalTiles} tiles...`;
+        progress(`Fetching 0/${totalTiles} tiles...`);
         await new Promise(r => setTimeout(r, 50));
 
         const canvas = document.createElement('canvas');
@@ -2787,34 +2806,40 @@ async function exportMapAsJPG() {
         }
 
         for (let i = 0; i < tileJobs.length; i += BATCH) {
+            if (abort.signal.aborted) throw new DOMException('Export cancelled', 'AbortError');
             const batch = tileJobs.slice(i, i + BATCH);
             await Promise.all(batch.map(({tx, ty}) => new Promise(resolve => {
                 const img = new Image();
                 img.crossOrigin = 'anonymous';
                 let settled = false;
-                // Resolve on load, error, OR timeout -- a single stalled tile
-                // request must not hang the whole export at "Fetching x/N".
+                // Resolve on load, error, timeout, OR abort -- a single stalled
+                // tile request must not hang the whole export at "Fetching x/N",
+                // and a cancel must drop pending fetches promptly.
                 const done = (draw) => {
                     if (settled) return;
                     settled = true;
                     clearTimeout(timer);
-                    if (draw) {
+                    abort.signal.removeEventListener('abort', onAbort);
+                    if (draw && !abort.signal.aborted) {
                         try {
                             ctx.drawImage(img, (tx - tileMinX) * TILE_SZ, (ty - tileMinY) * TILE_SZ, TILE_SZ, TILE_SZ);
                         } catch (_) { /* tainted/broken tile -- skip it */ }
                     }
                     loaded++;
-                    btn.textContent = `Fetching ${loaded}/${totalTiles} tiles...`;
+                    progress(`Fetching ${loaded}/${totalTiles} tiles...`);
                     resolve();
                 };
+                const onAbort = () => { img.src = ''; done(false); };
                 const timer = setTimeout(() => done(false), 20000);
+                abort.signal.addEventListener('abort', onAbort);
                 img.onload = () => done(true);
                 img.onerror = () => done(false);
                 img.src = window.satelliteSources[window.currentSatelliteSource].exportUrl(MAX_ZOOM, ty, tx);
             })));
         }
+        if (abort.signal.aborted) throw new DOMException('Export cancelled', 'AbortError');
 
-        btn.textContent = 'Rendering labels...';
+        progress('Rendering labels...');
         await new Promise(r => setTimeout(r, 50));
 
         // Step 2: Draw label pixels at max-zoom pixel coordinates
@@ -2889,13 +2914,14 @@ async function exportMapAsJPG() {
         // their size limits, common at zoom 18 when zoomed out -- surfaces as
         // a caught error with actionable text, instead of throwing inside the
         // callback and leaving the button stuck on "Saving...".
-        btn.textContent = 'Saving...';
+        if (btn) btn.textContent = 'Saving...';
         const blob = await new Promise((resolve, reject) => {
             outCanvas.toBlob(
                 b => b ? resolve(b) : reject(new Error(
                     `Image too large to encode (${outCanvas.width}×${outCanvas.height}px). Zoom in and export a smaller area.`)),
                 'image/jpeg', 0.95);
         });
+        if (abort.signal.aborted) throw new DOMException('Export cancelled', 'AbortError');
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -2904,14 +2930,20 @@ async function exportMapAsJPG() {
         URL.revokeObjectURL(url);
 
     } catch (e) {
-        console.error('[EXPORT] Error exporting map:', e);
-        alert(e && /^Image too large/.test(e.message || '')
-            ? e.message
-            : 'Error exporting map. Check console for details.');
+        if (e && e.name === 'AbortError') {
+            console.log('[EXPORT] Map JPG export cancelled by user');
+        } else {
+            console.error('[EXPORT] Error exporting map:', e);
+            alert(e && /^Image too large/.test(e.message || '')
+                ? e.message
+                : 'Error exporting map. Check console for details.');
+        }
     } finally {
+        _jpgExportAbort = null;
         if (btn) {
             btn.disabled = false;
             if (btnHTML !== null) btn.innerHTML = btnHTML;
+            btn.title = btnTitle;
         }
     }
 }

@@ -208,7 +208,7 @@ The **Export** button and its menu live in the Labelling-mode header bar, and it
 | **ESRI Shapefile (ZIP)** | Standard GIS interchange format — opens in QGIS, ArcGIS, etc. Can also be used as ground truth for validation. |
 | **CSV (points)** | A summary: one row per label — `name, code, type, lat, lon, pixel_count` — at the label's representative location (the pin itself for a pin, the vertex centroid for a polygon, a representative pixel for a cluster or similarity label). The quickest path into Google Earth Engine (`ee.FeatureCollection` from a lat/lon CSV) or ArcGIS's **Add XY Data**, or just a spreadsheet. It is **not** the full pixel set — use GeoJSON, Shapefile, or KML for that. |
 | **KML** | One Placemark per label, coloured to match its label colour — opens directly in Google Earth; ArcGIS and Google Earth Engine can import KML too |
-| **Map (JPG)** | A screenshot of the current satellite view with label overlays and a legend — good for presentations |
+| **Map (JPG)** | A screenshot of the current satellite view with label overlays and a legend — good for presentations. It fetches full-resolution satellite tiles for the visible area, so it can take a few seconds; while it runs, the **Export** button shows progress with a ✕ — click it to cancel. |
 
 > **How export works:** For pixel labels (auto-labelling or similarity search), TEE converts the raster (grid of coloured pixels) to vector polygons (outlines) for the GeoJSON, Shapefile, and KML formats. This keeps files compact — a label covering 50,000 pixels becomes a few polygon shapes rather than 50,000 points — and import converts the polygons back to pixels. CSV is the exception noted above: one representative point per label, never the full shape.
 >

@@ -911,3 +911,55 @@ class TestRegressionOutOfRangeColumn:
             "validation/test_regression_oor_column.mjs failed:\n"
             f"{result.stdout}\n{result.stderr}"
         )
+
+
+# ──────────────────────────────────────────────────
+# 20. Map (JPG) export: button always restored, and cancellable
+#     exportMapAsJPG() must (a) restore the Export button's label in a
+#     finally block -- it used to leave it reading "Saving..." forever
+#     after a successful export (Louis Driver) -- and (b) be abortable
+#     mid-tile-fetch via the Export button, which is the only export slow
+#     enough to be worth cancelling (feature 2). Structural guard: a full
+#     behavioural test would need a hand-rolled <canvas>/Image mock.
+# ──────────────────────────────────────────────────
+
+class TestJpgExportRobustness:
+    def _fn(self, name):
+        src = (ROOT / "public" / "js" / "labels.js").read_text()
+        i = src.index(f"function {name}(")
+        depth, started, j = 0, False, i
+        while True:
+            c = src[j]
+            if c == "{":
+                depth += 1
+                started = True
+            elif c == "}":
+                depth -= 1
+                if started and depth == 0:
+                    return src[i:j + 1]
+            j += 1
+
+    def test_export_button_is_restored_in_a_finally(self):
+        body = self._fn("exportMapAsJPG")
+        assert "} finally {" in body, "exportMapAsJPG must restore the button in a finally block"
+        assert "btn.innerHTML = btnHTML" in body, (
+            "the finally must put the button's original label back -- otherwise "
+            'a successful export leaves it stuck on "Saving..."'
+        )
+
+    def test_export_is_cancellable(self):
+        body = self._fn("exportMapAsJPG")
+        assert "new AbortController()" in body
+        assert "_jpgExportAbort = abort" in body
+        assert body.count("AbortError") >= 2, (
+            "abort must be checked between tile batches and surfaced as an "
+            "AbortError the catch treats as a silent cancel"
+        )
+        assert "_jpgExportAbort = null" in body, "finally must clear the in-progress flag"
+
+    def test_export_button_click_cancels_an_in_progress_export(self):
+        body = self._fn("exportManualLabels")
+        assert "if (_jpgExportAbort)" in body and "_jpgExportAbort.abort()" in body, (
+            "clicking Export while a JPG export runs must abort it, not open "
+            "the format menu"
+        )
