@@ -889,3 +889,25 @@ class TestVqQuantisedMosaic:
             "downloadVectorDataVq allocates a Float32Array sized on the pixel "
             "count again -- that is the OOM this change removed."
         )
+
+
+# ──────────────────────────────────────────────────
+# 19. "Outside range" column in the Regression Metrics table
+#     renderRegressionResults() renders tessera-eval >= v1.8.1's oor_frac /
+#     train_range (fraction of test predictions beyond the training span,
+#     bug 8) -- em dash for older pins, amber once >= 1%, and a caption
+#     naming the span. See validation/test_regression_oor_column.mjs.
+# ──────────────────────────────────────────────────
+
+class TestRegressionOutOfRangeColumn:
+    def test_oor_column_renders_dash_percentage_and_note(self):
+        if not (ROOT / "node_modules" / "linkedom").is_dir():
+            pytest.skip("node_modules/linkedom not installed -- run `npm install` from the repo root")
+        result = subprocess.run(
+            ["node", str(ROOT / "validation" / "test_regression_oor_column.mjs")],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, (
+            "validation/test_regression_oor_column.mjs failed:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )
