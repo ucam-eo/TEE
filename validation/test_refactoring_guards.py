@@ -963,3 +963,25 @@ class TestJpgExportRobustness:
             "clicking Export while a JPG export runs must abort it, not open "
             "the format menu"
         )
+
+
+# ──────────────────────────────────────────────────
+# 21. In-browser Create Map preview overlay
+#     evaluation.js turns tessera-eval >= v1.8.2's map_ready.preview (PNG +
+#     bounds + legend, feature 5) into an L.imageOverlay on Panel 2 with a
+#     dismissable opacity/legend control; clearMapPreview() tears both
+#     down. See validation/test_map_preview_overlay.mjs.
+# ──────────────────────────────────────────────────
+
+class TestMapPreviewOverlay:
+    def test_preview_overlay_and_control_lifecycle(self):
+        if not (ROOT / "node_modules" / "linkedom").is_dir():
+            pytest.skip("node_modules/linkedom not installed -- run `npm install` from the repo root")
+        result = subprocess.run(
+            ["node", str(ROOT / "validation" / "test_map_preview_overlay.mjs")],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, (
+            "validation/test_map_preview_overlay.mjs failed:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )

@@ -31,6 +31,8 @@ let valScatterChart = null;  // separate canvas from valChart -- predicted-vs-ac
 let valFieldData = null;
 let valGeoJsonLayer = null;
 let valGeoJsonData = null;
+let valMapPreviewLayers = [];  // L.imageOverlay(s) for Create Map previews on Panel 2
+let valMapPreviewOpacity = 0.75;
 
 const CLASS_PALETTE = [
     '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
@@ -1223,6 +1225,79 @@ document.getElementById('val-download-btn').addEventListener('click', downloadMo
 
 document.getElementById('val-create-map-btn').addEventListener('click', createMap);
 
+// ── In-browser map preview (feature 5) ──
+// tessera-eval >= v1.8.2 puts a small EPSG:4326 PNG + legend on each
+// map_ready event; drop it on Panel 2 as an image overlay so a map can be
+// eyeballed without downloading the GeoTIFF. Older pins send no `preview`,
+// so this whole path just never runs.
+
+function clearMapPreview() {
+    for (const layer of valMapPreviewLayers) {
+        if (window.maps && window.maps.rgb) window.maps.rgb.removeLayer(layer);
+    }
+    valMapPreviewLayers = [];
+    const ctl = document.getElementById('val-map-preview-ctl');
+    if (ctl) ctl.remove();
+}
+
+function addMapPreview(preview) {
+    if (!preview || !preview.png || !preview.bounds || !window.maps || !window.maps.rgb) return;
+    const layer = L.imageOverlay(preview.png, preview.bounds, {
+        opacity: valMapPreviewOpacity,
+        interactive: false,
+    }).addTo(window.maps.rgb);
+    valMapPreviewLayers.push(layer);
+    renderMapPreviewControl(preview.legend);
+}
+
+function renderMapPreviewControl(legend) {
+    const panel = document.getElementById('map-rgb') && document.getElementById('map-rgb').parentElement;
+    if (!panel) return;
+
+    let ctl = document.getElementById('val-map-preview-ctl');
+    if (!ctl) {
+        ctl = document.createElement('div');
+        ctl.id = 'val-map-preview-ctl';
+        ctl.style.cssText =
+            'position:absolute; left:12px; bottom:12px; z-index:600; background:rgba(0,0,0,0.82);' +
+            'color:#eee; font-size:11px; border-radius:6px; padding:8px 10px; max-width:240px;' +
+            'box-shadow:0 2px 10px rgba(0,0,0,0.4); line-height:1.5;';
+        panel.appendChild(ctl);
+    }
+
+    const esc = (s) => String(s).replace(/[&<>"]/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const nMaps = valMapPreviewLayers.length;
+    let legendHtml = '';
+    if (Array.isArray(legend)) {
+        legendHtml = legend.map(item =>
+            `<div style="display:flex; align-items:center; gap:6px;">` +
+            `<span style="width:12px; height:12px; border-radius:2px; background:${esc(item.color)}; flex:0 0 auto;"></span>` +
+            `<span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(item.label)}</span>` +
+            `</div>`
+        ).join('');
+    } else if (legend && Array.isArray(legend.ramp)) {
+        legendHtml =
+            `<div style="height:10px; border-radius:2px; background:linear-gradient(to right, ${legend.ramp.map(esc).join(',')});"></div>` +
+            `<div style="display:flex; justify-content:space-between;"><span>${esc(legend.min)}</span><span>${esc(legend.max)}</span></div>`;
+    }
+
+    ctl.innerHTML =
+        `<div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px;">` +
+        `<strong>Map preview${nMaps > 1 ? ` (${nMaps})` : ''}</strong>` +
+        `<span id="val-map-preview-close" title="Remove preview" style="cursor:pointer; padding:0 4px; font-size:13px;">&times;</span>` +
+        `</div>` +
+        `<input id="val-map-preview-opacity" type="range" min="0" max="1" step="0.05" value="${valMapPreviewOpacity}" style="width:100%;">` +
+        (legendHtml ? `<div style="margin-top:6px; display:flex; flex-direction:column; gap:3px;">${legendHtml}</div>` : '') +
+        `<div style="margin-top:6px; color:#aaa;">Preview only — download the GeoTIFF for the full-resolution map.</div>`;
+
+    ctl.querySelector('#val-map-preview-close').onclick = clearMapPreview;
+    ctl.querySelector('#val-map-preview-opacity').oninput = (e) => {
+        valMapPreviewOpacity = parseFloat(e.target.value);
+        for (const l of valMapPreviewLayers) l.setOpacity(valMapPreviewOpacity);
+    };
+}
+
 function updateCreateMapButton() {
     const btn = document.getElementById('val-create-map-btn');
     if (!btn) return;
@@ -1245,6 +1320,8 @@ async function createMap() {
         document.getElementById('val-status').style.color = '#dc3545';
         return;
     }
+
+    clearMapPreview();  // drop any overlay from a previous run
 
     // Pick the classifier: use the first checked pixel-based classifier
     const PIXEL_CLASSIFIERS = ['nn', 'rf', 'xgboost', 'mlp'];
@@ -1338,6 +1415,7 @@ async function createMap() {
                             : '';
                         status.textContent = `Map area ${ev.bbox_idx + 1} ready (${ev.width}x${ev.height} pixels)${yearNote}`;
                         status.style.color = '#28a745';
+                        if (ev.preview) addMapPreview(ev.preview);  // tessera-eval >= v1.8.2
                     } else if (ev.event === 'done') {
                         // Download all ready maps
                         for (const m of readyMaps) {
@@ -2536,9 +2614,11 @@ async function clearShapefiles() {
         valGeoJsonLayer = null;
     }
     valGeoJsonData = null;
+    clearMapPreview();
 }
 
 window.clearShapefiles = clearShapefiles;
+window.clearMapPreview = clearMapPreview;
 window.uploadShapefile = uploadShapefile;
 window.runEvaluation = runEvaluation;
 window.renderConfusionMatrix = renderConfusionMatrix;

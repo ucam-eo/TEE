@@ -791,6 +791,7 @@ After running an evaluation, you can generate a **classification map** — a Geo
 4. Click **Create Map** (the green button next to Run Evaluation)
 5. TEE trains the selected classifier on all available labels, then predicts every pixel inside the green rectangles
 6. The resulting GeoTIFF downloads automatically to your computer
+7. A **preview** of each map also appears as a coloured overlay on the Satellite panel, with a legend and an opacity slider — a quick sanity check without opening the GeoTIFF in QGIS. It's a downsampled image, not the real data; use the ✕ on its control to dismiss it. (Requires a compute server running tee-compute v1.8.2 or newer; older servers just skip the preview.)
 
 **What you get:**
 - A single-band GeoTIFF file (one pixel = one habitat class)
