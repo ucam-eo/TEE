@@ -33,7 +33,7 @@ With TEE you can:
 - [Manual Labelling](#manual-labelling) — pins, polygons, similarity expansion
 - [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
 - [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
-- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, confusion matrix, spatial splits, worked example, Create Map, CLI
+- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, confusion matrix, spatial splits, worked example, Create Map + preview, CLI
 - [Postcard](#postcard) — a fun, no-account image generator
 - [Data Privacy](#data-privacy)
 - [Reference](#reference) — mouse controls, keyboard shortcuts, tips
@@ -791,7 +791,7 @@ After running an evaluation, you can generate a **classification map** — a Geo
 4. Click **Create Map** (the green button next to Run Evaluation)
 5. TEE trains the selected classifier on all available labels, then predicts every pixel inside the green rectangles
 6. The resulting GeoTIFF downloads automatically to your computer
-7. A **preview** of each map also appears as a coloured overlay on the Satellite panel, with a legend and an opacity slider — a quick sanity check without opening the GeoTIFF in QGIS. It's a downsampled image, not the real data; use the ✕ on its control to dismiss it. (Requires a compute server running tee-compute v1.8.2 or newer; older servers just skip the preview.)
+7. A quick **preview** of each map also appears on the Satellite panel — see [Map preview](#map-preview) below
 
 **What you get:**
 - A single-band GeoTIFF file (one pixel = one habitat class)
@@ -805,6 +805,18 @@ After running an evaluation, you can generate a **classification map** — a Geo
 - Only pixel-based classifiers are supported for map generation (k-NN, Random Forest, XGBoost, MLP). The spatial classifiers need neighbourhood features at every pixel, which would be prohibitively slow for dense prediction.
 - Very large areas are processed in chunks, so country-scale maps will take some time.
 - You must have run an evaluation first, so TEE has cached training vectors and labels.
+
+#### Map preview
+
+As each map area finishes, TEE also drops a **coloured preview overlay** onto the Satellite panel so you can check the result in place, without downloading the GeoTIFF and opening it in a GIS. A small control appears at the bottom-left of that panel:
+
+- an **opacity slider** to fade the overlay against the imagery underneath
+- a **legend** — one swatch per class for a classification map, or a colour ramp with the value range for a regression map
+- a **✕** to dismiss it
+
+Each green map area you drew gets its own overlay; the control covers all of them at once. Starting another **Create Map** run, or clearing the uploaded shapefiles, removes the previews.
+
+The preview is a **downsampled image reprojected to lat/lon**, not the map data itself — colours and edges are approximate, and it's not georeferenced for measurement. The GeoTIFF is still the authoritative output. (The preview needs a compute server running **tee-compute v1.8.2 or newer**; against an older server, map generation is unchanged and no preview appears.)
 
 ### Mapping a Different Year (Cross-Year Inference)
 
