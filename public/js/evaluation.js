@@ -491,8 +491,12 @@ function createStreamChart(classifierNames) {
                 x: {
                     type: 'logarithmic',
                     title: { display: true, text: '% of labelled pixels used for training', color: '#aaa' },
-                    ticks: { color: '#aaa', callback: v => v < 1 ? v.toFixed(1) + '%' : Math.round(v) + '%' },
-                    min: 0.01, max: 100,
+                    // Runs start at 1% (server training_pcts = [1, 3, 5, ...]),
+                    // so the old min of 0.01 wasted two log decades of empty
+                    // axis. 0.9 keeps the leftmost 1% marker from being clipped
+                    // at the very edge without reintroducing that dead space.
+                    ticks: { color: '#aaa', callback: v => Math.round(v) + '%' },
+                    min: 0.9, max: 100,
                     grid: { color: 'rgba(255,255,255,0.08)' },
                 },
                 y: {
@@ -949,8 +953,12 @@ function renderChart(data, metric) {
                 x: {
                     type: 'logarithmic',
                     title: { display: true, text: '% of labelled pixels used for training', color: '#aaa' },
-                    ticks: { color: '#aaa', callback: v => v < 1 ? v.toFixed(1) + '%' : Math.round(v) + '%' },
-                    min: 0.01, max: 100,
+                    // Runs start at 1% (server training_pcts = [1, 3, 5, ...]),
+                    // so the old min of 0.01 wasted two log decades of empty
+                    // axis. 0.9 keeps the leftmost 1% marker from being clipped
+                    // at the very edge without reintroducing that dead space.
+                    ticks: { color: '#aaa', callback: v => Math.round(v) + '%' },
+                    min: 0.9, max: 100,
                     grid: { color: 'rgba(255,255,255,0.08)' },
                 },
                 y: {
