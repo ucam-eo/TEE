@@ -2728,6 +2728,11 @@ async function exportMapAsJPG() {
     if (!window.maps.rgb) return;
 
     const btn = document.getElementById('labelling-export-btn');
+    // Snapshot the label (which may carry the "⚠ Export" dirty marker) so the
+    // finally block can always restore it -- otherwise a successful export
+    // leaves the button reading "Saving..." forever, and a failure in toBlob
+    // leaves it disabled too.
+    const btnHTML = btn ? btn.innerHTML : null;
     if (btn) btn.disabled = true;
     const MAX_ZOOM = 18;
     const TILE_SZ = 256;
@@ -2786,15 +2791,25 @@ async function exportMapAsJPG() {
             await Promise.all(batch.map(({tx, ty}) => new Promise(resolve => {
                 const img = new Image();
                 img.crossOrigin = 'anonymous';
-                img.onload = () => {
-                    const dx = (tx - tileMinX) * TILE_SZ;
-                    const dy = (ty - tileMinY) * TILE_SZ;
-                    ctx.drawImage(img, dx, dy, TILE_SZ, TILE_SZ);
+                let settled = false;
+                // Resolve on load, error, OR timeout -- a single stalled tile
+                // request must not hang the whole export at "Fetching x/N".
+                const done = (draw) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    if (draw) {
+                        try {
+                            ctx.drawImage(img, (tx - tileMinX) * TILE_SZ, (ty - tileMinY) * TILE_SZ, TILE_SZ, TILE_SZ);
+                        } catch (_) { /* tainted/broken tile -- skip it */ }
+                    }
                     loaded++;
                     btn.textContent = `Fetching ${loaded}/${totalTiles} tiles...`;
                     resolve();
                 };
-                img.onerror = () => { loaded++; resolve(); };
+                const timer = setTimeout(() => done(false), 20000);
+                img.onload = () => done(true);
+                img.onerror = () => done(false);
                 img.src = window.satelliteSources[window.currentSatelliteSource].exportUrl(MAX_ZOOM, ty, tx);
             })));
         }
@@ -2869,22 +2884,35 @@ async function exportMapAsJPG() {
             }
         }
 
-        // Step 5: Download as JPG
+        // Step 5: Encode and download as JPG. Wrap toBlob in a promise so a
+        // null blob -- which is how browsers report a canvas that exceeds
+        // their size limits, common at zoom 18 when zoomed out -- surfaces as
+        // a caught error with actionable text, instead of throwing inside the
+        // callback and leaving the button stuck on "Saving...".
         btn.textContent = 'Saving...';
-        outCanvas.toBlob(function(blob) {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${window.currentViewportName}_labels_z${MAX_ZOOM}.jpg`;
-            a.click();
-            URL.revokeObjectURL(url);
-            if (btn) btn.disabled = false;
-        }, 'image/jpeg', 0.95);
+        const blob = await new Promise((resolve, reject) => {
+            outCanvas.toBlob(
+                b => b ? resolve(b) : reject(new Error(
+                    `Image too large to encode (${outCanvas.width}×${outCanvas.height}px). Zoom in and export a smaller area.`)),
+                'image/jpeg', 0.95);
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${window.currentViewportName}_labels_z${MAX_ZOOM}.jpg`;
+        a.click();
+        URL.revokeObjectURL(url);
 
     } catch (e) {
         console.error('[EXPORT] Error exporting map:', e);
-        alert('Error exporting map. Check console for details.');
-        if (btn) btn.disabled = false;
+        alert(e && /^Image too large/.test(e.message || '')
+            ? e.message
+            : 'Error exporting map. Check console for details.');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            if (btnHTML !== null) btn.innerHTML = btnHTML;
+        }
     }
 }
 
