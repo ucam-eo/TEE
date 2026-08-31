@@ -199,27 +199,18 @@ Labels are saved in your browser's local storage, so they persist across page re
 
 ### Exporting Labels
 
-The export menu offers different formats depending on which mode you're in:
-
-**From Explore / Auto-label modes:**
+The **Export** button and its menu live in the Labelling-mode header bar, and it's the same menu whether you're on the Auto-label or the Manual Label sub-tab — all six formats are always available and all of them export every label you currently have (auto-promoted clusters, similarity-search labels, manual pins, and polygons alike):
 
 | Format | What it's for |
 |--------|---------------|
-| **Labels (JSON)** | Re-import into TEE later — includes the embedding year and Tessera dataset version (e.g. "1.0") the labels were made against |
-| **Labels (GeoJSON)** | Open in QGIS or other GIS tools |
-| **Map (JPG)** | A screenshot of the satellite view with label overlays — good for presentations |
+| **JSON (full)** | Re-import into TEE later — includes the embeddings, the embedding year, the Tessera dataset version (e.g. "1.0"), and all per-label metadata |
+| **GeoJSON** | Open in QGIS or other GIS tools — points for pins, polygon outlines for everything with pixels |
+| **ESRI Shapefile (ZIP)** | Standard GIS interchange format — opens in QGIS, ArcGIS, etc. Can also be used as ground truth for validation. |
+| **CSV (points)** | A summary: one row per label — `name, code, type, lat, lon, pixel_count` — at the label's representative location (the pin itself for a pin, the vertex centroid for a polygon, a representative pixel for a cluster or similarity label). The quickest path into Google Earth Engine (`ee.FeatureCollection` from a lat/lon CSV) or ArcGIS's **Add XY Data**, or just a spreadsheet. It is **not** the full pixel set — use GeoJSON, Shapefile, or KML for that. |
+| **KML** | One Placemark per label, coloured to match its label colour — opens directly in Google Earth; ArcGIS and Google Earth Engine can import KML too |
+| **Map (JPG)** | A screenshot of the current satellite view with label overlays and a legend — good for presentations |
 
-**From Manual Labelling mode:**
-
-| Format | What it's for |
-|--------|---------------|
-| **JSON** | Re-import into TEE (includes embeddings, the embedding year, the Tessera dataset version, and all metadata) |
-| **GeoJSON** | GIS-compatible polygons |
-| **ESRI Shapefile (ZIP)** | Standard GIS interchange format — can be opened in QGIS, ArcGIS, etc. Can also be used as ground truth for validation. |
-| **CSV (points)** | One row per label (name, code, type, lat, lon, pixel count) — the simplest way into Google Earth Engine (`ee.FeatureCollection` from a CSV of lat/lon) or ArcGIS's **Add XY Data**, or just to open in a spreadsheet |
-| **KML** | One Placemark per label, coloured to match its label colour — opens directly in Google Earth, and both ArcGIS and Google Earth Engine can import KML |
-
-> **How export works:** When you export pixel labels (from auto-labelling or similarity search), TEE automatically converts them from a raster (grid of coloured pixels) to vector polygons (outlines) for the GeoJSON, Shapefile, and KML formats. This keeps the exported files compact — a label covering 50,000 pixels becomes a few polygon shapes rather than 50,000 individual points. When you import the file back into TEE, the polygons are converted back to pixels. CSV export is the exception: it's deliberately points-only, one row per label at its representative location, rather than the full polygon outline — use GeoJSON, Shapefile, or KML if you need the exact shape.
+> **How export works:** For pixel labels (auto-labelling or similarity search), TEE converts the raster (grid of coloured pixels) to vector polygons (outlines) for the GeoJSON, Shapefile, and KML formats. This keeps files compact — a label covering 50,000 pixels becomes a few polygon shapes rather than 50,000 points — and import converts the polygons back to pixels. CSV is the exception noted above: one representative point per label, never the full shape.
 >
 > **CSV import** expects a header row with latitude/longitude columns (`lat`/`lon`, `latitude`/`longitude`, or `x`/`y`) and, optionally, `name` and `code` columns. Multiple rows sharing the same name are grouped back into a single label, the same way GeoJSON import works. KML is export-only — TEE cannot import KML files back in.
 
@@ -807,6 +798,7 @@ After running an evaluation, you can generate a **classification map** — a Geo
 - Class names are stored as metadata tags in the file (`class_1`, `class_2`, etc.), along with `classifier`, `train_year`, and `map_year`
 - The coordinate system is the **native UTM zone** of the source embeddings — the model predicts directly on that grid, with no embedding resampling. If a map area spans more than one UTM zone, the file uses the majority zone and only the minority-zone blocks' predictions are reprojected into it (never the embeddings themselves).
 - Compressed with DEFLATE for small file sizes
+- For a **regression** map (continuous target field), pixels are float32 with NaN for no-data, and predictions are **clamped to the range of the training targets** — a random-forest or MLP regressor can otherwise extrapolate to physically impossible values (negative heights, biomass above anything observed) on land unlike its training data. The clamp bounds are written as `clamp_min` / `clamp_max` tags and shown in the progress log.
 
 **Limitations:**
 - Only pixel-based classifiers are supported for map generation (k-NN, Random Forest, XGBoost, MLP). The spatial classifiers need neighbourhood features at every pixel, which would be prohibitively slow for dense prediction.
@@ -846,6 +838,8 @@ with rasterio.open("map_1.tif") as src:
 ### Regression
 
 If the field you select contains continuous numeric values (e.g., biomass, carbon, canopy height) rather than class names, TEE automatically switches to **regression mode**. Instead of F1 scores and confusion matrices, it shows **R²** (how much variance is explained), **RMSE** (root mean squared error), and **MAE** (mean absolute error).
+
+The metrics table also has an **Outside range** column: the share of test predictions that fell beyond the span of the training targets. Random forest and k-NN can't produce values outside that span (they average stored targets); MLP and XGBoost can, and a high percentage here is a sign the model is extrapolating into territory your ground truth never covered. The evaluation scores themselves are left unclamped — only [Create Map](#create-map-geotiff-generation) clamps its raster.
 
 Below the metrics table, a **predicted-vs-actual scatter plot** shows each model's predictions against the true values, with a dashed *y = x* line marking perfect prediction — points hugging that line indicate an accurate model, while a fan spreading away from it shows where the model struggles.
 

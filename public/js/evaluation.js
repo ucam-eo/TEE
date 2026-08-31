@@ -1708,17 +1708,38 @@ function renderRegressionResults(aggregate) {
     panel.style.display = '';
 
     tbody.innerHTML = '';
+    let anyRange = null;
     for (const [name, metrics] of Object.entries(aggregate)) {
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #333';
         const color = getVariantColor(name);
+        // oor_frac / train_range arrive from tessera-eval >= v1.8.1; older
+        // pins simply won't have them, so show an em dash instead.
+        let oorCell = '\u2014';
+        if (typeof metrics.oor_frac === 'number') {
+            const pct = metrics.oor_frac * 100;
+            const warn = metrics.oor_frac >= 0.01;
+            oorCell = `<span style="color:${warn ? '#e0a44b' : '#8a8'}">${pct < 0.1 && pct > 0 ? '<0.1' : pct.toFixed(1)}%</span>`;
+            if (Array.isArray(metrics.train_range)) anyRange = metrics.train_range;
+        }
         tr.innerHTML = `
             <td style="padding:6px;"><span style="color:${color.line}">\u25cf</span> ${getVariantLabel(name)}</td>
             <td style="text-align:right; padding:6px;">${metrics.mean_r2.toFixed(4)} \u00b1 ${metrics.std_r2.toFixed(4)}</td>
             <td style="text-align:right; padding:6px;">${metrics.mean_rmse.toFixed(4)} \u00b1 ${metrics.std_rmse.toFixed(4)}</td>
             <td style="text-align:right; padding:6px;">${metrics.mean_mae.toFixed(4)} \u00b1 ${metrics.std_mae.toFixed(4)}</td>
+            <td style="text-align:right; padding:6px;">${oorCell}</td>
         `;
         tbody.appendChild(tr);
+    }
+
+    const note = document.getElementById('val-regression-oor-note');
+    if (note) {
+        if (anyRange) {
+            note.textContent = `"Outside range" = share of test predictions beyond the training targets' span [${(+anyRange[0]).toLocaleString()}, ${(+anyRange[1]).toLocaleString()}]. Create Map clamps its raster to that span; these scores are not clamped.`;
+            note.style.display = '';
+        } else {
+            note.style.display = 'none';
+        }
     }
 
     renderRegressionScatter(aggregate);
