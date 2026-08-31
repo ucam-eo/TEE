@@ -77,7 +77,7 @@ Viewport Manager from then on.
 ### Path 4: Just want a fun image?
 
 1. From the opening choice screen, click **Postcard** (or open `/postcard.html` directly, or use the 🌍 link in the Viewport Manager header)
-2. Search for a place, or click the map to position the 10km × 10km frame
+2. Search for a place, or click the map to position the 10km × 6km frame
 3. Click **Generate Postcard** and download the result
 
 No account needed, and nothing is saved — see [Postcard](#postcard) below for
@@ -269,7 +269,7 @@ Manual labelling lets you build habitat classes by hand — placing individual p
 1. Switch to **Labelling** mode using the layout dropdown in the header bar
 2. In Panel 6 (bottom-right), select **Manual Label** from the sub-mode dropdown
 3. Set an active label — either type a name and pick a colour manually, or select one from a [classification schema](#classification-schemas)
-4. Click **Set**, then you're ready to place labels on the map
+4. Click **Set**. The button briefly confirms with "✓ Ready" and the "Active:" row flashes — the label won't appear in the Manual Labels list until you actually place a pin or polygon for it, so this confirmation is how you know the name and colour are staged
 
 ### Placing Labels
 
@@ -277,7 +277,9 @@ Manual labelling lets you build habitat classes by hand — placing individual p
 |--------|-----|----------|
 | **Pin** | Hold Ctrl and click on the map (Cmd+click on Mac) | Identifying specific locations — a single field, a patch of woodland |
 | **Polygon** | Hold Ctrl and double-click to start drawing, then click to add corners, and close the shape | Drawing around a large area of known habitat |
-| **Similarity slider** | After placing a pin or polygon, drag the similarity slider on the label entry to expand coverage | Finding more of the same habitat type beyond the area you drew |
+| **Similarity slider** | After placing a pin or polygon, drag the similarity slider on the label entry to expand coverage. Use the **−/+** buttons to step by one, or click the number itself to type an exact threshold. | Finding more of the same habitat type beyond the area you drew |
+
+The per-class slider responds instantly once you've placed the first pin or polygon for a class — the per-pixel search is computed once and cached, so dragging (or stepping with −/+) only re-thresholds that cached result rather than re-scanning the whole viewport. The very first drag after adding or removing label points still recomputes.
 
 ### Polygon Search Mode
 
@@ -622,7 +624,7 @@ TEE offers several classifiers with different strengths. If you're not sure whic
 
 **Pixel classifiers** (k-NN, Random Forest, XGBoost, MLP) look at each pixel independently. They're fast and memory-efficient, even for country-scale datasets.
 
-**Spatial classifiers** (Spatial MLP, U-Net) consider each pixel together with its neighbours, so they can learn patterns like "grassland next to woodland edge". They need to download actual satellite embedding tiles from GeoTessera, which takes longer, but can achieve higher accuracy for classes where spatial context matters.
+**Spatial classifiers** (Spatial MLP, U-Net) consider each pixel together with its neighbours, so they can learn patterns like "grassland next to woodland edge". They need to download actual satellite embedding tiles from GeoTessera, which takes longer, but can achieve higher accuracy for classes where spatial context matters. They are automatically skipped (with a note in the progress log) whenever the test set is a separate region or a separate year — see [Spatial Train/Test Split](#spatial-traintest-split-optional) and [Train/Test Years](#traintest-years-optional).
 
 ### Classifier Parameters
 
@@ -702,6 +704,7 @@ To get a more honest evaluation, you can draw **separate geographic regions** fo
 - Click any rectangle on the map to delete it; click **Clear** to remove all rectangles
 - If you don't draw any rectangles and click Run, TEE will ask if you want to proceed with a random split
 - Your bounding boxes are saved when you use Generate Config / Upload Config
+- **Spatial classifiers (Spatial MLP 3×3, Spatial MLP 5×5, U-Net) are skipped** when you use a spatial split, with a status message in the progress log. They need a neighbourhood of features around every pixel, which a fixed held-out test region can't reliably provide; the pixel classifiers still run as normal.
 
 > **Tip:** For a meaningful spatial cross-validation, make sure the train and test regions are geographically separated — for example, train on the north and test on the south, or train on lowland and test on upland areas.
 
@@ -721,6 +724,8 @@ Set them to *different* years to test **temporal robustness**: train a classifie
 | Yes | The train region uses the training year as before; only the **test region** (yellow rectangles) is re-fetched at the test year. Train and test stay geographically separated *and* temporally separated. |
 
 Since a different test year needs its own embeddings fetch, expect evaluation to take a bit longer than a same-year run — TEE fetches training-year embeddings as usual, then a second time for the test year, before the learning curve starts (you'll see this as a "Fetching test-year (…) embeddings…" status line). The results panel and final status line label runs with different years clearly, e.g. "trained 2024 → tested 2023".
+
+As with the spatial split, **spatial classifiers (Spatial MLP, U-Net) are skipped** when the test year differs from the training year — the progress log says so — because they rely on a fixed random split of their own training pixels, which a separate test set removes. The pixel classifiers run normally.
 
 > **Tip:** A noticeably lower F1 when testing on a different year than you trained on is a meaningful signal in itself — it quantifies how much the satellite embeddings (or the habitat itself) actually changed between those years, similar to how the gap between random-split and spatial-split accuracy quantifies spatial autocorrelation.
 
@@ -799,9 +804,9 @@ After running an evaluation, you can generate a **classification map** — a Geo
 **What you get:**
 - A single-band GeoTIFF file (one pixel = one habitat class)
 - Pixel values are class IDs (1, 2, 3, ...) with 0 meaning "no data"
-- Class names are stored as metadata tags in the file (`class_1`, `class_2`, etc.), along with `train_year` and `map_year`
-- The coordinate system matches the source satellite tiles (typically UTM)
-- Compressed with LZ4 for small file sizes
+- Class names are stored as metadata tags in the file (`class_1`, `class_2`, etc.), along with `classifier`, `train_year`, and `map_year`
+- The coordinate system is the **native UTM zone** of the source embeddings — the model predicts directly on that grid, with no embedding resampling. If a map area spans more than one UTM zone, the file uses the majority zone and only the minority-zone blocks' predictions are reprojected into it (never the embeddings themselves).
+- Compressed with DEFLATE for small file sizes
 
 **Limitations:**
 - Only pixel-based classifiers are supported for map generation (k-NN, Random Forest, XGBoost, MLP). The spatial classifiers need neighbourhood features at every pixel, which would be prohibitively slow for dense prediction.
@@ -841,6 +846,8 @@ with rasterio.open("map_1.tif") as src:
 ### Regression
 
 If the field you select contains continuous numeric values (e.g., biomass, carbon, canopy height) rather than class names, TEE automatically switches to **regression mode**. Instead of F1 scores and confusion matrices, it shows **R²** (how much variance is explained), **RMSE** (root mean squared error), and **MAE** (mean absolute error).
+
+Below the metrics table, a **predicted-vs-actual scatter plot** shows each model's predictions against the true values, with a dashed *y = x* line marking perfect prediction — points hugging that line indicate an accurate model, while a fan spreading away from it shows where the model struggles.
 
 ### Config Files
 
@@ -892,15 +899,15 @@ downloadable image — no account, and nothing is saved on the server.
 1. Open `/postcard.html` directly, click **Postcard** on the opening
    choice screen, or use the 🌍 **Postcard** link in the Viewport
    Manager's header
-2. Search for a city or place, or click the map — a 10km × 10km frame
+2. Search for a city or place, or click the map — a 10km × 6km frame
    follows your cursor and locks in when you click. Click elsewhere to
    reposition it, the same way you'd position a new viewport
-3. Click **Generate Postcard**. This fetches one year of Tessera
-   embeddings for that area and renders them as an image — it can take a
-   little while (usually under a minute, occasionally up to a few
-   minutes for a location nobody has requested before). Click **Cancel**
-   if you don't want to wait
-4. Download the result — a 1000×1000 pixel JPEG, real Tessera data at
+3. Click **Generate Postcard**. This fetches a year (2024) of Tessera
+   embeddings for that area and renders them as an image — usually 10–30
+   seconds, occasionally a minute or two for a location nobody has
+   requested before. There's no cancel button; the request finishes (or
+   times out) on its own, and the Generate button re-enables when it does
+4. Download the result — a 1000×600 pixel JPEG, real Tessera data at
    native 10m/pixel resolution, not upscaled
 
 **What you're actually looking at:** the first 3 of the embedding's 128
@@ -911,10 +918,11 @@ literal photo; it's a visualisation of what a machine learning model
 striking or unusual rather than naturalistic.
 
 **Why it can be slow, and why retrying helps:** the first request for a
-brand-new location has to fetch and process real satellite data, which
-can occasionally take a few minutes. If it times out, just try again —
-the server keeps working even after your browser gives up waiting, and
-caches the result, so a retry is usually much faster.
+brand-new location has to fetch and process real satellite data. This is
+usually quick, but a large or busy area can occasionally exceed the
+timeout. If it does, just try again — the server keeps working even after
+your browser gives up waiting, and caches the result, so a retry is
+usually much faster.
 
 ---
 
