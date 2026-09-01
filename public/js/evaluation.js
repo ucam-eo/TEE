@@ -643,14 +643,15 @@ function handleStreamEvent(ev) {
     } else if (ev.event === 'progress') {
         lastChartData.training_pcts.push(ev.pct);
 
-        // Unified x-axis: all classifiers plotted as fraction of total labelled
-        // pixels. Denominator = the real total_labelled_pixels count from this
-        // run's 'start' event -- the backend's own denominator for turning a
-        // nominal pct into a sample size (training_pcts = [1, 3, 5, 10, 20, 30,
-        // 50, 80] in server.py), so trainPx/totalLabels*100 lands exactly on
-        // the nominal pct. valEstimatedLabelledPixels (a rough polygon-area/
-        // 100m² guess made at upload time, before real label extraction) is
-        // only a last-resort fallback for the sliver of time before a run's
+        // x-axis denominator for the pixel-based classifiers: the real
+        // total_labelled_pixels count from this run's 'start' event -- the
+        // backend's own denominator for turning a nominal pct into a sample
+        // size (training_pcts = [1, 3, 5, 10, 20, 30, 50, 80] in server.py),
+        // so pixel_train_count/totalLabels*100 lands exactly on the nominal
+        // pct. (U-Net uses its own denominator -- see the loop below.)
+        // valEstimatedLabelledPixels (a rough polygon-area/100m² guess made
+        // at upload time, before real label extraction) is only a
+        // last-resort fallback for the sliver of time before a run's
         // 'start' event has set lastChartData.total_labelled_pixels.
         // Using the upload-time estimate as primary (as this used to) meant
         // every point's x was off by whatever the estimate diverged from the
@@ -665,15 +666,31 @@ function handleStreamEvent(ev) {
         for (const [name, vals] of Object.entries(ev.classifiers)) {
             const acc = lastChartData.classifiers[name];
             if (!acc) continue;
-            // Both use same denominator: total labelled pixels. Computed once
-            // per classifier per pct (not just when a chart happens to be
-            // live) and stored in acc._x so it stays parallel to the metric
-            // arrays -- renderChart (the metric-switch rebuild path) reads
-            // this back instead of recomputing/guessing, which is what used
-            // to cause rebuilt points and freshly-streamed points to land at
-            // different x positions on the same chart (Louis Driver).
-            const trainPx = (name === 'unet') ? ev.unet_train_count : ev.pixel_train_count;
-            const x = trainPx / totalLabels * 100;
+            // x = fraction of that model's available training data actually
+            // used, as a %, so every point lands on (or near) its nominal
+            // pct. Computed once per classifier per pct -- not just when a
+            // chart is live -- and stored in acc._x so renderChart (the
+            // metric-switch rebuild path) reads it back instead of
+            // recomputing (Louis Driver: rebuilt vs streamed points used to
+            // diverge).
+            //
+            // The denominator MUST match the numerator's units. Pixel models
+            // train on individual labelled pixels: pixel_train_count /
+            // total_labelled_pixels. U-Net trains on 256x256 patches, so
+            // unet_train_count is a count of *patch* pixels (tens of K per
+            // patch) -- dividing that by the labelled-pixel total flung the
+            // U-Net curve far to the right and made its R² look erratic vs
+            // % (Louis Driver, round 4). Use total_unet_pixels; if the
+            // server didn't send it (older pin) fall back to the nominal
+            // pct rather than the wrong denominator.
+            let x;
+            if (name === 'unet') {
+                x = ev.total_unet_pixels
+                    ? ev.unet_train_count / ev.total_unet_pixels * 100
+                    : ev.pct;
+            } else {
+                x = ev.pixel_train_count / totalLabels * 100;
+            }
             acc._x.push(x);
             if (isRegressionRun) {
                 acc.mean_r2.push(vals.mean_r2);

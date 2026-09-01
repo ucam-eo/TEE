@@ -1007,3 +1007,44 @@ class TestBboxDrawEscape:
             "validation/test_bbox_draw_escape.mjs failed:\n"
             f"{result.stdout}\n{result.stderr}"
         )
+
+
+# ──────────────────────────────────────────────────
+# 23. U-Net learning-curve x-axis denominator
+#     A learning-curve point's x is "fraction of that model's available
+#     training data used". The pixel models (kNN/RF/XGB/MLP) train on
+#     individual labelled pixels, so x = pixel_train_count /
+#     total_labelled_pixels * 100. U-Net trains on 256x256 patches, so
+#     unet_train_count counts *patch* pixels (tens of K per patch) -- it
+#     must be divided by total_unet_pixels, NOT by the labelled-pixel
+#     total. Dividing patch pixels by the labelled-pixel total flung the
+#     U-Net curve far to the right (a point at nominal pct=5 landed near
+#     x=50%) and made its R² look erratic vs % (Louis Driver, round 4,
+#     2026-08-31). Fall back to the nominal ev.pct if the server (older
+#     pin) didn't send total_unet_pixels -- never to the wrong denominator.
+# ──────────────────────────────────────────────────
+
+class TestUnetLearningCurveXDenominator:
+    """U-Net's learning-curve x must be unet_train_count / total_unet_pixels,
+    not unet_train_count / <labelled-pixel total>."""
+
+    def test_unet_x_uses_its_own_pixel_total(self, all_script_text):
+        assert (
+            "ev.unet_train_count / ev.total_unet_pixels * 100" in all_script_text
+        ), (
+            "The U-Net learning-curve point's x must be computed as "
+            "ev.unet_train_count / ev.total_unet_pixels * 100 -- U-Net "
+            "trains on patches, so unet_train_count is a patch-pixel count "
+            "and dividing it by the labelled-pixel total misplaces every "
+            "U-Net point far to the right on the x-axis."
+        )
+
+    def test_unet_x_does_not_divide_by_labelled_pixel_total(self, all_script_text):
+        # The pre-fix form was a single shared ternary:
+        #   const trainPx = (name === 'unet') ? ev.unet_train_count : ev.pixel_train_count;
+        #   const x = trainPx / totalLabels * 100;
+        assert "(name === 'unet') ? ev.unet_train_count : ev.pixel_train_count" not in all_script_text, (
+            "Found the old shared x-denominator ternary -- U-Net's "
+            "unet_train_count (patch pixels) must not be divided by "
+            "totalLabels (labelled pixels)."
+        )
