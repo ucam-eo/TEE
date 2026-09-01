@@ -1048,3 +1048,30 @@ class TestUnetLearningCurveXDenominator:
             "unet_train_count (patch pixels) must not be divided by "
             "totalLabels (labelled pixels)."
         )
+
+
+# ──────────────────────────────────────────────────
+# 24. Create Map CRS shown on screen
+#     The GeoTIFF's CRS (native UTM zone, e.g. EPSG:32633) is the
+#     projection to use for figures/measurement, and which zone was
+#     picked matters when a map area spans two. tessera-eval >= v1.8.0
+#     sends it on the map_ready event as `crs`; the frontend must show
+#     it -- in the "Map area N ready" status line and the map-preview
+#     widget -- not leave it only in the downloaded file's tags (Louis
+#     Driver, round 4: "difficult to figure out what projection is
+#     appropriate").
+# ──────────────────────────────────────────────────
+
+class TestCreateMapCrsShown:
+    def test_map_ready_status_line_includes_crs(self, all_script_text):
+        assert "ev.crs" in all_script_text, (
+            "The map_ready handler must surface ev.crs (the GeoTIFF's "
+            "CRS) on screen -- the status line and/or the preview widget."
+        )
+
+    def test_preview_widget_renders_the_crs(self, all_script_text):
+        assert "valMapPreviewCrs" in all_script_text and "GeoTIFF CRS" in all_script_text, (
+            "The map-preview widget must show the GeoTIFF CRS (its own "
+            "overlay is EPSG:4326 and must not be mistaken for the map's "
+            "true projection)."
+        )

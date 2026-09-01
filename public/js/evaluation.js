@@ -34,6 +34,7 @@ let valGeoJsonData = null;
 let valMapPreviewLayers = [];  // L.imageOverlay(s) for Create Map previews on Panel 2
 let valMapPreviewOpacity = 0.75;
 let valMapPreviewCollapsed = false;  // floating legend/opacity widget collapsed?
+let valMapPreviewCrs = '';  // GeoTIFF CRS from the latest map_ready, shown in the widget
 
 const CLASS_PALETTE = [
     '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
@@ -1254,17 +1255,22 @@ function clearMapPreview() {
         if (window.maps && window.maps.rgb) window.maps.rgb.removeLayer(layer);
     }
     valMapPreviewLayers = [];
+    valMapPreviewCrs = '';
     const ctl = document.getElementById('val-map-preview-ctl');
     if (ctl) ctl.remove();
 }
 
-function addMapPreview(preview) {
+function addMapPreview(preview, crs) {
     if (!preview || !preview.png || !preview.bounds || !window.maps || !window.maps.rgb) return;
     const layer = L.imageOverlay(preview.png, preview.bounds, {
         opacity: valMapPreviewOpacity,
         interactive: false,
     }).addTo(window.maps.rgb);
     valMapPreviewLayers.push(layer);
+    // The preview PNG itself is EPSG:4326 (web-overlay only); crs is the
+    // real GeoTIFF projection, shown so the widget isn't mistaken for the
+    // map's true CRS.
+    if (crs) valMapPreviewCrs = crs;
     renderMapPreviewControl(preview.legend);
 }
 
@@ -1312,6 +1318,7 @@ function renderMapPreviewControl(legend) {
         `<div id="val-map-preview-body" style="padding:8px; ${valMapPreviewCollapsed ? 'display:none;' : ''}">` +
         `<input id="val-map-preview-opacity" type="range" min="0" max="1" step="0.05" value="${valMapPreviewOpacity}" style="width:100%;">` +
         (legendHtml ? `<div style="margin-top:6px; display:flex; flex-direction:column; gap:3px; max-height:38vh; overflow:auto;">${legendHtml}</div>` : '') +
+        (valMapPreviewCrs ? `<div style="margin-top:6px; color:#aaa;">GeoTIFF CRS: <span style="color:#ccc;">${esc(valMapPreviewCrs)}</span></div>` : '') +
         `<div style="margin-top:6px; color:#aaa;">Preview only — download the GeoTIFF for the full-resolution map.</div>` +
         `</div>`;
 
@@ -1465,9 +1472,15 @@ async function createMap() {
                         const yearNote = (ev.train_year && ev.map_year && ev.train_year !== ev.map_year)
                             ? ` — trained ${ev.train_year}, mapped ${ev.map_year}`
                             : '';
-                        status.textContent = `Map area ${ev.bbox_idx + 1} ready (${ev.width}x${ev.height} pixels)${yearNote}`;
+                        // Surface the GeoTIFF's CRS (native UTM zone, e.g.
+                        // EPSG:32633) so it's visible without gdalinfo -- it's
+                        // the projection to use for figures/measurement, and
+                        // which zone was picked matters when a map area spans
+                        // two. tessera-eval >= v1.8.0 sends it; older pins don't.
+                        const crsNote = ev.crs ? ` · ${ev.crs}` : '';
+                        status.textContent = `Map area ${ev.bbox_idx + 1} ready (${ev.width}x${ev.height} pixels${crsNote})${yearNote}`;
                         status.style.color = '#28a745';
-                        if (ev.preview) addMapPreview(ev.preview);  // tessera-eval >= v1.8.2
+                        if (ev.preview) addMapPreview(ev.preview, ev.crs);  // tessera-eval >= v1.8.2
                     } else if (ev.event === 'done') {
                         // Download all ready maps
                         for (const m of readyMaps) {

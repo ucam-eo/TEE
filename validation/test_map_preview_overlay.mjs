@@ -58,11 +58,11 @@ global.L = {
 window.maps = { rgb };
 
 const factory = new Function(
-    `let valMapPreviewLayers = [];\nlet valMapPreviewOpacity = 0.75;\nlet valMapPreviewCollapsed = false;\n` +
+    `let valMapPreviewLayers = [];\nlet valMapPreviewOpacity = 0.75;\nlet valMapPreviewCollapsed = false;\nlet valMapPreviewCrs = '';\n` +
     [extract('clearMapPreview'), extract('addMapPreview'), extract('renderMapPreviewControl')].join('\n\n') +
     `\nreturn { clearMapPreview, addMapPreview, renderMapPreviewControl,` +
     ` layers: () => valMapPreviewLayers, opacity: () => valMapPreviewOpacity,` +
-    ` collapsed: () => valMapPreviewCollapsed };`
+    ` collapsed: () => valMapPreviewCollapsed, crs: () => valMapPreviewCrs };`
 );
 const api = factory();
 
@@ -79,7 +79,7 @@ api.addMapPreview({
         { value: 2, label: 'Fen <mix>', color: '#3cb44b' },
     ],
     is_classification: true,
-});
+}, 'EPSG:32633');
 
 ok(rgb._layers.length === 1, 'image overlay added to Panel 2');
 ok(rgb._layers[0].png === 'data:image/png;base64,AAAA', 'overlay uses the preview PNG');
@@ -92,6 +92,8 @@ ok(/Fen &lt;mix&gt;/.test(ctl().innerHTML), 'legend label is HTML-escaped');
 ok(/#4363d8/.test(ctl().innerHTML), 'legend shows the class colour');
 ok(ctl().querySelector('#val-map-preview-opacity') !== null, 'control has an opacity slider');
 ok(ctl().querySelector('#val-map-preview-head') !== null, 'control has a drag header');
+ok(api.crs() === 'EPSG:32633', 'map_ready crs is stored');
+ok(/GeoTIFF CRS/.test(ctl().innerHTML) && /EPSG:32633/.test(ctl().innerHTML), 'control shows the GeoTIFF CRS');
 
 // --- collapse toggle hides the body -----------------------------------
 ok(ctl().querySelector('#val-map-preview-body').style.display !== 'none', 'body is expanded by default');
@@ -124,6 +126,7 @@ ctl().querySelector('#val-map-preview-close').onclick();
 ok(rgb._layers.length === 0, 'close removes every overlay');
 ok(ctl() === null, 'close removes the control');
 ok(api.layers().length === 0, 'internal layer list is emptied');
+ok(api.crs() === '', 'close resets the stored CRS');
 
 // --- regression legend renders a ramp --------------------------------
 api.addMapPreview({
