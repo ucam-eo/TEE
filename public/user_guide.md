@@ -33,7 +33,7 @@ With TEE you can:
 - [Manual Labelling](#manual-labelling) — pins, polygons, similarity expansion
 - [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
 - [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
-- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, confusion matrix, spatial splits, worked example, Create Map + preview, CLI
+- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, confusion matrix, spatial splits, worked example, Create Map + preview + projections, CLI
 - [Postcard](#postcard) — a fun, no-account image generator
 - [Data Privacy](#data-privacy)
 - [Reference](#reference) — mouse controls, keyboard shortcuts, tips
@@ -819,6 +819,16 @@ As each map area finishes, TEE also drops a **coloured preview overlay** onto th
 Drag the widget by its title bar to move it anywhere. Each green map area you drew gets its own overlay; the widget controls all of them at once. Starting another **Create Map** run, clearing the uploaded shapefiles, or leaving Validation mode removes the previews.
 
 The preview is a **downsampled image reprojected to lat/lon**, not the map data itself — colours and edges are approximate, and it's not georeferenced for measurement. The GeoTIFF is still the authoritative output. (The preview needs a compute server running **tee-compute v1.8.2 or newer**; against an older server, map generation is unchanged and no preview appears.)
+
+#### Choosing a projection for figures
+
+For a figure, a scale bar, or any area/distance measurement, **use the GeoTIFF exactly as TEE writes it** — in the native UTM zone of the source embeddings (`EPSG:326xx` in the northern hemisphere, `EPSG:327xx` in the southern; the exact code is in the file's CRS, visible with `gdalinfo` or `src.crs`). Over the extent of a single map, UTM preserves shape, is within a fraction of a percent of equal-area, and has its axes in metres, so anything you measure off it is correct. Do **not** make figures from an `EPSG:4326` version of the file (see below).
+
+**Why the UTM map can look "not squared" (a rotated block with empty corners).** You draw the map area in latitude/longitude, but UTM axes point true north and true east in metres, and a lat/lon rectangle is not aligned to those axes. So the data sits as a slightly rotated quadrilateral inside the raster's rectangular bounding box, with no-data (transparent / `0` / `NaN`) filling the corners. That is the map being placed **correctly** — not a stitching bug. For the final figure, clip or mask the layer to its data extent (in QGIS: right-click the layer → *Export* → *Save As…* with a clipping extent or mask layer).
+
+**Why `EPSG:4326` looks "squashed".** `EPSG:4326` is not a projection — it just plots longitude and latitude on equal-length axes. Away from the equator a degree of longitude covers less ground than a degree of latitude, by a factor of about cos(latitude) — roughly **0.68 at Austria's ~47° N** — so the map is stretched vertically and compressed horizontally. It is fine as a quick web-overlay CRS (that is all the [map preview](#map-preview) uses it for) but wrong for a figure or any measurement.
+
+**If you need one projection across several maps** (different UTM zones, or a country-wide figure), reproject **once, as the last step, from the UTM GeoTIFF** — never from a 4326 copy — to a national grid or an equal-area CRS (for Europe, ETRS89-LAEA `EPSG:3035`). Use **nearest-neighbour** resampling so class IDs are not blended into meaningless in-between values.
 
 ### Mapping a Different Year (Cross-Year Inference)
 
