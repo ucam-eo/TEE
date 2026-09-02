@@ -1048,8 +1048,11 @@
                     </div>
                 </div>
 
-                <div>
-                    <label>Map year <span style="font-weight:normal; color:#888;">(Create Map only)</span></label>
+                <button id="val-run-btn" class="validation-run-btn" disabled style="width:100%;" title="Run evaluation on selected classifiers">Run Evaluation</button>
+
+                <div style="margin-top:12px; padding-top:12px; border-top:1px solid #3a3a3a;">
+                    <div style="font-size:12px; font-weight:600; color:#bbb; margin-bottom:4px;">Create Map</div>
+                    <label for="val-map-year-select">Map year</label>
                     <select id="val-map-year-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;" title="Predict the trained model against a different year's embeddings when generating a map -- e.g. train on 2025, map 2018, to look for change over time. Pure inference: no ground truth needed, nothing gets scored. Leave as 'Same as training year' for the usual behavior.">
                         <option value="" selected>Same as training year</option>
                         <option value="2018">2018</option>
@@ -1061,20 +1064,16 @@
                         <option value="2024">2024</option>
                         <option value="2025">2025</option>
                     </select>
-                </div>
 
-                <div>
-                    <label>Map model <span style="font-weight:normal; color:#888;">(Create Map only)</span></label>
+                    <label for="val-map-model-select" style="margin-top:6px; display:block;">Map model</label>
                     <select id="val-map-model-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;" title="Which pixel classifier to train on all labels and predict the map with. 'Auto' picks the best-scoring one from the last evaluation. Spatial MLP / U-Net can't generate maps.">
                         <option value="">Auto (best from last run)</option>
                     </select>
+
+                    <button id="val-create-map-btn" class="validation-run-btn" disabled style="width:100%; margin-top:8px;" title="Train on all labels and predict every pixel in green map areas. Requires map bounding boxes and a prior evaluation run.">Create Map</button>
                 </div>
 
-                <div style="display:flex; gap:6px;">
-                    <button id="val-run-btn" class="validation-run-btn" disabled style="flex:1;" title="Run evaluation on selected classifiers">Run Evaluation</button>
-                    <button id="val-create-map-btn" class="validation-run-btn" disabled style="flex:1;" title="Train on all labels and predict every pixel in green map areas. Requires map bounding boxes and a prior evaluation run.">Create Map</button>
-                    <button id="val-cancel-btn" class="validation-run-btn" style="flex:0 0 auto; background:#dc3545; display:none;" title="Cancel running evaluation">Cancel</button>
-                </div>
+                <button id="val-cancel-btn" class="validation-run-btn" style="width:100%; margin-top:6px; background:#dc3545; display:none;" title="Cancel the running evaluation or map">Cancel</button>
                 <div id="val-status" class="validation-status"></div>
             </div>
         </div>
