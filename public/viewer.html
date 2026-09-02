@@ -1166,6 +1166,9 @@
                         <option value="weighted">Weighted F1</option>
                     </select>
                 </div>
+                <div style="position:absolute;top:8px;left:12px;z-index:10;">
+                    <button id="val-chart-png-btn" style="padding:3px 10px;border:1px solid #555;border-radius:4px;background:#333;color:#fff;font-size:12px;cursor:pointer;" title="Download this chart as a PNG">PNG</button>
+                </div>
                 <canvas id="val-chart" style="flex:1;min-height:0;"></canvas>
                 <div id="val-finish-btns" style="display:none;margin-top:8px;gap:6px;flex-wrap:wrap;justify-content:center;flex-shrink:0;"></div>
             </div>
@@ -1187,6 +1190,7 @@
                     <select id="cm-classifier-select"></select>
                     <button class="cm-toggle-pct" id="cm-toggle-pct" title="Toggle counts / percentages">%</button>
                     <button id="cm-view-btn" onclick="openCMPopup(document.getElementById('cm-classifier-select').value, lastEvalData)" style="padding:3px 10px; background:#4a90d9; color:#fff; border:none; border-radius:4px; font-size:12px; cursor:pointer; display:none;" title="Open full-size confusion matrix">View</button>
+                    <button id="cm-png-btn" style="padding:3px 10px; background:#333; color:#fff; border:1px solid #555; border-radius:4px; font-size:12px; cursor:pointer; display:none;" title="Download the confusion matrix as a PNG">PNG</button>
                 </div>
                 <div id="cm-filtered-note" style="display:none; padding: 0 16px 4px; font-size: 11px; color: #e8a838;"></div>
                 <div class="cm-scroll">
@@ -1194,7 +1198,10 @@
                 </div>
                 <!-- Regression metrics table (shown instead of CM for regression tasks) -->
                 <div id="val-regression-panel" style="display:none; padding:16px; overflow:auto;">
-                    <h3 style="color:#eee; margin:0 0 12px;">Regression Metrics</h3>
+                    <div style="display:flex; align-items:center; gap:10px; margin:0 0 12px;">
+                        <h3 style="color:#eee; margin:0;">Regression Metrics</h3>
+                        <button id="val-regression-png-btn" style="display:none; margin-left:auto; padding:3px 10px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:12px; cursor:pointer;" title="Download the predicted-vs-actual scatter as a PNG">PNG</button>
+                    </div>
                     <table id="val-regression-table" style="width:100%; border-collapse:collapse; color:#ccc; font-size:13px;">
                         <thead>
                             <tr style="border-bottom:1px solid #444;">

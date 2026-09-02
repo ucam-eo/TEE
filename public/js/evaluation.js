@@ -1184,6 +1184,10 @@ function renderConfusionMatrix(data) {
     if (!data.confusion_matrices) {
         scroll.innerHTML = '<div class="cm-placeholder">No confusion matrix data available.</div>';
         note.style.display = 'none';
+        for (const id of ['cm-view-btn', 'cm-png-btn']) {
+            const b = document.getElementById(id);
+            if (b) b.style.display = 'none';
+        }
         return;
     }
 
@@ -1324,10 +1328,17 @@ function renderCMTable(classifierName, data) {
     const labels = data.confusion_matrix_labels || [];
     const scroll = document.querySelector('#val-cm-panel .cm-scroll');
     const viewBtn = document.getElementById('cm-view-btn');
-    if (!cm) { scroll.innerHTML = '<div class="cm-placeholder">No data.</div>'; if (viewBtn) viewBtn.style.display = 'none'; return; }
+    const pngBtn = document.getElementById('cm-png-btn');
+    if (!cm) {
+        scroll.innerHTML = '<div class="cm-placeholder">No data.</div>';
+        if (viewBtn) viewBtn.style.display = 'none';
+        if (pngBtn) pngBtn.style.display = 'none';
+        return;
+    }
 
-    // Always show View button for opening full-size modal
+    // Always show View / PNG buttons once there's a matrix to act on
     if (viewBtn) viewBtn.style.display = '';
+    if (pngBtn) pngBtn.style.display = '';
 
     scroll.innerHTML = buildCMTableHTML(cm, labels, cmShowPct, false);
 }
@@ -1341,6 +1352,111 @@ function exportEvalResults() {
     a.download = `eval_results_${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.json`;
     a.click();
     URL.revokeObjectURL(url);
+}
+
+// ── PNG export of the validation charts / confusion matrix ──
+
+function _pngName(stem) {
+    return `${stem}_${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.png`;
+}
+
+function _downloadCanvasPng(canvas, filename) {
+    canvas.toBlob(blob => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }, 'image/png');
+}
+
+// Chart.js canvases are transparent -- composite onto the panel background
+// so the saved PNG isn't see-through on a white page.
+function downloadChartAsPng(chart, filename) {
+    if (!chart || !chart.canvas) return false;
+    const src = chart.canvas;
+    const out = document.createElement('canvas');
+    out.width = src.width || src.clientWidth;
+    out.height = src.height || src.clientHeight;
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#1e1e2e';
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(src, 0, 0, out.width, out.height);
+    _downloadCanvasPng(out, filename);
+    return true;
+}
+
+// The confusion matrix is an HTML table, not a chart -- redraw it onto a
+// canvas from the same {cm, labels} the table is built from (mirrors
+// buildCMTableHTML's colour logic).
+function downloadConfusionMatrixPng(cm, labels, filename) {
+    const n = cm.length;
+    if (!n) return false;
+    const rowSums = cm.map(r => r.reduce((a, b) => a + b, 0));
+    const cell = 46, headW = 130, headH = 88, pad = 22, titleH = 30;
+    const W = pad * 2 + headW + n * cell;
+    const H = pad * 2 + titleH + headH + n * cell + 8;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#1e1e2e';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textBaseline = 'middle';
+
+    ctx.fillStyle = '#eee';
+    ctx.font = 'bold 16px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('Confusion Matrix', pad, pad + titleH / 2);
+
+    const gridX = pad + headW;
+    const gridY = pad + titleH + headH;
+    const clip = (s, k) => (s.length > k ? s.slice(0, k - 1) + '…' : s);
+
+    ctx.fillStyle = '#9aa';
+    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('PREDICTED', gridX + (n * cell) / 2, pad + titleH + 8);
+    ctx.save();
+    ctx.translate(pad + 10, gridY + (n * cell) / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('ACTUAL', 0, 0);
+    ctx.restore();
+
+    ctx.fillStyle = '#ccc';
+    ctx.font = '11px system-ui, sans-serif';
+    for (let j = 0; j < n; j++) {
+        ctx.save();
+        ctx.translate(gridX + j * cell + cell / 2, gridY - 8);
+        ctx.rotate(-Math.PI / 4);
+        ctx.textAlign = 'left';
+        ctx.fillText(clip(String(labels[j] ?? `C${j}`), 18), 0, 0);
+        ctx.restore();
+    }
+
+    ctx.font = '12px system-ui, sans-serif';
+    for (let i = 0; i < n; i++) {
+        ctx.fillStyle = '#ccc';
+        ctx.textAlign = 'right';
+        ctx.fillText(clip(String(labels[i] ?? `C${i}`), 20), gridX - 8, gridY + i * cell + cell / 2);
+        for (let j = 0; j < n; j++) {
+            const count = cm[i][j];
+            const frac = rowSums[i] > 0 ? count / rowSums[i] : 0;
+            const x = gridX + j * cell;
+            const y = gridY + i * cell;
+            ctx.fillStyle = i === j
+                ? `rgba(40,167,69,${0.15 + frac * 0.7})`
+                : (frac > 0.01 ? `rgba(220,53,69,${0.1 + frac * 0.6})` : '#26262f');
+            ctx.fillRect(x, y, cell - 1, cell - 1);
+            ctx.fillStyle = frac > 0.5 ? '#fff' : '#ccc';
+            ctx.textAlign = 'center';
+            ctx.fillText(String(count), x + cell / 2, y + cell / 2);
+        }
+    }
+    _downloadCanvasPng(c, filename);
+    return true;
 }
 
 
@@ -1411,6 +1527,32 @@ async function downloadModels() {
 }
 document.getElementById('val-export-btn').addEventListener('click', exportEvalResults);
 document.getElementById('val-download-btn').addEventListener('click', downloadModels);
+
+// PNG export buttons for the three validation visualisations.
+{
+    const status = () => document.getElementById('val-status');
+    const chartBtn = document.getElementById('val-chart-png-btn');
+    if (chartBtn) chartBtn.addEventListener('click', () => {
+        const stem = (lastChartData && lastChartData._mode === 'kfold') ? 'kfold_scores' : 'learning_curve';
+        if (!downloadChartAsPng(valChart, _pngName(stem))) {
+            status().textContent = 'Run an evaluation first — no chart to export yet.';
+        }
+    });
+    const cmBtn = document.getElementById('cm-png-btn');
+    if (cmBtn) cmBtn.addEventListener('click', () => {
+        const name = document.getElementById('cm-classifier-select').value;
+        const cm = lastEvalData && lastEvalData.confusion_matrices && lastEvalData.confusion_matrices[name];
+        if (!cm || !downloadConfusionMatrixPng(cm, lastEvalData.confusion_matrix_labels || [], _pngName('confusion_matrix'))) {
+            status().textContent = 'No confusion matrix to export yet.';
+        }
+    });
+    const regBtn = document.getElementById('val-regression-png-btn');
+    if (regBtn) regBtn.addEventListener('click', () => {
+        if (!downloadChartAsPng(valScatterChart, _pngName('regression_scatter'))) {
+            status().textContent = 'No predicted-vs-actual scatter to export (k-fold runs have none).';
+        }
+    });
+}
 
 // ── Create Map (Phase 4: GeoTIFF generation) ──
 
@@ -2049,9 +2191,13 @@ function renderRegressionResults(aggregate) {
     const cmScroll = document.querySelector('#val-cm-panel .cm-scroll');
     const cmTitle = document.getElementById('val-cm-title');
 
-    // Hide CM, show regression
+    // Hide CM (and its PNG/View buttons), show regression
     if (cmScroll) cmScroll.style.display = 'none';
     if (cmTitle) cmTitle.textContent = 'Regression Metrics';
+    for (const id of ['cm-view-btn', 'cm-png-btn']) {
+        const b = document.getElementById(id);
+        if (b) b.style.display = 'none';
+    }
     panel.style.display = '';
 
     tbody.innerHTML = '';
@@ -2105,11 +2251,14 @@ function renderRegressionScatter(aggregate) {
 
     const modelsWithScatter = Object.entries(aggregate).filter(([, m]) => m.scatter && m.scatter.y_true && m.scatter.y_true.length);
     if (valScatterChart) { valScatterChart.destroy(); valScatterChart = null; }
+    const pngBtn = document.getElementById('val-regression-png-btn');
     if (modelsWithScatter.length === 0) {
         wrap.style.display = 'none';
+        if (pngBtn) pngBtn.style.display = 'none';
         return;
     }
     wrap.style.display = '';
+    if (pngBtn) pngBtn.style.display = '';
 
     let lo = Infinity, hi = -Infinity;
     const datasets = modelsWithScatter.map(([name, m]) => {

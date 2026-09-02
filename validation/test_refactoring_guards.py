@@ -1277,3 +1277,46 @@ class TestKfoldCvOption:
             "validation/test_kfold_results.mjs failed:\n"
             f"{result.stdout}\n{result.stderr}"
         )
+
+
+# ──────────────────────────────────────────────────
+# 27. PNG export of the validation visualisations
+#     A PNG button on the learning-curve/bar chart (#val-chart), the
+#     confusion matrix (redrawn to a canvas -- it's an HTML table), and
+#     the regression predicted-vs-actual scatter. Chart PNGs are
+#     composited onto an opaque background so they aren't see-through.
+#     Behaviour: validation/test_png_export.mjs.
+# ──────────────────────────────────────────────────
+
+class TestPngExport:
+    def test_buttons_exist(self, html):
+        for bid in ("val-chart-png-btn", "cm-png-btn", "val-regression-png-btn"):
+            assert f'id="{bid}"' in html, f"viewer.html must have #{bid}"
+
+    def test_helpers_defined_and_wired(self, all_script_text):
+        for fn in ("function downloadChartAsPng(", "function downloadConfusionMatrixPng(",
+                   "function _downloadCanvasPng(", "function _pngName("):
+            assert fn in all_script_text, f"evaluation.js must define {fn}…"
+        assert "getElementById('val-chart-png-btn')" in all_script_text
+        assert "getElementById('cm-png-btn')" in all_script_text
+        assert "getElementById('val-regression-png-btn')" in all_script_text
+
+    def test_chart_png_is_composited_onto_opaque_background(self, all_script_text):
+        i = all_script_text.find("function downloadChartAsPng(")
+        body = all_script_text[i:i + 600]
+        assert "fillRect(" in body, (
+            "downloadChartAsPng must paint an opaque background before drawImage "
+            "-- a raw Chart.js canvas is transparent and saves see-through"
+        )
+
+    def test_mjs_behaviour(self):
+        if not (ROOT / "node_modules" / "linkedom").is_dir():
+            pytest.skip("node_modules/linkedom not installed -- run `npm install` from the repo root")
+        result = subprocess.run(
+            ["node", str(ROOT / "validation" / "test_png_export.mjs")],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, (
+            "validation/test_png_export.mjs failed:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )
