@@ -597,32 +597,24 @@ class TestLargeAreaEvaluation:
             "renderRegressionBarChart must stay defined even if unused"
         )
 
-    def test_bar_chart_not_called_from_aggregate_handler(self, all_script_text):
-        # renderRegressionBarChart/renderClassificationBarChart destroy()
-        # and replace valChart with a *bar* chart on the same canvas
-        # (#val-chart) the learning-curve *line* chart was just built on
-        # over the whole run -- calling either from the 'aggregate' handler
-        # (fires once, when a large-area run finishes) silently clobbers
-        # the learning curve with a single-bar summary the instant the run
-        # completes. Confirmed live, Louis Driver, 2026-08-21: "it looks
-        # fine [during the run], but when it finishes it presents a
-        # strange graph" -- a box shape, which for one model is exactly
-        # what a lone bar looks like.
+    def test_bar_chart_from_aggregate_handler_is_kfold_gated(self, all_script_text):
+        # renderRegressionBarChart/renderClassificationBarChart destroy() and
+        # replace valChart on #val-chart. For a *learning-curve* run that
+        # canvas holds the line chart built over the whole run, so calling
+        # either unconditionally from the 'aggregate' handler clobbers it
+        # (Louis Driver, 2026-08-21: "when it finishes it presents a strange
+        # graph"). In *k-fold* mode there is no line chart, so the bar chart
+        # is what belongs there -- but the calls must stay gated behind a
+        # k-fold check so a learning-curve run never reaches them.
         i = all_script_text.find("ev.event === 'aggregate'")
         assert i != -1, "expected an 'aggregate' event handler in evaluation.js"
-        # Bounded to the handler's own block, not the whole file, so this
-        # doesn't just ban the functions outright (they may legitimately
-        # be called elsewhere, e.g. a future standalone k-fold CV UI).
-        handler_block = all_script_text[i:i + 1200]
-        assert "renderRegressionBarChart(" not in handler_block, (
-            "renderRegressionBarChart must not be called from the 'aggregate' "
-            "handler -- it destroys and replaces the learning curve line "
-            "chart with a bar chart the instant a large-area run finishes"
-        )
-        assert "renderClassificationBarChart(" not in handler_block, (
-            "renderClassificationBarChart must not be called from the "
-            "'aggregate' handler -- same reason as renderRegressionBarChart above"
-        )
+        handler_block = all_script_text[i:i + 1600]
+        for fn in ("renderRegressionBarChart(", "renderClassificationBarChart("):
+            if fn in handler_block:
+                assert "isKfold" in handler_block or "_mode === 'kfold'" in handler_block, (
+                    f"{fn} is called from the 'aggregate' handler without a "
+                    "k-fold guard -- a learning-curve run would lose its line chart"
+                )
 
     def test_done_handler_null_guard(self, all_script_text):
         # The done handler must guard against null lastChartData
@@ -748,6 +740,55 @@ class TestLargeAreaEvaluation:
             "the file-input 'change' handler must reset fileInput.value so the "
             "same .zip can be re-selected after a Clear"
         )
+
+    def test_eval_method_control_exists(self, html, all_script_text):
+        assert 'id="val-eval-mode"' in html and 'id="val-kfold-k"' in html, (
+            "viewer.html must have the #val-eval-mode select and #val-kfold-k input"
+        )
+        assert "function getEvalMode(" in all_script_text and "function getKfoldK(" in all_script_text, (
+            "evaluation.js must define getEvalMode() and getKfoldK()"
+        )
+
+    def test_run_large_area_sends_eval_mode(self, all_script_text):
+        i = all_script_text.find("evalUrl('run-large-area')")
+        assert i != -1
+        block = all_script_text[i:i + 1800]
+        assert "eval_mode: evalMode" in block, (
+            "run-large-area POST body must send `eval_mode` (learning_curve | kfold)"
+        )
+        assert "kfold_k: getKfoldK()" in block, (
+            "run-large-area POST body must send `kfold_k` when eval_mode is kfold"
+        )
+
+    def test_kfold_run_does_not_send_train_test_bboxes(self, all_script_text):
+        # k-fold cross-validates over all labelled pixels; sending the
+        # train/test rectangles would narrow the pool to the train side.
+        i = all_script_text.find("evalUrl('run-large-area')")
+        block = all_script_text[i:i + 1800]
+        assert "evalMode !== 'kfold' && hasSpatialBboxes()" in block, (
+            "run-large-area must omit getSpatialBboxData() in k-fold mode"
+        )
+
+    def test_fold_result_appends_a_results_row(self, all_script_text):
+        i = all_script_text.find("ev.event === 'fold_result'")
+        assert i != -1, "expected a 'fold_result' handler in evaluation.js"
+        block = all_script_text[i:i + 500]
+        assert "appendFoldResultRow(" in block, (
+            "the 'fold_result' handler must add a per-fold row to the results table"
+        )
+        assert "function appendFoldResultRow(" in all_script_text
+        assert "function renderKfoldClassificationTable(" in all_script_text
+
+    def test_kfold_aggregate_draws_the_bar_chart_only_for_kfold(self, all_script_text):
+        # The bar-chart functions must NOT be called for a learning-curve run
+        # (they clobber the line chart -- Louis Driver 2026-08-21), but MUST
+        # be called for k-fold, where there is no line chart.
+        i = all_script_text.find("ev.event === 'aggregate'")
+        assert i != -1
+        block = all_script_text[i:i + 1400]
+        assert "_mode === 'kfold'" in block
+        assert "renderRegressionBarChart(ev.models)" in block
+        assert "renderClassificationBarChart(ev.models)" in block
 
 
 # ──────────────────────────────────────────────────
@@ -1193,5 +1234,28 @@ class TestTaskOverrideAndShapefileList:
         )
         assert result.returncode == 0, (
             "validation/test_task_override_and_shapefile_list.mjs failed:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )
+
+
+# ──────────────────────────────────────────────────
+# 26. K-fold CV option in the Validation panel
+#     #val-eval-mode switches run-large-area between the learning curve and
+#     k-fold CV (eval_mode=kfold, kfold_k). k-fold has no line chart -- fold
+#     rows in the results table, a "Mean ± std" summary row, and the bar
+#     chart (renderRegression/ClassificationBarChart, kfold-gated) on
+#     #val-chart. Behaviour: validation/test_kfold_results.mjs.
+# ──────────────────────────────────────────────────
+
+class TestKfoldCvOption:
+    def test_mjs_behaviour(self):
+        if not (ROOT / "node_modules" / "linkedom").is_dir():
+            pytest.skip("node_modules/linkedom not installed -- run `npm install` from the repo root")
+        result = subprocess.run(
+            ["node", str(ROOT / "validation" / "test_kfold_results.mjs")],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, (
+            "validation/test_kfold_results.mjs failed:\n"
             f"{result.stdout}\n{result.stderr}"
         )

@@ -962,6 +962,20 @@
                 </div>
 
                 <div>
+                    <label for="val-eval-mode">Evaluation method</label>
+                    <select id="val-eval-mode" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+                        <option value="learning_curve" selected>Learning curve (train/test split)</option>
+                        <option value="kfold">K-fold cross-validation</option>
+                    </select>
+                    <div id="val-kfold-k-wrap" style="display:none; margin-top:6px;">
+                        <label for="val-kfold-k">Folds (k)</label>
+                        <input type="number" id="val-kfold-k" value="5" min="2" max="20" step="1"
+                            style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+                    </div>
+                    <div id="val-eval-mode-hint" style="font-size:11px; color:#888; margin-top:2px;">Learning curve: repeated resamples at 1–80% training size against a held-out (or spatial) test set. K-fold: cross-validate over all labelled pixels; pixel models only, ignores train/test rectangles.</div>
+                </div>
+
+                <div>
                     <label>Max pixel samples</label>
                     <input type="number" id="val-max-train-large" value="200000" min="1000" max="500000" step="10000"
                         style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">

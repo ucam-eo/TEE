@@ -387,6 +387,27 @@ window.refreshShapefileList = refreshShapefileList;
 const _taskOverrideEl = document.getElementById('val-task-override');
 if (_taskOverrideEl) _taskOverrideEl.addEventListener('change', updateTaskDetectedLabel);
 
+// ── Evaluation method (learning curve vs k-fold CV) ──
+
+function getEvalMode() {
+    const el = document.getElementById('val-eval-mode');
+    return el ? el.value : 'learning_curve';   // 'learning_curve' | 'kfold'
+}
+
+function getKfoldK() {
+    const el = document.getElementById('val-kfold-k');
+    const k = el ? parseInt(el.value, 10) : 5;
+    return Math.max(2, Math.min(20, isNaN(k) ? 5 : k));
+}
+
+const _evalModeEl = document.getElementById('val-eval-mode');
+if (_evalModeEl) {
+    _evalModeEl.addEventListener('change', () => {
+        const wrap = document.getElementById('val-kfold-k-wrap');
+        if (wrap) wrap.style.display = getEvalMode() === 'kfold' ? '' : 'none';
+    });
+}
+
 async function updateYearCoverage(geojson) {
     if (!geojson || !geojson.features || geojson.features.length === 0) return;
 
@@ -653,14 +674,20 @@ function handleStreamEvent(ev) {
         // Same cache-hit-skips-field_start issue as above -- redo the
         // metric-selector visibility here too rather than trusting it was
         // already set correctly for *this* run's task.
+        stopResultsLog();
+        const evalMode = ev.mode || 'learning_curve';
         if (ev.task) {
             const metricWrap = document.getElementById('val-metric-select-wrap');
-            if (metricWrap) metricWrap.style.display = (ev.task === 'regression') ? 'none' : '';
+            // Macro/weighted F1 toggle is meaningless for regression, and for
+            // k-fold (the bar chart is fixed to macro F1).
+            if (metricWrap) metricWrap.style.display =
+                (ev.task === 'regression' || evalMode === 'kfold') ? 'none' : '';
         }
-        stopResultsLog();
         lastChartData = {
             training_pcts: [],
             _plannedPcts: ev.training_pcts || [],
+            _mode: evalMode,
+            _k: ev.k || null,
             classifiers: {},
             classes: ev.classes,
             total_labelled_pixels: ev.total_labelled_pixels,
@@ -678,7 +705,10 @@ function handleStreamEvent(ev) {
                 ? { mean_r2: [], std_r2: [], mean_rmse: [], std_rmse: [], mean_mae: [], std_mae: [], _x: [] }
                 : { mean_f1: [], std_f1: [], mean_f1w: [], std_f1w: [], _x: [] };
         });
-        createStreamChart(ev.classifiers);
+        // k-fold has no learning curve -- the bar chart is drawn on the
+        // 'aggregate' event instead.
+        if (evalMode !== 'kfold') createStreamChart(ev.classifiers);
+        else if (valChart) { valChart.destroy(); valChart = null; }
         // Show results table in panel 3 with progress
         {
             const pixels = ev.total_labelled_pixels || 0;
@@ -688,9 +718,13 @@ function handleStreamEvent(ev) {
             const yearNote = (ev.train_year && ev.test_year && ev.train_year !== ev.test_year)
                 ? ` Trained ${ev.train_year} → tested ${ev.test_year}.`
                 : '';
-            initResultsTable(ev.classifiers, currentLargeAreaTask || 'classification');
+            initResultsTable(ev.classifiers, currentLargeAreaTask || 'classification',
+                evalMode === 'kfold' ? 'Fold' : 'Training labels');
+            const running = evalMode === 'kfold'
+                ? `Running ${ev.k || ''}-fold cross-validation...`
+                : 'Running learning curve...';
             setResultsStatus(
-                `${pixels.toLocaleString()} labelled pixels from ${stats.tiles_with_data || '?'}/${stats.tile_count || '?'} tiles.${yearNote} Running learning curve...`
+                `${pixels.toLocaleString()} labelled pixels from ${stats.tiles_with_data || '?'}/${stats.tile_count || '?'} tiles.${yearNote} ${running}`
             );
         }
 
@@ -892,34 +926,77 @@ function handleStreamEvent(ev) {
         showResultsPanel(`Loading embeddings for ${ev.field} (${ev.type})...`);
 
     } else if (ev.event === 'fold_result') {
-        status.textContent = `Fold ${ev.fold} complete`;
+        const total = ev.total_folds || (lastChartData && lastChartData._k) || '?';
+        status.textContent = `Fold ${ev.fold}/${total} complete`;
         if (lastChartData) {
             if (!lastChartData._foldResults) lastChartData._foldResults = [];
             lastChartData._foldResults.push(ev);
         }
+        appendFoldResultRow(ev.fold, ev.models);
+        const elapsed = status.dataset.t0 ? ((Date.now() - parseInt(status.dataset.t0)) / 1000).toFixed(0) : '';
+        setResultsStatus(`Fold ${ev.fold}/${total} (${elapsed}s)`);
 
     } else if (ev.event === 'aggregate') {
         if (lastChartData) {
             lastChartData.aggregate = ev.models;
         }
-        // NOT renderRegressionBarChart/renderClassificationBarChart here:
-        // both destroy() and replace valChart with a *bar* chart on the
-        // same canvas #val-chart the learning curve *line* chart was just
-        // built on over the whole run -- so the aggregate event silently
-        // clobbered the more informative learning curve with a same-titled
-        // ("R2 Score by Model (k-fold CV)") single-bar summary the instant
-        // the run finished. Confirmed live, Louis Driver, 2026-08-21: "it
-        // looks fine [during the run], but when it finishes it presents a
-        // strange graph" -- a box shape, which for a single model is
-        // exactly what a lone bar looks like. Those two functions were
-        // built for an actual standalone k-fold CV flow (see their
-        // hardcoded titles) and aren't otherwise called anywhere in this
-        // file; leaving them defined (unused for large-area runs) rather
-        // than deleting them, since a guard test asserts they exist.
+        const isKfold = lastChartData && lastChartData._mode === 'kfold';
+        // For a learning-curve run, do NOT draw a bar chart here: both
+        // renderRegressionBarChart/renderClassificationBarChart destroy()
+        // and replace valChart on the same canvas #val-chart the learning
+        // curve *line* chart was just built on over the whole run -- the
+        // aggregate event then silently clobbered the more informative
+        // learning curve with a single-bar summary the instant the run
+        // finished (Louis Driver, 2026-08-21: "when it finishes it presents
+        // a strange graph"). In k-fold mode there is no line chart, so the
+        // bar chart -- which those two functions were literally built for
+        // (their titles say "k-fold CV") -- is exactly what belongs there.
         if (currentLargeAreaTask === 'regression') {
             renderRegressionResults(ev.models);
+            if (isKfold) renderRegressionBarChart(ev.models);
+        } else if (isKfold) {
+            renderKfoldClassificationTable(ev.models);
+            renderClassificationBarChart(ev.models);
         }
+        if (isKfold) lastEvalData = lastChartData;   // so Export Results works
     }
+}
+
+// One summary row per model: mean F1 ± std across folds (k-fold
+// classification -- the learning-curve path fills this table from
+// 'progress' events instead).
+function renderKfoldClassificationTable(aggregate) {
+    const tbody = document.getElementById('val-results-tbody');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.style.borderTop = '2px solid #555';
+    let cells = `<td style="padding:6px; font-weight:bold;">Mean ± std</td>`;
+    for (const name of _resultsTableModels) {
+        const m = aggregate[name];
+        cells += `<td style="text-align:right; padding:6px; font-weight:bold;">${
+            m ? `${m.mean_f1.toFixed(4)} ± ${m.std_f1.toFixed(4)}` : '—'
+        }</td>`;
+    }
+    tr.innerHTML = cells;
+    tbody.appendChild(tr);
+}
+
+// One row per fold in the results table. Per-fold metric keys differ from
+// the learning curve's: classification folds carry mean_f1, regression
+// folds carry r2 (run_kfold_cv).
+function appendFoldResultRow(foldNum, models) {
+    const tbody = document.getElementById('val-results-tbody');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid #333';
+    let cells = `<td style="padding:6px; font-size:12px;">Fold ${foldNum}</td>`;
+    for (const name of _resultsTableModels) {
+        const m = models[name] || {};
+        const val = currentLargeAreaTask === 'regression' ? m.r2 : m.mean_f1;
+        cells += `<td style="text-align:right; padding:6px;">${typeof val === 'number' ? val.toFixed(4) : '—'}</td>`;
+    }
+    tr.innerHTML = cells;
+    tbody.appendChild(tr);
 }
 
 async function runEvaluation() {
@@ -955,6 +1032,15 @@ async function readNdjsonStream(resp, resetButtons) {
 
 function renderChart(data, metric) {
     lastChartData = data;
+    // k-fold has no learning curve -- its chart is the aggregate bar chart,
+    // drawn on the 'aggregate' event / restore path, not here.
+    if (data && data._mode === 'kfold') {
+        if (data.aggregate) {
+            if (currentLargeAreaTask === 'regression') renderRegressionBarChart(data.aggregate);
+            else renderClassificationBarChart(data.aggregate);
+        }
+        return;
+    }
     if (!metric) metric = document.getElementById('val-metric-select').value;
     const firstClf = Object.values(data.classifiers)[0];
     // Shape-based, not currentLargeAreaTask-based: this also runs on session
@@ -1714,8 +1800,16 @@ async function runLargeAreaEvaluation() {
     const field = document.getElementById('val-field-select').value;
     if (!field) return;
 
-    // Spatial split confirmation: if no bboxes drawn, confirm random split
-    if (!hasSpatialBboxes()) {
+    const evalMode = getEvalMode();
+
+    if (evalMode === 'kfold') {
+        // k-fold ignores the train/test rectangles and cross-validates over
+        // every labelled pixel -- warn if the user drew any.
+        if (hasSpatialBboxes() && !confirm('K-fold cross-validation ignores the train/test rectangles and cross-validates over all labelled pixels.\nContinue?')) {
+            return;
+        }
+    } else if (!hasSpatialBboxes()) {
+        // Learning curve: if no bboxes drawn, confirm random split
         if (!confirm('No spatial bounding boxes drawn.\nRun with random train/test split?')) {
             return;
         }
@@ -1825,7 +1919,12 @@ async function runLargeAreaEvaluation() {
                 sampling: document.getElementById('val-sampling-select').value || 'sqrt',
                 max_patches: parseInt(document.getElementById('val-max-patches').value) || 500,
                 task: getTaskOverride(),   // 'auto' lets the server detect; else force it
-                ...(hasSpatialBboxes() ? getSpatialBboxData() : {}),
+                eval_mode: evalMode,
+                ...(evalMode === 'kfold' ? { kfold_k: getKfoldK() } : {}),
+                // k-fold CV runs over all labelled pixels -- don't send the
+                // train/test rectangles (they'd narrow the pool to the
+                // train side). Map rectangles are separate (Create Map).
+                ...(evalMode !== 'kfold' && hasSpatialBboxes() ? getSpatialBboxData() : {}),
             }),
             signal: evalAbortController.signal,
         });
@@ -1898,13 +1997,13 @@ function setResultsStatus(message) {
     document.getElementById('val-results-status').textContent = message;
 }
 
-function initResultsTable(modelNames, task) {
+function initResultsTable(modelNames, task, firstColLabel) {
     _resultsTableModels = modelNames;
     const thead = document.getElementById('val-results-thead');
     const tbody = document.getElementById('val-results-tbody');
 
     const metric = task === 'regression' ? 'R²' : 'F1';
-    thead.innerHTML = '<th style="text-align:left; padding:6px;">Training labels</th>'
+    thead.innerHTML = `<th style="text-align:left; padding:6px;">${firstColLabel || 'Training labels'}</th>`
         + modelNames.map(n =>
             `<th style="text-align:right; padding:6px;">${getVariantLabel(n)} (${metric})</th>`
         ).join('');
@@ -2664,7 +2763,15 @@ function restoreValidationState() {
     updateBboxSummary();
 
     // Re-render chart
-    if (lastChartData && lastChartData.training_pcts && lastChartData.training_pcts.length > 0) {
+    if (lastChartData && lastChartData._mode === 'kfold' && lastChartData.aggregate) {
+        // k-fold: bar chart + summary table, no learning curve
+        if (currentLargeAreaTask === 'regression') {
+            renderRegressionResults(lastChartData.aggregate);
+            renderRegressionBarChart(lastChartData.aggregate);
+        } else {
+            renderClassificationBarChart(lastChartData.aggregate);
+        }
+    } else if (lastChartData && lastChartData.training_pcts && lastChartData.training_pcts.length > 0) {
         renderChart(lastChartData);
     }
 
