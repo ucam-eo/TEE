@@ -1280,26 +1280,29 @@ class TestKfoldCvOption:
 
 
 # ──────────────────────────────────────────────────
-# 27. PNG export of the validation visualisations
-#     A PNG button on the learning-curve/bar chart (#val-chart), the
-#     confusion matrix (redrawn to a canvas -- it's an HTML table), and
-#     the regression predicted-vs-actual scatter. Chart PNGs are
-#     composited onto an opaque background so they aren't see-through.
-#     Behaviour: validation/test_png_export.mjs.
+# 27. PNG + CSV export of the validation visualisations
+#     A PNG and a CSV button on the learning-curve/bar chart (#val-chart),
+#     the confusion matrix (redrawn to a canvas -- it's an HTML table --
+#     and dumped as raw-count rows), and the regression scatter/metrics.
+#     Chart PNGs are composited onto an opaque background so they aren't
+#     see-through. Behaviour: validation/test_png_export.mjs.
 # ──────────────────────────────────────────────────
 
 class TestPngExport:
     def test_buttons_exist(self, html):
-        for bid in ("val-chart-png-btn", "cm-png-btn", "val-regression-png-btn"):
+        for bid in ("val-chart-png-btn", "cm-png-btn", "val-regression-png-btn",
+                    "val-chart-csv-btn", "cm-csv-btn", "val-regression-csv-btn"):
             assert f'id="{bid}"' in html, f"viewer.html must have #{bid}"
 
     def test_helpers_defined_and_wired(self, all_script_text):
         for fn in ("function downloadChartAsPng(", "function downloadConfusionMatrixPng(",
-                   "function _downloadCanvasPng(", "function _pngName("):
+                   "function _downloadCanvasPng(", "function _pngName(",
+                   "function _downloadCsv(", "function learningCurveCsvRows(",
+                   "function regressionCsv(", "function confusionMatrixCsvRows("):
             assert fn in all_script_text, f"evaluation.js must define {fn}…"
-        assert "getElementById('val-chart-png-btn')" in all_script_text
-        assert "getElementById('cm-png-btn')" in all_script_text
-        assert "getElementById('val-regression-png-btn')" in all_script_text
+        for bid in ("val-chart-png-btn", "cm-png-btn", "val-regression-png-btn",
+                    "val-chart-csv-btn", "cm-csv-btn", "val-regression-csv-btn"):
+            assert f"getElementById('{bid}')" in all_script_text, f"{bid} must be wired"
 
     def test_chart_png_is_composited_onto_opaque_background(self, all_script_text):
         i = all_script_text.find("function downloadChartAsPng(")

@@ -1184,7 +1184,7 @@ function renderConfusionMatrix(data) {
     if (!data.confusion_matrices) {
         scroll.innerHTML = '<div class="cm-placeholder">No confusion matrix data available.</div>';
         note.style.display = 'none';
-        for (const id of ['cm-view-btn', 'cm-png-btn']) {
+        for (const id of ['cm-view-btn', 'cm-png-btn', 'cm-csv-btn']) {
             const b = document.getElementById(id);
             if (b) b.style.display = 'none';
         }
@@ -1327,18 +1327,15 @@ function renderCMTable(classifierName, data) {
     const cm = data.confusion_matrices[classifierName];
     const labels = data.confusion_matrix_labels || [];
     const scroll = document.querySelector('#val-cm-panel .cm-scroll');
-    const viewBtn = document.getElementById('cm-view-btn');
-    const pngBtn = document.getElementById('cm-png-btn');
+    const cmBtns = ['cm-view-btn', 'cm-png-btn', 'cm-csv-btn'].map(id => document.getElementById(id));
     if (!cm) {
         scroll.innerHTML = '<div class="cm-placeholder">No data.</div>';
-        if (viewBtn) viewBtn.style.display = 'none';
-        if (pngBtn) pngBtn.style.display = 'none';
+        cmBtns.forEach(b => { if (b) b.style.display = 'none'; });
         return;
     }
 
-    // Always show View / PNG buttons once there's a matrix to act on
-    if (viewBtn) viewBtn.style.display = '';
-    if (pngBtn) pngBtn.style.display = '';
+    // Show View / PNG / CSV once there's a matrix to act on
+    cmBtns.forEach(b => { if (b) b.style.display = ''; });
 
     scroll.innerHTML = buildCMTableHTML(cm, labels, cmShowPct, false);
 }
@@ -1459,6 +1456,110 @@ function downloadConfusionMatrixPng(cm, labels, filename) {
     return true;
 }
 
+// ── CSV export of the same three visualisations ──
+
+function _csvEscape(v) {
+    const s = v === null || v === undefined ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function _downloadCsv(rows, filename) {
+    if (!rows || !rows.length) return false;
+    const text = rows.map(r => r.map(_csvEscape).join(',')).join('\n') + '\n';
+    const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    return true;
+}
+
+// Learning curve: one row per (training %, model). k-fold: one row per
+// (fold, model) plus a mean±std block. Metric columns follow the task.
+function learningCurveCsvRows(data) {
+    if (!data || !data.classifiers) return [];
+    const isReg = currentLargeAreaTask === 'regression';
+    const rows = [];
+
+    if (data._mode === 'kfold') {
+        const foldCols = isReg ? ['r2', 'rmse', 'mae'] : ['mean_f1', 'mean_f1w'];
+        rows.push(['fold', 'model', ...foldCols]);
+        for (const fr of (data._foldResults || [])) {
+            for (const [name, m] of Object.entries(fr.models || {})) {
+                rows.push([fr.fold, name, ...foldCols.map(k => (m[k] ?? ''))]);
+            }
+        }
+        const aggCols = isReg
+            ? ['mean_r2', 'std_r2', 'mean_rmse', 'std_rmse', 'mean_mae', 'std_mae']
+            : ['mean_f1', 'std_f1', 'mean_f1w', 'std_f1w'];
+        rows.push([]);
+        rows.push(['summary', 'model', ...aggCols]);
+        for (const [name, m] of Object.entries(data.aggregate || {})) {
+            rows.push(['mean±std', name, ...aggCols.map(k => (m[k] ?? ''))]);
+        }
+        return rows;
+    }
+
+    const cols = isReg
+        ? ['mean_r2', 'std_r2', 'mean_rmse', 'std_rmse', 'mean_mae', 'std_mae']
+        : ['mean_f1', 'std_f1', 'mean_f1w', 'std_f1w'];
+    rows.push(['training_pct', 'model', ...cols]);
+    for (const [name, acc] of Object.entries(data.classifiers)) {
+        const xs = (acc._x && acc._x.length) ? acc._x : (data.training_pcts || []);
+        for (let i = 0; i < xs.length; i++) {
+            rows.push([
+                xs[i] != null ? Number(xs[i]).toFixed(3) : '',
+                name,
+                ...cols.map(k => (acc[k] && acc[k][i] != null ? acc[k][i] : '')),
+            ]);
+        }
+    }
+    return rows;
+}
+
+// Regression: the raw predicted-vs-actual points when the run captured
+// them (long format), otherwise the metrics table.
+function regressionCsv(aggregate) {
+    const withScatter = Object.entries(aggregate || {})
+        .filter(([, m]) => m.scatter && m.scatter.y_true && m.scatter.y_true.length);
+    if (withScatter.length) {
+        const rows = [['model', 'y_true', 'y_pred']];
+        for (const [name, m] of withScatter) {
+            for (let i = 0; i < m.scatter.y_true.length; i++) {
+                rows.push([name, m.scatter.y_true[i], m.scatter.y_pred[i]]);
+            }
+        }
+        return { rows, stem: 'regression_scatter' };
+    }
+    const rows = [[
+        'model', 'r2', 'r2_std', 'rmse', 'rmse_std', 'mae', 'mae_std',
+        'outside_range_frac', 'train_min', 'train_max',
+    ]];
+    for (const [name, m] of Object.entries(aggregate || {})) {
+        rows.push([
+            name, m.mean_r2 ?? '', m.std_r2 ?? '', m.mean_rmse ?? '', m.std_rmse ?? '',
+            m.mean_mae ?? '', m.std_mae ?? '',
+            typeof m.oor_frac === 'number' ? m.oor_frac : '',
+            Array.isArray(m.train_range) ? m.train_range[0] : '',
+            Array.isArray(m.train_range) ? m.train_range[1] : '',
+        ]);
+    }
+    return { rows, stem: 'regression_metrics' };
+}
+
+// Confusion matrix: header row of predicted labels, first column of
+// actual labels, raw counts (the canonical form -- the on-screen % toggle
+// is a view choice).
+function confusionMatrixCsvRows(cm, labels) {
+    const n = cm.length;
+    const name = j => String(labels[j] ?? `C${j}`);
+    const rows = [['actual\\predicted', ...Array.from({ length: n }, (_, j) => name(j))]];
+    for (let i = 0; i < n; i++) rows.push([name(i), ...cm[i]]);
+    return rows;
+}
+
 
 async function downloadModels() {
     const dlBtn = document.getElementById('val-download-btn');
@@ -1551,6 +1652,32 @@ document.getElementById('val-download-btn').addEventListener('click', downloadMo
         if (!downloadChartAsPng(valScatterChart, _pngName('regression_scatter'))) {
             status().textContent = 'No predicted-vs-actual scatter to export (k-fold runs have none).';
         }
+    });
+
+    const csvName = stem => `${stem}_${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.csv`;
+
+    const chartCsvBtn = document.getElementById('val-chart-csv-btn');
+    if (chartCsvBtn) chartCsvBtn.addEventListener('click', () => {
+        const rows = learningCurveCsvRows(lastChartData);
+        const stem = (lastChartData && lastChartData._mode === 'kfold') ? 'kfold_scores' : 'learning_curve';
+        if (!_downloadCsv(rows, csvName(stem))) {
+            status().textContent = 'Run an evaluation first — no data to export yet.';
+        }
+    });
+    const cmCsvBtn = document.getElementById('cm-csv-btn');
+    if (cmCsvBtn) cmCsvBtn.addEventListener('click', () => {
+        const name = document.getElementById('cm-classifier-select').value;
+        const cm = lastEvalData && lastEvalData.confusion_matrices && lastEvalData.confusion_matrices[name];
+        if (!cm || !_downloadCsv(confusionMatrixCsvRows(cm, lastEvalData.confusion_matrix_labels || []), csvName('confusion_matrix'))) {
+            status().textContent = 'No confusion matrix to export yet.';
+        }
+    });
+    const regCsvBtn = document.getElementById('val-regression-csv-btn');
+    if (regCsvBtn) regCsvBtn.addEventListener('click', () => {
+        const agg = lastChartData && lastChartData.aggregate;
+        if (!agg) { status().textContent = 'No regression results to export yet.'; return; }
+        const { rows, stem } = regressionCsv(agg);
+        _downloadCsv(rows, csvName(stem));
     });
 }
 
@@ -2191,13 +2318,15 @@ function renderRegressionResults(aggregate) {
     const cmScroll = document.querySelector('#val-cm-panel .cm-scroll');
     const cmTitle = document.getElementById('val-cm-title');
 
-    // Hide CM (and its PNG/View buttons), show regression
+    // Hide CM (and its View/PNG/CSV buttons), show regression + its CSV
     if (cmScroll) cmScroll.style.display = 'none';
     if (cmTitle) cmTitle.textContent = 'Regression Metrics';
-    for (const id of ['cm-view-btn', 'cm-png-btn']) {
+    for (const id of ['cm-view-btn', 'cm-png-btn', 'cm-csv-btn']) {
         const b = document.getElementById(id);
         if (b) b.style.display = 'none';
     }
+    const regCsv = document.getElementById('val-regression-csv-btn');
+    if (regCsv) regCsv.style.display = '';
     panel.style.display = '';
 
     tbody.innerHTML = '';
