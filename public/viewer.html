@@ -1063,6 +1063,13 @@
                     </select>
                 </div>
 
+                <div>
+                    <label>Map model <span style="font-weight:normal; color:#888;">(Create Map only)</span></label>
+                    <select id="val-map-model-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;" title="Which pixel classifier to train on all labels and predict the map with. 'Auto' picks the best-scoring one from the last evaluation. Spatial MLP / U-Net can't generate maps.">
+                        <option value="">Auto (best from last run)</option>
+                    </select>
+                </div>
+
                 <div style="display:flex; gap:6px;">
                     <button id="val-run-btn" class="validation-run-btn" disabled style="flex:1;" title="Run evaluation on selected classifiers">Run Evaluation</button>
                     <button id="val-create-map-btn" class="validation-run-btn" disabled style="flex:1;" title="Train on all labels and predict every pixel in green map areas. Requires map bounding boxes and a prior evaluation run.">Create Map</button>

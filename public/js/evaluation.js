@@ -897,6 +897,7 @@ function handleStreamEvent(ev) {
         if (dlBtnH) dlBtnH.disabled = false;  // always enable — trains on click
         hideFinishButtons();
         updateCreateMapButton();
+        updateMapModelOptions();  // now that per-model scores are final
 
 
     } else if (ev.event === 'heartbeat') {
@@ -1813,6 +1814,76 @@ function updateCreateMapButton() {
     }
 }
 
+// ── Map model picker (Create Map) ──
+
+const PIXEL_MAP_CLASSIFIERS = ['nn', 'rf', 'xgboost', 'mlp'];
+
+function _checkedPixelClassifiers() {
+    return Array.from(document.querySelectorAll('.val-clf-header input:checked'))
+        .map(cb => cb.value)
+        .filter(v => PIXEL_MAP_CLASSIFIERS.includes(v));
+}
+
+// Best score from the last run for a base pixel classifier -- across its
+// hyperparameter variants, and matching the regression "_reg" names. null
+// if the last run didn't produce a score for it.
+function _pixelModelScore(base) {
+    if (!lastChartData || !lastChartData.classifiers) return null;
+    const key = currentLargeAreaTask === 'regression' ? 'mean_r2' : 'mean_f1';
+    let best = null;
+    for (const [name, acc] of Object.entries(lastChartData.classifiers)) {
+        if (name.replace(/_v\d+$/, '').replace(/_reg$/, '') !== base) continue;
+        let v;
+        if (lastChartData._mode === 'kfold' && lastChartData.aggregate && lastChartData.aggregate[name]) {
+            v = lastChartData.aggregate[name][key];
+        } else if (Array.isArray(acc[key]) && acc[key].length) {
+            v = acc[key][acc[key].length - 1];
+        }
+        if (typeof v === 'number' && (best === null || v > best)) best = v;
+    }
+    return best;
+}
+
+// Rebuild #val-map-model-select from the checked pixel classifiers,
+// annotating each with its last-run score. Keeps the current choice if it
+// is still checked.
+function updateMapModelOptions() {
+    const sel = document.getElementById('val-map-model-select');
+    if (!sel) return;
+    const prev = sel.value;
+    const metricLbl = currentLargeAreaTask === 'regression' ? 'R²' : 'F1';
+    sel.innerHTML = '<option value="">Auto (best from last run)</option>';
+    for (const name of _checkedPixelClassifiers()) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        const s = _pixelModelScore(name);
+        opt.textContent = getVariantLabel(name) + (s != null ? ` — ${metricLbl} ${s.toFixed(3)}` : '');
+        sel.appendChild(opt);
+    }
+    if (prev) {
+        const keep = Array.from(sel.options).find(o => o.value === prev);
+        if (keep) keep.selected = true;
+    }
+}
+
+// The classifier Create Map should use: the explicit choice, else the
+// best-scoring checked pixel classifier from the last run, else the first
+// checked pixel classifier.
+function getMapModel() {
+    const sel = document.getElementById('val-map-model-select');
+    const checked = _checkedPixelClassifiers();
+    if (sel && sel.value && checked.includes(sel.value)) return sel.value;
+    let best = null, bestScore = -Infinity;
+    for (const name of checked) {
+        const s = _pixelModelScore(name);
+        if (s != null && s > bestScore) { bestScore = s; best = name; }
+    }
+    return best || checked[0] || null;
+}
+
+document.querySelector('.val-classifiers')?.addEventListener('change', updateMapModelOptions);
+updateMapModelOptions();  // populate from whatever is checked on load
+
 async function createMap() {
     const mapBboxes = spatialBboxes.map.map(r => rectToBbox(r));
     if (mapBboxes.length === 0) {
@@ -1823,15 +1894,9 @@ async function createMap() {
 
     clearMapPreview();  // drop any overlay from a previous run
 
-    // Pick the classifier: use the first checked pixel-based classifier
-    const PIXEL_CLASSIFIERS = ['nn', 'rf', 'xgboost', 'mlp'];
-    const checkboxes = document.querySelectorAll('.val-clf-header input:checked');
-    const checked = Array.from(checkboxes).map(cb => cb.value);
-    const pixelClf = checked.find(c => {
-        const base = c.replace(/_v\d+$/, '');
-        return PIXEL_CLASSIFIERS.includes(base);
-    });
-
+    // Which classifier to train + predict the map with -- the "Map model"
+    // dropdown's explicit choice, or the best-scoring checked pixel model.
+    const pixelClf = getMapModel();
     if (!pixelClf) {
         document.getElementById('val-status').textContent = 'Select a pixel-based classifier (k-NN, RF, XGBoost, or MLP) for map generation';
         document.getElementById('val-status').style.color = '#dc3545';
@@ -2783,6 +2848,8 @@ function applyConfig(config) {
             }
         }
     }
+
+    updateMapModelOptions();  // checked classifiers changed
 }
 
 document.getElementById('val-config-file').addEventListener('change', loadConfigFile);
@@ -3081,6 +3148,7 @@ function restoreValidationState() {
     // and reflect the task-type override / last detection.
     refreshShapefileList();
     updateTaskDetectedLabel();
+    updateMapModelOptions();
 }
 window.restoreValidationState = restoreValidationState;
 window.exitBboxDrawMode = exitBboxDrawMode;

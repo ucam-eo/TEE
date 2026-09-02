@@ -1323,3 +1323,44 @@ class TestPngExport:
             "validation/test_png_export.mjs failed:\n"
             f"{result.stdout}\n{result.stderr}"
         )
+
+
+# ──────────────────────────────────────────────────
+# 28. "Map model" dropdown next to Create Map
+#     #val-map-model-select lets the user pick which pixel classifier
+#     Create Map trains on, instead of the old "first checked pixel model
+#     in list order". Auto = the best-scoring checked model from the last
+#     run. Behaviour: validation/test_map_model_picker.mjs.
+# ──────────────────────────────────────────────────
+
+class TestMapModelPicker:
+    def test_control_and_helpers(self, html, all_script_text):
+        assert 'id="val-map-model-select"' in html, "viewer.html must have #val-map-model-select"
+        for fn in ("function getMapModel(", "function updateMapModelOptions(",
+                   "function _pixelModelScore(", "function _checkedPixelClassifiers("):
+            assert fn in all_script_text, f"evaluation.js must define {fn}…"
+
+    def test_create_map_uses_the_picker(self, all_script_text):
+        i = all_script_text.find("async function createMap(")
+        body = all_script_text[i:i + 1200]
+        assert "getMapModel()" in body, "createMap must resolve its classifier via getMapModel()"
+        assert ".find(c =>" not in body, (
+            "createMap must not fall back to the old 'first checked pixel model' .find() logic"
+        )
+
+    def test_options_refresh_when_classifiers_change(self, all_script_text):
+        assert "'.val-classifiers')?.addEventListener('change', updateMapModelOptions)" in all_script_text, (
+            "the classifier checkboxes must refresh #val-map-model-select on change"
+        )
+
+    def test_mjs_behaviour(self):
+        if not (ROOT / "node_modules" / "linkedom").is_dir():
+            pytest.skip("node_modules/linkedom not installed -- run `npm install` from the repo root")
+        result = subprocess.run(
+            ["node", str(ROOT / "validation" / "test_map_model_picker.mjs")],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, (
+            "validation/test_map_model_picker.mjs failed:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )
