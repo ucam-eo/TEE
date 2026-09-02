@@ -2119,6 +2119,8 @@ function generateConfig() {
         "output_dir": "./eval_output",
         "dry_run": false,
         "seed": getSeed(),
+        "kfold": getKfoldK(),
+        "_kfold": "folds for scripts/tee_evaluate.py, which cross-validates (2-20)",
     };
 
     // Spatial bounding boxes (if any)
@@ -2772,6 +2774,10 @@ function applyConfig(config) {
     if (config.seed !== undefined && config.seed !== null) {
         const seedEl = document.getElementById('val-seed');
         if (seedEl) seedEl.value = String(config.seed);
+    }
+    if (config.kfold !== undefined && config.kfold !== null) {
+        const kEl = document.getElementById('val-kfold-k');
+        if (kEl) kEl.value = String(config.kfold);
     }
 
     // Set year. The config format isn't train/test-split-aware (see

@@ -33,7 +33,7 @@ With TEE you can:
 - [Manual Labelling](#manual-labelling) — pins, polygons, similarity expansion
 - [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
 - [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
-- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, confusion matrix, spatial splits, worked example, Create Map + preview + projections, CLI
+- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, task type, random seed, PNG/CSV export, worked example, Create Map + preview + projections, CLI
 - [Postcard](#postcard) — a fun, no-account image generator
 - [Data Privacy](#data-privacy)
 - [Reference](#reference) — mouse controls, keyboard shortcuts, tips
@@ -586,18 +586,18 @@ Validation answers the question: **"How well can machine learning distinguish my
 | Step | Panel | What to do |
 |------|-------|------------|
 | 1 | — | In the Viewport Manager, go to the **Validation** tab and click **Evaluate** |
-| 2 | 1 | Drag and drop one or more `.zip` shapefiles onto the upload area. (You can upload multiple files; click **Clear** to start over.) |
+| 2 | 1 | Drag and drop one or more `.zip` shapefiles onto the upload area. Uploads **accumulate** (the polygons are merged) — the panel lists what's currently loaded, with feature counts; click **Clear** to start over. |
 | 3 | 2 | Check the satellite panel — your polygons should appear as red outlines on the map |
 | 4 | 3 | Review the class table — it shows each habitat class and how many polygons/pixels it contains |
-| 5 | 1 | Select the **Class field** (the column in your shapefile that contains habitat names) and the **Year of training** / **Year of test** satellite data to use (see [Train/Test Years](#traintest-years-optional) below — leave both at the same value for a standard single-year evaluation) |
+| 5 | 1 | Select the **Class field** (the column in your shapefile with habitat names or numeric targets). Optionally set **Task type** if the auto-detection is wrong (see [Task Type](#task-type-classification-vs-regression)), and pick the **Year of training** / **Year of test** satellite data (see [Train/Test Years](#traintest-years-optional) — leave both the same for a standard single-year run) |
 | 6 | 1 | Tick the **Classifiers** you want to test. Click the **...** button next to each one to see and adjust its parameters. Click **+** to add a variant with different settings (see [Hyperparameter Variants](#hyperparameter-variants)). |
-| 7 | 1 | Adjust **Max pixel samples** (how many random points to sample from your polygons), **Sampling** strategy (how to distribute points across classes), and **Max patches** (for spatial classifiers) |
+| 7 | 1 | Adjust **Max pixel samples**, **Sampling** strategy, **Max patches** (for spatial classifiers), the **Evaluation method** — learning curve or k-fold CV (see [Evaluation Method](#evaluation-method-learning-curve-or-k-fold)) — and the **Random seed** (see [Reproducibility](#reproducibility-the-random-seed)) |
 | 8 | 1 | *(Optional)* Set up a **Spatial split** — draw separate train and test regions on the map to avoid spatial autocorrelation (see [Spatial Train/Test Split](#spatial-traintest-split-optional)) |
 | 9 | 1 | *(Optional)* Click **Generate Config** to save your current settings as a JSON file for later, or **Upload Config** to restore previously saved settings |
-| 10 | 1 | Click **Run Evaluation**. (Or click **Create Map** to generate a classification GeoTIFF — this requires a prior evaluation run.) |
+| 10 | 1 | Click **Run Evaluation**. (To generate a GeoTIFF instead, use the separate **Create Map** group below the button — this requires a prior evaluation run.) |
 | 11 | 4 | Watch the progress log — it shows tile fetching, point extraction, and classifier training in real time. You can click **Cancel** to stop at any time. |
-| 12 | 5 | The learning curve builds up as each training percentage completes — you'll see lines for each classifier showing how accuracy improves with more data |
-| 13 | 6 | When training finishes, a confusion matrix appears showing which classes the classifier got right and which it confused. Use the dropdown to switch between classifiers, **%** to toggle between counts and percentages, and **View** to open a full-size version. |
+| 12 | 5 | The learning curve builds up as each training percentage completes — one line per classifier. (In k-fold mode you instead get a per-fold table and a bar chart.) A **PNG** and a **CSV** button on the panel export the chart and its data. |
+| 13 | 6 | When training finishes, a confusion matrix appears showing which classes the classifier got right and which it confused. Use the dropdown to switch classifiers, **%** to toggle counts/percentages, **View** for a full-size version, and **PNG** / **CSV** to export it. |
 
 ### Available Classifiers
 
@@ -646,6 +646,20 @@ Each classifier has adjustable parameters. Click the **...** button next to a cl
 Want to compare the same classifier with different settings — for example, Random Forest with 50 trees vs 200 trees? Click the **+** button next to a classifier to add a **variant**. Each variant runs as a separate line on the learning curve, labelled with a suffix (v1, v2, etc.). This lets you compare settings side-by-side in a single evaluation run without having to re-upload your data.
 
 Click **×** on a variant row to remove it.
+
+### Task Type (Classification vs Regression)
+
+TEE looks at the **Class field** you selected and decides whether this is a **classification** problem (distinct habitat classes) or a **regression** problem (a continuous quantity like canopy height, biomass or carbon). The rule: a non-numeric field, or a numeric field with **20 or fewer distinct values**, is treated as classification; a numeric field with more than 20 distinct values is treated as regression.
+
+That rule occasionally gets it wrong — most often when a genuinely continuous field has been **coarsely binned or rounded** (heights rounded to the nearest metre, say, giving only a few dozen repeated values). Use the **Task type** dropdown to override it:
+
+| Setting | Effect |
+|---------|--------|
+| **Auto-detect from field** (default) | Apply the rule above |
+| **Force classification** | Treat the field's values as class labels |
+| **Force regression** | Treat the field as a continuous target, even if it has few distinct values |
+
+The choice applies to **both** the evaluation and [Create Map](#create-map-geotiff-generation), so the map can't end up disagreeing with the run that produced its scores. The hint line under the dropdown shows what was detected (or that you've forced it). If a map is ever generated as a different task than the evaluation ran as, the status line says so in red.
 
 ### Sampling Strategy
 
@@ -698,6 +712,7 @@ To get a more honest evaluation, you can draw **separate geographic regions** fo
 - If you don't draw any rectangles and click Run, TEE will ask if you want to proceed with a random split
 - Your bounding boxes are saved when you use Generate Config / Upload Config
 - **Spatial classifiers (Spatial MLP 3×3, Spatial MLP 5×5, U-Net) are skipped** when you use a spatial split, with a status message in the progress log. They need a neighbourhood of features around every pixel, which a fixed held-out test region can't reliably provide; the pixel classifiers still run as normal.
+- The spatial split applies to the **learning curve** only. [K-fold cross-validation](#evaluation-method-learning-curve-or-k-fold) ignores the train/test rectangles (it cross-validates over all labelled pixels); if you have rectangles drawn and switch to k-fold, TEE warns you before it runs. The green **Map area** rectangles are unaffected — they're only for Create Map.
 
 > **Tip:** For a meaningful spatial cross-validation, make sure the train and test regions are geographically separated — for example, train on the north and test on the south, or train on lowland and test on upland areas.
 
@@ -747,9 +762,32 @@ The 17 classes are unevenly sized (from 150 fields for `AC06` Sunflower up to 10
 3. Select **Test area (yellow)** and draw a rectangle over the **eastern half** (from about 16.7°E onward), covering the full north–south extent
 4. Run the evaluation — compare the resulting accuracy against a run with no spatial split (random split) on the same data. Expect the spatial-split numbers to be somewhat lower — that's the honest estimate; a big gap between the two indicates the random split was overly optimistic due to autocorrelation
 
+### Evaluation Method: Learning Curve or K-Fold
+
+The **Evaluation method** dropdown chooses how classifiers are scored:
+
+| Method | What it does | When to use |
+|--------|-------------|-------------|
+| **Learning curve** (default) | Trains at increasing fractions of the data (1%–80%) with repeated random resamples, against a held-out (or spatial) test set. The output is a curve of accuracy vs training size. | You want to see whether you have *enough* labels, or how quickly the classifier learns. |
+| **K-fold cross-validation** | Splits **all** the labelled pixels into *k* folds; each fold is held out once for testing while the other *k*−1 train. Reports the mean ± standard deviation across folds. | You want a single robust accuracy estimate that uses every labelled pixel for both training and testing. |
+
+When you pick **K-fold cross-validation**, a **Folds (k)** box appears (2–20, default 5). K-fold:
+
+- cross-validates over **every** labelled pixel — it **ignores the train/test rectangles** (a spatial split makes no sense here);
+- supports **pixel classifiers only** (k-NN, Random Forest, XGBoost, MLP) — Spatial MLP and U-Net are dropped with a note in the log;
+- shows a **per-fold table** and a **bar chart** of the mean score per model instead of a learning curve; the confusion matrix (summed across folds) still appears.
+
+### Reproducibility: The Random Seed
+
+Every random step in a run — which points get sampled from your polygons, the learning-curve resamples, the k-fold splits, and each model's own internal randomness — is driven by a single **Random seed** (default 42). Run the same data with the same seed and the same settings and you get **identical** numbers.
+
+- The seed is also used by **Download Models** and **Create Map**, so a downloaded model and a map match the run that scored them.
+- It's saved in [config files](#config-files) and available on the [CLI](#cli-for-headless-evaluation) as `--seed`.
+- Changing the seed is the right way to check how *sensitive* a result is to the luck of the draw — run it two or three times with different seeds and see how much the scores move.
+
 ### Understanding the Learning Curve
 
-The learning curve is the main output of an evaluation. It shows how well each classifier performs as it gets access to more training data:
+The learning curve is the main output of a **learning-curve** evaluation. It shows how well each classifier performs as it gets access to more training data:
 
 ![Example learning curve](images/learning_curve.png)
 
@@ -758,6 +796,7 @@ The learning curve is the main output of an evaluation. It shows how well each c
 - **Steeper curves** mean the embeddings separate your classes well even with very little training data — a good sign
 - **Flat curves at low F1** suggest the classes are hard to distinguish, or you may need different training features
 - Use the dropdown to toggle between **Macro F1** (average across all classes equally) and **Weighted F1** (weighted by class size)
+- **PNG** saves the chart as an image; **CSV** saves the underlying numbers — one row per training-percentage per model (or, in [k-fold](#evaluation-method-learning-curve-or-k-fold) mode, one row per fold plus a mean ± std summary)
 
 ### Confusion Matrix
 
@@ -770,6 +809,7 @@ The confusion matrix shows, for each true habitat class, how the classifier pred
 - Click **%** to switch between raw counts and percentages
 - Click **View** to open a full-screen version (useful when you have many classes)
 - Use the **Classifier dropdown** to see the confusion matrix for different classifiers
+- **PNG** saves the matrix as an image; **CSV** saves it as raw counts, with predicted classes across the top row and actual classes down the first column
 
 ### Downloading Trained Models
 
@@ -789,11 +829,22 @@ After running an evaluation, you can generate a **classification map** — a Geo
 
 1. In the **Spatial split** dropdown, select **Map area (green)** and drag to draw one or more rectangles covering the area you want to classify, then press **Esc** to leave drawing mode (so you can pan the Satellite panel again)
 2. Make sure you've already run an evaluation (so the training data is cached)
-3. *(Optional)* Set **Map year** if you want to predict on a different year than the model was trained on — see [Mapping a Different Year](#mapping-a-different-year-cross-year-inference) below
-4. Click **Create Map** (the green button next to Run Evaluation)
-5. TEE trains the selected classifier on all available labels, then predicts every pixel inside the green rectangles
+3. In the **Create Map** group (below Run Evaluation), set:
+   - **Map model** — which classifier to train and predict with (see [Choosing the map model](#choosing-the-map-model) below)
+   - *(Optional)* **Map year** — to predict on a different year than the model was trained on, see [Mapping a Different Year](#mapping-a-different-year-cross-year-inference) below
+4. Click **Create Map**
+5. TEE trains the chosen classifier on all available labels, then predicts every pixel inside the green rectangles
 6. The resulting GeoTIFF downloads automatically to your computer
 7. A quick **preview** of each map also appears on the Satellite panel — see [Map preview](#map-preview) below
+
+#### Choosing the map model
+
+The **Map model** dropdown lists every **pixel classifier you have ticked** (k-NN, Random Forest, XGBoost, MLP), each annotated with its score from the last evaluation (F1 for classification, R² for regression):
+
+- **Auto (best from last run)** — the default. Uses whichever ticked pixel classifier scored highest in the last evaluation.
+- **A specific model** — pin the map to that one regardless of scores.
+
+Only one model generates the map. Spatial MLP and U-Net never appear here — they can't generate maps (see [Limitations](#limitations) below). The list refreshes when you tick/untick classifiers or finish a run.
 
 **What you get:**
 - A single-band GeoTIFF file (one pixel = one habitat class)
@@ -803,8 +854,9 @@ After running an evaluation, you can generate a **classification map** — a Geo
 - Compressed with DEFLATE for small file sizes
 - For a **regression** map (continuous target field), pixels are float32 with NaN for no-data, and predictions are **clamped to the range of the training targets** — a random-forest or MLP regressor can otherwise extrapolate to physically impossible values (negative heights, biomass above anything observed) on land unlike its training data. The clamp bounds are written as `clamp_min` / `clamp_max` tags and shown in the progress log.
 
-**Limitations:**
-- Only pixel-based classifiers are supported for map generation (k-NN, Random Forest, XGBoost, MLP). The spatial classifiers need neighbourhood features at every pixel, which would be prohibitively slow for dense prediction.
+#### Limitations
+
+- **Pixel classifiers only** (k-NN, Random Forest, XGBoost, MLP). Spatial MLP and U-Net are not supported for map generation: Spatial MLP would need the 9× or 25× wider neighbourhood feature computed for *every* pixel in the area (a large memory cost) plus overlap handling at chunk edges, and neither has been built. U-Net is convolutional and could in principle do dense prediction, but the map pipeline was never wired to it and it needs a GPU. If none of your ticked classifiers is a pixel model, Create Map tells you to tick one.
 - Very large areas are processed in chunks, so country-scale maps will take some time.
 - You must have run an evaluation first, so TEE has cached training vectors and labels.
 
@@ -862,20 +914,20 @@ with rasterio.open("map_1.tif") as src:
 
 ### Regression
 
-If the field you select contains continuous numeric values (e.g., biomass, carbon, canopy height) rather than class names, TEE automatically switches to **regression mode**. Instead of F1 scores and confusion matrices, it shows **R²** (how much variance is explained), **RMSE** (root mean squared error), and **MAE** (mean absolute error).
+If the field you select contains continuous numeric values (e.g., biomass, carbon, canopy height) rather than class names, TEE automatically switches to **regression mode** (or you can [force it](#task-type-classification-vs-regression) for a coarsely-binned field). Instead of F1 scores and confusion matrices, it shows **R²** (how much variance is explained), **RMSE** (root mean squared error), and **MAE** (mean absolute error).
 
 The metrics table also has an **Outside range** column: the share of test predictions that fell beyond the span of the training targets. Random forest and k-NN can't produce values outside that span (they average stored targets); MLP and XGBoost can, and a high percentage here is a sign the model is extrapolating into territory your ground truth never covered. The evaluation scores themselves are left unclamped — only [Create Map](#create-map-geotiff-generation) clamps its raster.
 
-Below the metrics table, a **predicted-vs-actual scatter plot** shows each model's predictions against the true values, with a dashed *y = x* line marking perfect prediction — points hugging that line indicate an accurate model, while a fan spreading away from it shows where the model struggles.
+Below the metrics table, a **predicted-vs-actual scatter plot** shows each model's predictions against the true values, with a dashed *y = x* line marking perfect prediction — points hugging that line indicate an accurate model, while a fan spreading away from it shows where the model struggles. A **PNG** button saves the scatter as an image; a **CSV** button saves the raw predicted-vs-actual points (or, when no scatter was captured, the metrics table). K-fold regression runs report the same R²/RMSE/MAE as a mean ± std across folds, but have no scatter plot.
 
 ### Config Files
 
 You can save and restore your evaluation settings using config files:
 
-- **Generate Config** — downloads a JSON file capturing your current settings (classifiers, parameters, year, sampling, bounding boxes)
+- **Generate Config** — downloads a JSON file capturing your current settings (classifiers and their parameters, task type, year, sampling, random seed, bounding boxes)
 - **Upload Config** — loads a previously saved config file and fills in all the controls
 
-This is useful for reproducibility (re-running the same evaluation later) or for running evaluations from the command line.
+This is useful for reproducibility (re-running the same evaluation later, seed and all) or for running evaluations from the command line.
 
 ### CLI for Headless Evaluation
 
@@ -889,6 +941,8 @@ python scripts/tee_evaluate.py --config eval_config.json > results.json
 # (shows dataset stats, class counts, estimated size)
 python scripts/tee_evaluate.py --config eval_config.json --dry-run
 ```
+
+`scripts/tee_evaluate.py` runs **k-fold cross-validation** (not the learning curve). The config file carries the settings that matter for a reproducible headless run: `"seed"` (default 42) and `"kfold"` (number of folds, default 5) — both are written by **Generate Config**, so a config saved from the web UI reproduces the same numbers on the command line. Task type is auto-detected from the field unless the config's `fields[].type` forces it.
 
 The output file (`results.json`) contains one JSON object per line — each line is a progress event or a result. You can open it in a text editor, or load it in Python:
 
