@@ -38,6 +38,7 @@ const { document, window } = parseHTML(
     '<!DOCTYPE html><html><body>' +
     '<select id="val-eval-mode"><option value="learning_curve">lc</option><option value="kfold">kfold</option></select>' +
     '<input id="val-kfold-k" value="5">' +
+    '<input id="val-seed" value="42">' +
     '<table><tbody id="val-results-tbody"></tbody></table>' +
     '</body></html>'
 );
@@ -52,10 +53,11 @@ const factory = new Function(
     [
         extract('getEvalMode'),
         extract('getKfoldK'),
+        extract('getSeed'),
         extract('appendFoldResultRow'),
         extract('renderKfoldClassificationTable'),
     ].join('\n\n') +
-    `\nreturn { getEvalMode, getKfoldK, appendFoldResultRow, renderKfoldClassificationTable };`
+    `\nreturn { getEvalMode, getKfoldK, getSeed, appendFoldResultRow, renderKfoldClassificationTable };`
 );
 const api = factory();
 
@@ -86,6 +88,15 @@ kInput.value = '1';
 ok(api.getKfoldK() === 2, 'getKfoldK clamps low to 2');
 kInput.value = '';
 ok(api.getKfoldK() === 5, 'getKfoldK falls back to 5 on empty');
+
+// --- getSeed ------------------------------------------------------
+const seedInput = document.getElementById('val-seed');
+seedInput.value = '7';
+ok(api.getSeed() === 7, 'getSeed reads the input');
+seedInput.value = '-3';
+ok(api.getSeed() === 42, 'getSeed rejects a negative value');
+seedInput.value = '';
+ok(api.getSeed() === 42, 'getSeed falls back to 42 on empty');
 
 // --- appendFoldResultRow: classification ----------------------------
 globalThis.__setModels(['rf', 'nn']);

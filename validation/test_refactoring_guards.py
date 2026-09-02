@@ -779,6 +779,24 @@ class TestLargeAreaEvaluation:
         assert "function appendFoldResultRow(" in all_script_text
         assert "function renderKfoldClassificationTable(" in all_script_text
 
+    def test_random_seed_control_exists_and_is_sent(self, html, all_script_text):
+        assert 'id="val-seed"' in html, "viewer.html must have a #val-seed input"
+        assert "function getSeed(" in all_script_text, "evaluation.js must define getSeed()"
+        # run-large-area
+        i = all_script_text.find("evalUrl('run-large-area')")
+        assert "seed: getSeed()" in all_script_text[i:i + 1800], (
+            "run-large-area POST body must send `seed: getSeed()`"
+        )
+        # create-map (same seed so a map matches the scored model)
+        j = all_script_text.find("evalUrl('create-map')")
+        assert "seed: getSeed()" in all_script_text[j:j + 900], (
+            "create-map POST body must send `seed: getSeed()`"
+        )
+        # config round-trip
+        assert '"seed": getSeed()' in all_script_text, (
+            "generateConfig must write the live seed, not a hardcoded 42"
+        )
+
     def test_kfold_aggregate_draws_the_bar_chart_only_for_kfold(self, all_script_text):
         # The bar-chart functions must NOT be called for a learning-curve run
         # (they clobber the line chart -- Louis Driver 2026-08-21), but MUST

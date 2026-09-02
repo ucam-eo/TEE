@@ -400,6 +400,14 @@ function getKfoldK() {
     return Math.max(2, Math.min(20, isNaN(k) ? 5 : k));
 }
 
+// One seed for the whole run (sampling, resampling / fold splits, every
+// model's random_state). Sent to run-large-area AND create-map.
+function getSeed() {
+    const el = document.getElementById('val-seed');
+    const s = el ? parseInt(el.value, 10) : 42;
+    return (isNaN(s) || s < 0) ? 42 : s;
+}
+
 const _evalModeEl = document.getElementById('val-eval-mode');
 if (_evalModeEl) {
     _evalModeEl.addEventListener('change', () => {
@@ -1599,6 +1607,7 @@ async function createMap() {
                 // mid-run) never writes, and then defaults a regression map
                 // to classification.
                 ...(taskForCreateMap() ? { task: taskForCreateMap() } : {}),
+                seed: getSeed(),
                 ...(mapYear ? { map_year: mapYear } : {}),
             }),
             signal: evalAbortController.signal,
@@ -1775,7 +1784,7 @@ function generateConfig() {
         "_max_patches": "max 256x256 tile crops for spatial MLP and U-Net (min 100)",
         "output_dir": "./eval_output",
         "dry_run": false,
-        "seed": 42,
+        "seed": getSeed(),
     };
 
     // Spatial bounding boxes (if any)
@@ -1919,6 +1928,7 @@ async function runLargeAreaEvaluation() {
                 sampling: document.getElementById('val-sampling-select').value || 'sqrt',
                 max_patches: parseInt(document.getElementById('val-max-patches').value) || 500,
                 task: getTaskOverride(),   // 'auto' lets the server detect; else force it
+                seed: getSeed(),
                 eval_mode: evalMode,
                 ...(evalMode === 'kfold' ? { kfold_k: getKfoldK() } : {}),
                 // k-fold CV runs over all labelled pixels -- don't send the
@@ -2413,6 +2423,12 @@ function applyConfig(config) {
             taskSel.value = t;
             updateTaskDetectedLabel();
         }
+    }
+
+    // Random seed
+    if (config.seed !== undefined && config.seed !== null) {
+        const seedEl = document.getElementById('val-seed');
+        if (seedEl) seedEl.value = String(config.seed);
     }
 
     // Set year. The config format isn't train/test-split-aware (see
