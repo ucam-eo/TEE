@@ -216,6 +216,10 @@ dropZone.addEventListener('drop', e => {
 });
 fileInput.addEventListener('change', () => {
     if (fileInput.files[0]) uploadShapefile(fileInput.files[0]);
+    // Reset so re-selecting the *same* file fires 'change' again -- otherwise
+    // after a Clear, picking the same .zip a second time is a silent no-op
+    // (the input still holds that path, so the value doesn't change).
+    fileInput.value = '';
 });
 
 // ── Upload shapefile ──
@@ -270,6 +274,8 @@ async function uploadShapefile(file) {
         valEstimatedLabelledPixels = data.estimated_labelled_pixels || 0;
         addValGeoJsonLayer();
         updateClassSummary();
+        updateTaskDetectedLabel();
+        refreshShapefileList();
         updateYearCoverage(data.geojson);
 
     } catch (e) {
@@ -310,6 +316,76 @@ function updateClassSummary() {
     }
     addValGeoJsonLayer();
 }
+
+// ── Task type override ──
+// The compute server auto-detects classification vs regression from the
+// field (numeric with > 20 distinct values => regression). This control
+// lets a coarsely-binned continuous field (e.g. heights rounded to a few
+// dozen values) be forced to regression. The choice is sent to both
+// run-large-area and create-map, so the map can't disagree with the
+// evaluation.
+
+function getTaskOverride() {
+    const el = document.getElementById('val-task-override');
+    return el ? el.value : 'auto';   // 'auto' | 'classification' | 'regression'
+}
+
+// The task actually used for Create Map: an explicit override wins,
+// otherwise whatever the last evaluation run detected.
+function taskForCreateMap() {
+    const o = getTaskOverride();
+    return o !== 'auto' ? o : (currentLargeAreaTask || null);
+}
+
+function updateTaskDetectedLabel() {
+    const hint = document.getElementById('val-task-detected');
+    if (!hint) return;
+    const override = getTaskOverride();
+    if (override !== 'auto') {
+        hint.textContent = `Forced to ${override} — the field's own type is ignored, for evaluation and for Create Map.`;
+        hint.style.color = '#f0ad4e';
+        return;
+    }
+    hint.style.color = '#888';
+    hint.textContent = currentLargeAreaTask
+        ? `Auto-detected as ${currentLargeAreaTask} on the last run.`
+        : 'Numeric fields with more than 20 distinct values auto-detect as regression. Force it if a coarsely-binned continuous field (e.g. rounded heights) should still be mapped as regression.';
+}
+
+// ── Uploaded shapefile list ──
+// Uploads accumulate server-side (multi-shapefile merge). Show what's
+// currently in the set so a stale earlier upload is visible, not a
+// surprise. Refreshed on entering Validation, after an upload, and after
+// Clear.
+async function refreshShapefileList() {
+    const box = document.getElementById('val-shapefile-list');
+    if (!box) return;
+    let files = [];
+    try {
+        const resp = await fetch(evalUrl('list-shapefiles'));
+        if (!resp.ok) return;              // older compute server: no endpoint, leave blank
+        files = (await resp.json()).files || [];
+    } catch (_) {
+        return;                            // compute server unreachable — nothing to show
+    }
+    box.textContent = '';
+    if (files.length === 0) return;
+    const head = document.createElement('div');
+    head.style.color = '#bbb';
+    head.textContent = `Loaded shapefiles (${files.length}):`;
+    box.appendChild(head);
+    for (const f of files) {
+        const row = document.createElement('div');
+        const name = typeof f === 'string' ? f : f.name;
+        const feats = (f && f.features != null) ? ` (${Number(f.features).toLocaleString()} features)` : '';
+        row.textContent = `• ${name}${feats}`;
+        box.appendChild(row);
+    }
+}
+window.refreshShapefileList = refreshShapefileList;
+
+const _taskOverrideEl = document.getElementById('val-task-override');
+if (_taskOverrideEl) _taskOverrideEl.addEventListener('change', updateTaskDetectedLabel);
 
 async function updateYearCoverage(geojson) {
     if (!geojson || !geojson.features || geojson.features.length === 0) return;
@@ -573,6 +649,7 @@ function handleStreamEvent(ev) {
         // state (tessera-eval v1.7.2+ carries task on it directly), so set
         // it here too rather than trusting event-ordering alone.
         if (ev.task) currentLargeAreaTask = ev.task;
+        updateTaskDetectedLabel();
         // Same cache-hit-skips-field_start issue as above -- redo the
         // metric-selector visibility here too rather than trusting it was
         // already set correctly for *this* run's task.
@@ -804,6 +881,7 @@ function handleStreamEvent(ev) {
 
     } else if (ev.event === 'field_start') {
         currentLargeAreaTask = ev.type;
+        updateTaskDetectedLabel();
         // Macro/weighted F1 is a classification-only distinction; regression
         // always plots R², so the selector would just be a dead control.
         const metricWrap = document.getElementById('val-metric-select-wrap');
@@ -1428,6 +1506,13 @@ async function createMap() {
             body: JSON.stringify({
                 classifier: pixelClf,
                 map_bboxes: mapBboxes,
+                // Pass the task explicitly: the user's override if set,
+                // otherwise the task this session's evaluation ran as. The
+                // backend otherwise depends on a tile-cache flag that an
+                // interrupted eval stream (tab throttled/disconnected
+                // mid-run) never writes, and then defaults a regression map
+                // to classification.
+                ...(taskForCreateMap() ? { task: taskForCreateMap() } : {}),
                 ...(mapYear ? { map_year: mapYear } : {}),
             }),
             signal: evalAbortController.signal,
@@ -1480,6 +1565,15 @@ async function createMap() {
                         const crsNote = ev.crs ? ` · ${ev.crs}` : '';
                         status.textContent = `Map area ${ev.bbox_idx + 1} ready (${ev.width}x${ev.height} pixels${crsNote})${yearNote}`;
                         status.style.color = '#28a745';
+                        // The task the map was actually generated as (tessera-eval
+                        // >= this fix). If it disagrees with the evaluation run,
+                        // say so loudly -- a regression field mapped as
+                        // classification comes out quantised onto the label
+                        // values with a discrete palette.
+                        if (ev.task && currentLargeAreaTask && ev.task !== currentLargeAreaTask) {
+                            status.textContent += ` — warning: map generated as ${ev.task}, but this evaluation ran as ${currentLargeAreaTask}`;
+                            status.style.color = '#dc3545';
+                        }
                         if (ev.preview) addMapPreview(ev.preview, ev.crs);  // tessera-eval >= v1.8.2
                     } else if (ev.event === 'done') {
                         // Download all ready maps
@@ -1574,7 +1668,7 @@ function generateConfig() {
     const config = {
         "$schema": "tee_evaluate_config_v1",
         "shapefile": valUploadedFilename || "/path/to/ground_truth.zip",
-        "fields": [{ "name": field, "type": "auto" }],
+        "fields": [{ "name": field, "type": getTaskOverride() }],
         "_fields_type": "auto | classification | regression",
         "classifiers": classifiers,
         "_classifiers_available": "nn, rf, xgboost, mlp, spatial_mlp, spatial_mlp_5x5, unet",
@@ -1730,6 +1824,7 @@ async function runLargeAreaEvaluation() {
                 max_training_samples: parseInt(document.getElementById('val-max-train-large').value.replace(/,/g, '')) || 200000,
                 sampling: document.getElementById('val-sampling-select').value || 'sqrt',
                 max_patches: parseInt(document.getElementById('val-max-patches').value) || 500,
+                task: getTaskOverride(),   // 'auto' lets the server detect; else force it
                 ...(hasSpatialBboxes() ? getSpatialBboxData() : {}),
             }),
             signal: evalAbortController.signal,
@@ -2212,6 +2307,13 @@ function applyConfig(config) {
                 updateClassSummary();
             }
         }
+        // Task-type override (auto | classification | regression)
+        const taskSel = document.getElementById('val-task-override');
+        const t = config.fields[0].type;
+        if (taskSel && ['auto', 'classification', 'regression'].includes(t)) {
+            taskSel.value = t;
+            updateTaskDetectedLabel();
+        }
     }
 
     // Set year. The config format isn't train/test-split-aware (see
@@ -2573,6 +2675,11 @@ function restoreValidationState() {
 
     // Restore max train hint
     updateMaxTrainPctHint();
+
+    // Show what's currently in the ground-truth set (uploads accumulate),
+    // and reflect the task-type override / last detection.
+    refreshShapefileList();
+    updateTaskDetectedLabel();
 }
 window.restoreValidationState = restoreValidationState;
 window.exitBboxDrawMode = exitBboxDrawMode;
@@ -2715,6 +2822,9 @@ async function clearShapefiles() {
     if (sel) { sel.innerHTML = '<option value="">-- upload shapefile first --</option>'; sel.disabled = true; }
     document.getElementById('val-run-btn').disabled = true;
     document.getElementById('val-status').textContent = 'Shapefiles cleared';
+    const listBox = document.getElementById('val-shapefile-list');
+    if (listBox) listBox.textContent = '';
+    refreshShapefileList();
     // Remove GeoJSON overlay
     if (valGeoJsonLayer && window.maps && window.maps.rgb) {
         window.maps.rgb.removeLayer(valGeoJsonLayer);

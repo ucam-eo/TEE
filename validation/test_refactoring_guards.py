@@ -656,6 +656,99 @@ class TestLargeAreaEvaluation:
             "Back button must be disabled during evaluation"
         )
 
+    def test_create_map_sends_task_to_backend(self, all_script_text):
+        # create_map's POST must pass an explicit task. The backend otherwise
+        # reads the task only from a tile-cache flag that run_large_area
+        # writes at the *end* of its stream -- an eval cut short mid-run (tab
+        # throttled / disconnected, the M5 bug) never writes it, and
+        # create_map then defaults a regression map to classification:
+        # predictions snap onto the label values, discrete palette. Confirmed
+        # live, Louis Driver.
+        i = all_script_text.find("evalUrl('create-map')")
+        assert i != -1, "expected a fetch to evalUrl('create-map') in evaluation.js"
+        # The body object literal follows within the fetch options.
+        block = all_script_text[i:i + 700]
+        assert "task:" in block and "taskForCreateMap()" in block, (
+            "create-map POST body must include `task: taskForCreateMap()` so "
+            "the backend isn't left guessing classification vs regression"
+        )
+
+    def test_map_ready_handler_flags_task_mismatch(self, all_script_text):
+        # map_ready carries the task the map was actually generated as. If it
+        # disagrees with the evaluation run, the handler must surface it
+        # rather than silently showing a quantised, class-palette map.
+        i = all_script_text.find("ev.event === 'map_ready'")
+        assert i != -1, "expected a 'map_ready' handler in evaluation.js"
+        block = all_script_text[i:i + 1400]
+        assert "ev.task" in block and "currentLargeAreaTask" in block, (
+            "the 'map_ready' handler must compare ev.task against "
+            "currentLargeAreaTask and warn on a mismatch"
+        )
+
+    def test_task_override_control_exists(self, html, all_script_text):
+        # The user-facing override for a coarsely-binned continuous field
+        # that auto-detects as classification. Must exist in the panel and
+        # be readable by the run/create-map senders.
+        assert 'id="val-task-override"' in html, (
+            "viewer.html must have a #val-task-override select in the validation panel"
+        )
+        assert "function getTaskOverride(" in all_script_text, (
+            "evaluation.js must define getTaskOverride() to read #val-task-override"
+        )
+
+    def test_run_large_area_sends_task_override(self, all_script_text):
+        i = all_script_text.find("evalUrl('run-large-area')")
+        assert i != -1, "expected a fetch to evalUrl('run-large-area')"
+        block = all_script_text[i:i + 900]
+        assert "task: getTaskOverride()" in block, (
+            "run-large-area POST body must send `task: getTaskOverride()` so a "
+            "forced classification/regression reaches the compute server"
+        )
+
+    def test_create_map_prefers_task_override(self, all_script_text):
+        # create-map's task must be the explicit override when set, falling
+        # back to the last run's detected task.
+        assert "function taskForCreateMap(" in all_script_text, (
+            "evaluation.js must define taskForCreateMap() (override > last detected)"
+        )
+        i = all_script_text.find("evalUrl('create-map')")
+        assert i != -1
+        block = all_script_text[i:i + 700]
+        assert "taskForCreateMap()" in block, (
+            "create-map POST body must send taskForCreateMap(), not just currentLargeAreaTask"
+        )
+
+    def test_uploaded_shapefile_list_shown_on_entering_validation(self, html, all_script_text):
+        assert 'id="val-shapefile-list"' in html, (
+            "viewer.html must have a #val-shapefile-list container under the drop zone"
+        )
+        assert "function refreshShapefileList(" in all_script_text, (
+            "evaluation.js must define refreshShapefileList()"
+        )
+        assert "evalUrl('list-shapefiles')" in all_script_text, (
+            "refreshShapefileList must fetch /api/evaluation/list-shapefiles"
+        )
+        # Wired into the mode-entry restore path so uploads that accumulated
+        # in a prior session are visible on entering Validation.
+        i = all_script_text.find("function restoreValidationState(")
+        assert i != -1, "expected restoreValidationState() in evaluation.js"
+        end = all_script_text.find("\n}", i)
+        assert "refreshShapefileList()" in all_script_text[i:end], (
+            "restoreValidationState() must call refreshShapefileList()"
+        )
+
+    def test_file_input_resets_value_so_same_zip_reuploads(self, all_script_text):
+        # <input type=file> only fires 'change' when its value changes. After
+        # a Clear, re-picking the *same* .zip was a silent no-op because the
+        # input still held that path. The change handler must reset .value.
+        i = all_script_text.find("fileInput.addEventListener('change'")
+        assert i != -1, "expected a change listener on #val-file-input"
+        block = all_script_text[i:i + 400]
+        assert "fileInput.value = ''" in block, (
+            "the file-input 'change' handler must reset fileInput.value so the "
+            "same .zip can be re-selected after a Clear"
+        )
+
 
 # ──────────────────────────────────────────────────
 # 13. Inline handler / module scope reachability
@@ -1074,4 +1167,31 @@ class TestCreateMapCrsShown:
             "The map-preview widget must show the GeoTIFF CRS (its own "
             "overlay is EPSG:4326 and must not be mistaken for the map's "
             "true projection)."
+        )
+
+
+# ──────────────────────────────────────────────────
+# 25. Task-type override control + uploaded-shapefile list
+#     - #val-task-override forces classification/regression for a
+#       coarsely-binned continuous field that auto-detects wrong; the
+#       choice goes to run-large-area AND create-map so the map can't
+#       disagree with the evaluation (Louis Driver: height map came out
+#       quantised to the label values).
+#     - #val-shapefile-list shows what's in the accumulating ground-truth
+#       set on entering Validation (uploads merge; a stale one was a
+#       surprise -- Keshav 2026-09-02).
+#     Behaviour covered by validation/test_task_override_and_shapefile_list.mjs.
+# ──────────────────────────────────────────────────
+
+class TestTaskOverrideAndShapefileList:
+    def test_mjs_behaviour(self):
+        if not (ROOT / "node_modules" / "linkedom").is_dir():
+            pytest.skip("node_modules/linkedom not installed -- run `npm install` from the repo root")
+        result = subprocess.run(
+            ["node", str(ROOT / "validation" / "test_task_override_and_shapefile_list.mjs")],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, (
+            "validation/test_task_override_and_shapefile_list.mjs failed:\n"
+            f"{result.stdout}\n{result.stderr}"
         )

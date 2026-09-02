@@ -934,12 +934,21 @@
                     Drop .zip shapefiles here (multiple allowed)
                     <input type="file" id="val-file-input" accept=".zip" style="display:none;">
                 </div>
+                <div id="val-shapefile-list" style="margin-top:4px; font-size:11px; color:#999;"></div>
 
                 <label for="val-field-select">Class field</label>
                 <select id="val-field-select" disabled>
                     <option value="">-- upload shapefile first --</option>
                 </select>
                 <div id="val-class-summary" style="margin-top: 6px; color: #999; font-size: 12px;"></div>
+
+                <label for="val-task-override">Task type</label>
+                <select id="val-task-override" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+                    <option value="auto" selected>Auto-detect from field</option>
+                    <option value="classification">Force classification</option>
+                    <option value="regression">Force regression</option>
+                </select>
+                <div id="val-task-detected" style="font-size:11px; color:#888; margin-top:2px;">Numeric fields with more than 20 distinct values auto-detect as regression. Force it if a coarsely-binned continuous field (e.g. rounded heights) should still be mapped as regression.</div>
 
                 <label>Classifiers</label>
                 <div class="val-classifiers">
