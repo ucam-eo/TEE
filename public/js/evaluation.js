@@ -1370,10 +1370,21 @@ function _downloadCanvasPng(canvas, filename) {
     }, 'image/png');
 }
 
+// PNG_EXPORT_SCALE: the charts/matrix are small on screen (a narrow panel),
+// so exports render at this pixel-density multiple to be usable in a
+// figure or a slide -- e.g. a 700px-wide chart comes out ~2100px.
+const PNG_EXPORT_SCALE = 3;
+
 // Chart.js canvases are transparent -- composite onto the panel background
-// so the saved PNG isn't see-through on a white page.
-function downloadChartAsPng(chart, filename) {
+// so the saved PNG isn't see-through on a white page. Re-renders the chart
+// at PNG_EXPORT_SCALE resolution for the export, then restores it.
+function downloadChartAsPng(chart, filename, scale = PNG_EXPORT_SCALE) {
     if (!chart || !chart.canvas) return false;
+    // Chart.js multiplies the CSS size by devicePixelRatio for the backing
+    // store; bump it, force a synchronous re-render, capture, restore.
+    const prevDPR = chart.options.devicePixelRatio;
+    chart.options.devicePixelRatio = scale;
+    chart.resize();
     const src = chart.canvas;
     const out = document.createElement('canvas');
     out.width = src.width || src.clientWidth;
@@ -1382,6 +1393,8 @@ function downloadChartAsPng(chart, filename) {
     ctx.fillStyle = '#1e1e2e';
     ctx.fillRect(0, 0, out.width, out.height);
     ctx.drawImage(src, 0, 0, out.width, out.height);
+    chart.options.devicePixelRatio = prevDPR;
+    chart.resize();
     _downloadCanvasPng(out, filename);
     return true;
 }
@@ -1389,7 +1402,7 @@ function downloadChartAsPng(chart, filename) {
 // The confusion matrix is an HTML table, not a chart -- redraw it onto a
 // canvas from the same {cm, labels} the table is built from (mirrors
 // buildCMTableHTML's colour logic).
-function downloadConfusionMatrixPng(cm, labels, filename) {
+function downloadConfusionMatrixPng(cm, labels, filename, scale = PNG_EXPORT_SCALE) {
     const n = cm.length;
     if (!n) return false;
     const rowSums = cm.map(r => r.reduce((a, b) => a + b, 0));
@@ -1397,9 +1410,12 @@ function downloadConfusionMatrixPng(cm, labels, filename) {
     const W = pad * 2 + headW + n * cell;
     const H = pad * 2 + titleH + headH + n * cell + 8;
     const c = document.createElement('canvas');
-    c.width = W;
-    c.height = H;
+    // Draw at logical coordinates but on a scale× backing store, so text
+    // and cell edges are re-rasterised crisply at high resolution.
+    c.width = W * scale;
+    c.height = H * scale;
     const ctx = c.getContext('2d');
+    ctx.scale(scale, scale);
     ctx.fillStyle = '#1e1e2e';
     ctx.fillRect(0, 0, W, H);
     ctx.textBaseline = 'middle';

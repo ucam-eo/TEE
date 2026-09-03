@@ -1306,10 +1306,27 @@ class TestPngExport:
 
     def test_chart_png_is_composited_onto_opaque_background(self, all_script_text):
         i = all_script_text.find("function downloadChartAsPng(")
-        body = all_script_text[i:i + 600]
+        body = all_script_text[i:i + 900]
         assert "fillRect(" in body, (
             "downloadChartAsPng must paint an opaque background before drawImage "
             "-- a raw Chart.js canvas is transparent and saves see-through"
+        )
+
+    def test_png_exports_are_high_resolution(self, all_script_text):
+        assert "PNG_EXPORT_SCALE" in all_script_text, (
+            "there must be a PNG_EXPORT_SCALE multiple so exports aren't at "
+            "on-screen (small-panel) resolution"
+        )
+        # chart: re-render at higher devicePixelRatio, then restore
+        chart = all_script_text[all_script_text.find("function downloadChartAsPng("):][:900]
+        assert "devicePixelRatio" in chart and chart.count("chart.resize()") >= 2, (
+            "downloadChartAsPng must bump devicePixelRatio, resize, capture, then restore + resize"
+        )
+        assert "prevDPR" in chart, "downloadChartAsPng must restore the previous devicePixelRatio"
+        # confusion matrix: scale× backing store + ctx.scale
+        cm = all_script_text[all_script_text.find("function downloadConfusionMatrixPng("):][:900]
+        assert "* scale" in cm and "ctx.scale(scale, scale)" in cm, (
+            "downloadConfusionMatrixPng must draw on a scale× canvas with ctx.scale()"
         )
 
     def test_mjs_behaviour(self):

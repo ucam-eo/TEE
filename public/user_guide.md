@@ -822,7 +822,7 @@ The learning curve is the main output of a **learning-curve** evaluation. It sho
 - **Steeper curves** mean the embeddings separate your classes well even with very little training data — a good sign
 - **Flat curves at low F1** suggest the classes are hard to distinguish, or you may need different training features
 - Use the dropdown to toggle between **Macro F1** (average across all classes equally) and **Weighted F1** (weighted by class size)
-- **PNG** saves the chart as an image; **CSV** saves the underlying numbers — one row per training-percentage per model (or, in [k-fold](#evaluation-method-learning-curve-or-k-fold) mode, one row per fold plus a mean ± std summary)
+- **PNG** saves the chart as an image at roughly 3× the on-screen size (usable in a figure or slide); **CSV** saves the underlying numbers — one row per training-percentage per model (or, in [k-fold](#evaluation-method-learning-curve-or-k-fold) mode, one row per fold plus a mean ± std summary)
 
 ### Confusion Matrix
 
@@ -835,7 +835,7 @@ The confusion matrix shows, for each true habitat class, how the classifier pred
 - Click **%** to switch between raw counts and percentages
 - Click **View** to open a full-screen version (useful when you have many classes)
 - Use the **Classifier dropdown** to see the confusion matrix for different classifiers
-- **PNG** saves the matrix as an image; **CSV** saves it as raw counts, with predicted classes across the top row and actual classes down the first column
+- **PNG** saves the matrix as a high-resolution image (redrawn from the numbers, not a screenshot); **CSV** saves it as raw counts, with predicted classes across the top row and actual classes down the first column
 
 ### Downloading Trained Models
 

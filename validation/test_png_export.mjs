@@ -35,6 +35,7 @@ const { document } = parseHTML('<!DOCTYPE html><html><body></body></html>');
 global.document = document;
 
 const factory = new Function(
+    'const PNG_EXPORT_SCALE = 3;\n' +
     'let currentLargeAreaTask = "classification";\n' +
     'globalThis.__setTask = t => { currentLargeAreaTask = t; };\n' +
     [
