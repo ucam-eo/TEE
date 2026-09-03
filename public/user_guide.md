@@ -72,7 +72,7 @@ Viewport Manager from then on.
 3. Choose a class field (the column in your shapefile that contains the habitat names), select a year, and tick the classifiers you want to test
 4. Click **Run Evaluation** — TEE will train each classifier and show you learning curves and a confusion matrix so you can see how well the embeddings distinguish your habitat classes
 
-> **Try it:** TEE ships `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). [Download it](/sample-data/austria.zip), upload it, select field **"HabUK"**, year **2024**, and click Run. See [Worked Example: austria.zip](#worked-example-austriazip) for a full walkthrough, including a spatial train/test split.
+> **Try it:** TEE ships `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). [Download it](/sample-data/austria.zip), upload it, select field **"HabUK"**, year **2024**, and click Run. See [Worked Example: austria.zip](#worked-example-austria-zip) for a full walkthrough, including a spatial train/test split.
 
 ### Path 4: Just want a fun image?
 
@@ -589,10 +589,10 @@ Validation answers the question: **"How well can machine learning distinguish my
 | 2 | 1 | Drag and drop one or more `.zip` shapefiles onto the upload area. Uploads **accumulate** (the polygons are merged) — the panel lists what's currently loaded, with feature counts; click **Clear** to start over. |
 | 3 | 2 | Check the satellite panel — your polygons should appear as red outlines on the map |
 | 4 | 3 | Review the class table — it shows each habitat class and how many polygons/pixels it contains |
-| 5 | 1 | Select the **Class field** (the column in your shapefile with habitat names or numeric targets). Optionally set **Task type** if the auto-detection is wrong (see [Task Type](#task-type-classification-vs-regression)), and pick the **Year of training** / **Year of test** satellite data (see [Train/Test Years](#traintest-years-optional) — leave both the same for a standard single-year run) |
+| 5 | 1 | Select the **Class field** (the column in your shapefile with habitat names or numeric targets). Optionally set **Task type** if the auto-detection is wrong (see [Task Type](#task-type-classification-vs-regression)), and pick the **Year of training** / **Year of test** satellite data (see [Train/Test Years](#train-test-years-optional) — leave both the same for a standard single-year run) |
 | 6 | 1 | Tick the **Classifiers** you want to test. Click the **...** button next to each one to see and adjust its parameters. Click **+** to add a variant with different settings (see [Hyperparameter Variants](#hyperparameter-variants)). |
 | 7 | 1 | Adjust **Max pixel samples**, **Sampling** strategy, **Max patches** (for spatial classifiers), the **Evaluation method** — learning curve or k-fold CV (see [Evaluation Method](#evaluation-method-learning-curve-or-k-fold)) — and the **Random seed** (see [Reproducibility](#reproducibility-the-random-seed)) |
-| 8 | 1 | *(Optional)* Set up a **Spatial split** — draw separate train and test regions on the map to avoid spatial autocorrelation (see [Spatial Train/Test Split](#spatial-traintest-split-optional)) |
+| 8 | 1 | *(Optional)* Set up a **Spatial split** — draw separate train and test regions on the map to avoid spatial autocorrelation (see [Spatial Train/Test Split](#spatial-train-test-split-optional)) |
 | 9 | 1 | *(Optional)* Click **Generate Config** to save your current settings as a JSON file for later, or **Upload Config** to restore previously saved settings |
 | 10 | 1 | Click **Run Evaluation**. (To generate a GeoTIFF instead, use the separate **Create Map** group below the button — this requires a prior evaluation run.) |
 | 11 | 4 | Watch the progress log — it shows tile fetching, point extraction, and classifier training in real time. You can click **Cancel** to stop at any time. |
@@ -615,7 +615,7 @@ TEE offers several classifiers with different strengths. If you're not sure whic
 
 **Pixel classifiers** (k-NN, Random Forest, XGBoost, MLP) look at each pixel independently. They're fast and memory-efficient, even for country-scale datasets.
 
-**Spatial classifiers** (Spatial MLP, U-Net) consider each pixel together with its neighbours, so they can learn patterns like "grassland next to woodland edge". They need to download actual satellite embedding tiles from GeoTessera, which takes longer, but can achieve higher accuracy for classes where spatial context matters. They are automatically skipped (with a note in the progress log) whenever the test set is a separate region or a separate year — see [Spatial Train/Test Split](#spatial-traintest-split-optional) and [Train/Test Years](#traintest-years-optional).
+**Spatial classifiers** (Spatial MLP, U-Net) consider each pixel together with its neighbours, so they can learn patterns like "grassland next to woodland edge". They need to download actual satellite embedding tiles from GeoTessera, which takes longer, but can achieve higher accuracy for classes where spatial context matters. They are automatically skipped (with a note in the progress log) whenever the test set is a separate region or a separate year — see [Spatial Train/Test Split](#spatial-train-test-split-optional) and [Train/Test Years](#train-test-years-optional).
 
 ### Classifier Parameters
 
@@ -755,7 +755,7 @@ TEE ships a ready-to-use sample dataset — [download austria.zip](/sample-data/
 
 The 17 classes are unevenly sized (from 150 fields for `AC06` Sunflower up to 10,874 for `AC04` Winter Grain) — a realistic test of how classifiers handle class imbalance. The **sqrt-proportional** sampling strategy (the default) is a reasonable starting point.
 
-**Doing a spatial split:** field boundaries reflect real farm/parcel layout, so nearby fields often share the same crop due to local rotation and farm management — exactly the kind of spatial autocorrelation the [Spatial Train/Test Split](#spatial-traintest-split-optional) feature above is for. The dataset is wider east–west (~0.69°) than north–south (~0.42°), so a simple east/west split works well:
+**Doing a spatial split:** field boundaries reflect real farm/parcel layout, so nearby fields often share the same crop due to local rotation and farm management — exactly the kind of spatial autocorrelation the [Spatial Train/Test Split](#spatial-train-test-split-optional) feature above is for. The dataset is wider east–west (~0.69°) than north–south (~0.42°), so a simple east/west split works well:
 
 1. Upload `austria.zip` — its polygons appear as red outlines on the satellite map, roughly centred around 16.7°E, 48.27°N
 2. Select **Train area (blue)** and draw a rectangle over the **western half** of the red outlines (up to about 16.7°E)
@@ -769,13 +769,39 @@ The **Evaluation method** dropdown chooses how classifiers are scored:
 | Method | What it does | When to use |
 |--------|-------------|-------------|
 | **Learning curve** (default) | Trains at increasing fractions of the data (1%–80%) with repeated random resamples, against a held-out (or spatial) test set. The output is a curve of accuracy vs training size. | You want to see whether you have *enough* labels, or how quickly the classifier learns. |
-| **K-fold cross-validation** | Splits **all** the labelled pixels into *k* folds; each fold is held out once for testing while the other *k*−1 train. Reports the mean ± standard deviation across folds. | You want a single robust accuracy estimate that uses every labelled pixel for both training and testing. |
+| **K-fold cross-validation** | Splits the **sampled** labelled pixels into *k* folds; each fold is held out once for testing while the other *k*−1 train. Reports the mean ± standard deviation across folds. | You want a single robust accuracy estimate that uses every sampled pixel for both training and testing. |
 
-When you pick **K-fold cross-validation**, a **Folds (k)** box appears (2–20, default 5). K-fold:
+When you pick **K-fold cross-validation**, a **Folds (k)** box appears (2–20, default 5).
 
-- cross-validates over **every** labelled pixel — it **ignores the train/test rectangles** (a spatial split makes no sense here);
-- supports **pixel classifiers only** (k-NN, Random Forest, XGBoost, MLP) — Spatial MLP and U-Net are dropped with a note in the log;
-- shows a **per-fold table** and a **bar chart** of the mean score per model instead of a learning curve; the confusion matrix (summed across folds) still appears.
+#### What gets split
+
+Not every pixel in your shapefile — the points that **Max pixel samples** and **Sampling strategy** already drew from your polygons (exactly as for a learning-curve run). K-fold then partitions *that* set. It **ignores the train/test rectangles** entirely (a spatial split doesn't apply here); if you have rectangles drawn and switch to k-fold, TEE warns you first. It supports **pixel classifiers only** (k-NN, Random Forest, XGBoost, MLP) — Spatial MLP and U-Net are dropped with a note in the log.
+
+#### How the folds are chosen
+
+TEE uses scikit-learn's standard splitters:
+
+| Task | Splitter |
+|------|----------|
+| Classification | `StratifiedKFold(n_splits=k, shuffle=True, random_state=seed)` |
+| Regression | `KFold(n_splits=k, shuffle=True, random_state=seed)` |
+
+- **The order is shuffled first, seeded by the [Random seed](#reproducibility-the-random-seed).** Same seed + same data → the same folds every time; change the seed to get a different partition.
+- Each fold holds ≈ N⁄k of the points; the first (N mod k) folds get one extra.
+- **Regression (`KFold`)**: the point indices are permuted, then cut into *k* contiguous blocks.
+- **Classification (`StratifiedKFold`)**: within *each class*, that class's points are shuffled and dealt across the *k* folds, so every fold ends up with roughly the same class proportions as the full sample. If a class has **fewer than *k* points**, it can't appear in every fold — it will be missing from some training folds (the run continues; scikit-learn just warns).
+- Each fold is the **test set exactly once**; the other *k*−1 folds are the training set. **Every sampled point is predicted exactly once**, as a held-out point.
+- If **Max pixel samples** is set *and* a fold's training set (the *k*−1 folds' worth) still exceeds it, that training set is randomly subsampled down to the cap, seeded per fold. In practice the sample drawn upstream is already under the cap, so this rarely fires.
+
+#### What you get
+
+Per fold: a fresh model (seeded), fitted on the *k*−1 training folds and predicted on the held-out fold. Classification labels are internally remapped to a contiguous range for the fit (XGBoost requires it) and mapped back. Per-fold metrics are macro F1 + weighted F1 (classification) or R² / RMSE / MAE (regression); a model that errors on a fold gets zeros for that fold, logged.
+
+The panel then shows a **per-fold table**, a **"Mean ± std" summary row**, and a **bar chart** of the mean score per model (in place of a learning curve). The **confusion matrix** is the *k* per-fold matrices summed. **PNG** / **CSV** export work as for a learning-curve run (the CSV has one row per fold plus the summary).
+
+#### K-fold is *not* a spatial split
+
+Folds are assigned by **random shuffling of points, not by geography**. Two points from neighbouring locations — or from the same polygon — can land in different folds (one training, one test). So k-fold here carries the **same spatial-autocorrelation optimism as a random train/test split**: nearby points that look alike can let the model "cheat". If you need a spatially honest estimate, use the **learning curve** with a [Spatial Train/Test Split](#spatial-train-test-split-optional). K-fold's advantage is a **lower-variance estimate that tests on every sampled point**, not spatial rigour.
 
 ### Reproducibility: The Random Seed
 
@@ -888,7 +914,7 @@ By default, **Map year** is set to "Same as training year" — the map uses whic
 
 ![Map year selector, set to a different year than training](images/validation_map_year.png)
 
-This answers a different question than [Train/Test Years](#traintest-years-optional) above. That feature *scores* a classifier against held-out ground truth from a different year, at the same labelled points — an evaluation exercise, producing an F1/R² number. Cross-year mapping doesn't score anything: there's no ground truth involved for the map year at all, just a trained model applied to a new year's embeddings across a whole area, producing an actual map.
+This answers a different question than [Train/Test Years](#train-test-years-optional) above. That feature *scores* a classifier against held-out ground truth from a different year, at the same labelled points — an evaluation exercise, producing an F1/R² number. Cross-year mapping doesn't score anything: there's no ground truth involved for the map year at all, just a trained model applied to a new year's embeddings across a whole area, producing an actual map.
 
 **The use case this is for:** train a classifier on this year's data (e.g. 2025) to identify land-use classes, then apply it to a past year's embeddings (e.g. 2018) to see whether the area covered by those classes has changed over time — path erosion, solar panel installations, deforestation, and similar change-detection questions where you want "classify with today's best model, but look backward or forward in time."
 
