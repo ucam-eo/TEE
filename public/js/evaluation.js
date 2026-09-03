@@ -29,6 +29,7 @@ function evalUrl(path) {
 let valChart = null;
 let valScatterChart = null;  // separate canvas from valChart -- predicted-vs-actual, regression only
 let valFieldData = null;
+let valTestFieldData = null;   // fields of the optional held-out test shapefile
 let valGeoJsonLayer = null;
 let valGeoJsonData = null;
 let valMapPreviewLayers = [];  // L.imageOverlay(s) for Create Map previews on Panel 2
@@ -199,45 +200,50 @@ function addValGeoJsonLayer() {
     }
 }
 
-// ── Drop zone ──
+// ── Drop zones (training + optional held-out test) ──
 
 const dropZone = document.getElementById('val-drop-zone');
 const fileInput = document.getElementById('val-file-input');
+const testDropZone = document.getElementById('val-test-drop-zone');
+const testFileInput = document.getElementById('val-test-file-input');
 
-dropZone.addEventListener('click', () => fileInput.click());
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-
-dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropZone.classList.remove('dragover');
-    const file = e.dataTransfer.files[0];
-    if (file) uploadShapefile(file);
-});
-fileInput.addEventListener('change', () => {
-    if (fileInput.files[0]) uploadShapefile(fileInput.files[0]);
-    // Reset so re-selecting the *same* file fires 'change' again -- otherwise
-    // after a Clear, picking the same .zip a second time is a silent no-op
-    // (the input still holds that path, so the value doesn't change).
-    fileInput.value = '';
-});
+function _wireDropZone(zone, input, role) {
+    if (!zone || !input) return;
+    zone.addEventListener('click', () => input.click());
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) uploadShapefile(file, role);
+    });
+    input.addEventListener('change', () => {
+        if (input.files[0]) uploadShapefile(input.files[0], role);
+        // Reset so re-selecting the *same* file fires 'change' again -- after
+        // a Clear, picking the same .zip is otherwise a silent no-op.
+        input.value = '';
+    });
+}
+_wireDropZone(dropZone, fileInput, 'train');
+_wireDropZone(testDropZone, testFileInput, 'test');
 
 // ── Upload shapefile ──
 
-async function uploadShapefile(file) {
+async function uploadShapefile(file, role = 'train') {
+    const isTest = role === 'test';
+    const zone = isTest ? testDropZone : dropZone;
     const status = document.getElementById('val-status');
-    status.textContent = 'Uploading...';
+    status.textContent = isTest ? 'Uploading test file...' : 'Uploading...';
     status.style.color = '#888';
-    dropZone.classList.remove('uploaded');
-    // Real survey shapefiles (thousands of polygons) can take a visible
-    // moment to upload+parse -- the drop zone otherwise just sits there
-    // looking idle the whole time, easy to miss the small status text and
-    // assume nothing happened. .uploading also blocks a second drop/click
-    // from starting an overlapping upload.
-    dropZone.classList.add('uploading');
+    zone.classList.remove('uploaded');
+    // Real survey shapefiles can take a visible moment to upload+parse;
+    // .uploading also blocks a second drop/click while one is in flight.
+    zone.classList.add('uploading');
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('role', role);
 
     try {
         const resp = await fetch(evalUrl('upload-shapefile'), { method: 'POST', body: formData });
@@ -248,11 +254,36 @@ async function uploadShapefile(file) {
             return;
         }
 
+        if (isTest) {
+            valTestFieldData = data.fields;
+            const sel = document.getElementById('val-test-field-select');
+            const prev = sel.value;
+            sel.innerHTML = '';
+            data.fields.forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f.name;
+                opt.textContent = `${f.name} (${f.unique_count} classes)`;
+                sel.appendChild(opt);
+            });
+            // Default the test field to the training class field when it exists
+            const trainField = document.getElementById('val-field-select').value;
+            if (Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+            else if (Array.from(sel.options).some(o => o.value === trainField)) sel.value = trainField;
+            document.getElementById('val-test-field-wrap').style.display = '';
+            const tf = data.test_files || [file.name];
+            zone.textContent = tf.length > 1 ? `${tf.length} files: ${tf.join(', ')}` : file.name;
+            zone.classList.add('uploaded');
+            status.textContent = `Test file added (${data.fields.length} fields)`;
+            status.style.color = '#28a745';
+            refreshShapefileList();
+            return;
+        }
+
         valFieldData = data.fields;
         valUploadedFilename = file.name;
         const fileList = data.files || [file.name];
-        dropZone.textContent = fileList.length > 1 ? `${fileList.length} files: ${fileList.join(', ')}` : file.name;
-        dropZone.classList.add('uploaded');
+        zone.textContent = fileList.length > 1 ? `${fileList.length} files: ${fileList.join(', ')}` : file.name;
+        zone.classList.add('uploaded');
 
         const sel = document.getElementById('val-field-select');
         sel.innerHTML = '';
@@ -287,11 +318,13 @@ async function uploadShapefile(file) {
         }
         status.style.color = '#dc3545';
     } finally {
-        // Runs on every exit path (success, the early return on a non-OK
-        // response, and the catch above) so a failed/errored upload doesn't
-        // leave the drop zone permanently stuck looking busy.
-        dropZone.classList.remove('uploading');
+        zone.classList.remove('uploading');
     }
+}
+
+function hasTestFile() {
+    const box = document.getElementById('val-test-shapefile-list');
+    return !!(box && box.dataset.count && box.dataset.count !== '0');
 }
 
 // ── Field selection ──
@@ -357,22 +390,14 @@ function updateTaskDetectedLabel() {
 // currently in the set so a stale earlier upload is visible, not a
 // surprise. Refreshed on entering Validation, after an upload, and after
 // Clear.
-async function refreshShapefileList() {
-    const box = document.getElementById('val-shapefile-list');
+function _renderShapefileList(box, files, label) {
     if (!box) return;
-    let files = [];
-    try {
-        const resp = await fetch(evalUrl('list-shapefiles'));
-        if (!resp.ok) return;              // older compute server: no endpoint, leave blank
-        files = (await resp.json()).files || [];
-    } catch (_) {
-        return;                            // compute server unreachable — nothing to show
-    }
     box.textContent = '';
+    box.dataset.count = String(files.length);
     if (files.length === 0) return;
     const head = document.createElement('div');
     head.style.color = '#bbb';
-    head.textContent = `Loaded shapefiles (${files.length}):`;
+    head.textContent = `${label} (${files.length}):`;
     box.appendChild(head);
     for (const f of files) {
         const row = document.createElement('div');
@@ -381,6 +406,24 @@ async function refreshShapefileList() {
         row.textContent = `• ${name}${feats}`;
         box.appendChild(row);
     }
+}
+
+async function refreshShapefileList() {
+    const box = document.getElementById('val-shapefile-list');
+    if (!box) return;
+    let data;
+    try {
+        const resp = await fetch(evalUrl('list-shapefiles'));
+        if (!resp.ok) return;              // older compute server: no endpoint, leave blank
+        data = await resp.json();
+    } catch (_) {
+        return;                            // compute server unreachable — nothing to show
+    }
+    _renderShapefileList(box, data.files || [], 'Loaded shapefiles');
+    const testBox = document.getElementById('val-test-shapefile-list');
+    _renderShapefileList(testBox, data.test_files || [], 'Test shapefiles');
+    const wrap = document.getElementById('val-test-field-wrap');
+    if (wrap) wrap.style.display = (data.test_files || []).length ? '' : 'none';
 }
 window.refreshShapefileList = refreshShapefileList;
 
@@ -747,6 +790,16 @@ function handleStreamEvent(ev) {
             lastChartData.year_split = true;
             lastChartData.train_count = ev.train_count;
             lastChartData.test_count = ev.test_count;
+        }
+        if (ev.file_split) {
+            lastChartData.file_split = true;
+            lastChartData.train_count = ev.train_count;
+            lastChartData.test_count = ev.test_count;
+            setResultsStatus(
+                `Held-out test file: ${Number(ev.test_count).toLocaleString()} test points` +
+                (ev.train_year !== ev.test_year ? ` at ${ev.test_year}` : '') +
+                ` vs ${Number(ev.train_count).toLocaleString()} training points.`
+            );
         }
 
         if (ev.classes) {
@@ -2169,8 +2222,17 @@ async function runLargeAreaEvaluation() {
         if (hasSpatialBboxes() && !confirm('K-fold cross-validation ignores the train/test rectangles and cross-validates over all labelled pixels.\nContinue?')) {
             return;
         }
+        if (hasTestFile()) {
+            document.getElementById('val-status').textContent =
+                'Note: the test file is ignored in k-fold mode (k-fold makes its own folds).';
+        }
+    } else if (hasTestFile()) {
+        // A separate held-out test file is the test set -- rectangles are ignored.
+        if (hasSpatialBboxes() && !confirm('A separate test file is loaded, so the drawn train/test rectangles will be ignored.\nContinue?')) {
+            return;
+        }
     } else if (!hasSpatialBboxes()) {
-        // Learning curve: if no bboxes drawn, confirm random split
+        // Learning curve, no test file, no bboxes: confirm random split
         if (!confirm('No spatial bounding boxes drawn.\nRun with random train/test split?')) {
             return;
         }
@@ -2283,10 +2345,13 @@ async function runLargeAreaEvaluation() {
                 seed: getSeed(),
                 eval_mode: evalMode,
                 ...(evalMode === 'kfold' ? { kfold_k: getKfoldK() } : {}),
-                // k-fold CV runs over all labelled pixels -- don't send the
-                // train/test rectangles (they'd narrow the pool to the
-                // train side). Map rectangles are separate (Create Map).
-                ...(evalMode !== 'kfold' && hasSpatialBboxes() ? getSpatialBboxData() : {}),
+                // The held-out test file (if uploaded). The server detects it
+                // itself; we just say which of its columns is the label.
+                ...(hasTestFile() ? { test_field: document.getElementById('val-test-field-select').value } : {}),
+                // k-fold CV runs over all labelled pixels, and a test file is
+                // its own test set -- in both cases don't send the train/test
+                // rectangles. Map rectangles are separate (Create Map).
+                ...(evalMode !== 'kfold' && !hasTestFile() && hasSpatialBboxes() ? getSpatialBboxData() : {}),
             }),
             signal: evalAbortController.signal,
         });
@@ -3136,6 +3201,23 @@ function restoreValidationState() {
         updateClassSummary();
     }
 
+    // Restore the held-out test file's field selector (the list + its
+    // visibility are handled by refreshShapefileList below)
+    if (valTestFieldData && valTestFieldData.length > 0) {
+        const tsel = document.getElementById('val-test-field-select');
+        if (tsel) {
+            const prev = tsel.value;
+            tsel.innerHTML = '';
+            valTestFieldData.forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f.name;
+                opt.textContent = `${f.name} (${f.unique_count} classes)`;
+                tsel.appendChild(opt);
+            });
+            if (prev && Array.from(tsel.options).some(o => o.value === prev)) tsel.value = prev;
+        }
+    }
+
     // Restore GeoJSON overlay + zoom
     if (valGeoJsonData) {
         addValGeoJsonLayer();
@@ -3299,30 +3381,47 @@ function updateVariantButtonState(clfName) {
 window.addVariant = addVariant;
 window.removeVariant = removeVariant;
 
-async function clearShapefiles() {
-    await fetch(evalUrl('clear-shapefiles'), { method: 'POST' });
-    valFieldData = null;
-    valUploadedFilename = null;
-    valEstimatedLabelledPixels = 0;
-    const dropZone = document.getElementById('val-drop-zone');
-    if (dropZone) {
-        dropZone.textContent = 'Drop .zip shapefiles here (multiple allowed)';
-        dropZone.classList.remove('uploaded');
+async function clearShapefiles(role = 'all') {
+    await fetch(evalUrl('clear-shapefiles'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+    });
+    document.getElementById('val-status').textContent =
+        role === 'test' ? 'Test shapefile cleared' : 'Shapefiles cleared';
+
+    if (role === 'test' || role === 'all') {
+        const tz = document.getElementById('val-test-drop-zone');
+        if (tz) { tz.textContent = 'Drop a separate held-out test .zip here'; tz.classList.remove('uploaded'); }
+        const twrap = document.getElementById('val-test-field-wrap');
+        if (twrap) twrap.style.display = 'none';
+        const tlist = document.getElementById('val-test-shapefile-list');
+        if (tlist) { tlist.textContent = ''; tlist.dataset.count = '0'; }
     }
-    const sel = document.getElementById('val-field-select');
-    if (sel) { sel.innerHTML = '<option value="">-- upload shapefile first --</option>'; sel.disabled = true; }
-    document.getElementById('val-run-btn').disabled = true;
-    document.getElementById('val-status').textContent = 'Shapefiles cleared';
-    const listBox = document.getElementById('val-shapefile-list');
-    if (listBox) listBox.textContent = '';
+
+    if (role === 'train' || role === 'all') {
+        valFieldData = null;
+        valUploadedFilename = null;
+        valEstimatedLabelledPixels = 0;
+        const dropZone = document.getElementById('val-drop-zone');
+        if (dropZone) {
+            dropZone.textContent = 'Drop .zip shapefiles here (multiple allowed)';
+            dropZone.classList.remove('uploaded');
+        }
+        const sel = document.getElementById('val-field-select');
+        if (sel) { sel.innerHTML = '<option value="">-- upload shapefile first --</option>'; sel.disabled = true; }
+        document.getElementById('val-run-btn').disabled = true;
+        const listBox = document.getElementById('val-shapefile-list');
+        if (listBox) listBox.textContent = '';
+        if (valGeoJsonLayer && window.maps && window.maps.rgb) {
+            window.maps.rgb.removeLayer(valGeoJsonLayer);
+            valGeoJsonLayer = null;
+        }
+        valGeoJsonData = null;
+        clearMapPreview();
+    }
+
     refreshShapefileList();
-    // Remove GeoJSON overlay
-    if (valGeoJsonLayer && window.maps && window.maps.rgb) {
-        window.maps.rgb.removeLayer(valGeoJsonLayer);
-        valGeoJsonLayer = null;
-    }
-    valGeoJsonData = null;
-    clearMapPreview();
 }
 
 window.clearShapefiles = clearShapefiles;

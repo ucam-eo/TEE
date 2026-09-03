@@ -33,7 +33,7 @@ With TEE you can:
 - [Manual Labelling](#manual-labelling) — pins, polygons, similarity expansion
 - [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
 - [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
-- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, task type, random seed, PNG/CSV export, worked example, Create Map + preview + projections, CLI
+- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, train/test years, separate test file, task type, random seed, PNG/CSV export, worked example, Create Map + preview + projections, CLI
 - [Postcard](#postcard) — a fun, no-account image generator
 - [Data Privacy](#data-privacy)
 - [Reference](#reference) — mouse controls, keyboard shortcuts, tips
@@ -589,7 +589,7 @@ Validation answers the question: **"How well can machine learning distinguish my
 | 2 | 1 | Drag and drop one or more `.zip` shapefiles onto the upload area. Uploads **accumulate** (the polygons are merged) — the panel lists what's currently loaded, with feature counts; click **Clear** to start over. |
 | 3 | 2 | Check the satellite panel — your polygons should appear as red outlines on the map |
 | 4 | 3 | Review the class table — it shows each habitat class and how many polygons/pixels it contains |
-| 5 | 1 | Select the **Class field** (the column in your shapefile with habitat names or numeric targets). Optionally set **Task type** if the auto-detection is wrong (see [Task Type](#task-type-classification-vs-regression)), and pick the **Year of training** / **Year of test** satellite data (see [Train/Test Years](#train-test-years-optional) — leave both the same for a standard single-year run) |
+| 5 | 1 | Select the **Class field** (the column in your shapefile with habitat names or numeric targets). Optionally set **Task type** if the auto-detection is wrong (see [Task Type](#task-type-classification-vs-regression)), and pick the **Year of training** / **Year of test** satellite data (see [Train/Test Years](#train-test-years-optional) — leave both the same for a standard single-year run). *(Optional)* drop a repeat-survey shapefile in **Test Ground Truth** to use it as the held-out test set (see [Separate Test File](#separate-test-file-optional)) |
 | 6 | 1 | Tick the **Classifiers** you want to test. Click the **...** button next to each one to see and adjust its parameters. Click **+** to add a variant with different settings (see [Hyperparameter Variants](#hyperparameter-variants)). |
 | 7 | 1 | Adjust **Max pixel samples**, **Sampling** strategy, **Max patches** (for spatial classifiers), the **Evaluation method** — learning curve or k-fold CV (see [Evaluation Method](#evaluation-method-learning-curve-or-k-fold)) — and the **Random seed** (see [Reproducibility](#reproducibility-the-random-seed)) |
 | 8 | 1 | *(Optional)* Set up a **Spatial split** — draw separate train and test regions on the map to avoid spatial autocorrelation (see [Spatial Train/Test Split](#spatial-train-test-split-optional)) |
@@ -738,6 +738,21 @@ As with the spatial split, **spatial classifiers (Spatial MLP, U-Net) are skippe
 > **Tip:** A noticeably lower F1 when testing on a different year than you trained on is a meaningful signal in itself — it quantifies how much the satellite embeddings (or the habitat itself) actually changed between those years, similar to how the gap between random-split and spatial-split accuracy quantifies spatial autocorrelation.
 
 > **Generate Config / Upload Config:** the downloaded config file doesn't yet distinguish training and test years — uploading a saved config sets both selectors to the same saved value.
+
+### Separate Test File (optional)
+
+The train/test-years feature above re-uses the **same ground-truth points** at a different year — it assumes your labels are still correct in the test year. If the land *itself* changed between surveys (a field became a solar farm, a path eroded), you instead want **new labels from a repeat survey**.
+
+For that, upload a **separate held-out test shapefile** in the **Test Ground Truth** drop zone (below the training upload). When a test file is present:
+
+- it becomes the fixed test set, sampled at the **Year of test** — so with a repeat survey from year B and training data from year A, you get a genuine between-year transfer test with real surface change in the data;
+- pick the **Test class field** (defaults to the same column name as the training class field);
+- the drawn **train/test rectangles are ignored** (a real test file supersedes a spatial split);
+- **spatial classifiers (Spatial MLP, U-Net) are skipped**, same as the other fixed-test-set modes;
+- for classification, the test file's classes must be a **subset of the training classes** — an unknown class is an error;
+- **k-fold cross-validation ignores it** (k-fold makes its own folds); the log says so.
+
+The results panel notes the split, e.g. *"Held-out test file: 4,102 test points at 2020 vs 38,540 training points."* Use per-drop-zone **Clear** buttons to remove the training or the test files independently.
 
 ### Worked Example: austria.zip
 

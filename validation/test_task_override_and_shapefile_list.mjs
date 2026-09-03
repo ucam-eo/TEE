@@ -38,6 +38,8 @@ const { document, window } = parseHTML(
     '<!DOCTYPE html><html><body>' +
     '<div id="val-drop-zone"></div>' +
     '<div id="val-shapefile-list"></div>' +
+    '<div id="val-test-shapefile-list"></div>' +
+    '<div id="val-test-field-wrap" style="display:none"></div>' +
     '<select id="val-task-override">' +
     '<option value="auto">auto</option>' +
     '<option value="classification">classification</option>' +
@@ -60,6 +62,7 @@ const factory = new Function(
         extract('getTaskOverride'),
         extract('taskForCreateMap'),
         extract('updateTaskDetectedLabel'),
+        extract('_renderShapefileList'),
         extract('refreshShapefileList'),
     ].join('\n\n') +
     `\nreturn { getTaskOverride, taskForCreateMap, updateTaskDetectedLabel, refreshShapefileList };`

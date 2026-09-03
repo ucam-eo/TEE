@@ -733,11 +733,11 @@ class TestLargeAreaEvaluation:
         # <input type=file> only fires 'change' when its value changes. After
         # a Clear, re-picking the *same* .zip was a silent no-op because the
         # input still held that path. The change handler must reset .value.
-        i = all_script_text.find("fileInput.addEventListener('change'")
-        assert i != -1, "expected a change listener on #val-file-input"
+        i = all_script_text.find("input.addEventListener('change'")
+        assert i != -1, "expected a change listener on the shapefile file inputs"
         block = all_script_text[i:i + 400]
-        assert "fileInput.value = ''" in block, (
-            "the file-input 'change' handler must reset fileInput.value so the "
+        assert "input.value = ''" in block, (
+            "the file-input 'change' handler must reset input.value so the "
             "same .zip can be re-selected after a Clear"
         )
 
@@ -761,12 +761,13 @@ class TestLargeAreaEvaluation:
         )
 
     def test_kfold_run_does_not_send_train_test_bboxes(self, all_script_text):
-        # k-fold cross-validates over all labelled pixels; sending the
-        # train/test rectangles would narrow the pool to the train side.
+        # k-fold cross-validates over all labelled pixels, and a separate test
+        # file is its own test set -- in both cases the train/test rectangles
+        # must not be sent (they'd narrow the pool to the train side).
         i = all_script_text.find("evalUrl('run-large-area')")
-        block = all_script_text[i:i + 1800]
-        assert "evalMode !== 'kfold' && hasSpatialBboxes()" in block, (
-            "run-large-area must omit getSpatialBboxData() in k-fold mode"
+        block = all_script_text[i:i + 2000]
+        assert "evalMode !== 'kfold' && !hasTestFile() && hasSpatialBboxes()" in block, (
+            "run-large-area must omit getSpatialBboxData() in k-fold mode and when a test file is loaded"
         )
 
     def test_fold_result_appends_a_results_row(self, all_script_text):
@@ -1254,6 +1255,50 @@ class TestTaskOverrideAndShapefileList:
             "validation/test_task_override_and_shapefile_list.mjs failed:\n"
             f"{result.stdout}\n{result.stderr}"
         )
+
+
+# ──────────────────────────────────────────────────
+# 29. Separate held-out test shapefile
+#     A second drop zone (#val-test-drop-zone) uploads a shapefile with
+#     role=test; when present, run-large-area uses it as the fixed test set
+#     (sampled at the test year) and the drawn rectangles are ignored.
+# ──────────────────────────────────────────────────
+
+class TestSeparateTestFile:
+    def test_test_drop_zone_and_field(self, html):
+        for _id in ("val-test-drop-zone", "val-test-file-input",
+                    "val-test-shapefile-list", "val-test-field-select"):
+            assert f'id="{_id}"' in html, f"viewer.html must have #{_id}"
+        assert "clearShapefiles('test')" in html and "clearShapefiles('train')" in html, (
+            "the two Clear buttons must pass their role"
+        )
+
+    def test_upload_sends_role_and_clear_is_role_aware(self, all_script_text):
+        assert "formData.append('role', role)" in all_script_text, (
+            "uploadShapefile must send the upload role (train|test)"
+        )
+        assert "function uploadShapefile(file, role = 'train')" in all_script_text
+        assert "async function clearShapefiles(role = 'all')" in all_script_text
+        assert "JSON.stringify({ role })" in all_script_text, (
+            "clearShapefiles must POST the role to clear-shapefiles"
+        )
+
+    def test_run_body_sends_test_field_when_a_test_file_is_loaded(self, all_script_text):
+        assert "function hasTestFile(" in all_script_text
+        i = all_script_text.find("evalUrl('run-large-area')")
+        block = all_script_text[i:i + 2000]
+        assert "hasTestFile() ? { test_field:" in block, (
+            "run-large-area body must include test_field when a test file is loaded"
+        )
+
+    def test_start_handler_reads_file_split(self, all_script_text):
+        assert "ev.file_split" in all_script_text and "lastChartData.file_split" in all_script_text, (
+            "the 'start' handler must record ev.file_split / train_count / test_count"
+        )
+
+    def test_refresh_renders_both_lists(self, all_script_text):
+        assert "function _renderShapefileList(" in all_script_text
+        assert "data.test_files" in all_script_text and "val-test-shapefile-list" in all_script_text
 
 
 # ──────────────────────────────────────────────────

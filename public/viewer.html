@@ -927,8 +927,8 @@
                 </div>
 
                 <div style="display:flex; align-items:center; justify-content:space-between;">
-                    <h3 style="margin:0;">Upload Ground Truth</h3>
-                    <button onclick="clearShapefiles()" style="padding:3px 8px; background:#333; color:#999; border:1px solid #555; border-radius:4px; font-size:11px; cursor:pointer;" title="Clear all uploaded shapefiles">Clear</button>
+                    <h3 style="margin:0;">Training Ground Truth</h3>
+                    <button onclick="clearShapefiles('train')" style="padding:3px 8px; background:#333; color:#999; border:1px solid #555; border-radius:4px; font-size:11px; cursor:pointer;" title="Clear the training shapefiles">Clear</button>
                 </div>
                 <div id="val-drop-zone" class="validation-drop-zone">
                     Drop .zip shapefiles here (multiple allowed)
@@ -949,6 +949,21 @@
                     <option value="regression">Force regression</option>
                 </select>
                 <div id="val-task-detected" style="font-size:11px; color:#888; margin-top:2px;">Numeric fields with more than 20 distinct values auto-detect as regression. Force it if a coarsely-binned continuous field (e.g. rounded heights) should still be mapped as regression.</div>
+
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-top:12px;">
+                    <h3 style="margin:0; font-size:14px;">Test Ground Truth <span style="font-weight:normal; color:#888; font-size:12px;">(optional)</span></h3>
+                    <button onclick="clearShapefiles('test')" style="padding:3px 8px; background:#333; color:#999; border:1px solid #555; border-radius:4px; font-size:11px; cursor:pointer;" title="Clear the test shapefile(s)">Clear</button>
+                </div>
+                <div id="val-test-drop-zone" class="validation-drop-zone">
+                    Drop a separate held-out test .zip here
+                    <input type="file" id="val-test-file-input" accept=".zip" style="display:none;">
+                </div>
+                <div id="val-test-shapefile-list" style="margin-top:4px; font-size:11px; color:#999;"></div>
+                <div id="val-test-field-wrap" style="display:none; margin-top:4px;">
+                    <label for="val-test-field-select">Test class field</label>
+                    <select id="val-test-field-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;"></select>
+                </div>
+                <div style="font-size:11px; color:#888; margin-top:2px;">A separate shapefile used only as the held-out test set — e.g. a repeat survey. It's sampled at the <em>Year of test</em>. When present, the drawn train/test rectangles are ignored, and spatial classifiers are skipped. For classification its classes must be a subset of the training classes.</div>
 
                 <label>Classifiers</label>
                 <div class="val-classifiers">
