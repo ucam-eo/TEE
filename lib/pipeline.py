@@ -8,6 +8,7 @@ The pipeline handles cancellation, error detection, and final status.
 
 import subprocess
 import logging
+import re
 import signal
 import os
 import threading
@@ -209,18 +210,33 @@ class PipelineRunner:
         result = self.run_script('process_viewport.py', *args)
 
         if result.returncode != 0:
+            stdout_text = result.stdout or ''
             stderr_text = result.stderr.strip() if result.stderr else '(no stderr output)'
-            stdout_tail = '\n'.join(result.stdout.strip().splitlines()[-10:]) if result.stdout else '(no stdout output)'
+            stdout_tail = '\n'.join(stdout_text.strip().splitlines()[-10:]) if stdout_text else '(no stdout output)'
             if result.returncode < 0:
                 kill_hint = f" [killed by signal {-result.returncode}, SIGKILL=9 usually means out of memory]"
             else:
                 kill_hint = ""
-            error_msg = (
+            raw_msg = (
                 f"Stage 1 failed - Process viewport (exit code {result.returncode}{kill_hint}):\n"
                 f"  stderr: {stderr_text[:1000]}\n"
                 f"  last stdout: {stdout_tail[:500]}"
             )
-            logger.error(f"[PIPELINE] {error_msg}")
+            logger.error(f"[PIPELINE] {raw_msg}")
+
+            # process_viewport.py already prints a clean "[YYYY] FAILED: <reason>"
+            # line per year that failed (e.g. "No embeddings could be found for
+            # 2025 at this location") -- surface that to the user instead of the
+            # raw stderr/stdout dump, which is full of retry-attempt internals
+            # (HTTPError repr, urllib traceback fragments) that read as a crash
+            # even when the real story is just "nothing there". Falls back to
+            # the raw dump when there's no such line -- a genuine crash or an
+            # OOM kill -- so nothing gets silently hidden.
+            failed_lines = re.findall(r'^\s*\[\d{4}\]\s*FAILED:\s*(.+)$', stdout_text, re.MULTILINE)
+            if failed_lines and not kill_hint:
+                error_msg = '; '.join(dict.fromkeys(failed_lines))  # de-dup, keep order
+            else:
+                error_msg = raw_msg
             return False, error_msg
 
         # Verify pyramids + vectors exist for at least one year

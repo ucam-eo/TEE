@@ -669,8 +669,17 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
                     print(f"  [{year}] Attempt {attempt}/{max_retries} failed, retrying in 5s: {short_msg}")
                     _time.sleep(5)
                 else:
+                    # Every attempt in this loop is a fetch over the network, so
+                    # exhausting all of them always means the same thing to the
+                    # user: no embeddings were obtainable, whatever the exact
+                    # cause (a genuine no-coverage response, a transient server
+                    # error, a network blip). Say that plainly rather than
+                    # surfacing HTTPError/urllib internals as the headline --
+                    # the technical detail stays in the per-attempt log lines
+                    # above (and in short_msg here) for debugging.
                     print(f"  [{year}] Failed after {max_retries} attempts: {short_msg}")
-                    return (year, False, short_msg)
+                    friendly_msg = f"No embeddings could be found for {year} at this location."
+                    return (year, False, friendly_msg)
 
         if mosaic is None:
             return (year, False, "fetch failed")
