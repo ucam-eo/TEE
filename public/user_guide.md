@@ -345,7 +345,7 @@ The hosted TEE website only serves map tiles and satellite imagery — it does n
 
 ### How It Works
 
-![Architecture — tee.cl.cam.ac.uk (GeoTessera, VQ bolt-on, and the Django back end in a Docker container) serves the front end (TEE-UI and the label store) in your browser; the front end talks to your own compute server (Flask, GeoTessera, and tee-evaluate), which reads embeddings from the cloud embedding repository](images/architecture.png)
+![Architecture — tee.cl.cam.ac.uk runs the Django back end (in a Docker container) plus a separate VQ bolt-on service, both reading from the cloud embedding repository; the back end serves the front end (TEE-UI and the label store) in your browser, and the front end talks to your own compute server (Flask, GeoTessera, and tee-evaluate), which also reads embeddings from the cloud embedding repository](images/architecture.png)
 
 ### Deployment Modes
 
