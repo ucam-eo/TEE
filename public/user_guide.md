@@ -23,6 +23,8 @@ With TEE you can:
 
 > **Privacy by design:** Similarity searches and labelling run entirely in your browser — no data is sent to the server. ML evaluation runs on your own machine. Ground-truth shapefiles never leave your computer. The hosted server only serves map tiles and satellite imagery.
 
+> **No account needed if you run it yourself.** [tee.cl.cam.ac.uk](https://tee.cl.cam.ac.uk) requires sign-in (or demo mode) because it's a shared server. If you [clone the repo](#option-a-all-local) and run TEE on your own machine instead (`./scripts/deploy-compute.sh --local`), there's no login, no account, and no third party involved at all — see [Compute Server Setup](#compute-server-setup).
+
 ## Contents
 
 - [Quick Start](#quick-start)
