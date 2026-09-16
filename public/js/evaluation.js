@@ -49,11 +49,12 @@ const CLASSIFIER_COLORS = {
     rf:          { line: 'rgba(75, 192, 192, 1)',  fill: 'rgba(75, 192, 192, 0.15)' },
     xgboost:     { line: 'rgba(153, 102, 255, 1)', fill: 'rgba(153, 102, 255, 0.15)' },
     mlp:         { line: 'rgba(255, 99, 132, 1)',  fill: 'rgba(255, 99, 132, 0.15)' },
+    deep_mlp:    { line: 'rgba(233, 30, 99, 1)',   fill: 'rgba(233, 30, 99, 0.15)' },
     spatial_mlp: { line: 'rgba(54, 162, 235, 1)',  fill: 'rgba(54, 162, 235, 0.15)' },
     spatial_mlp_5x5: { line: 'rgba(255, 206, 86, 1)', fill: 'rgba(255, 206, 86, 0.15)' },
     unet:            { line: 'rgba(0, 200, 83, 1)',   fill: 'rgba(0, 200, 83, 0.15)' },
 };
-const CLASSIFIER_LABELS = { nn: 'k-NN', rf: 'Random Forest', xgboost: 'XGBoost', mlp: 'MLP', spatial_mlp: 'Spatial MLP (3\u00d73)', spatial_mlp_5x5: 'Spatial MLP (5\u00d75)', unet: 'U-Net' };
+const CLASSIFIER_LABELS = { nn: 'k-NN', rf: 'Random Forest', xgboost: 'XGBoost', mlp: 'MLP', deep_mlp: 'Deep MLP (BatchNorm)', spatial_mlp: 'Spatial MLP (3\u00d73)', spatial_mlp_5x5: 'Spatial MLP (5\u00d75)', unet: 'U-Net' };
 
 let evalAbortController = null;
 let lastChartData = null;
@@ -1902,7 +1903,7 @@ function updateCreateMapButton() {
 
 // ── Map model picker (Create Map) ──
 
-const PIXEL_MAP_CLASSIFIERS = ['nn', 'rf', 'xgboost', 'mlp'];
+const PIXEL_MAP_CLASSIFIERS = ['nn', 'rf', 'xgboost', 'mlp', 'deep_mlp'];
 
 function _checkedPixelClassifiers() {
     return Array.from(document.querySelectorAll('.val-clf-header input:checked'))
@@ -2197,7 +2198,7 @@ function generateConfig() {
         "fields": [{ "name": field, "type": getTaskOverride() }],
         "_fields_type": "auto | classification | regression",
         "classifiers": classifiers,
-        "_classifiers_available": "nn, rf, xgboost, mlp",
+        "_classifiers_available": "nn, rf, xgboost, mlp, deep_mlp (requires PyTorch on the compute server)",
         "regressors": regressors,
         "_regressors_available": "nn_reg, rf_reg, mlp_reg, xgboost_reg",
         "spatial_models": spatialModels,
