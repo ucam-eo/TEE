@@ -505,7 +505,7 @@ Then open **http://localhost:8001** in your browser.
 
 > **Why localhost?** Web browsers block mixed HTTP/HTTPS requests for security. The deploy script creates a local proxy on your laptop that serves the TEE interface over plain HTTP, so evaluation requests can reach the compute server without being blocked.
 
-> **PyTorch note:** If you want to use the U-Net classifier (which benefits from a GPU), add `--install-torch` to the deploy command the first time, e.g. `./scripts/deploy-compute.sh --install-torch gpu-box`. The script auto-detects your GPU's CUDA version. If it installs the wrong version, see [Fixing PyTorch CUDA version mismatch](#fixing-pytorch-cuda-version-mismatch) at the end of this section.
+> **PyTorch note:** If you want to use the U-Net or Deep MLP (BatchNorm) classifiers, add `--install-torch` to the deploy command the first time, e.g. `./scripts/deploy-compute.sh --install-torch gpu-box`. The script auto-detects your GPU's CUDA version. Deep MLP runs fine on CPU; U-Net benefits greatly from a GPU. If it installs the wrong CUDA version, see [Fixing PyTorch CUDA version mismatch](#fixing-pytorch-cuda-version-mismatch) at the end of this section.
 
 ### Option C: Local UI, Remote GPU
 
@@ -551,7 +551,7 @@ In all cases, open **http://localhost:8001** in your browser after running the c
 | `Could not resolve hostname gpu-box` | Make sure you've added the server to your `~/.ssh/config` file (Step 2 above). |
 | SSH asks for passphrase every time | Run `ssh-add` once to cache your key for the session. |
 | Evaluation takes several minutes to start | The first run for each shapefile downloads embedding tiles from GeoTessera. This is normal for large areas (e.g., country-scale). The data is cached, so the next run with the same shapefile, field, and year will start much faster. |
-| `Skipping U-Net: PyTorch not installed` | Install PyTorch with `--install-torch` flag. |
+| `Skipping U-Net: PyTorch not installed` / `Failed to train deep_mlp: ... requires PyTorch` | Install PyTorch with `--install-torch` flag. |
 | U-Net runs but doesn't use the GPU | CUDA version mismatch — see below. |
 
 > **Tip:** Click the **Status** button in the viewer header bar to see which machines are running the backend and compute server.
@@ -621,11 +621,14 @@ TEE offers several classifiers with different strengths. If you're not sure whic
 | **Random Forest** | Pixel | Reliable workhorse — strong performance at all training sizes. |
 | **XGBoost** | Pixel | Often the most accurate pixel classifier. Slightly slower to train. |
 | **MLP** | Pixel | Neural network — needs more data to converge but can capture complex patterns. |
+| **Deep MLP (BatchNorm)** | Pixel | Larger neural network (BatchNorm + Dropout + AdamW), generally more accurate than MLP given enough training data, but slower and requires PyTorch. |
 | **Spatial MLP (3×3)** | Neighbourhood | Like MLP but uses a 3×3 pixel neighbourhood, capturing local spatial context. |
 | **Spatial MLP (5×5)** | Neighbourhood | Uses a wider 5×5 neighbourhood for more spatial context. |
 | **U-Net** | Patch-based | Deep learning model that processes 256×256 image patches. Best accuracy for spatially complex habitats. Requires PyTorch; benefits greatly from a GPU. |
 
-**Pixel classifiers** (k-NN, Random Forest, XGBoost, MLP) look at each pixel independently. They're fast and memory-efficient, even for country-scale datasets.
+**Pixel classifiers** (k-NN, Random Forest, XGBoost, MLP, Deep MLP) look at each pixel independently. They're fast and memory-efficient, even for country-scale datasets.
+
+**Deep MLP** is a heavier alternative to MLP: the same hidden-layer idea, but each layer adds batch normalization and dropout, trained with AdamW and (internally) checkpointed against a held-out validation split rather than just keeping the final epoch's weights. It needs PyTorch (see the [PyTorch note](#compute-server-setup) in Compute Server Setup) and more training data than plain MLP to show its advantage — on a small evaluation it may only edge out MLP slightly, or not at all; it's worth trying at larger training-data sizes and comparing the two on your own learning curve rather than assuming it wins.
 
 **Spatial classifiers** (Spatial MLP, U-Net) consider each pixel together with its neighbours, so they can learn patterns like "grassland next to woodland edge". They need to download actual satellite embedding tiles from GeoTessera, which takes longer, but can achieve higher accuracy for classes where spatial context matters. They are automatically skipped (with a note in the progress log) whenever the test set is a separate region or a separate year — see [Spatial Train/Test Split](#spatial-train-test-split-optional) and [Train/Test Years](#train-test-years-optional).
 
@@ -644,6 +647,10 @@ Each classifier has adjustable parameters. Click the **...** button next to a cl
 | XGBoost | Max depth | 6 | Maximum depth of each tree. Deeper trees can capture more complex patterns but risk overfitting. |
 | MLP | Hidden layers | 64, 32 | Size of the neural network's hidden layers. Larger = more capacity but slower. |
 | MLP | Max iterations | 200 | Maximum training iterations (epochs). |
+| Deep MLP (BatchNorm) | Hidden layers | 512, 256 | Size of the hidden layers (each followed by batch norm, ReLU, and dropout). |
+| Deep MLP (BatchNorm) | Epochs | 150 | Number of training passes over the data. |
+| Deep MLP (BatchNorm) | Dropout | 0.3 | Fraction of hidden units randomly zeroed each step, to reduce overfitting. |
+| Deep MLP (BatchNorm) | Weight decay | 0.01 | L2 regularisation strength used by the AdamW optimiser. |
 | Spatial MLP (3×3) | Hidden layers | 256, 128 | Hidden layers for the 3×3 spatial variant (larger because the input is 9× wider). |
 | Spatial MLP (3×3) | Max iterations | 300 | Maximum training iterations. |
 | Spatial MLP (5×5) | Hidden layers | 512, 256 | Hidden layers for the 5×5 spatial variant. |
@@ -804,7 +811,7 @@ When you pick **K-fold cross-validation**, a **Folds (k)** box appears (2–20, 
 
 Not every pixel in your shapefile — the points that **Max pixel samples** and **Sampling strategy** already drew from your polygons (exactly as for a learning-curve run). K-fold then partitions *that* set. It **ignores the train/test rectangles** entirely (a spatial split doesn't apply here); if you have rectangles drawn and switch to k-fold, TEE warns you first.
 
-It supports the **pixel classifiers** (k-NN, Random Forest, XGBoost, MLP) **and the Spatial MLP models** (3×3, 5×5). **U-Net is not available in k-fold mode** — it trains on 256×256 image patches, not points, so there is no point-based fold split for it; use the learning curve to evaluate U-Net. If U-Net is ticked when you run a k-fold evaluation it is dropped with a note in the log.
+It supports the **pixel classifiers** (k-NN, Random Forest, XGBoost, MLP, Deep MLP) **and the Spatial MLP models** (3×3, 5×5). **U-Net is not available in k-fold mode** — it trains on 256×256 image patches, not points, so there is no point-based fold split for it; use the learning curve to evaluate U-Net. If U-Net is ticked when you run a k-fold evaluation it is dropped with a note in the log.
 
 Spatial MLP in k-fold cross-validates over its **neighbourhood-feature points** — a *different*, generally larger set than the pixel points, extracted from the same downloaded 256×256 tile crops (≤ 5000 px per patch). Picking k-fold with a Spatial MLP model therefore triggers the tile download, so the run is slower than a pixel-only k-fold run.
 
@@ -899,7 +906,7 @@ After running an evaluation, you can generate a **classification map** — a Geo
 
 #### Choosing the map model
 
-The **Map model** dropdown lists every **pixel classifier you have ticked** (k-NN, Random Forest, XGBoost, MLP), each annotated with its score from the last evaluation (F1 for classification, R² for regression):
+The **Map model** dropdown lists every **pixel classifier you have ticked** (k-NN, Random Forest, XGBoost, MLP, Deep MLP), each annotated with its score from the last evaluation (F1 for classification, R² for regression):
 
 - **Auto (best from last run)** — the default. Uses whichever ticked pixel classifier scored highest in the last evaluation.
 - **A specific model** — pin the map to that one regardless of scores.
@@ -916,7 +923,7 @@ Only one model generates the map. Spatial MLP and U-Net never appear here — th
 
 #### Limitations
 
-- **Pixel classifiers only** (k-NN, Random Forest, XGBoost, MLP). Spatial MLP and U-Net are not supported for map generation: Spatial MLP would need the 9× or 25× wider neighbourhood feature computed for *every* pixel in the area (a large memory cost) plus overlap handling at chunk edges, and neither has been built. U-Net is convolutional and could in principle do dense prediction, but the map pipeline was never wired to it and it needs a GPU. If none of your ticked classifiers is a pixel model, Create Map tells you to tick one.
+- **Pixel classifiers only** (k-NN, Random Forest, XGBoost, MLP, Deep MLP). Spatial MLP and U-Net are not supported for map generation: Spatial MLP would need the 9× or 25× wider neighbourhood feature computed for *every* pixel in the area (a large memory cost) plus overlap handling at chunk edges, and neither has been built. U-Net is convolutional and could in principle do dense prediction, but the map pipeline was never wired to it and it needs a GPU. If none of your ticked classifiers is a pixel model, Create Map tells you to tick one.
 - Very large areas are processed in chunks, so country-scale maps will take some time.
 - You must have run an evaluation first, so TEE has cached training vectors and labels.
 
