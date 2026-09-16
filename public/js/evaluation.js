@@ -433,6 +433,11 @@ if (_taskOverrideEl) _taskOverrideEl.addEventListener('change', updateTaskDetect
 
 // ── Evaluation method (learning curve vs k-fold CV) ──
 
+function getGroupByField() {
+    const el = document.getElementById('val-group-by-field');
+    return !!(el && el.checked);
+}
+
 function getEvalMode() {
     const el = document.getElementById('val-eval-mode');
     return el ? el.value : 'learning_curve';   // 'learning_curve' | 'kfold'
@@ -2223,6 +2228,8 @@ function generateConfig() {
         "_eval_mode": "learning_curve | kfold (Validation panel setting)",
         "kfold": getKfoldK(),
         "_kfold": "folds for k-fold cross-validation (2-20)",
+        "group_by_field": getGroupByField(),
+        "_group_by_field": "keep each shapefile polygon's pixels on one side of train/test (StratifiedGroupKFold) -- off by default, classification only",
     };
 
     // Spatial bounding boxes (if any)
@@ -2377,6 +2384,7 @@ async function runLargeAreaEvaluation() {
                 task: getTaskOverride(),   // 'auto' lets the server detect; else force it
                 seed: getSeed(),
                 eval_mode: evalMode,
+                group_by_field: getGroupByField(),
                 ...(evalMode === 'kfold' ? { kfold_k: getKfoldK() } : {}),
                 // The held-out test file (if uploaded). The server detects it
                 // itself; we just say which of its columns is the label.
@@ -2892,6 +2900,10 @@ function applyConfig(config) {
     if (config.kfold !== undefined && config.kfold !== null) {
         const kEl = document.getElementById('val-kfold-k');
         if (kEl) kEl.value = String(config.kfold);
+    }
+    if (typeof config.group_by_field === 'boolean') {
+        const gEl = document.getElementById('val-group-by-field');
+        if (gEl) gEl.checked = config.group_by_field;
     }
     // Evaluation method (learning curve vs k-fold CV)
     if (['learning_curve', 'kfold'].includes(config.eval_mode)) {

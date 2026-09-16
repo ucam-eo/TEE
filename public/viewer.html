@@ -990,6 +990,12 @@
                     </div>
                     <div id="val-eval-mode-hint" style="font-size:11px; color:#888; margin-top:2px;">Learning curve: repeated resamples at 1–80% training size against a held-out (or spatial) test set. K-fold: cross-validate over all labelled pixels; pixel and Spatial MLP models (not U-Net), ignores train/test rectangles.</div>
 
+                    <label style="margin-top:6px; display:flex; align-items:center; gap:6px; font-weight:normal;">
+                        <input type="checkbox" id="val-group-by-field">
+                        Group by field (no leakage)
+                    </label>
+                    <div style="font-size:11px; color:#888; margin-top:2px;">Keeps every shapefile polygon's pixels entirely on one side of train/test. Off by default — scores are usually optimistic without it (nearby pixels in the same field look alike), so this can lower your reported F1/R². Ignored with a train/test rectangles or separate-year/test-file split, and for regression.</div>
+
                     <label for="val-seed" style="margin-top:6px; display:block;">Random seed</label>
                     <input type="number" id="val-seed" value="42" min="0" step="1"
                         style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">

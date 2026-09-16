@@ -36,7 +36,7 @@ With TEE you can:
 - [Manual Labelling](#manual-labelling) — pins, polygons, similarity expansion
 - [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
 - [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
-- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, train/test years, separate test file, task type, random seed, PNG/CSV export, worked example, Create Map + preview + projections, CLI
+- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, group by field, train/test years, separate test file, task type, random seed, PNG/CSV export, worked example, Create Map + preview + projections, CLI
 - [Postcard](#postcard) — a fun, no-account image generator
 - [Data Privacy](#data-privacy)
 - [Reference](#reference) — mouse controls, keyboard shortcuts, tips
@@ -840,9 +840,22 @@ The panel then shows a **per-fold table**, a **"Mean ± std" summary row**, and 
 
 #### K-fold is *not* a spatial split
 
-Folds are assigned by **random shuffling of points, not by geography**. Two points from neighbouring locations — or from the same polygon — can land in different folds (one training, one test). So k-fold here carries the **same spatial-autocorrelation optimism as a random train/test split**: nearby points that look alike can let the model "cheat". If you need a spatially honest estimate, use the **learning curve** with a [Spatial Train/Test Split](#spatial-train-test-split-optional). K-fold's advantage is a **lower-variance estimate that tests on every sampled point**, not spatial rigour.
+Folds are assigned by **random shuffling of points, not by geography**. Two points from neighbouring locations — or from the same polygon — can land in different folds (one training, one test). So k-fold here carries the **same spatial-autocorrelation optimism as a random train/test split**: nearby points that look alike can let the model "cheat". If you need a spatially honest estimate, use the **learning curve** with a [Spatial Train/Test Split](#spatial-train-test-split-optional), or turn on [Group by Field](#group-by-field-avoiding-within-field-leakage) below — it works in both modes. K-fold's advantage is a **lower-variance estimate that tests on every sampled point**, not spatial rigour.
 
 For **Spatial MLP** this is doubly true: its features are 3×3 or 5×5 windows, so neighbouring windows overlap in the pixels they see, and two windows that straddle a fold boundary share input — the optimism is larger than for the pixel models. Treat a k-fold Spatial MLP score as a best case.
+
+### Group by Field (avoiding within-field leakage)
+
+By default, both evaluation methods split at the level of individual **pixels**, not whole **fields** (shapefile polygons). Because embeddings from the same field are usually very similar to each other, a model can end up partly "recognizing the field" rather than genuinely learning what the habitat looks like — if some of a field's pixels are in training and others in testing, the model gets an unfair hint. This makes reported scores **optimistic**: on a real test (2 million embeddings across 6,674 fields), turning this on dropped macro F1 by **0.11–0.14** for the same data and the same models — a bigger effect than the difference between any two classifiers tested.
+
+Tick **Group by field (no leakage)**, next to the evaluation method, to fix this: every field's pixels are kept entirely on one side of the split — in the learning curve, a fixed set of held-out fields (about 20% of them) never contributes a training pixel at any training percentage; in k-fold, no field's pixels ever appear in more than one fold.
+
+- **Off by default.** This is a real change to what your score means, and it usually goes down — so it's your choice to opt in, not a silent change to numbers you've already recorded.
+- **Classification only** — not yet available for regression.
+- **Ignored when a test set is already fixed** some other way — a [Spatial Train/Test Split](#spatial-train-test-split-optional), different [train/test years](#traintest-years-optional), or a [separate test file](#separate-test-file-optional) all already guarantee no field crosses the split, so Group by Field has nothing to add there (a status message in the progress log says so if you tick it anyway).
+- **Not available right after a config upload that hits the result cache** — re-run the evaluation once to regenerate it, then the option works normally.
+
+If your F1/R² drops noticeably when you turn this on, that's the more honest number, not a bug — it means the un-grouped score was benefiting from the model recognizing fields it had already partly seen.
 
 ### Reproducibility: The Random Seed
 
