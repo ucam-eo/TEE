@@ -36,7 +36,7 @@ With TEE you can:
 - [Manual Labelling](#manual-labelling) — pins, polygons, similarity expansion
 - [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
 - [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
-- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, group by field, train/test years, separate test file, task type, random seed, PNG/CSV export, worked example, Create Map + preview + projections, CLI
+- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, spatial k-fold, group by field, train/test years, separate test file, task type, random seed, PNG/CSV export, worked example, Create Map + preview + projections, CLI
 - [Postcard](#postcard) — a fun, no-account image generator
 - [Data Privacy](#data-privacy)
 - [Reference](#reference) — mouse controls, keyboard shortcuts, tips
@@ -840,13 +840,22 @@ The panel then shows a **per-fold table**, a **"Mean ± std" summary row**, and 
 
 #### K-fold is *not* a spatial split
 
-Folds are assigned by **random shuffling of points, not by geography**. Two points from neighbouring locations — or from the same polygon — can land in different folds (one training, one test). So k-fold here carries the **same spatial-autocorrelation optimism as a random train/test split**: nearby points that look alike can let the model "cheat". If you need a spatially honest estimate, use the **learning curve** with a [Spatial Train/Test Split](#spatial-train-test-split-optional), or turn on [Group by Field](#group-by-field-avoiding-within-field-leakage) below — it works in both modes. K-fold's advantage is a **lower-variance estimate that tests on every sampled point**, not spatial rigour.
+Folds are assigned by **random shuffling of points, not by geography**. Two points from neighbouring locations — or from the same polygon — can land in different folds (one training, one test). So k-fold here carries the **same spatial-autocorrelation optimism as a random train/test split**: nearby points that look alike can let the model "cheat". If you need a spatially honest estimate, turn on [Spatial k-fold](#spatial-k-fold-a-geographic-split) or [Group by Field](#group-by-field-avoiding-within-field-leakage) below, or use the **learning curve** with a [Spatial Train/Test Split](#spatial-train-test-split-optional). K-fold's advantage is a **lower-variance estimate that tests on every sampled point**, not spatial rigour.
 
 For **Spatial MLP** this is doubly true: its features are 3×3 or 5×5 windows, so neighbouring windows overlap in the pixels they see, and two windows that straddle a fold boundary share input — the optimism is larger than for the pixel models. Treat a k-fold Spatial MLP score as a best case.
 
+### Spatial k-fold (a geographic split)
+
+K-fold's own random shuffling has no notion of location at all — see [K-fold is not a spatial split](#k-fold-is-not-a-spatial-split) above. Tick **Spatial k-fold (geographic split)**, shown once you pick K-fold cross-validation, to fix that: each sampled point is assigned to one of *k* geographic blocks (grouped by location, not by class), and no block's points ever appear in more than one fold.
+
+- **Off by default**, same reasoning as Group by Field below — it changes every reported k-fold score, usually downward.
+- **K-fold only** — the learning curve already has its own geographic split, [Spatial Train/Test Split](#spatial-train-test-split-optional).
+- **Takes precedence over Group by Field** if both are ticked (a status message in the progress log says so) — only one grouping can drive a single split, and a geographic split is the stronger check of the two here.
+- **Falls back to plain k-fold, with a status message,** if your points are too tightly clustered to form *k* distinct geographic blocks (try a smaller *k*), or if this run hit the on-disk result cache without coordinates (re-run once to regenerate it).
+
 ### Group by Field (avoiding within-field leakage)
 
-By default, both evaluation methods split at the level of individual **pixels**, not whole **fields** (shapefile polygons). Because embeddings from the same field are usually very similar to each other, a model can end up partly "recognizing the field" rather than genuinely learning what the habitat looks like — if some of a field's pixels are in training and others in testing, the model gets an unfair hint. This makes reported scores **optimistic**: on a real test (2 million embeddings across 6,674 fields), turning this on dropped macro F1 by **0.11–0.14** for the same data and the same models — a bigger effect than the difference between any two classifiers tested.
+By default, both evaluation methods split at the level of individual **pixels**, not whole **fields** (shapefile polygons). Because embeddings from the same field are usually very similar to each other, a model can end up partly "recognizing the field" rather than genuinely learning what the habitat looks like — if some of a field's pixels are in training and others in testing, the model gets an unfair hint. This makes reported scores **optimistic**: on a real test (Austrian crop data, ~78,000 labelled pixels), turning this on dropped macro F1 by roughly **0.03** for the same data and the same models.
 
 Tick **Group by field (no leakage)**, next to the evaluation method, to fix this: every field's pixels are kept entirely on one side of the split — in the learning curve, a fixed set of held-out fields (about 20% of them) never contributes a training pixel at any training percentage; in k-fold, no field's pixels ever appear in more than one fold.
 

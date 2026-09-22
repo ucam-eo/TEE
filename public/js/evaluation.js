@@ -438,6 +438,11 @@ function getGroupByField() {
     return !!(el && el.checked);
 }
 
+function getSpatialKfold() {
+    const el = document.getElementById('val-spatial-kfold');
+    return !!(el && el.checked);
+}
+
 function getEvalMode() {
     const el = document.getElementById('val-eval-mode');
     return el ? el.value : 'learning_curve';   // 'learning_curve' | 'kfold'
@@ -2230,6 +2235,8 @@ function generateConfig() {
         "_kfold": "folds for k-fold cross-validation (2-20)",
         "group_by_field": getGroupByField(),
         "_group_by_field": "keep each shapefile polygon's pixels on one side of train/test (StratifiedGroupKFold) -- off by default, classification only",
+        "spatial_kfold": getSpatialKfold(),
+        "_spatial_kfold": "geographic split for k-fold cross-validation (StratifiedGroupKFold over quantile-binned lon/lat blocks) -- off by default, k-fold only, takes precedence over group_by_field",
     };
 
     // Spatial bounding boxes (if any)
@@ -2385,7 +2392,7 @@ async function runLargeAreaEvaluation() {
                 seed: getSeed(),
                 eval_mode: evalMode,
                 group_by_field: getGroupByField(),
-                ...(evalMode === 'kfold' ? { kfold_k: getKfoldK() } : {}),
+                ...(evalMode === 'kfold' ? { kfold_k: getKfoldK(), spatial_kfold: getSpatialKfold() } : {}),
                 // The held-out test file (if uploaded). The server detects it
                 // itself; we just say which of its columns is the label.
                 ...(hasTestFile() ? { test_field: document.getElementById('val-test-field-select').value } : {}),
@@ -2904,6 +2911,10 @@ function applyConfig(config) {
     if (typeof config.group_by_field === 'boolean') {
         const gEl = document.getElementById('val-group-by-field');
         if (gEl) gEl.checked = config.group_by_field;
+    }
+    if (typeof config.spatial_kfold === 'boolean') {
+        const skEl = document.getElementById('val-spatial-kfold');
+        if (skEl) skEl.checked = config.spatial_kfold;
     }
     // Evaluation method (learning curve vs k-fold CV)
     if (['learning_curve', 'kfold'].includes(config.eval_mode)) {

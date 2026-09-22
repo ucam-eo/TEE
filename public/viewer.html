@@ -987,6 +987,11 @@
                         <label for="val-kfold-k">Folds (k)</label>
                         <input type="number" id="val-kfold-k" value="5" min="2" max="20" step="1"
                             style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+                        <label style="margin-top:6px; display:flex; align-items:center; gap:6px; font-weight:normal;">
+                            <input type="checkbox" id="val-spatial-kfold">
+                            Spatial k-fold (geographic split)
+                        </label>
+                        <div style="font-size:11px; color:#888; margin-top:2px;">Groups folds by location instead of shuffling points at random, so neighbouring points (or points from the same field) don't end up split across folds. Off by default — usually lowers your reported score, which is the more honest number. Takes precedence over Group by field if both are checked.</div>
                     </div>
                     <div id="val-eval-mode-hint" style="font-size:11px; color:#888; margin-top:2px;">Learning curve: repeated resamples at 1–80% training size against a held-out (or spatial) test set. K-fold: cross-validate over all labelled pixels; pixel and Spatial MLP models (not U-Net), ignores train/test rectangles.</div>
 
