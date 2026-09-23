@@ -886,6 +886,8 @@ function handleStreamEvent(ev) {
                 x = ev.pixel_train_count / totalLabels * 100;
             }
             acc._x.push(x);
+            if (!acc.failed) acc.failed = [];
+            acc.failed.push(!!vals.failed);
             if (isRegressionRun) {
                 acc.mean_r2.push(vals.mean_r2);
                 acc.std_r2.push(vals.std_r2);
@@ -1048,6 +1050,23 @@ function handleStreamEvent(ev) {
 // One summary row per model: mean F1 ± std across folds (k-fold
 // classification -- the learning-curve path fills this table from
 // 'progress' events instead).
+// A model that raised during training (e.g. deep_mlp without PyTorch
+// installed) still reports a numeric 0.0 score from the backend -- that
+// keeps the aggregation math simple server-side, but a bare "0.0000" next
+// to other models' real scores reads as "the worst score", not "didn't
+// run". The `failed` flag (tessera-eval, both run_learning_curve and
+// run_kfold_cv) says which one it actually was; render that distinctly
+// instead of the misleading number. The failure's actual cause is also
+// logged as a status message in the progress log (server.py's
+// classifier_status forwarding) -- this cell is a visual pointer back to
+// that, not a replacement for it.
+function _resultCellHTML(m, val) {
+    if (m && m.failed) {
+        return `<span style="color:#dc3545;" title="This model failed to train -- see the progress log above for why (e.g. a missing optional dependency).">failed</span>`;
+    }
+    return typeof val === 'number' ? val.toFixed(4) : '—';
+}
+
 function renderKfoldClassificationTable(aggregate) {
     const tbody = document.getElementById('val-results-tbody');
     if (!tbody) return;
@@ -1056,9 +1075,10 @@ function renderKfoldClassificationTable(aggregate) {
     let cells = `<td style="padding:6px; font-weight:bold;">Mean ± std</td>`;
     for (const name of _resultsTableModels) {
         const m = aggregate[name];
-        cells += `<td style="text-align:right; padding:6px; font-weight:bold;">${
-            m ? `${m.mean_f1.toFixed(4)} ± ${m.std_f1.toFixed(4)}` : '—'
-        }</td>`;
+        const body = !m ? '—'
+            : m.failed ? _resultCellHTML(m)
+            : `${m.mean_f1.toFixed(4)} ± ${m.std_f1.toFixed(4)}`;
+        cells += `<td style="text-align:right; padding:6px; font-weight:bold;">${body}</td>`;
     }
     tr.innerHTML = cells;
     tbody.appendChild(tr);
@@ -1076,7 +1096,7 @@ function appendFoldResultRow(foldNum, models) {
     for (const name of _resultsTableModels) {
         const m = models[name] || {};
         const val = currentLargeAreaTask === 'regression' ? m.r2 : m.mean_f1;
-        cells += `<td style="text-align:right; padding:6px;">${typeof val === 'number' ? val.toFixed(4) : '—'}</td>`;
+        cells += `<td style="text-align:right; padding:6px;">${_resultCellHTML(m, val)}</td>`;
     }
     tr.innerHTML = cells;
     tbody.appendChild(tr);
@@ -1574,21 +1594,27 @@ function learningCurveCsvRows(data) {
     const isReg = currentLargeAreaTask === 'regression';
     const rows = [];
 
+    // 'failed' (yes/blank): the model raised during training this fold/pct
+    // (e.g. a missing optional dependency) -- the other columns are still a
+    // real 0.0 fallback so the CSV shape never changes, but this marks
+    // which rows that 0.0 actually means "didn't run" rather than "scored
+    // zero". See _resultCellHTML's comment in the on-screen table for the
+    // same distinction.
     if (data._mode === 'kfold') {
         const foldCols = isReg ? ['r2', 'rmse', 'mae'] : ['mean_f1', 'mean_f1w'];
-        rows.push(['fold', 'model', ...foldCols]);
+        rows.push(['fold', 'model', ...foldCols, 'failed']);
         for (const fr of (data._foldResults || [])) {
             for (const [name, m] of Object.entries(fr.models || {})) {
-                rows.push([fr.fold, name, ...foldCols.map(k => (m[k] ?? ''))]);
+                rows.push([fr.fold, name, ...foldCols.map(k => (m[k] ?? '')), m.failed ? 'yes' : '']);
             }
         }
         const aggCols = isReg
             ? ['mean_r2', 'std_r2', 'mean_rmse', 'std_rmse', 'mean_mae', 'std_mae']
             : ['mean_f1', 'std_f1', 'mean_f1w', 'std_f1w'];
         rows.push([]);
-        rows.push(['summary', 'model', ...aggCols]);
+        rows.push(['summary', 'model', ...aggCols, 'failed']);
         for (const [name, m] of Object.entries(data.aggregate || {})) {
-            rows.push(['mean±std', name, ...aggCols.map(k => (m[k] ?? ''))]);
+            rows.push(['mean±std', name, ...aggCols.map(k => (m[k] ?? '')), m.failed ? 'yes' : '']);
         }
         return rows;
     }
@@ -1596,7 +1622,7 @@ function learningCurveCsvRows(data) {
     const cols = isReg
         ? ['mean_r2', 'std_r2', 'mean_rmse', 'std_rmse', 'mean_mae', 'std_mae']
         : ['mean_f1', 'std_f1', 'mean_f1w', 'std_f1w'];
-    rows.push(['training_pct', 'model', ...cols]);
+    rows.push(['training_pct', 'model', ...cols, 'failed']);
     for (const [name, acc] of Object.entries(data.classifiers)) {
         const xs = (acc._x && acc._x.length) ? acc._x : (data.training_pcts || []);
         for (let i = 0; i < xs.length; i++) {
@@ -1604,6 +1630,7 @@ function learningCurveCsvRows(data) {
                 xs[i] != null ? Number(xs[i]).toFixed(3) : '',
                 name,
                 ...cols.map(k => (acc[k] && acc[k][i] != null ? acc[k][i] : '')),
+                (acc.failed && acc.failed[i]) ? 'yes' : '',
             ]);
         }
     }
@@ -1626,7 +1653,7 @@ function regressionCsv(aggregate) {
     }
     const rows = [[
         'model', 'r2', 'r2_std', 'rmse', 'rmse_std', 'mae', 'mae_std',
-        'outside_range_frac', 'train_min', 'train_max',
+        'outside_range_frac', 'train_min', 'train_max', 'failed',
     ]];
     for (const [name, m] of Object.entries(aggregate || {})) {
         rows.push([
@@ -1635,6 +1662,7 @@ function regressionCsv(aggregate) {
             typeof m.oor_frac === 'number' ? m.oor_frac : '',
             Array.isArray(m.train_range) ? m.train_range[0] : '',
             Array.isArray(m.train_range) ? m.train_range[1] : '',
+            m.failed ? 'yes' : '',
         ]);
     }
     return { rows, stem: 'regression_metrics' };
@@ -2502,7 +2530,7 @@ function appendResultsRow(pct, classifiers, ev) {
         // read the metric that actually matches (regression events never
         // carry mean_f1, so this used to just show "—" for every row).
         const val = currentLargeAreaTask === 'regression' ? m.mean_r2 : m.mean_f1;
-        cells += `<td style="text-align:right; padding:6px;">${val !== undefined ? val.toFixed(4) : '—'}</td>`;
+        cells += `<td style="text-align:right; padding:6px;">${val !== undefined ? _resultCellHTML(m, val) : '—'}</td>`;
     }
     tr.innerHTML = cells;
     tbody.appendChild(tr);
@@ -2540,12 +2568,13 @@ function renderRegressionResults(aggregate) {
             oorCell = `<span style="color:${warn ? '#e0a44b' : '#8a8'}">${pct < 0.1 && pct > 0 ? '<0.1' : pct.toFixed(1)}%</span>`;
             if (Array.isArray(metrics.train_range)) anyRange = metrics.train_range;
         }
+        const failedCell = _resultCellHTML(metrics);
         tr.innerHTML = `
             <td style="padding:6px;"><span style="color:${color.line}">\u25cf</span> ${getVariantLabel(name)}</td>
-            <td style="text-align:right; padding:6px;">${metrics.mean_r2.toFixed(4)} \u00b1 ${metrics.std_r2.toFixed(4)}</td>
-            <td style="text-align:right; padding:6px;">${metrics.mean_rmse.toFixed(4)} \u00b1 ${metrics.std_rmse.toFixed(4)}</td>
-            <td style="text-align:right; padding:6px;">${metrics.mean_mae.toFixed(4)} \u00b1 ${metrics.std_mae.toFixed(4)}</td>
-            <td style="text-align:right; padding:6px;">${oorCell}</td>
+            <td style="text-align:right; padding:6px;">${metrics.failed ? failedCell : `${metrics.mean_r2.toFixed(4)} \u00b1 ${metrics.std_r2.toFixed(4)}`}</td>
+            <td style="text-align:right; padding:6px;">${metrics.failed ? failedCell : `${metrics.mean_rmse.toFixed(4)} \u00b1 ${metrics.std_rmse.toFixed(4)}`}</td>
+            <td style="text-align:right; padding:6px;">${metrics.failed ? failedCell : `${metrics.mean_mae.toFixed(4)} \u00b1 ${metrics.std_mae.toFixed(4)}`}</td>
+            <td style="text-align:right; padding:6px;">${metrics.failed ? '\u2014' : oorCell}</td>
         `;
         tbody.appendChild(tr);
     }
@@ -2703,12 +2732,15 @@ function renderRegressionBarChart(aggregate) {
     const modelNames = Object.keys(aggregate);
     const r2Values = modelNames.map(n => aggregate[n].mean_r2);
     const r2Std = modelNames.map(n => aggregate[n].std_r2);
-    const colors = modelNames.map(n => getVariantColor(n).line);
+    // A failed model's bar is a real 0 (see _resultCellHTML's comment) --
+    // grey it out and label it, rather than letting a 0-height bar next to
+    // real scores read as "this model scored zero".
+    const colors = modelNames.map(n => aggregate[n].failed ? 'rgba(150,150,150,1)' : getVariantColor(n).line);
 
     valChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: modelNames.map(n => getVariantLabel(n)),
+            labels: modelNames.map(n => getVariantLabel(n) + (aggregate[n].failed ? ' (failed)' : '')),
             datasets: [{
                 label: 'R\u00b2',
                 data: r2Values,
@@ -2766,12 +2798,15 @@ function renderClassificationBarChart(aggregate) {
     const modelNames = Object.keys(aggregate);
     const f1Values = modelNames.map(n => aggregate[n].mean_f1);
     const f1Std = modelNames.map(n => aggregate[n].std_f1);
-    const colors = modelNames.map(n => getVariantColor(n).line);
+    // A failed model's bar is a real 0 (see _resultCellHTML's comment) --
+    // grey it out and label it, rather than letting a 0-height bar next to
+    // real scores read as "this model scored zero".
+    const colors = modelNames.map(n => aggregate[n].failed ? 'rgba(150,150,150,1)' : getVariantColor(n).line);
 
     valChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: modelNames.map(n => getVariantLabel(n)),
+            labels: modelNames.map(n => getVariantLabel(n) + (aggregate[n].failed ? ' (failed)' : '')),
             datasets: [{
                 label: 'Macro F1',
                 data: f1Values,
