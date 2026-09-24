@@ -62,7 +62,10 @@ tessera-vq @ git+https://github.com/sk818/tessera-vq.git@v0.7.4
 # v1.14.1: a model that fails to train (e.g. deep_mlp without PyTorch
 # installed) is now flagged as failed in the results table/chart/CSV
 # instead of silently reporting a real-looking 0.0 score.
-tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.14.1
+# v1.14.2: zarr fast path temporarily disabled (forces NPY tile fetches) --
+# it was using a smaller chunk size than intended, so every read hit the
+# network regardless of the on-disk cache. Re-enable once fixed upstream.
+tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.14.2
 numpy>=1.24.0
 rasterio>=1.3.0
 Pillow>=10.0.0
