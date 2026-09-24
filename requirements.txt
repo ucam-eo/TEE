@@ -65,7 +65,10 @@ tessera-vq @ git+https://github.com/sk818/tessera-vq.git@v0.7.4
 # v1.14.2: zarr fast path temporarily disabled (forces NPY tile fetches) --
 # it was using a smaller chunk size than intended, so every read hit the
 # network regardless of the on-disk cache. Re-enable once fixed upstream.
-tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.14.2
+# v1.14.3: fixes a Spatial MLP learning-curve confusion matrix silently
+# dropping a whole class (0% recall row, including the diagonal) when that
+# class's pixels were missing from the run's random pixel sample.
+tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.14.3
 numpy>=1.24.0
 rasterio>=1.3.0
 Pillow>=10.0.0
