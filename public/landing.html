@@ -57,6 +57,68 @@
             line-height: 1.4;
         }
         .option.primary { border-color: #667eea; background: #f8f9ff; }
+        button.option { width: 100%; text-align: left; background: white; font: inherit; cursor: pointer; }
+
+        /* Account request modal */
+        .modal-backdrop {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.45);
+            align-items: center; justify-content: center;
+            padding: 20px;
+            z-index: 100;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+            width: 380px;
+            max-width: 100%;
+            padding: 24px 26px 26px;
+        }
+        .modal h2 { font-size: 17px; margin-bottom: 4px; color: #222; }
+        .modal .modal-sub { font-size: 12px; color: #777; margin-bottom: 18px; line-height: 1.4; }
+        .modal label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: #444;
+            margin: 14px 0 5px;
+        }
+        .modal label:first-of-type { margin-top: 0; }
+        .modal input, .modal textarea {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #d5d5d5;
+            border-radius: 6px;
+            font: inherit;
+            font-size: 13px;
+            color: #222;
+        }
+        .modal input:focus, .modal textarea:focus { outline: none; border-color: #667eea; }
+        .modal textarea { resize: vertical; min-height: 48px; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+        .modal-actions button {
+            flex: 1;
+            padding: 10px;
+            border-radius: 6px;
+            border: none;
+            font: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        #accountReqCancel { background: #eee; color: #444; }
+        #accountReqCancel:hover { background: #e2e2e2; }
+        #accountReqSend { background: #667eea; color: white; }
+        #accountReqSend:hover { background: #5a6fd6; }
+        .modal-error {
+            display: none;
+            font-size: 12px;
+            color: #c0392b;
+            margin-top: 12px;
+        }
     </style>
 </head>
 <body>
@@ -78,7 +140,89 @@
                 <div class="title">🌍 Just want a postcard?</div>
                 <div class="desc">Pick anywhere on Earth and turn its Tessera embeddings into a downloadable image — no account, nothing saved.</div>
             </a>
+            <button type="button" class="option" onclick="openAccountRequestModal()">
+                <div class="title">✉️ Request an account</div>
+                <div class="desc">Don't have a login yet? Send a short request and we'll set one up.</div>
+            </button>
         </div>
     </div>
+
+    <div class="modal-backdrop" id="accountReqBackdrop">
+        <div class="modal">
+            <h2>Request an account</h2>
+            <div class="modal-sub">This opens an email to the TEE team with your details — nothing is sent automatically, you'll still need to hit send in your own mail app.</div>
+
+            <label for="accountReqName">Name</label>
+            <input type="text" id="accountReqName" autocomplete="name">
+
+            <label for="accountReqEmail">Email address</label>
+            <input type="email" id="accountReqEmail" autocomplete="email">
+
+            <label for="accountReqInstitution">Institution</label>
+            <input type="text" id="accountReqInstitution" autocomplete="organization">
+
+            <label for="accountReqPurpose">What will you use it for? (a line or two)</label>
+            <textarea id="accountReqPurpose" rows="3"></textarea>
+
+            <div class="modal-error" id="accountReqError">Please fill in all four fields.</div>
+
+            <div class="modal-actions">
+                <button type="button" id="accountReqCancel" onclick="closeAccountRequestModal()">Cancel</button>
+                <button type="button" id="accountReqSend" onclick="sendAccountRequest()">Open email</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openAccountRequestModal() {
+            document.getElementById('accountReqBackdrop').classList.add('open');
+            document.getElementById('accountReqError').style.display = 'none';
+            document.getElementById('accountReqName').focus();
+        }
+
+        function closeAccountRequestModal() {
+            document.getElementById('accountReqBackdrop').classList.remove('open');
+        }
+
+        // Click outside the modal card to dismiss. The listener is on the
+        // backdrop, which a click anywhere inside the card also bubbles up
+        // to -- checking e.target (not just that the handler fired) is what
+        // limits this to an actual click on the backdrop itself.
+        document.getElementById('accountReqBackdrop').addEventListener('click', (e) => {
+            if (e.target.id === 'accountReqBackdrop') closeAccountRequestModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeAccountRequestModal();
+        });
+
+        function sendAccountRequest() {
+            const name = document.getElementById('accountReqName').value.trim();
+            const email = document.getElementById('accountReqEmail').value.trim();
+            const institution = document.getElementById('accountReqInstitution').value.trim();
+            const purpose = document.getElementById('accountReqPurpose').value.trim();
+            const errorEl = document.getElementById('accountReqError');
+
+            if (!name || !email || !institution || !purpose) {
+                errorEl.style.display = 'block';
+                return;
+            }
+            errorEl.style.display = 'none';
+
+            // No backend mail server in this app -- same mailto: pattern the
+            // in-app Feedback button already uses (viewer.html/
+            // viewport_selector.html's openFeedback()). The form just
+            // structures the four fields Keshav asked for into a
+            // consistent, pre-filled body instead of a blank template.
+            const body = [
+                `Name: ${name}`,
+                `Email: ${email}`,
+                `Institution: ${institution}`,
+                '',
+                'What they\'ll use it for:',
+                purpose,
+            ].join('\n');
+            window.location.href = `mailto:sk818@cam.ac.uk?subject=${encodeURIComponent('TEE account request — ' + name)}&body=${encodeURIComponent(body)}`;
+        }
+    </script>
 </body>
 </html>
