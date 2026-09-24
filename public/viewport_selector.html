@@ -971,6 +971,7 @@
 
     <!-- Leaflet JS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="js/mailto.js"></script>
 
     <script>
         // Tab switching
@@ -1042,7 +1043,7 @@
                 '',
                 'To include a screenshot: Cmd+Shift+4 (Mac) or Win+Shift+S (Windows), then paste into this email.',
             ].join('\n');
-            window.location.href = `mailto:sk818@cam.ac.uk?subject=${encodeURIComponent('TEE Feedback — ' + vp)}&body=${encodeURIComponent(body)}`;
+            openMailtoReport('sk818@cam.ac.uk', 'TEE Feedback — ' + vp, body);
         }
 
         function doLogout() {

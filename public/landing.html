@@ -173,6 +173,7 @@
         </div>
     </div>
 
+    <script src="js/mailto.js"></script>
     <script>
         function openAccountRequestModal() {
             document.getElementById('accountReqBackdrop').classList.add('open');
@@ -208,11 +209,13 @@
             }
             errorEl.style.display = 'none';
 
-            // No backend mail server in this app -- same mailto: pattern the
-            // in-app Feedback button already uses (viewer.html/
-            // viewport_selector.html's openFeedback()). The form just
-            // structures the four fields Keshav asked for into a
-            // consistent, pre-filled body instead of a blank template.
+            // openMailtoReport (js/mailto.js) is the same shared helper the
+            // in-app Feedback button uses (viewer.html/viewport_selector.
+            // html's openFeedback()) -- no backend mail server in this app,
+            // so every structured-info request goes through a pre-filled
+            // mailto: link the visitor's own mail client sends. This form
+            // just structures the four fields Keshav asked for into a
+            // consistent body instead of a blank template.
             const body = [
                 `Name: ${name}`,
                 `Email: ${email}`,
@@ -221,7 +224,7 @@
                 'What they\'ll use it for:',
                 purpose,
             ].join('\n');
-            window.location.href = `mailto:sk818@cam.ac.uk?subject=${encodeURIComponent('TEE account request — ' + name)}&body=${encodeURIComponent(body)}`;
+            openMailtoReport('sk818@cam.ac.uk', 'TEE account request — ' + name, body);
         }
     </script>
 </body>

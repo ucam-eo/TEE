@@ -1528,6 +1528,7 @@
     <script type="module" src="js/labels.js"></script>
     <script type="module" src="js/maps.js"></script>
     <script type="module" src="js/app.js"></script>
+    <script src="js/mailto.js"></script>
     <script>
     async function openFeedback() {
         const vp = window.currentViewportName || '(none)';
@@ -1547,7 +1548,7 @@
             '',
             'To include a screenshot: take one with Cmd+Shift+4 (Mac) or Win+Shift+S (Windows), then paste into this email.',
         ].join('\n');
-        window.location.href = `mailto:sk818@cam.ac.uk?subject=${encodeURIComponent('TEE Feedback — ' + vp)}&body=${encodeURIComponent(body)}`;
+        openMailtoReport('sk818@cam.ac.uk', 'TEE Feedback — ' + vp, body);
     }
 
     </script>
