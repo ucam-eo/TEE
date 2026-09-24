@@ -146,7 +146,9 @@ Each mode rearranges the six panels. Panels in the same position always show the
 
 ### Switching Modes
 
-Use the **layout dropdown** in the top-left of the header bar to switch between Explore, Change Detection, and Labelling. Validation mode is accessed from the Viewport Manager's **Validation** tab (not the dropdown).
+TEE has four modes: **Explore**, **Change Detection**, **Labelling**, and **Validation**. Use the **layout dropdown** in the top-left of the header bar to switch between Explore, Change Detection, and Labelling — these three all work on the viewport you currently have loaded, so you can freely switch between them.
+
+**Validation** mode is different: it has no loaded viewport at all (you upload your own ground-truth shapefile and evaluate directly against live embeddings — see [Validation](#validation-evaluating-classifiers) below), so it isn't one of the dropdown's choices. Enter it from the Viewport Manager's **Validation** tab's **Evaluate** button; the layout dropdown is greyed out for the duration, since none of Explore/Change Detection/Labelling have a viewport to work with while you're there. Use **← Back** to leave Validation mode and return to the Viewport Manager.
 
 ### Switching Years
 

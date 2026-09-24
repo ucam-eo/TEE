@@ -420,6 +420,7 @@
         }
         .validation-run-btn:hover { background: #5a6fd6; }
         .validation-run-btn:disabled { background: #555; cursor: not-allowed; }
+        #panel-layout-select:disabled { opacity: 0.5; cursor: not-allowed; }
         #val-create-map-btn { background: #44bb44; color: #fff; }
         #val-create-map-btn:hover:not(:disabled) { background: #38a838; }
         #val-create-map-btn:disabled { background: #555 !important; color: #888 !important; }
@@ -776,6 +777,13 @@
                 <option value="explore">Explore</option>
                 <option value="change-detection">Change Detection</option>
                 <option value="labelling">Labelling</option>
+                <!-- Validation mode has its own entry point (the Validation tab's
+                     "Evaluate" button, viewer.html?mode=validation) rather than a
+                     loaded viewport, so it's not reachable by picking it here --
+                     disabled so it's still named/visible for consistency with the
+                     other three (setPanelLayout's own comment explains why the
+                     whole select is disabled while this mode is active). -->
+                <option value="validation" disabled>Validation</option>
             </select>
             <button id="help-btn" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;" title="Show keyboard shortcuts and help">? Help</button>
             <button id="feedback-btn" onclick="openFeedback()" style="padding: 6px 10px; background: transparent; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;" title="Send feedback or report a bug">Feedback</button>

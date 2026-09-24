@@ -816,7 +816,7 @@ function applyHeatmapLayerRule(layer, shouldShow) {
     applyLayerRule(layer, shouldShow, window.maps.panel5);
 }
 
-// Panel layout: explore / change-detection / labelling
+// Panel layout: explore / change-detection / labelling / validation
 function setPanelLayout(mode) {
     const container = document.getElementById('map-container');
     const select = document.getElementById('panel-layout-select');
@@ -829,6 +829,19 @@ function setPanelLayout(mode) {
     document.body.classList.remove('mode-explore', 'mode-change-detection', 'mode-labelling', 'mode-validation');
     document.body.classList.add('mode-' + mode);
     select.value = mode;
+    // Validation mode has no loaded viewport (it's entered fresh via
+    // viewer.html?mode=validation, not by picking a viewport), so the other
+    // three modes are non-functional there -- and there was no way back
+    // in the other direction either, since 'validation' has no selectable
+    // <option> of its own. Confirmed live (Keshav): switching out via this
+    // menu while in Validation mode leaves you stuck in a mode with nothing
+    // loaded, unable to return. Disabling the whole menu in Validation mode
+    // blocks the broken direction outright; getting there is still only via
+    // the Validation tab's own "Evaluate" button, same as before.
+    select.disabled = (mode === 'validation');
+    select.title = select.disabled
+        ? 'Validation mode has its own workflow, entered from the Validation tab — no other mode is available here.'
+        : '';
     window.currentPanelMode = mode;
 
     // ── Declarative panel layout table ──
