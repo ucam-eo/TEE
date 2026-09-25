@@ -14,7 +14,7 @@ A web-based tool for exploring and classifying land cover from Sentinel-2 satell
 - **Find similar pixels** instantly — double-click anywhere to highlight similar locations
 - **Label habitats** using K-means clustering (with a settable seed for reproducible clusters), manual pins, polygon drawing, and standard schemas (UKHab, EUNIS, HOTW)
 - **Export** hand-drawn or classified pixels as GeoJSON / Shapefile / KML polygons, not just points
-- **Evaluate classifiers** (k-NN, Random Forest, XGBoost, MLP, Spatial MLP, U-Net) for **classification or regression**, with **learning curves** or **k-fold cross-validation**, on ground-truth shapefiles at any scale — with a spatial hold-out, separate train/test years, or a separate held-out test file, all keyed off one random seed, and PNG/CSV export of every panel
+- **Evaluate classifiers** (k-NN, Random Forest, XGBoost, MLP, Deep MLP, Spatial MLP, U-Net) for **classification or regression**, with **learning curves** or **k-fold cross-validation**, on ground-truth shapefiles at any scale — with a spatial hold-out, a geographic split for k-fold, a field-grouped split (no within-field leakage), separate train/test years, or a separate held-out test file, all keyed off one random seed, and PNG/CSV export of every panel
 - **Generate classification / regression maps** as GeoTIFFs (native UTM, optional value clamping) for use in GIS, with an in-browser preview
 - **Compare years** side by side to detect land-use change
 
@@ -64,8 +64,8 @@ The **[User Guide](public/user_guide.md)** covers everything:
 - Compute server setup (local, GPU, all-local modes)
 - Validation: learning curves, k-fold cross-validation (mechanics and fold selection), confusion matrices, regression metrics and scatter
 - Classification vs regression, the task-type override, and one settable random seed
-- Classifier parameters and hyperparameter variants; the Spatial MLP and U-Net models
-- Spatial train/test splits, separate train/test years, and a separate held-out test file
+- Classifier parameters and hyperparameter variants; the Deep MLP, Spatial MLP, and U-Net models
+- Spatial train/test splits, spatial k-fold, group-by-field splits, separate train/test years, and a separate held-out test file
 - PNG / CSV export of the validation panels (hi-res)
 - Exporting labels (points or classified-pixel polygons) and generating classification / regression maps, with projection guidance and value clamping
 - Sharing labels with other users
