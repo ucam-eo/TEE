@@ -17,11 +17,12 @@ from lib.tile_renderer import (
     render_tile_png,
     _load_pyramid_meta,
 )
+from api.helpers import MIN_YEAR, MAX_YEAR
 
 logger = logging.getLogger(__name__)
 
 PYRAMIDS_BASE_DIR = PYRAMIDS_DIR
-_VALID_MAP_IDS = {str(y) for y in range(2017, 2026)}
+_VALID_MAP_IDS = {str(y) for y in range(MIN_YEAR, MAX_YEAR + 1)}
 
 # Cache for tile reader paths
 _readers = {}

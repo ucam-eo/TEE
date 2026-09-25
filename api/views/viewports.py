@@ -334,10 +334,10 @@ def create_viewport(request):
         # Validate years
         years = data.get('years')
         if years:
-            valid_range = range(2017, 2026)
+            valid_range = range(MIN_YEAR, MAX_YEAR + 1)
             invalid = [y for y in years if y not in valid_range]
             if invalid:
-                return JsonResponse({'success': False, 'error': f'Years out of range (2017-2025): {invalid}'}, status=400)
+                return JsonResponse({'success': False, 'error': f'Years out of range ({MIN_YEAR}-{MAX_YEAR}): {invalid}'}, status=400)
 
             # Note: GeoTessera availability is NOT checked here (would block for 28s
             # downloading the registry). The pipeline reports unavailable years as errors.
@@ -651,7 +651,7 @@ def embedding_coverage(request):
         from geotessera import GeoTessera
         gt = GeoTessera()
         coverage = {}
-        for year in range(2018, 2026):
+        for year in range(MIN_YEAR, MAX_YEAR + 1):
             tiles = gt.registry.load_blocks_for_region(tuple(bbox), year)
             coverage[str(year)] = len(tiles)
         return JsonResponse({'coverage': coverage})

@@ -8,7 +8,7 @@ with zero intermediate GeoTIFF files.
 
 Usage:
     python process_viewport.py --years 2024,2025
-    python process_viewport.py                    # all years 2018-2025
+    python process_viewport.py                    # all years 2017-2025
 """
 
 import sys
@@ -48,7 +48,10 @@ except ImportError as e:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_YEARS = range(2018, 2026)
+# Matches api/helpers.py's MIN_YEAR/MAX_YEAR (not imported directly -- this
+# script runs standalone as a subprocess, deliberately decoupled from the
+# Django app's api/ package).
+DEFAULT_YEARS = range(2017, 2026)
 EMBEDDING_DIM = 128
 NUM_ZOOM_LEVELS = 6
 

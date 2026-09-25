@@ -22,8 +22,15 @@ if not VENV_PYTHON.exists():
     VENV_PYTHON = sys.executable
 logger.debug(f"Using Python: {VENV_PYTHON}")
 
-# Year range constant (used in multiple views)
-MIN_YEAR = 2018
+# Year range constant (used in multiple views). geotessera serves 2017-2025
+# (confirmed directly against the registry) -- MIN_YEAR was 2018 here for a
+# while, inconsistent with the 2017 floor already used correctly elsewhere
+# in this file's own callers (api/views/tiles.py's _VALID_MAP_IDS, and the
+# "Add Years" validation in api/views/viewports.py) and in
+# evaluation.js's own config comment. Matters more once dclimate v1.1
+# lands (its own coverage is also 2017-2025) -- see the
+# tessera-viewport-dataset-version-choice memory.
+MIN_YEAR = 2017
 MAX_YEAR = 2025
 
 # Per-user disk quota default (2 GB); overridable in passwd file

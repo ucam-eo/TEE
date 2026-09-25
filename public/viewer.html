@@ -1058,6 +1058,7 @@
                     <div style="flex:1;">
                         <label>Year of training</label>
                         <select id="val-train-year-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+                            <option value="2017">2017</option>
                             <option value="2018">2018</option>
                             <option value="2019">2019</option>
                             <option value="2020">2020</option>
@@ -1071,6 +1072,7 @@
                     <div style="flex:1;">
                         <label>Year of test</label>
                         <select id="val-test-year-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;" title="Score the trained classifier against a different year's embeddings at the same locations. Defaults to the training year.">
+                            <option value="2017">2017</option>
                             <option value="2018">2018</option>
                             <option value="2019">2019</option>
                             <option value="2020">2020</option>
@@ -1090,6 +1092,7 @@
                     <label for="val-map-year-select">Map year</label>
                     <select id="val-map-year-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;" title="Predict the trained model against a different year's embeddings when generating a map -- e.g. train on 2025, map 2018, to look for change over time. Pure inference: no ground truth needed, nothing gets scored. Leave as 'Same as training year' for the usual behavior.">
                         <option value="" selected>Same as training year</option>
+                        <option value="2017">2017</option>
                         <option value="2018">2018</option>
                         <option value="2019">2019</option>
                         <option value="2020">2020</option>
