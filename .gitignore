@@ -44,6 +44,9 @@ vectors/
 *.tiff
 *.npy
 *.index
+# geotessera drops this sidecar into the working directory when a CLI run
+# (e.g. scripts/tee_evaluate.py) fetches tiles from the repo root
+tessera_metadata.json
 
 # Shapefiles / ground-truth data (private)
 Cumbria_naddle/
