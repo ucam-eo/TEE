@@ -68,7 +68,13 @@ tessera-vq @ git+https://github.com/sk818/tessera-vq.git@v0.7.4
 # v1.14.3: fixes a Spatial MLP learning-curve confusion matrix silently
 # dropping a whole class (0% recall row, including the diagonal) when that
 # class's pixels were missing from the run's random pixel sample.
-tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.14.3
+# v1.15.0: "Area-stratified split" -- reproduces Frank Feng's (TESSERA
+# paper co-author) own Austrian-crop split exactly: 30% of each class's
+# field area -> train, rest 1/7 val, 6/7 test, computed independently per
+# class. Off by default; learning-curve, classification only; see the
+# Validation panel and the User Guide's "How TEE's numbers can differ from
+# the paper's" section.
+tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.15.0
 numpy>=1.24.0
 rasterio>=1.3.0
 Pillow>=10.0.0

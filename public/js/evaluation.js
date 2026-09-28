@@ -443,6 +443,11 @@ function getSpatialKfold() {
     return !!(el && el.checked);
 }
 
+function getAreaStratifiedSplit() {
+    const el = document.getElementById('val-area-stratified-split');
+    return !!(el && el.checked);
+}
+
 function getEvalMode() {
     const el = document.getElementById('val-eval-mode');
     return el ? el.value : 'learning_curve';   // 'learning_curve' | 'kfold'
@@ -871,6 +876,15 @@ function handleStreamEvent(ev) {
                 `Held-out test file: ${Number(ev.test_count).toLocaleString()} test points` +
                 (ev.train_year !== ev.test_year ? ` at ${ev.test_year}` : '') +
                 ` vs ${Number(ev.train_count).toLocaleString()} training points.`
+            );
+        }
+        if (ev.area_stratified_split) {
+            lastChartData.area_stratified_split = true;
+            lastChartData.train_count = ev.train_count;
+            lastChartData.test_count = ev.test_count;
+            setResultsStatus(
+                `Area-stratified split (30% train / class): ${Number(ev.train_count).toLocaleString()} training, ` +
+                `${Number(ev.test_count).toLocaleString()} test pixels.`
             );
         }
 
@@ -2316,6 +2330,8 @@ function generateConfig() {
         "_group_by_field": "keep each shapefile polygon's pixels on one side of train/test (StratifiedGroupKFold) -- off by default, classification only",
         "spatial_kfold": getSpatialKfold(),
         "_spatial_kfold": "geographic split for k-fold cross-validation (StratifiedGroupKFold over quantile-binned lon/lat blocks) -- off by default, k-fold only, takes precedence over group_by_field",
+        "area_stratified_split": getAreaStratifiedSplit(),
+        "_area_stratified_split": "reproduces the TESSERA paper's own split: 30% of each class's field area -> train, rest 1/7 val + 6/7 test, per class -- off by default, learning-curve + classification only, takes precedence over group_by_field/spatial_kfold and any other fixed test set",
     };
 
     // Spatial bounding boxes (if any)
@@ -2477,6 +2493,7 @@ async function runLargeAreaEvaluation() {
                 seed: getSeed(),
                 eval_mode: evalMode,
                 group_by_field: getGroupByField(),
+                area_stratified_split: getAreaStratifiedSplit(),
                 ...(evalMode === 'kfold' ? { kfold_k: getKfoldK(), spatial_kfold: getSpatialKfold() } : {}),
                 // The held-out test file (if uploaded). The server detects it
                 // itself; we just say which of its columns is the label.
@@ -3007,6 +3024,10 @@ function applyConfig(config) {
     if (typeof config.spatial_kfold === 'boolean') {
         const skEl = document.getElementById('val-spatial-kfold');
         if (skEl) skEl.checked = config.spatial_kfold;
+    }
+    if (typeof config.area_stratified_split === 'boolean') {
+        const asEl = document.getElementById('val-area-stratified-split');
+        if (asEl) asEl.checked = config.area_stratified_split;
     }
     // Evaluation method (learning curve vs k-fold CV)
     if (['learning_curve', 'kfold'].includes(config.eval_mode)) {
