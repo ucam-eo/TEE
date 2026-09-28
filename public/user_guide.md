@@ -36,7 +36,7 @@ With TEE you can:
 - [Manual Labelling](#manual-labelling) — pins, polygons, similarity expansion
 - [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
 - [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
-- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, spatial k-fold, group by field, area-stratified split, train/test years, separate test file, task type, random seed, PNG/CSV export, worked example, comparing against the TESSERA paper, Create Map + preview + projections, CLI
+- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, spatial k-fold, group by field, area-stratified split, train/test years, separate test file, task type, random seed, PNG/CSV export, worked example, Create Map + preview + projections, CLI
 - [Postcard](#postcard) — a fun, no-account image generator
 - [Data Privacy](#data-privacy)
 - [Reference](#reference) — mouse controls, keyboard shortcuts, tips
@@ -610,10 +610,7 @@ Validation answers the question: **"How well can machine learning distinguish my
 > takeaway: **don't compare two F1 numbers unless you know both used the same metric,
 > sampling strategy, and split settings** — a score that looks worse after you change a
 > setting usually just got more honest, not more wrong, and a score that looks better after
-> changing a setting isn't necessarily a better model. See [Comparing against the TESSERA
-> paper](#comparing-against-the-tessera-paper) below for a worked example of exactly this,
-> including a case where the "obvious" fix (more balanced sampling) turned out to explain
-> less of a gap than it first appeared to.
+> changing a setting isn't necessarily a better model.
 
 ### Step-by-Step
 
@@ -813,7 +810,7 @@ TEE ships a ready-to-use sample dataset — [download austria.zip](/sample-data/
 
 The 17 classes are unevenly sized (from 150 fields for `AC06` Mustard up to 10,874 for `AC04` Winter Grain) — a realistic test of how classifiers handle class imbalance. The **sqrt-proportional** sampling strategy (the default) is a reasonable starting point.
 
-That imbalance is also why the **Macro F1 / Weighted F1** selector above the chart matters so much here — see [Comparing against the TESSERA paper](#comparing-against-the-tessera-paper) below before reading anything into a low number.
+That imbalance is also why the **Macro F1 / Weighted F1** selector above the chart matters so much here — macro and weighted F1 can differ enormously on data this skewed, so check which one you're reading before drawing conclusions from a low number.
 
 **Doing a spatial split:** field boundaries reflect real farm/parcel layout, so nearby fields often share the same crop due to local rotation and farm management — exactly the kind of spatial autocorrelation the [Spatial Train/Test Split](#spatial-train-test-split-optional) feature above is for. The dataset is wider east–west (~0.69°) than north–south (~0.42°), so a simple east/west split works well:
 
@@ -821,76 +818,6 @@ That imbalance is also why the **Macro F1 / Weighted F1** selector above the cha
 2. Select **Train area (blue)** and draw a rectangle over the **western half** of the red outlines (up to about 16.7°E)
 3. Select **Test area (yellow)** and draw a rectangle over the **eastern half** (from about 16.7°E onward), covering the full north–south extent
 4. Run the evaluation — compare the resulting accuracy against a run with no spatial split (random split) on the same data. Expect the spatial-split numbers to be somewhat lower — that's the honest estimate; a big gap between the two indicates the random split was overly optimistic due to autocorrelation
-
-### Comparing against the TESSERA paper
-
-The TESSERA paper reports its own results on this dataset, and TEE's numbers will look
-far lower unless you line the two protocols up first. Every difference below is real and
-expected — none of them means the embeddings are underperforming.
-
-**1. The metric. This is the big one.** The paper reports **weighted** F1; TEE's chart
-defaults to **Macro F1**. On a dataset this imbalanced (Winter Grain is ~37% of labelled
-pixels, `AC17` Other (Non Plants) under 0.1%) the two differ enormously — on one reference
-run at 30% training labels, the *same predictions* scored **0.56 macro** and **0.78
-weighted**. Switch the selector above the chart to **Weighted F1** before comparing.
-
-Neither metric is wrong: macro asks "how well does it do on a typical *class*", weighted
-asks "how well does it do on a typical *pixel*". They just answer different questions, and
-the paper answers the second one.
-
-**2. How the training set is drawn.** By default TEE's [Sampling Strategy](#sampling-strategy)
-is **sqrt-proportional** — bigger classes still get more points than tiny ones, but not
-fully proportionally, so rare classes aren't starved. The paper instead takes a **fixed
-30% of each crop's *area*** for training, computed independently per class, with the rest
-split 1/7 val, 6/7 test — a genuinely different rule, not just a different balance point on
-the same dial. TEE's **Area-stratified split (30% train / class)** option (see
-[Area-Stratified Split](#area-stratified-split-30-per-class-optional) below) reproduces
-this exactly. We tested it head-to-head against the paper's own reported number and it's
-worth reading honestly rather than as a quick fix: on a real run it scored **lower**, not
-higher, than TEE's sqrt-proportional default (weighted F1 0.61 vs 0.74) — the opposite of
-what you'd expect if sampling imbalance were the main cause of the gap. TEE's **Equal**
-sampling setting (every class competes for an even share of one shared point budget, not
-a fixed per-class area quota) did score closer to the paper's figure (0.79 weighted, and a
-*higher* macro F1 than the paper's own 0.725) — but the area-stratified test above shows
-that's very unlikely to be for the same reason the paper's split gets there; it looks more
-like an artefact of how aggressively Equal oversamples rare classes than a faithful
-reproduction. Net effect: **sampling/split methodology, tested every way TEE currently
-supports, doesn't reliably close the gap on its own** — see the table below, and don't
-read a single "closer" number here as the fix without checking it against the others.
-
-**3. How train and test are separated.** By default TEE splits at the **pixel** level, so
-pixels from one field can land on both sides — see [Group by Field](#group-by-field-avoiding-within-field-leakage).
-The paper splits by **field**. On this dataset the leakage is worth roughly 0.05–0.07
-weighted F1, so tick **Group by field (no leakage)** for a like-for-like number — note this
-also moves the score *down*, same direction as area-stratified split above.
-
-**4. How much training data.** The curve has not flattened by the time TEE's defaults stop,
-and the paper's own worked example trains on comparatively few pixels — its 30%-label-ratio
-figure comes from roughly 23,000 training pixels (30% of a 78,000-pixel downsampled raster),
-smaller than several of the comparisons below. So "more training data" doesn't explain the
-gap either — the paper reaches a higher score with *fewer* training pixels than TEE's own
-area-stratified split gives it.
-
-**Roughly what we've measured** (weighted F1, deep_mlp, year 2022, 80% training where
-applicable — deep_mlp mirrors the paper's own architecture):
-
-| Setup | Weighted F1 |
-|-------|-------------|
-| Paper's reported figure at a 30% label ratio (~23k training pixels) | 0.85 |
-| TEE default (sqrt-proportional sampling, pixel-level split) | 0.74 |
-| TEE, Equal sampling | 0.79 (macro F1 0.76, above the paper's own 0.73) |
-| TEE, Group by field (no leakage) | 0.68 |
-| TEE, **Area-stratified split** (the paper's literal rule) | 0.61 |
-
-Treat these as one seed's numbers, not final targets — they'll move a little with the seed
-and the classifier. But the *pattern* held up under real testing: none of TEE's
-sampling/split options reliably reproduces the paper's figure, and the one that gets
-closest (Equal sampling) doesn't do it for the reason we initially assumed. If you're
-chasing an exact match to a paper figure and none of these options gets you there, the
-likely remaining differences are outside what a split/sampling setting can fix — most
-plausibly the underlying embeddings or label pipeline itself, not the evaluation protocol.
-A score in the right *ballpark* (same order of magnitude, moves the same direction as you'd
-expect) is the realistic bar; treat an exact match as a coincidence, not a target.
 
 ### Evaluation Method: Learning Curve or K-Fold
 
@@ -983,14 +910,10 @@ Tick **Area-stratified split (30% train / class)**, next to Group by Field, to u
   a 30% *area quota per class*. Rare and common classes are treated identically as a
   fraction of themselves, not as a shared competition for one pooled budget the way
   [Sampling Strategy](#sampling-strategy)'s Equal/Sqrt/Proportional choice is.
-- **This is the literal paper protocol, not necessarily the number you'll get closest to
-  the paper's own figure with.** We built this to test a specific hypothesis — that
-  rare-class training representation explained most of the gap to the paper's reported
-  F1 — and on a real run it didn't hold up: weighted F1 came in *lower* than TEE's plain
-  defaults, not higher (see [Comparing against the TESSERA
-  paper](#comparing-against-the-tessera-paper) above for the numbers). Use this option when
-  you specifically want the paper's exact split rule reproduced, not as a way to inflate
-  your score toward a target figure.
+- **This is the literal paper protocol, not a way to raise your score.** On a real run it
+  actually scored *lower* than TEE's plain defaults, not higher — a stricter, less
+  leakage-prone split isn't the same thing as a better one. Use this option when you
+  specifically want the paper's exact split rule reproduced, not to chase a higher number.
 - **Classification only, learning curve only** — a per-class area quota has no meaning for
   a continuous regression target, and k-fold makes its own folds.
 - **Takes precedence** over Group by Field, Spatial k-fold, a drawn Spatial Train/Test
