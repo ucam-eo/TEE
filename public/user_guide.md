@@ -36,7 +36,7 @@ With TEE you can:
 - [Manual Labelling](#manual-labelling) — pins, polygons, similarity expansion
 - [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
 - [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
-- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, spatial k-fold, group by field, train/test years, separate test file, task type, random seed, PNG/CSV export, worked example, Create Map + preview + projections, CLI
+- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, spatial k-fold, group by field, train/test years, separate test file, task type, random seed, PNG/CSV export, worked example, comparing against the TESSERA paper, Create Map + preview + projections, CLI
 - [Postcard](#postcard) — a fun, no-account image generator
 - [Data Privacy](#data-privacy)
 - [Reference](#reference) — mouse controls, keyboard shortcuts, tips
@@ -75,7 +75,9 @@ Viewport Manager from then on.
 3. Choose a class field (the column in your shapefile that contains the habitat names), select a year, and tick the classifiers you want to test
 4. Click **Run Evaluation** — TEE will train each classifier and show you learning curves and a confusion matrix so you can see how well the embeddings distinguish your habitat classes
 
-> **Try it:** TEE ships `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). [Download it](/sample-data/austria.zip), upload it, select field **"HabUK"**, year **2024**, and click Run. See [Worked Example: austria.zip](#worked-example-austria-zip) for a full walkthrough, including a spatial train/test split.
+> **Try it:** TEE ships `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). [Download it](/sample-data/austria.zip), upload it, select field **"HabUK"**, year **2022**, and click Run. See [Worked Example: austria.zip](#worked-example-austriazip) for a full walkthrough, including a spatial train/test split and how to compare your numbers against the TESSERA paper.
+>
+> **Use 2022, not a later year.** These labels are the 2022 INVEKOS declarations, and crops rotate every season — pairing them with a different year's embeddings asks the classifier to predict what was growing in a field two years earlier. It fails badly: weighted F1 drops from ~0.78 (2022) to ~0.30 (2024) on an otherwise identical run.
 
 ### Path 4: Just want a fun image?
 
@@ -781,6 +783,8 @@ TEE ships a ready-to-use sample dataset — [download austria.zip](/sample-data/
 
 **What's in it:** 42,789 agricultural field polygons from Austria's INVEKOS system (the EU farm-subsidy declarations), just east of Vienna — roughly 16.36°E–17.05°E, 48.06°N–48.48°N. The original 153 German crop-type declarations have been grouped into 17 broader crop classes.
 
+**Which year to use: 2022.** The declarations are from the **2022** INVEKOS submission, so 2022 is the only year whose embeddings actually describe the crop each label names. Because crops rotate annually, a later year measures a different planting: on an identical run, weighted F1 falls from ~0.78 with 2022 embeddings to ~0.30 with 2024. This is the single most common way to get a surprisingly low score on this dataset.
+
 **Which field to use:** the shapefile carries several attribute columns; use **`HabUK`** as the class field (or the equivalent `HabUKcode`, if you prefer short codes like `AC01`):
 
 | Column | Contents | Use for evaluation? |
@@ -789,7 +793,9 @@ TEE ships a ready-to-use sample dataset — [download austria.zip](/sample-data/
 | `HabUKcode` | Same 17 groups, as short codes `AC01`–`AC17` | Yes, if you prefer codes to names |
 | `Habitat` / `NVC` | 153 raw German crop declarations (unsimplified) | Not recommended for a first run — too fine-grained, many classes have very few fields |
 
-The 17 classes are unevenly sized (from 150 fields for `AC06` Sunflower up to 10,874 for `AC04` Winter Grain) — a realistic test of how classifiers handle class imbalance. The **sqrt-proportional** sampling strategy (the default) is a reasonable starting point.
+The 17 classes are unevenly sized (from 150 fields for `AC06` Mustard up to 10,874 for `AC04` Winter Grain) — a realistic test of how classifiers handle class imbalance. The **sqrt-proportional** sampling strategy (the default) is a reasonable starting point.
+
+That imbalance is also why the **Macro F1 / Weighted F1** selector above the chart matters so much here — see [Comparing against the TESSERA paper](#comparing-against-the-tessera-paper) below before reading anything into a low number.
 
 **Doing a spatial split:** field boundaries reflect real farm/parcel layout, so nearby fields often share the same crop due to local rotation and farm management — exactly the kind of spatial autocorrelation the [Spatial Train/Test Split](#spatial-train-test-split-optional) feature above is for. The dataset is wider east–west (~0.69°) than north–south (~0.42°), so a simple east/west split works well:
 
@@ -797,6 +803,53 @@ The 17 classes are unevenly sized (from 150 fields for `AC06` Sunflower up to 10
 2. Select **Train area (blue)** and draw a rectangle over the **western half** of the red outlines (up to about 16.7°E)
 3. Select **Test area (yellow)** and draw a rectangle over the **eastern half** (from about 16.7°E onward), covering the full north–south extent
 4. Run the evaluation — compare the resulting accuracy against a run with no spatial split (random split) on the same data. Expect the spatial-split numbers to be somewhat lower — that's the honest estimate; a big gap between the two indicates the random split was overly optimistic due to autocorrelation
+
+### Comparing against the TESSERA paper
+
+The TESSERA paper reports its own results on this dataset, and TEE's numbers will look
+far lower unless you line the two protocols up first. Every difference below is real and
+expected — none of them means the embeddings are underperforming.
+
+**1. The metric. This is the big one.** The paper reports **weighted** F1; TEE's chart
+defaults to **Macro F1**. On a dataset this imbalanced (Winter Grain is ~37% of labelled
+pixels, `AC17` Other (Non Plants) under 0.1%) the two differ enormously — on one reference
+run at 30% training labels, the *same predictions* scored **0.56 macro** and **0.78
+weighted**. Switch the selector above the chart to **Weighted F1** before comparing.
+
+Neither metric is wrong: macro asks "how well does it do on a typical *class*", weighted
+asks "how well does it do on a typical *pixel*". They just answer different questions, and
+the paper answers the second one.
+
+**2. How the training set is drawn.** TEE's learning curve samples an **equal number of
+pixels per class**, so a 17-class run trains on a roughly balanced set while the test set
+keeps the natural, heavily skewed distribution. The paper instead takes a fixed share of
+each crop's *area*, keeping the natural class prior on both sides. Matching the prior is
+worth roughly 0.03–0.06 weighted F1 at the same training size. K-fold cross-validation does
+not rebalance, so it is the closer comparison of the two evaluation methods.
+
+**3. How train and test are separated.** By default TEE splits at the **pixel** level, so
+pixels from one field can land on both sides — see [Group by Field](#group-by-field-avoiding-within-field-leakage).
+The paper splits by **field**. On this dataset the leakage is worth roughly 0.05–0.07
+weighted F1, so tick **Group by field (no leakage)** for a like-for-like number.
+
+**4. How much training data.** The curve has not flattened by the time TEE's defaults stop.
+Weighted F1 keeps climbing well past 100,000 training pixels, so a run capped at a few tens
+of thousands will sit several points low no matter what else you match.
+
+**Roughly what to expect** once the protocols agree (weighted F1, year 2022, natural class
+prior, the `deep_mlp` classifier, which mirrors the paper's own architecture):
+
+| Setup | Weighted F1 |
+|-------|-------------|
+| Paper's reported figure at a 30% label ratio | 0.82 |
+| Pixel-level split, ~160k training pixels | ~0.82 |
+| Pixel-level split, ~1.3M training pixels | ~0.85 |
+| Field-level split (no leakage), 30% of fields | ~0.78–0.81 |
+
+Treat these as ballpark, not targets — they move with the seed, the sampling strategy and
+the classifier. The point is the *shape*: matched protocols land in the same region, and a
+score near 0.5 almost always means the metric, the year, or the split is misaligned rather
+than anything wrong with the data.
 
 ### Evaluation Method: Learning Curve or K-Fold
 
