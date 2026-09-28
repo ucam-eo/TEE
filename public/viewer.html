@@ -1057,7 +1057,7 @@
                 <div style="display:flex; gap:6px;">
                     <div style="flex:1;">
                         <label>Year of training</label>
-                        <select id="val-train-year-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+                        <select id="val-train-year-select" onchange="checkYearCoverageValidity()" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
                             <option value="2017">2017</option>
                             <option value="2018">2018</option>
                             <option value="2019">2019</option>
@@ -1071,7 +1071,7 @@
                     </div>
                     <div style="flex:1;">
                         <label>Year of test</label>
-                        <select id="val-test-year-select" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;" title="Score the trained classifier against a different year's embeddings at the same locations. Defaults to the training year.">
+                        <select id="val-test-year-select" onchange="checkYearCoverageValidity()" style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;" title="Score the trained classifier against a different year's embeddings at the same locations. Defaults to the training year.">
                             <option value="2017">2017</option>
                             <option value="2018">2018</option>
                             <option value="2019">2019</option>

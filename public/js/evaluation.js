@@ -515,6 +515,7 @@ async function updateYearCoverage(geojson) {
         _annotateYearSelectCoverage(document.getElementById('val-train-year-select'), coverage);
         _annotateYearSelectCoverage(document.getElementById('val-test-year-select'), coverage);
         _annotateYearSelectCoverage(document.getElementById('val-map-year-select'), coverage);
+        checkYearCoverageValidity();
     } catch (e) {
         console.warn('Failed to check year coverage:', e);
     }
@@ -523,6 +524,22 @@ async function updateYearCoverage(geojson) {
 // Annotates one <select>'s options with tile-coverage counts and disables
 // years with no coverage at all. Shared by both the train-year and
 // test-year selects (see updateYearCoverage above).
+//
+// Deliberately does NOT touch sel.value when the current selection turns
+// out to have no coverage -- it used to silently jump to "the first
+// available year" with no indication anything had changed. Confirmed live
+// (Keshav, chasing Frank's "embedding year was 2024 instead of 2022"
+// theory for the Austrian-crop F1 gap): "that silent disabling seems
+// pretty crazy! That should return an error." Ruled out as the actual
+// cause there (Austria's bbox has full 2017-2025 coverage, so nothing
+// would have triggered this path for that shapefile) -- but the silent-
+// substitution behaviour itself was real and worth fixing regardless: a
+// shapefile whose bbox genuinely lacks coverage for the selected year
+// could silently score against a different year's embeddings with zero
+// visible warning. Now the disabled option just sits there, visibly
+// selected-but-unusable ("2022 (no coverage)"), and
+// checkYearCoverageValidity() (called right after this from
+// updateYearCoverage) turns that into a real, blocking error.
 function _annotateYearSelectCoverage(sel, coverage) {
     if (!sel) return;
     Array.from(sel.options).forEach(opt => {
@@ -534,11 +551,45 @@ function _annotateYearSelectCoverage(sel, coverage) {
         opt.disabled = tiles === 0;
         opt.textContent = tiles > 0 ? `${opt.value} (${tiles} tiles)` : `${opt.value} (no coverage)`;
     });
-    // If current selection has no coverage, pick the first available
-    if (sel.selectedOptions[0] && sel.selectedOptions[0].disabled) {
-        const first = Array.from(sel.options).find(o => !o.disabled);
-        if (first) sel.value = first.value;
+}
+
+// Blocks Run Evaluation with a real, visible error when the currently
+// selected training or test year has no embedding coverage for the
+// uploaded shapefile's area -- see _annotateYearSelectCoverage's own
+// comment for why this replaced a silent auto-substitution. Also wired to
+// both year selects' onchange, so picking a valid year clears the error
+// and re-enables Run immediately, without needing to re-upload anything.
+function checkYearCoverageValidity() {
+    const trainSel = document.getElementById('val-train-year-select');
+    const testSel = document.getElementById('val-test-year-select');
+    const bad = [];
+    if (trainSel && trainSel.selectedOptions[0] && trainSel.selectedOptions[0].disabled) {
+        bad.push(`training year ${trainSel.value}`);
     }
+    if (testSel && testSel.selectedOptions[0] && testSel.selectedOptions[0].disabled) {
+        bad.push(`test year ${testSel.value}`);
+    }
+    const runBtn = document.getElementById('val-run-btn');
+    const status = document.getElementById('val-status');
+    if (bad.length > 0) {
+        if (runBtn) runBtn.disabled = true;
+        if (status) {
+            status.textContent = `No embedding coverage for ${bad.join(' and ')} in this area — pick a different year.`;
+            status.style.color = '#dc3545';
+        }
+        return false;
+    }
+    // Valid again -- only re-enable Run if a shapefile is actually loaded
+    // (the field select being enabled is the existing signal for that;
+    // don't stomp on Run staying disabled for that separate reason).
+    const fieldSel = document.getElementById('val-field-select');
+    if (runBtn && fieldSel && !fieldSel.disabled) {
+        runBtn.disabled = false;
+        if (status && status.textContent.startsWith('No embedding coverage for')) {
+            status.textContent = '';
+        }
+    }
+    return true;
 }
 
 function populateValClassTable(classNames, classData, isPixelCounts) {
@@ -2288,6 +2339,12 @@ function generateConfig() {
 async function runLargeAreaEvaluation() {
     const field = document.getElementById('val-field-select').value;
     if (!field) return;
+
+    // Belt-and-braces: checkYearCoverageValidity() already disables Run and
+    // shows an error the moment a selected year loses coverage, but this
+    // is the one place a request actually goes out -- refuse here too
+    // rather than trust the button's disabled state alone.
+    if (!checkYearCoverageValidity()) return;
 
     const evalMode = getEvalMode();
 
