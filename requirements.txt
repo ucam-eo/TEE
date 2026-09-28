@@ -72,9 +72,12 @@ tessera-vq @ git+https://github.com/sk818/tessera-vq.git@v0.7.4
 # paper co-author) own Austrian-crop split exactly: 30% of each class's
 # field area -> train, rest 1/7 val, 6/7 test, computed independently per
 # class. Off by default; learning-curve, classification only; see the
-# Validation panel and the User Guide's "How TEE's numbers can differ from
-# the paper's" section.
-tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.15.0
+# Validation panel's "Area-Stratified Split" section in the User Guide.
+# v1.15.1: a classifier's confusion matrix row/column for a class with zero
+# true test examples now surfaces an explicit status message (naming the
+# class and classifier) instead of silently showing a zero row that reads
+# identically to "the classifier failed on this class".
+tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.15.1
 numpy>=1.24.0
 rasterio>=1.3.0
 Pillow>=10.0.0
