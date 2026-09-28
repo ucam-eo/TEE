@@ -223,9 +223,13 @@ chosen by the user:
 - **No shapefile handy?** TEE ships `austria.zip` — Austrian INVEKOS crop
   field data (42,789 polygons, 17 crop classes) — downloadable from the
   Validation tab or directly at `/sample-data/austria.zip`. Use field
-  `HabUK` (not `Crop`, `Habitat`, or `NVC` — see the [User
+  `HabUK` (not `Crop`, `Habitat`, or `NVC`) and year **2022** (the labels
+  are the 2022 declarations; crops rotate, so a later year scores far
+  lower) — see the [User
   Guide](../public/user_guide.md#worked-example-austriazip) for a full
-  worked example including a spatial train/test split).
+  worked example including a spatial train/test split and [how to compare
+  against the TESSERA
+  paper](../public/user_guide.md#comparing-against-the-tessera-paper).
 
 ### Streaming evaluation
 
