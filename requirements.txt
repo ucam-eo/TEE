@@ -81,7 +81,15 @@ tessera-vq @ git+https://github.com/sk818/tessera-vq.git@v0.7.4
 # to suggest raising Max patches, which does essentially nothing (a fixed
 # 5 patches/tile regardless of the budget); now points at trying a
 # different seed instead, confirmed live to actually work.
-tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.15.2
+# v1.15.3: the real fix behind v1.15.2's advice change -- patches_per_tile
+# had been silently stuck at a fixed 5 regardless of Max patches since a
+# 2026-04-03 regression. Restored: it scales with the budget again (still
+# floored at 5), so raising Max patches for a spatial model is a real,
+# working lever once more.
+# v1.15.4: updates v1.15.2's advice text again now that v1.15.3 fixed the
+# underlying bug -- spatial models correctly get "try increasing Max
+# patches, or a different seed" once more.
+tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.15.4
 numpy>=1.24.0
 rasterio>=1.3.0
 Pillow>=10.0.0
