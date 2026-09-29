@@ -77,7 +77,11 @@ tessera-vq @ git+https://github.com/sk818/tessera-vq.git@v0.7.4
 # true test examples now surfaces an explicit status message (naming the
 # class and classifier) instead of silently showing a zero row that reads
 # identically to "the classifier failed on this class".
-tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.15.1
+# v1.15.2: fixes that same warning's advice for spatial models -- it used
+# to suggest raising Max patches, which does essentially nothing (a fixed
+# 5 patches/tile regardless of the budget); now points at trying a
+# different seed instead, confirmed live to actually work.
+tessera-eval[server] @ git+https://github.com/ucam-eo/tessera-eval.git@v1.15.2
 numpy>=1.24.0
 rasterio>=1.3.0
 Pillow>=10.0.0
