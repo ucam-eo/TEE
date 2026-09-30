@@ -772,6 +772,20 @@ function hideFinishButtons() {
     container.innerHTML = '';
 }
 
+// Zero-test-sample warnings (tessera-eval v1.15.1+) arrive as ordinary
+// 'status' events just before 'confusion_matrices' -- and 'done' follows
+// moments later and overwrites the status line with "Done in ...", so the
+// warning was on screen for a fraction of a second and then gone for good.
+// Confirmed live (Moustafa Eweda, 2026-09-30): a run with a genuinely
+// zero confusion-matrix row finished showing only "Done in 12126s --
+// 199,496 pixels, 38 classes". Collect them here and re-show them under
+// the Done line so they survive to the end of the run.
+let _runWarnings = [];
+
+function _isZeroRowWarning(message) {
+    return typeof message === 'string' && message.includes('no test samples for');
+}
+
 function handleStreamEvent(ev) {
     const status = document.getElementById('val-status');
     const metric = document.getElementById('val-metric-select').value;
@@ -798,6 +812,7 @@ function handleStreamEvent(ev) {
         // state (tessera-eval v1.7.2+ carries task on it directly), so set
         // it here too rather than trusting event-ordering alone.
         if (ev.task) currentLargeAreaTask = ev.task;
+        _runWarnings = [];
         updateTaskDetectedLabel();
         // Same cache-hit-skips-field_start issue as above -- redo the
         // metric-selector visibility here too rather than trusting it was
@@ -1034,6 +1049,13 @@ function handleStreamEvent(ev) {
             : '';
         status.textContent = `Done in ${ev.elapsed_seconds}s${suffix}${yearSuffix}`;
         status.style.color = '#28a745';
+        for (const w of _runWarnings) {
+            const div = document.createElement('div');
+            div.textContent = '\u26a0 ' + w;
+            div.style.color = '#b36b00';
+            div.style.marginTop = '4px';
+            status.appendChild(div);
+        }
         const dlBtnH = document.getElementById('val-download-btn');
         if (dlBtnH) dlBtnH.disabled = false;  // always enable — trains on click
         hideFinishButtons();
@@ -1045,6 +1067,9 @@ function handleStreamEvent(ev) {
         // Keep-alive, ignore
 
     } else if (ev.event === 'status') {
+        if (_isZeroRowWarning(ev.message) && !_runWarnings.includes(ev.message)) {
+            _runWarnings.push(ev.message);
+        }
         status.dataset.updated = '1';
         status.textContent = ev.message;
         showResultsPanel(ev.message);
