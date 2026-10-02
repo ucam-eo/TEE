@@ -174,6 +174,9 @@ def viewport_info(request, viewport_name):
         validate_viewport_name(viewport_name)
     except ValueError as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    allowed, deny_response = check_viewport_owner(request, viewport_name)
+    if not allowed:
+        return deny_response
     try:
         viewport = read_viewport_file(viewport_name)
         viewport['name'] = viewport_name
