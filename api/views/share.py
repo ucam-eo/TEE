@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -12,6 +13,31 @@ from lib.config import SHARE_DIR
 from lib.viewport_utils import validate_viewport_name
 
 logger = logging.getLogger(__name__)
+
+MAX_SHARE_ZIP_SIZE = 50 * 1024 * 1024  # 50 MB upload limit
+MAX_SHARE_ZIP_UNCOMPRESSED_SIZE = 500 * 1024 * 1024  # 500 MB expanded limit
+
+
+def _validate_zip_upload(zip_file):
+    """Reject oversized, non-ZIP, path-traversing, or archive-bomb uploads."""
+    if zip_file.size > MAX_SHARE_ZIP_SIZE:
+        return 'ZIP file exceeds maximum allowed size'
+    if not zipfile.is_zipfile(zip_file):
+        return 'Uploaded file is not a valid ZIP archive'
+    zip_file.seek(0)
+    try:
+        with zipfile.ZipFile(zip_file) as zf:
+            total_uncompressed = 0
+            for info in zf.infolist():
+                if info.filename.startswith('/') or '..' in Path(info.filename).parts:
+                    return 'ZIP archive contains unsafe file paths'
+                total_uncompressed += info.file_size
+                if total_uncompressed > MAX_SHARE_ZIP_UNCOMPRESSED_SIZE:
+                    return 'ZIP archive content exceeds maximum allowed size'
+    except zipfile.BadZipFile:
+        return 'Uploaded file is not a valid ZIP archive'
+    zip_file.seek(0)
+    return None
 
 
 def _sanitize_email(email):
