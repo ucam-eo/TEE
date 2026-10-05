@@ -1040,6 +1040,16 @@
                         style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
                     <div style="font-size:11px; color:#888; margin-top:2px;">256×256 tile crops for spatial MLP and U-Net</div>
 
+                    <label>Max Spatial MLP training points</label>
+                    <input type="number" id="val-max-spatial-train" value="50000" min="1000" step="10000" placeholder="no limit"
+                        style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+                    <div style="font-size:11px; color:#888; margin-top:2px;">Spatial MLP trains on at most this many points (pixels with their neighbourhoods), chosen at random before each is flipped into 4 training examples. Learning-curve steps that would use more all train on the same capped set, so the curve flattens above it. Blank = no limit; larger values need more memory and time.</div>
+
+                    <label>Spatial features per patch</label>
+                    <input type="number" id="val-max-spatial-px" value="5000" min="100" step="500" placeholder="no limit"
+                        style="width:100%; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">
+                    <div style="font-size:11px; color:#888; margin-top:2px;">How many labelled pixels in each 256×256 patch become Spatial MLP points (chosen at random). A fully labelled patch has 65,536. Blank = use every labelled pixel; larger values need more memory.</div>
+
                     <label>Spatial split (optional) — draw rectangles on map</label>
                     <div style="display:flex; gap:6px; align-items:center;">
                         <select id="val-bbox-type" style="flex:1; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; font-size:13px;">

@@ -168,6 +168,15 @@ function buildClassColorMap(geojson, fieldName) {
     return map;
 }
 
+// A blank limit field means "no limit" -- sent as null (the server treats a
+// missing key as its default, and null as no limit).
+function optionalLimitInput(id) {
+    const el = document.getElementById(id);
+    if (!el) return undefined;
+    const v = parseInt(String(el.value).replace(/,/g, ''));
+    return Number.isFinite(v) && v > 0 ? v : null;
+}
+
 function addValGeoJsonLayer() {
     const maps = window.maps;
     if (valGeoJsonLayer && maps.rgb) maps.rgb.removeLayer(valGeoJsonLayer);
@@ -177,6 +186,11 @@ function addValGeoJsonLayer() {
     valGeoJsonLayer = L.geoJSON(valGeoJsonData, {
         style: function() {
             return { color: '#ff0000', weight: 1.5, fillOpacity: 0.15, fillColor: '#ff0000' };
+        },
+        // Point ground truth: small circles in the same red, instead of
+        // Leaflet's default pin icons (thousands of pins are unreadable).
+        pointToLayer: function(feature, latlng) {
+            return L.circleMarker(latlng, { radius: 3 });
         },
         onEachFeature: function(feature, layer) {
             if (fieldName && feature.properties[fieldName] != null) {
@@ -2344,6 +2358,10 @@ function generateConfig() {
         "_sampling_choices": "equal | sqrt | proportional",
         "max_patches": parseInt(document.getElementById('val-max-patches').value) || 500,
         "_max_patches": "max 256x256 tile crops for spatial MLP and U-Net (min 100)",
+        "max_spatial_train_samples": optionalLimitInput('val-max-spatial-train'),
+        "_max_spatial_train_samples": "Spatial MLP training points before 4x flip augmentation (null = no limit)",
+        "max_spatial_px_per_patch": optionalLimitInput('val-max-spatial-px'),
+        "_max_spatial_px_per_patch": "labelled pixels per patch used as Spatial MLP points (null = all)",
         "output_dir": "./eval_output",
         "dry_run": false,
         "seed": getSeed(),
@@ -2514,6 +2532,8 @@ async function runLargeAreaEvaluation() {
                 max_training_samples: parseInt(document.getElementById('val-max-train-large').value.replace(/,/g, '')) || 200000,
                 sampling: document.getElementById('val-sampling-select').value || 'sqrt',
                 max_patches: parseInt(document.getElementById('val-max-patches').value) || 500,
+                max_spatial_train_samples: optionalLimitInput('val-max-spatial-train'),
+                max_spatial_px_per_patch: optionalLimitInput('val-max-spatial-px'),
                 task: getTaskOverride(),   // 'auto' lets the server detect; else force it
                 seed: getSeed(),
                 eval_mode: evalMode,
@@ -3130,6 +3150,15 @@ function applyConfig(config) {
     if (config.max_patches) {
         const input = document.getElementById('val-max-patches');
         if (input) input.value = config.max_patches;
+    }
+    // Spatial MLP limits: null in a config means "no limit" (blank field);
+    // a config from before these settings existed leaves the defaults.
+    for (const [key, id] of [['max_spatial_train_samples', 'val-max-spatial-train'],
+                             ['max_spatial_px_per_patch', 'val-max-spatial-px']]) {
+        if (key in config) {
+            const input = document.getElementById(id);
+            if (input) input.value = config[key] == null ? '' : config[key];
+        }
     }
 
     // Restore spatial bounding boxes

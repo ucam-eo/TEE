@@ -71,7 +71,7 @@ Viewport Manager from then on.
 ### Path 3: Evaluate classifiers
 
 1. In the Viewport Manager, go to the **Validation** tab and click **Evaluate**
-2. Drag and drop a ground-truth `.zip` shapefile (e.g., habitat survey polygons) onto the upload area
+2. Drag and drop a ground-truth `.zip` shapefile (habitat survey polygons or points) onto the upload area
 3. Choose a class field (the column in your shapefile that contains the habitat names), select a year, and tick the classifiers you want to test
 4. Click **Run Evaluation** — TEE will train each classifier and show you learning curves and a confusion matrix so you can see how well the embeddings distinguish your habitat classes
 
@@ -591,7 +591,7 @@ If `nvidia-smi` shows a GPU but `torch.cuda.is_available()` returns False, insta
 
 ## Validation (Evaluating Classifiers)
 
-Validation answers the question: **"How well can machine learning distinguish my habitat classes using satellite embeddings?"** You upload a ground-truth shapefile (polygons with habitat labels from a field survey, for example), and TEE trains several classifiers on increasing amounts of your data. The result is a **learning curve** showing how accuracy improves as more training data is added, plus a **confusion matrix** showing which classes get mixed up.
+Validation answers the question: **"How well can machine learning distinguish my habitat classes using satellite embeddings?"** You upload a ground-truth shapefile (polygons or points with habitat labels from a field survey, for example), and TEE trains several classifiers on increasing amounts of your data. The result is a **learning curve** showing how accuracy improves as more training data is added, plus a **confusion matrix** showing which classes get mixed up.
 
 ![Validation — learning curves, confusion matrix, and ground truth overlay](images/validation.png)
 
@@ -617,7 +617,9 @@ Validation answers the question: **"How well can machine learning distinguish my
 | Step | Panel | What to do |
 |------|-------|------------|
 | 1 | — | In the Viewport Manager, go to the **Validation** tab and click **Evaluate** |
-| 2 | 1 | Drag and drop one or more `.zip` shapefiles onto the upload area. Uploads **accumulate** (the polygons are merged) — the panel lists what's currently loaded, with feature counts; click **Clear** to start over. |
+| 2 | 1 | Drag and drop one or more `.zip` shapefiles onto the upload area. Polygons, points, or a mix all work. Uploads **accumulate** (the features are merged) — the panel lists what's currently loaded, with feature counts; click **Clear** to start over. |
+
+> **Point ground truth:** each point is treated as one labelled 10 m pixel. TEE uses the points themselves rather than sampling inside them (a random subset if there are more than **Max pixel samples**), and for the area-based **Sampling** strategies each point counts as one pixel's area. Points appear as small red circles on the map. Spatial MLP and U-Net need labelled pixels inside each 256×256 patch, so sparse points give them much less to learn from than polygons do.
 | 3 | 2 | Check the satellite panel — your polygons should appear as red outlines on the map |
 | 4 | 3 | Review the class table — it shows each habitat class and how many polygons/pixels it contains |
 | 5 | 1 | Select the **Class field** (the column in your shapefile with habitat names or numeric targets). Optionally set **Task type** if the auto-detection is wrong (see [Task Type](#task-type-classification-vs-regression)), and pick the **Year of training** / **Year of test** satellite data (see [Train/Test Years](#train-test-years-optional) — leave both the same for a standard single-year run). *(Optional)* drop a repeat-survey shapefile in **Test Ground Truth** to use it as the held-out test set (see [Separate Test File](#separate-test-file-optional)) |
@@ -720,6 +722,8 @@ When you select Spatial MLP or U-Net, TEE needs to download actual embedding til
 | Setting | Default | What it controls |
 |---------|---------|-----------------|
 | **Max spatial/U-Net patches** | 500 | How many patches to extract. More patches = better accuracy but longer download and training time. Minimum 100. |
+| **Max Spatial MLP training points** | 50,000 | Spatial MLP trains on at most this many points (a pixel plus its neighbourhood), chosen at random; each is then flipped into 4 training examples. A learning-curve step that would use more trains on the same capped set, so the curve flattens above this value. Blank = no limit. Larger values need more memory and time. |
+| **Spatial features per patch** | 5,000 | How many labelled pixels in each patch become Spatial MLP points, chosen at random (a fully labelled 256×256 patch has 65,536). Blank = every labelled pixel. Larger values need more memory. |
 
 Tiles are sampled from across the shapefile area so patches come from diverse geographic regions (each tile contributes up to Max patches ÷ number of tiles, and at least 5). During U-Net training, each patch is augmented 16× (4 rotations × 2 flips × 2 noise levels) to increase the effective training set size.
 
@@ -827,7 +831,7 @@ The **Evaluation method** dropdown chooses how classifiers are scored:
 
 | Method | What it does | When to use |
 |--------|-------------|-------------|
-| **Learning curve** (default) | Trains at increasing fractions of the data (1%–80%) with repeated random resamples, against a held-out (or spatial) test set. The output is a curve of accuracy vs training size. | You want to see whether you have *enough* labels, or how quickly the classifier learns. |
+| **Learning curve** (default) | Trains at increasing fractions of the data (1%–80%, or up to 100% when the test set is separate) with repeated random resamples, against a held-out (or spatial) test set. The output is a curve of accuracy vs training size. | You want to see whether you have *enough* labels, or how quickly the classifier learns. |
 | **K-fold cross-validation** | Splits the **sampled** labelled pixels into *k* folds; each fold is held out once for testing while the other *k*−1 train. Reports the mean ± standard deviation across folds. | You want a single robust accuracy estimate that uses every sampled pixel for both training and testing. |
 
 When you pick **K-fold cross-validation**, a **Folds (k)** box appears (2–20, default 5).
@@ -838,7 +842,7 @@ Not every pixel in your shapefile — the points that **Max pixel samples** and 
 
 It supports the **pixel classifiers** (k-NN, Random Forest, XGBoost, MLP, Deep MLP) **and the Spatial MLP models** (3×3, 5×5). **U-Net is not available in k-fold mode** — it trains on 256×256 image patches, not points, so there is no point-based fold split for it; use the learning curve to evaluate U-Net. If U-Net is ticked when you run a k-fold evaluation it is dropped with a note in the log.
 
-Spatial MLP in k-fold cross-validates over its **neighbourhood-feature points** — a *different*, generally larger set than the pixel points, extracted from the same downloaded 256×256 tile crops (≤ 5000 px per patch). Picking k-fold with a Spatial MLP model therefore triggers the tile download, so the run is slower than a pixel-only k-fold run.
+Spatial MLP in k-fold cross-validates over its **neighbourhood-feature points** — a *different*, generally larger set than the pixel points, extracted from the same downloaded 256×256 tile crops (up to **Spatial features per patch** labelled pixels each, default 5,000). Picking k-fold with a Spatial MLP model therefore triggers the tile download, so the run is slower than a pixel-only k-fold run.
 
 #### How the folds are chosen
 
@@ -949,7 +953,7 @@ The learning curve is the main output of a **learning-curve** evaluation. It sho
 
 ![Example learning curve](images/learning_curve.png)
 
-- **X axis**: percentage of the training data used (from 1% up to 80%)
+- **X axis**: percentage of the training data used, from 1% up to 80%. With a random split the remaining 20% is the test set, so 80% is the most that can be trained on. When the test set is separate (spatial rectangles, a different test year, a test file, area-stratified split or group-by-field holdout), the curve goes up to 100% of the training data. Every step uses the same number of repeated runs.
 - **Y axis**: F1 score — a measure of accuracy from 0 (worst) to 1 (perfect). The shaded band around each line shows ±1 standard deviation across repeated runs.
 - **Steeper curves** mean the embeddings separate your classes well even with very little training data — a good sign
 - **Flat curves at low F1** suggest the classes are hard to distinguish, or you may need different training features
