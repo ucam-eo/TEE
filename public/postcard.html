@@ -605,11 +605,13 @@
             renderCurrentPostcard(randomBands());
         }
 
-        // 10 frames x 2s = 20s. Each frame is a fresh random 3-band render of
-        // the *already-reconstructed* mosaic (same randomBands()/renderCurrentPostcard
+        // 10 frames x 0.5s = 5s loop. Each frame is a fresh random 3-band render
+        // of the *already-reconstructed* mosaic (same randomBands()/renderCurrentPostcard
         // as "change colours") -- no new fetch, just re-encoding what's in memory.
+        // The live preview is paced by the same delay, so this also sets how
+        // long creating the animation takes (was 2s/frame: 20s before encoding).
         const GIF_FRAME_COUNT = 10;
-        const GIF_FRAME_DELAY_MS = 2000;
+        const GIF_FRAME_DELAY_MS = 500;
         let gifBlobUrl = null;
 
         async function generateGif() {
@@ -629,7 +631,9 @@
             animateBtn.textContent = 'Animating... 0%';
 
             const gif = new GIF({
-                workers: 2,
+                // One encoder worker per core (capped): gif.js encodes frames
+                // in parallel, so 2 fixed workers left most machines idle.
+                workers: Math.min(8, Math.max(2, navigator.hardwareConcurrency || 2)),
                 quality: 10,
                 width: currentDisplayW,
                 height: currentDisplayH,
