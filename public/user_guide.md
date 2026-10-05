@@ -678,6 +678,8 @@ Each classifier has adjustable parameters. Click the **...** button next to a cl
 | U-Net | Learning rate | 0.001 | Step size for the neural network optimiser. |
 | U-Net | Depth | 3 | Number of encoder/decoder levels. Deeper = captures larger-scale patterns. |
 | U-Net | Base filters | 64 | Number of feature channels in the first layer. Doubles at each level. |
+| U-Net | Max train patches | no limit | Learning curve only. Caps how many patches U-Net trains on at each step; blank trains on the requested percentage of all extracted patches. |
+| U-Net | Max test patches | no limit | Learning curve only. Caps how many patches U-Net is tested on at each step; blank tests on every patch not used for training. A small cap leaves many classes with no test samples, so their confusion-matrix rows show 0. The progress log reports the actual counts at each step. |
 
 ### Hyperparameter Variants
 
@@ -719,7 +721,7 @@ When you select Spatial MLP or U-Net, TEE needs to download actual embedding til
 |---------|---------|-----------------|
 | **Max spatial/U-Net patches** | 500 | How many patches to extract. More patches = better accuracy but longer download and training time. Minimum 100. |
 
-Tiles are sampled from across the shapefile area so patches come from diverse geographic regions (maximum 5 patches per tile). During U-Net training, each patch is augmented 16× (4 rotations × 2 flips × 2 noise levels) to increase the effective training set size.
+Tiles are sampled from across the shapefile area so patches come from diverse geographic regions (each tile contributes up to Max patches ÷ number of tiles, and at least 5). During U-Net training, each patch is augmented 16× (4 rotations × 2 flips × 2 noise levels) to increase the effective training set size.
 
 > **Tip:** If you only want to test pixel classifiers (k-NN, Random Forest, etc.), you don't need spatial patches at all — uncheck Spatial MLP and U-Net, and the evaluation will be much faster since no tiles need to be downloaded.
 
