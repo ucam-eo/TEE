@@ -344,16 +344,25 @@ function applyYearSelector(selectorId, years, currentYear, onChange) {
         const option = document.createElement('option');
         option.value = year;
         option.textContent = year;
-        if (String(year) === yearToUse) option.selected = true;
+        // defaultSelected sets the `selected` *attribute*, which is what
+        // cloneNode() below copies -- the .selected property alone doesn't
+        // survive the clone.
+        if (String(year) === yearToUse) option.selected = option.defaultSelected = true;
         selector.appendChild(option);
     });
 
     // Show/hide based on count
     selector.style.display = years.length > 1 ? 'inline-block' : 'none';
 
-    // Replace element to remove stale listeners, then attach new one
+    // Replace element to remove stale listeners, then attach new one.
+    // cloneNode() drops the live selection, so without re-applying it the
+    // dropdown fell back to its first option (the earliest year) while the
+    // panel showed yearToUse's tiles -- confirmed live on a reopened viewport
+    // (Eddington): Panel 3 labelled 2020 while showing 2024, and the change
+    // heatmap, which reads this dropdown's value, compared the wrong year.
     const clone = selector.cloneNode(true);
     selector.parentNode.replaceChild(clone, selector);
+    clone.value = yearToUse;
     clone.addEventListener('change', (e) => onChange(e.target.value));
 
     return yearToUse;
