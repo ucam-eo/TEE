@@ -652,7 +652,10 @@ def embedding_coverage(request):
 
     try:
         from geotessera import GeoTessera
-        gt = GeoTessera()
+        # Name the dataset: geotessera 0.11 changed a bare GeoTessera() to
+        # v1.1-cambridge (a sparse test run), which would report coverage for
+        # different embeddings than viewports are built from (v1.0).
+        gt = GeoTessera(dataset_version="v1.0")
         coverage = {}
         for year in range(MIN_YEAR, MAX_YEAR + 1):
             tiles = gt.registry.load_blocks_for_region(tuple(bbox), year)
