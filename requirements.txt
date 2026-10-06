@@ -11,15 +11,12 @@ django-cors-headers>=4.0.0
 waitress>=3.0.0
 
 # Geospatial processing
-# geotessera: no longer used by process_viewport.py's own pipeline (VQTessera,
-# below, is the standard client there now) -- kept for the coverage-probe
-# endpoint (api/views/viewports.py) and scripts/tee_evaluate.py, both of which
-# use it directly, and pulled in transitively by tessera-eval.
-# >=0.10.1: source.coop embedding hosting (0.10 retired the old host), v1.1/v2
-# dataset-version support, and the UTM-zone-boundary fix in GeoTesseraZarr.
-# Also the floor tessera-eval[server] 1.8.0 requires. (Was a git-commit pin to
-# PR #357 while 0.10.x was unreleased -- 0.10.1 is on PyPI now.)
-geotessera>=0.10.1
+# geotessera: read through tessera_eval.dataset's Zarr client (v1.1-dclimate,
+# the wall-to-wall 2017-2025 run) by tessera-eval, the coverage-probe endpoint
+# (api/views/viewports.py) and scripts/tee_evaluate.py. >=0.11.0: v1.1-dclimate
+# Zarr/Icechunk support and direct bucket reads (no throttling gateway). NPY
+# tiles are deprecated and no longer used.
+geotessera>=0.11.0
 # Tessera VQ bolt-on client (VQTessera) -- the standard embeddings client for
 # every viewport (process_viewport.py, api/embeddings_provider.py,
 # api/views/postcard.py), not an opt-in fast path. See docs/architecture.md

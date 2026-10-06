@@ -37,7 +37,7 @@ def config_with_bad_field(tmp_path, gdf):
     }
 
 
-@patch("geotessera.GeoTessera")
+@patch("tessera_eval.dataset.ZarrClient")
 def test_dry_run_bad_field_emits_error(MockGT, config_with_bad_field, gdf):
     mock_gt = MockGT.return_value
     mock_gt.registry.load_blocks_for_region.return_value = [(2024, 0.5, 0.5)]

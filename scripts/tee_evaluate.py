@@ -2,7 +2,8 @@
 """Standalone CLI for large-area evaluation.
 
 Evaluates classifiers/regressors on ground-truth shapefiles that cover
-areas larger than a single viewport, using GeoTessera tile-by-tile loading.
+areas larger than a single viewport, reading embeddings tile by tile through
+tessera_eval's Zarr client (v1.1-dclimate).
 
 Usage:
     python scripts/tee_evaluate.py --config eval_config.json [--dry-run] [--stdout]
@@ -79,12 +80,12 @@ def load_shapefile(shapefile_path):
 
 def run_dry_run(config, gdf, out=sys.stdout):
     """Print stats without downloading or evaluating."""
-    from geotessera import GeoTessera
+    from tessera_eval.dataset import make_client
 
     bounds = gdf.total_bounds
     bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
 
-    gt = GeoTessera()
+    gt = make_client()
 
     for year in config.get("years", [2024]):
         tiles = gt.registry.load_blocks_for_region(bbox, year)
@@ -124,11 +125,11 @@ def run_dry_run(config, gdf, out=sys.stdout):
 
 def run_evaluation(config, gdf, out=sys.stdout):
     """Run full evaluation for each year and field."""
-    from geotessera import GeoTessera
     from tessera_eval.data import load_embeddings_for_shapefile
+    from tessera_eval.dataset import make_client
     from tessera_eval.evaluate import run_kfold_cv
 
-    gt = GeoTessera()
+    gt = make_client()
     seed = config.get("seed", 42)
     k = config.get("kfold", 5)
     max_train = config.get("max_training_samples")

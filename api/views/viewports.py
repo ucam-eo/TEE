@@ -639,6 +639,44 @@ def add_years(request, viewport_name):
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 
+_coverage_client = None  # shared embeddings reader, opened on first use
+
+
+def _zarr_year_coverage(bbox, grid=5):
+    """{year: tiles} for the embeddings dataset TEE reads (v1.1-dclimate, via
+    tessera_eval's Zarr client), 0 for a year with no data in *bbox*.
+
+    A year counts as covered when any point of a grid x grid sample across
+    the bbox has a real embedding -- a grid rather than tile centres, so a
+    small coastal viewport whose tile centre is over the sea isn't wrongly
+    reported as having no data. Covered years report the bbox's tile count,
+    which is what the year pickers display.
+    """
+    import numpy as np
+    from tessera_eval.dataset import make_client, tiles_for_bbox
+
+    global _coverage_client
+    if _coverage_client is None:
+        _coverage_client = make_client()
+    store_years = set(getattr(_coverage_client.store, 'years', None) or [])
+
+    west, south, east, north = bbox
+    xs = np.linspace(west, east, grid)
+    ys = np.linspace(south, north, grid)
+    points = [(float(x), float(y)) for x in xs for y in ys]
+    n_tiles = len(tiles_for_bbox(bbox))
+
+    coverage = {}
+    for year in range(MIN_YEAR, MAX_YEAR + 1):
+        if year not in store_years:
+            coverage[str(year)] = 0
+            continue
+        vecs = _coverage_client.sample_embeddings_at_points(points, year=year)
+        has_data = bool(np.isfinite(vecs).all(axis=1).any())
+        coverage[str(year)] = n_tiles if has_data else 0
+    return coverage
+
+
 def embedding_coverage(request):
     """Check which years have GeoTessera embedding coverage for a bbox."""
     try:
@@ -651,12 +689,7 @@ def embedding_coverage(request):
         return JsonResponse({'error': 'bbox is required as [minLon, minLat, maxLon, maxLat]'}, status=400)
 
     try:
-        from geotessera import GeoTessera
-        gt = GeoTessera()
-        coverage = {}
-        for year in range(MIN_YEAR, MAX_YEAR + 1):
-            tiles = gt.registry.load_blocks_for_region(tuple(bbox), year)
-            coverage[str(year)] = len(tiles)
+        coverage = _zarr_year_coverage(tuple(float(v) for v in bbox))
         return JsonResponse({'coverage': coverage})
     except Exception as e:
         logger.error(f"Error checking embedding coverage: {e}")
