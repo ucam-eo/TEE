@@ -112,7 +112,7 @@ class TestAutoTypeDetection:
 # ── TestDryRun ──
 
 class TestDryRun:
-    @patch("geotessera.GeoTessera")
+    @patch("tessera_eval.dataset.ZarrClient")
     def test_dry_run_outputs_stats(self, MockGT, valid_config, tmp_shapefile):
         _, gdf = tmp_shapefile
         mock_gt = MockGT.return_value
@@ -131,7 +131,7 @@ class TestDryRun:
         assert events[0]["field"] == "habitat"
         assert events[0]["field_type"] == "classification"
 
-    @patch("geotessera.GeoTessera")
+    @patch("tessera_eval.dataset.ZarrClient")
     def test_dry_run_no_download(self, MockGT, valid_config, tmp_shapefile):
         _, gdf = tmp_shapefile
         mock_gt = MockGT.return_value

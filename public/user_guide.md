@@ -546,7 +546,7 @@ In all cases, open **http://localhost:8001** in your browser after running the c
 |---------|------------|
 | `Connection refused` | The compute server isn't running. Re-run the deploy script. |
 | `Cannot reach hosted server` | Check your internet connection: `curl https://tee.cl.cam.ac.uk/health` |
-| `No GeoTessera tiles found` | Not all years have coverage everywhere. Try year **2025** (the widest coverage). |
+| `No GeoTessera tiles found` | Evaluations use the v1.1 embeddings, which cover the whole land surface for 2017–2025, so this usually means the area is over the sea or outside 2017–2025. A few areas were left out of individual years for lack of satellite observations; try a neighbouring year. |
 | `ModuleNotFoundError` (All Local) | Dependencies aren't installed, or you're not running from inside the `TEE` folder. From inside it: `venv/bin/pip install -r requirements.txt` |
 | `ModuleNotFoundError` (Remote GPU) | Dependencies aren't installed on the server. Run: `ssh gpu-box '~/TEE/venv/bin/pip install -r ~/TEE/requirements.txt'` |
 | Script exits immediately with no output | You ran `deploy-compute.sh` from outside the `TEE` folder — `cd` into it first |
