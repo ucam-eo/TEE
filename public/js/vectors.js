@@ -316,11 +316,18 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
         };
 
         const grid = buildGridLookup(coords, numPixels);
-        localVectors = {
+        // Keep a reference to *this* call's result and return that, never the
+        // shared `localVectors` global: the cache write below awaits, and the
+        // change heatmap downloads two years concurrently -- returning the
+        // global handed both callers whichever year finished last, so the
+        // heatmap compared one year with itself (every distance 0, every
+        // pixel "Major change"). Confirmed live on a v1.1 viewport (dasd).
+        const result = {
             values, coords, metadata,
             gridLookup: grid, numVectors: numPixels, dim,
             viewport, year: String(year),
         };
+        localVectors = result;
 
         setProgress(100, 'Done');
         if (overlay) overlay.style.display = 'none';
@@ -339,7 +346,7 @@ async function downloadVectorDataVq(viewport, year, vqMeta) {
         ) / (1024 * 1024);
         console.log(`[VECTORS] VQ load complete: ${numPixels} px, wire ~${wireMb.toFixed(1)} MB (was ~28 MB)`);
 
-        return localVectors;
+        return result;
     } catch (err) {
         console.error('[VECTORS] VQ download failed:', err);
         // If this is the contiguous-allocation ceiling, log enough to tell
@@ -420,7 +427,7 @@ async function downloadVectorData(viewport, year) {
             console.log(`[VECTORS] Cache hit for ${viewport}/${year}`);
             const numVectors = cached.values.length / 128;
             const grid = buildGridLookup(cached.coords, numVectors);
-            localVectors = {
+            const result = {
                 values: cached.values,
                 coords: cached.coords,
                 metadata: cached.metadata,
@@ -430,7 +437,8 @@ async function downloadVectorData(viewport, year) {
                 viewport,
                 year: String(year)
             };
-            return localVectors;
+            localVectors = result;
+            return result;  // this call's data, not the shared global (see downloadVectorDataVq)
         }
         await VectorCache.delete(viewport, year);
     }
@@ -607,7 +615,7 @@ async function downloadVectorData(viewport, year) {
             metadata
         }).catch(e => console.warn('[VECTORS] Cache write failed:', e));
 
-        localVectors = {
+        const result = {
             values: embeddingsData,
             coords: coordsData,
             metadata,
@@ -617,9 +625,10 @@ async function downloadVectorData(viewport, year) {
             viewport,
             year: String(year)
         };
+        localVectors = result;
 
         console.log(`[VECTORS] Downloaded and cached: ${numVectors} vectors for ${viewport}/${year}`);
-        return localVectors;
+        return result;  // this call's data, not the shared global (see downloadVectorDataVq)
 
     } catch (error) {
         console.error('[VECTORS] Download failed:', error);
