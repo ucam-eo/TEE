@@ -1092,7 +1092,21 @@ async function loadHeatmap() {
         // Restore localVectors
         window.localVectors = savedLocalVectors;
 
-        const numVectors = Math.min(data1.numVectors, data2.numVectors);
+        // Pair the two years by pixel, not by vector index: with gaps in the
+        // source data each year keeps a different set of pixels. Pixels that
+        // are a gap in either year are left out of the heatmap.
+        const grid2 = data2.gridLookup || window.buildGridLookup(data2.coords, data2.numVectors);
+        const coords1 = data1.coords;
+        const pairs1 = new Int32Array(data1.numVectors);
+        const pairs2 = new Int32Array(data1.numVectors);
+        let numVectors = 0;
+        for (let i = 0; i < data1.numVectors; i++) {
+            const j = window.gridLookupIndex(grid2, coords1[i * 2], coords1[i * 2 + 1]);
+            if (j < 0) continue;
+            pairs1[numVectors] = i;
+            pairs2[numVectors] = j;
+            numVectors++;
+        }
         const dim = 128;
         const gt = data1.metadata.geotransform;
         const emb1 = data1.values;
@@ -1108,17 +1122,17 @@ async function loadHeatmap() {
 
         for (let i = 0; i < numVectors; i++) {
             let sum = 0;
-            const base = i * dim;
+            const base1 = pairs1[i] * dim, base2 = pairs2[i] * dim;
             for (let d = 0; d < dim; d++) {
-                const diff = (emb1[base + d] * dq1.scale[d] + dq1.min[d])
-                           - (emb2[base + d] * dq2.scale[d] + dq2.min[d]);
+                const diff = (emb1[base1 + d] * dq1.scale[d] + dq1.min[d])
+                           - (emb2[base2 + d] * dq2.scale[d] + dq2.min[d]);
                 sum += diff * diff;
             }
             const dist = Math.sqrt(sum);
             rawDists[i] = dist;
 
-            const px = coords[i * 2];
-            const py = coords[i * 2 + 1];
+            const px = coords[pairs1[i] * 2];
+            const py = coords[pairs1[i] * 2 + 1];
             distances[i] = {
                 lat: gt.f + py * gt.e,
                 lon: gt.c + px * gt.a,

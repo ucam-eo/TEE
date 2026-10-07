@@ -151,36 +151,64 @@ export function reconstructFloatMosaic({ idx1, cb1Float, idx2, cb2Float, outH, o
 // 0 / outH / outW) for an uncropped grid -- reduces to the previous behaviour
 // exactly, so existing viewports read byte-identically.
 //
-// Returns { values: Uint8Array(outH*outW*dim), dimMin: Float32Array(dim),
-// dimMax: Float32Array(dim) }.
-export function reconstructQuantisedMosaic({ idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim, cropTop = 0, cropLeft = 0, fullH = outH, fullW = outW }) {
+// Returns { values, dimMin: Float32Array(dim), dimMax: Float32Array(dim),
+// pixelIndex } -- see below for which pixels `values` holds.
+// Optional inputs (both absent on viewports built before tessera-vq 0.9.0,
+// which reproduces the old behaviour exactly):
+//   valid   -- Uint8Array(outH*outW), 1 = real data. Pixels missing from the
+//              source were filled for quantization only; they are skipped
+//              here (not counted in dim min/max, not emitted).
+//   tileIds -- Int32Array(nTileRows*nTileCols): tile id for each (row, col)
+//              of the tile grid, -1 if the server sent no tile there (no valid
+//              pixel in it). Without it, ids are assumed dense and row-major.
+// Returns { values, dimMin, dimMax, pixelIndex }: values holds only the kept
+// pixels (numKept*dim), and pixelIndex (Int32Array) gives each kept pixel's
+// row-major position in the outH x outW grid.
+export function reconstructQuantisedMosaic({ idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim, cropTop = 0, cropLeft = 0, fullH = outH, fullW = outW, valid = null, tileIds = null }) {
     const numPixels = outH * outW;
     const rvq = !!cb2Float;
 
-    const dimMin = new Float32Array(dim).fill(Infinity);
-    const dimMax = new Float32Array(dim).fill(-Infinity);
-
-    // pass 1 -- exact per-dim min/max of the reconstructed values
+    // Which pixels are kept, and the tile each belongs to.
+    const pixelTile = new Int32Array(numPixels);
+    let numKept = 0;
     for (let ly = 0; ly < outH; ly++) {
         const tileRow = tileIndexForPixel(cropTop + ly, nTileRows, fullH, t);
         for (let lx = 0; lx < outW; lx++) {
             const pixel = ly * outW + lx;
             const tileCol = tileIndexForPixel(cropLeft + lx, nTileCols, fullW, t);
-            const tileId = tileRow * nTileCols + tileCol;
-            const cb1Off = (tileId * k1 + idx1[pixel]) * dim;
-            if (rvq) {
-                const cb2Off = (tileId * k2 + idx2[pixel]) * dim;
-                for (let d = 0; d < dim; d++) {
-                    const v = Math.fround(cb1Float[cb1Off + d] + cb2Float[cb2Off + d]);
-                    if (v < dimMin[d]) dimMin[d] = v;
-                    if (v > dimMax[d]) dimMax[d] = v;
-                }
+            const cell = tileRow * nTileCols + tileCol;
+            const tileId = tileIds ? tileIds[cell] : cell;
+            if (tileId < 0 || (valid && !valid[pixel])) {
+                pixelTile[pixel] = -1;
             } else {
-                for (let d = 0; d < dim; d++) {
-                    const v = cb1Float[cb1Off + d];
-                    if (v < dimMin[d]) dimMin[d] = v;
-                    if (v > dimMax[d]) dimMax[d] = v;
-                }
+                pixelTile[pixel] = tileId;
+                numKept++;
+            }
+        }
+    }
+    const pixelIndex = new Int32Array(numKept);
+
+    const dimMin = new Float32Array(dim).fill(Infinity);
+    const dimMax = new Float32Array(dim).fill(-Infinity);
+
+    // pass 1 -- exact per-dim min/max of the reconstructed (kept) values
+    for (let pixel = 0, k = 0; pixel < numPixels; pixel++) {
+        const tileId = pixelTile[pixel];
+        if (tileId < 0) continue;
+        pixelIndex[k++] = pixel;
+        const cb1Off = (tileId * k1 + idx1[pixel]) * dim;
+        if (rvq) {
+            const cb2Off = (tileId * k2 + idx2[pixel]) * dim;
+            for (let d = 0; d < dim; d++) {
+                const v = Math.fround(cb1Float[cb1Off + d] + cb2Float[cb2Off + d]);
+                if (v < dimMin[d]) dimMin[d] = v;
+                if (v > dimMax[d]) dimMax[d] = v;
+            }
+        } else {
+            for (let d = 0; d < dim; d++) {
+                const v = cb1Float[cb1Off + d];
+                if (v < dimMin[d]) dimMin[d] = v;
+                if (v > dimMax[d]) dimMax[d] = v;
             }
         }
     }
@@ -188,31 +216,27 @@ export function reconstructQuantisedMosaic({ idx1, cb1Float, idx2, cb2Float, out
     const dimScale = new Float32Array(dim);
     for (let d = 0; d < dim; d++) dimScale[d] = (dimMax[d] - dimMin[d]) || 1;
 
-    // pass 2 -- quantise straight into values
-    const values = new Uint8Array(numPixels * dim);
-    for (let ly = 0; ly < outH; ly++) {
-        const tileRow = tileIndexForPixel(cropTop + ly, nTileRows, fullH, t);
-        for (let lx = 0; lx < outW; lx++) {
-            const pixel = ly * outW + lx;
-            const tileCol = tileIndexForPixel(cropLeft + lx, nTileCols, fullW, t);
-            const tileId = tileRow * nTileCols + tileCol;
-            const cb1Off = (tileId * k1 + idx1[pixel]) * dim;
-            const outOff = pixel * dim;
-            if (rvq) {
-                const cb2Off = (tileId * k2 + idx2[pixel]) * dim;
-                for (let d = 0; d < dim; d++) {
-                    const v = Math.fround(cb1Float[cb1Off + d] + cb2Float[cb2Off + d]);
-                    const q = Math.round((v - dimMin[d]) / dimScale[d] * 255);
-                    values[outOff + d] = q < 0 ? 0 : q > 255 ? 255 : q;
-                }
-            } else {
-                for (let d = 0; d < dim; d++) {
-                    const q = Math.round((cb1Float[cb1Off + d] - dimMin[d]) / dimScale[d] * 255);
-                    values[outOff + d] = q < 0 ? 0 : q > 255 ? 255 : q;
-                }
+    // pass 2 -- quantise the kept pixels straight into values
+    const values = new Uint8Array(numKept * dim);
+    for (let k = 0; k < numKept; k++) {
+        const pixel = pixelIndex[k];
+        const tileId = pixelTile[pixel];
+        const cb1Off = (tileId * k1 + idx1[pixel]) * dim;
+        const outOff = k * dim;
+        if (rvq) {
+            const cb2Off = (tileId * k2 + idx2[pixel]) * dim;
+            for (let d = 0; d < dim; d++) {
+                const v = Math.fround(cb1Float[cb1Off + d] + cb2Float[cb2Off + d]);
+                const q = Math.round((v - dimMin[d]) / dimScale[d] * 255);
+                values[outOff + d] = q < 0 ? 0 : q > 255 ? 255 : q;
+            }
+        } else {
+            for (let d = 0; d < dim; d++) {
+                const q = Math.round((cb1Float[cb1Off + d] - dimMin[d]) / dimScale[d] * 255);
+                values[outOff + d] = q < 0 ? 0 : q > 255 ? 255 : q;
             }
         }
     }
 
-    return { values, dimMin, dimMax };
+    return { values, dimMin, dimMax, pixelIndex };
 }

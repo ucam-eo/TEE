@@ -126,3 +126,27 @@ def test_vq_single_stage_crop(tmp_path):
     got = _load_npy_gz(tmp_path / "indices1.npy.gz")
     full_idx1 = _assemble_indices_from_tiles(qs, "indices1", full_h, full_w)
     np.testing.assert_array_equal(got, full_idx1[2:20, 3:25])
+
+
+def test_valid_mask_cropped_with_indices_and_flagged(tmp_path):
+    """tessera-vq >= 0.9.0 ships a per-pixel validity mask; it is saved over the
+    same crop window as the indices, and vq_metadata says it's there."""
+    full_h, full_w, t, k1, k2, dim = 40, 44, 16, 20, 64, 8
+    qs = _make_qs(full_h=full_h, full_w=full_w, t=t, k1=k1, k2=k2, dim=dim, seed=5)
+    valid = np.ones((full_h, full_w), dtype=bool)
+    valid[10:14, 20:30] = False
+    qs.valid = valid
+
+    save_vectors_rvq(qs, IDENTITY, "vp", 2024, tmp_path, crop_window=(7, 11, 33, 39))
+
+    assert json.loads((tmp_path / "vq_metadata.json").read_text())["has_valid_mask"] is True
+    got = _load_npy_gz(tmp_path / "valid_mask.npy.gz")
+    assert got.dtype == np.uint8 and got.shape == (26, 28)
+    np.testing.assert_array_equal(got, valid[7:33, 11:39].astype(np.uint8))
+
+
+def test_no_valid_mask_from_older_bolt_on(tmp_path):
+    qs = _make_qs(full_h=24, full_w=24, t=8, k1=16, k2=None, dim=8, seed=2)
+    save_vectors_rvq(qs, IDENTITY, "vp", 2024, tmp_path)
+    assert json.loads((tmp_path / "vq_metadata.json").read_text())["has_valid_mask"] is False
+    assert not (tmp_path / "valid_mask.npy.gz").exists()
