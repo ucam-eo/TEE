@@ -51,6 +51,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install --break-system-packages -r requirements.txt
 
+# geotessera 0.11 hard-depends on pcodec and icechunk, whose prebuilt wheels
+# need AVX2; the production host (michael/tee.cl, Xeon E5-2420: AVX, no AVX2)
+# dies with SIGILL as soon as numcodecs auto-imports pcodec. Neither is used:
+# the v1.1-dclimate Zarr store is blosc-compressed and TEE reads the Zarr copy
+# (geotessera imports icechunk lazily; its tile registry is plain Parquet).
+RUN pip3 uninstall --break-system-packages -y pcodec icechunk
+
 # Copy application code
 COPY . .
 
