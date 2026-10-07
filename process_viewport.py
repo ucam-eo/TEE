@@ -523,6 +523,20 @@ def save_vectors_rvq(qs, transform, viewport_id, year, output_dir,
     with open(output_dir / 'tile_index.json', 'w') as f:
         json.dump(tile_index, f)
 
+    # Per-pixel validity (tessera-vq >= 0.9.0): pixels missing from the source
+    # data were filled for quantization only and must show as gaps. Saved over
+    # the same cropped grid as the indices; 1 = real data. Absent from older
+    # bolt-ons -- the browser then treats every pixel as valid.
+    valid = getattr(qs, 'valid', None)
+    has_valid_mask = valid is not None
+    if has_valid_mask:
+        valid_crop = np.ascontiguousarray(valid[row0:row1, col0:col1].astype(np.uint8))
+        _save_npy_gz(output_dir / 'valid_mask.npy.gz', valid_crop)
+        n_missing = int(valid_crop.size - valid_crop.sum())
+        if n_missing:
+            print(f"  Missing pixels (gaps): {n_missing:,} of {valid_crop.size:,} "
+                  f"({100 * n_missing / valid_crop.size:.1f}%)")
+
     # VQ-aware metadata (separate from the legacy metadata.json which is also
     # written; the browser branches on metadata.kind to pick the read path).
     vq_meta = {
@@ -546,6 +560,7 @@ def save_vectors_rvq(qs, transform, viewport_id, year, output_dir,
         'n_tile_cols': n_tile_cols,
         'metric': qs.metric,
         'dataset_version': dataset_version,
+        'has_valid_mask': has_valid_mask,
     }
     with open(output_dir / 'vq_metadata.json', 'w') as f:
         json.dump(vq_meta, f, indent=2)
@@ -752,6 +767,10 @@ def process_year(tessera, viewport_id, bounds, year, pyramids_dir, vectors_dir,
             percentile_normalize(mosaic[:, :, 1]),
             percentile_normalize(mosaic[:, :, 2]),
         ], axis=0)  # (3, H, W) uint8
+        # Missing pixels (NaN: data gaps, reprojection corners) render black,
+        # like everything outside the viewport -- uint8-casting NaN is
+        # undefined. v1.1-dclimate has real scattered gaps.
+        rgb[:, ~np.isfinite(mosaic).all(axis=2)] = 0
 
         write_pyramid_levels(rgb, transform, crs, year_pyramids_dir)
         del rgb

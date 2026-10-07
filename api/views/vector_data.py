@@ -18,6 +18,7 @@ ALLOWED_FILES = {
     'vq_metadata.json', 'tile_index.json',
     'codebooks1_uint8.npy.gz', 'codebooks1_scales.npy.gz', 'indices1.npy.gz',
     'codebooks2_uint8.npy.gz', 'codebooks2_scales.npy.gz', 'indices2.npy.gz',
+    'valid_mask.npy.gz',  # per-pixel validity (gaps in the source data)
 }
 
 
