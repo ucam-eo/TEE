@@ -642,39 +642,17 @@ def add_years(request, viewport_name):
 _coverage_client = None  # shared embeddings reader, opened on first use
 
 
-def _zarr_year_coverage(bbox, grid=5):
-    """{year: tiles} for the embeddings dataset TEE reads (v1.1-dclimate, via
-    tessera_eval's Zarr client), 0 for a year with no data in *bbox*.
-
-    A year counts as covered when any point of a grid x grid sample across
-    the bbox has a real embedding -- a grid rather than tile centres, so a
-    small coastal viewport whose tile centre is over the sea isn't wrongly
-    reported as having no data. Covered years report the bbox's tile count,
-    which is what the year pickers display.
-    """
-    import numpy as np
-    from tessera_eval.dataset import make_client, tiles_for_bbox
+def _zarr_year_coverage(bbox):
+    """{year: tiles} for the embeddings dataset TEE reads (v1.1-dclimate):
+    how many 0.1-degree tiles in *bbox* overlap a block the dataset embedded
+    that year, 0 for a year with no data. One tile-registry lookup (cached on
+    disk after the first query for an area) -- no embedding reads."""
+    from tessera_eval.dataset import make_client, year_coverage
 
     global _coverage_client
     if _coverage_client is None:
         _coverage_client = make_client()
-    store_years = set(getattr(_coverage_client.store, 'years', None) or [])
-
-    west, south, east, north = bbox
-    xs = np.linspace(west, east, grid)
-    ys = np.linspace(south, north, grid)
-    points = [(float(x), float(y)) for x in xs for y in ys]
-    n_tiles = len(tiles_for_bbox(bbox))
-
-    coverage = {}
-    for year in range(MIN_YEAR, MAX_YEAR + 1):
-        if year not in store_years:
-            coverage[str(year)] = 0
-            continue
-        vecs = _coverage_client.sample_embeddings_at_points(points, year=year)
-        has_data = bool(np.isfinite(vecs).all(axis=1).any())
-        coverage[str(year)] = n_tiles if has_data else 0
-    return coverage
+    return year_coverage(_coverage_client, bbox, years=range(MIN_YEAR, MAX_YEAR + 1))
 
 
 def embedding_coverage(request):
