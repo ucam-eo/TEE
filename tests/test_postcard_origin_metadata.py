@@ -141,3 +141,48 @@ def test_generate_postcard_uses_the_site_wide_embeddings_provider(
     resp = postcard.generate_postcard(request)
     assert resp.status_code == 200
     assert calls == [None]  # get_embeddings_provider(None), not a custom-built client
+
+
+def _unpack_arrays(body_bytes):
+    header = _unpack_header(body_bytes)
+    offset = 4 + struct.unpack(">I", body_bytes[:4])[0]
+    arrays = {}
+    for spec in header["arrays"]:
+        dtype = np.dtype(spec["dtype"])
+        count = int(np.prod(spec["shape"]))
+        arrays[spec["name"]] = np.frombuffer(body_bytes, dtype, count, offset).reshape(spec["shape"])
+        offset += count * dtype.itemsize
+    return header, arrays
+
+
+def test_generate_postcard_ships_gaps_and_tile_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Source-data gaps (tessera-vq >= 0.9.0's valid mask) and tiles the server
+    didn't send reach the browser, so they render black instead of as the
+    filler values / a neighbouring tile's codebook."""
+    bbox = postcard._bbox_from_center(52.2099, 0.1823)
+    # 2x2 tile grid with the bottom-left tile missing (no valid pixel in it).
+    struct_ = _make_structure(bbox, None, full_h=32, full_w=32)
+    positions = np.array([[0, 0], [0, 1], [1, 1]], dtype=np.int32)
+    struct_.positions = positions
+    struct_.codebooks1 = np.repeat(struct_.codebooks1, 3, axis=0)
+    struct_.indices1 = np.repeat(struct_.indices1, 3, axis=0)
+    valid = np.ones((32, 32), dtype=bool)
+    valid[16:, :16] = False
+    valid[3, 5] = False
+    struct_.valid = valid
+
+    class _FakeClient:
+        def fetch_quantized_structure(self, bbox, year):  # noqa: ARG002
+            return struct_
+
+    monkeypatch.setattr(
+        "api.embeddings_provider.get_embeddings_provider", lambda _name: _FakeClient()
+    )
+    request = _FakeRequest(52.2099, 0.1823)
+    request.META["REMOTE_ADDR"] = "test-gaps"
+    resp = postcard.generate_postcard(request)
+    assert resp.status_code == 200
+    meta, arrays = _unpack_arrays(resp.content)
+    assert meta["n_tiles"] == 3
+    np.testing.assert_array_equal(arrays["tile_ids"], [0, 1, -1, 2])
+    np.testing.assert_array_equal(arrays["valid"].reshape(32, 32), valid.astype(np.uint8))

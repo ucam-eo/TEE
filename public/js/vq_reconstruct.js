@@ -86,7 +86,9 @@ function tileIndexForPixel(p, n, fullDim, t) {
 // local to the given idx array, but tile ids resolve at the global position
 // srcTop/srcLeft + local against the full mosaic shape. Defaults make this a
 // no-op -- postcard.html builds an uncropped bundle and is untouched.
-export function reconstructFloatMosaic({ idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim, crop, srcTop = 0, srcLeft = 0, fullH = outH, fullW = outW }) {
+// `valid` / `tileIds` are as in reconstructQuantisedMosaic; a pixel that is a
+// gap (or falls in a tile the server didn't send) comes back as NaN.
+export function reconstructFloatMosaic({ idx1, cb1Float, idx2, cb2Float, outH, outW, nTileRows, nTileCols, t, k1, k2, dim, crop, srcTop = 0, srcLeft = 0, fullH = outH, fullW = outW, valid = null, tileIds = null }) {
     const top = crop ? crop.top : 0;
     const left = crop ? crop.left : 0;
     const cropH = crop ? crop.height : outH;
@@ -99,10 +101,15 @@ export function reconstructFloatMosaic({ idx1, cb1Float, idx2, cb2Float, outH, o
             const px = left + lx;
             const pixel = py * outW + px; // indexes into the given (possibly source-cropped) idx1/idx2
             const tileCol = tileIndexForPixel(srcLeft + px, nTileCols, fullW, t);
-            const tileId = tileRow * nTileCols + tileCol;
+            const cell = tileRow * nTileCols + tileCol;
+            const tileId = tileIds ? tileIds[cell] : cell;
+            const outOff = (ly * cropW + lx) * dim;
+            if (tileId < 0 || (valid && !valid[pixel])) {
+                floatMosaic.fill(NaN, outOff, outOff + dim);
+                continue;
+            }
             const i1 = idx1[pixel];
             const cb1Off = tileId * k1 * dim + i1 * dim;
-            const outOff = (ly * cropW + lx) * dim;
             if (cb2Float) {
                 const i2 = idx2[pixel];
                 const cb2Off = tileId * k2 * dim + i2 * dim;
