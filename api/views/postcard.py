@@ -240,6 +240,18 @@ def generate_postcard(request):
                 ('codebooks2_scales', cb2_scales),
                 ('indices2', idx2),
             ]
+        # Which tile of the grid each codebook belongs to (-1: no tile sent,
+        # it had no valid pixel) -- tile ids aren't dense once one is missing.
+        n_tile_rows, n_tile_cols = n_tiles_along(full_h, t), n_tiles_along(full_w, t)
+        tile_ids = np.full(n_tile_rows * n_tile_cols, -1, dtype=np.int32)
+        for i, (row, col) in enumerate(qs.positions):
+            tile_ids[int(row) * n_tile_cols + int(col)] = i
+        arrays.append(('tile_ids', tile_ids))
+        # Per-pixel validity (tessera-vq >= 0.9.0): source-data gaps were
+        # filled for quantization only, so the browser must blank them.
+        valid = getattr(qs, 'valid', None)
+        if valid is not None:
+            arrays.append(('valid', np.ascontiguousarray(valid, dtype=np.uint8)))
     except NoCoverageError as e:
         logger.info('postcard: no coverage for lat=%s lon=%s: %s', lat, lon, e)
         return JsonResponse(
@@ -278,8 +290,9 @@ def generate_postcard(request):
         'tile_size': t,
         'k1': int(qs.k1),
         'k2': int(qs.k2) if is_rvq else None,
-        'n_tile_rows': n_tiles_along(full_h, t),
-        'n_tile_cols': n_tiles_along(full_w, t),
+        'n_tile_rows': n_tile_rows,
+        'n_tile_cols': n_tile_cols,
+        'n_tiles': int(qs.codebooks1.shape[0]),
         'embedding_dim': int(qs.codebooks1.shape[-1]),
         'output_shape': [out_h, out_w],
         'crop_width_px': POSTCARD_WIDTH_PX,

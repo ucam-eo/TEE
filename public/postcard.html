@@ -416,7 +416,7 @@
             const view = new DataView(buffer);
             const headerLen = view.getUint32(0, false);
             const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 4, headerLen)));
-            const ctorByDtype = { uint8: Uint8Array, uint16: Uint16Array, float32: Float32Array };
+            const ctorByDtype = { uint8: Uint8Array, uint16: Uint16Array, int32: Int32Array, float32: Float32Array };
             let offset = 4 + headerLen;
             const arrays = {};
             for (const spec of meta.arrays) {
@@ -736,7 +736,8 @@
 
                 const dim = meta.embedding_dim;
                 const [outH, outW] = meta.output_shape;
-                const nTiles = meta.n_tile_rows * meta.n_tile_cols;
+                // Bundles from before tile_ids/n_tiles assumed a full, dense tile grid.
+                const nTiles = meta.n_tiles ?? meta.n_tile_rows * meta.n_tile_cols;
                 const cb1Float = decodeCodebook(
                     arrays.codebooks1_uint8, arrays.codebooks1_scales, nTiles, meta.k1, dim
                 );
@@ -762,6 +763,9 @@
                     nTileRows: meta.n_tile_rows, nTileCols: meta.n_tile_cols,
                     t: meta.tile_size, k1: meta.k1, k2: meta.k2, dim,
                     crop: region,
+                    // Gaps in the source data come back NaN, which
+                    // percentileStretchToRGB renders black.
+                    valid: arrays.valid || null, tileIds: arrays.tile_ids || null,
                 });
                 currentFloatMosaic = cropped;
                 currentMosaicW = region.width;
