@@ -3,7 +3,9 @@
 Email is optional at sign-up, so not every user has one. Addresses are
 deduplicated case-insensitively (several people have more than one account)
 and lightly cleaned (stray whitespace, a trailing dot); anything that still
-doesn't look like an address is reported rather than included.
+doesn't look like an address is reported rather than included. The list is
+semicolon-separated: Outlook only splits on semicolons by default (a comma
+list pastes as one bad address), and Gmail accepts either.
 
 TEE has no outgoing mail configured, so this only lists addresses -- send
 the message from your own mail client, with everyone in BCC.
@@ -50,5 +52,5 @@ class Command(BaseCommand):
         for raw in rejected:
             self.stdout.write(f'  Skipped, not an address: {raw!r}')
         self.stdout.write('')
-        self.stdout.write(', '.join(addresses))
+        self.stdout.write('; '.join(addresses))
         self.stdout.write('')
