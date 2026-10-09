@@ -11,11 +11,29 @@ import os
 import logging
 
 import requests as _requests
+from django.core.cache import cache
 from django.http import StreamingHttpResponse, JsonResponse
 
 logger = logging.getLogger(__name__)
 
 COMPUTE_URL = os.environ.get("TEE_COMPUTE_URL", "http://localhost:8002")
+
+# Rate limit for file-upload proxy requests (CWE-770): long (2-hour) upstream
+# timeouts mean an unthrottled client could pin many concurrent compute-server
+# connections. Cap uploads per client IP within a rolling window.
+UPLOAD_RATE_LIMIT = 10
+UPLOAD_RATE_LIMIT_WINDOW = 300  # seconds
+
+
+def _upload_rate_limited(request):
+    """Return True if this client has exceeded the upload rate limit."""
+    client_ip = request.META.get("REMOTE_ADDR", "unknown")
+    cache_key = f"evaluation_upload_rate:{client_ip}"
+    count = cache.get(cache_key, 0)
+    if count >= UPLOAD_RATE_LIMIT:
+        return True
+    cache.set(cache_key, count + 1, UPLOAD_RATE_LIMIT_WINDOW)
+    return False
 
 
 def _proxy_to_compute(request, path):
@@ -26,6 +44,11 @@ def _proxy_to_compute(request, path):
 
     try:
         if request.FILES:
+            if _upload_rate_limited(request):
+                return JsonResponse(
+                    {"error": "Too many upload requests. Please try again later."},
+                    status=429,
+                )
             # Multipart file upload — forward files, let requests set Content-Type
             files = {k: (f.name, f, f.content_type) for k, f in request.FILES.items()}
             resp = _requests.request(
