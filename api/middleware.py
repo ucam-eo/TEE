@@ -39,19 +39,27 @@ PUBLIC_PATHS = {
     '/login.html',
 }
 
-# Endpoints that require login (write/destructive operations)
-WRITE_ENDPOINTS = {
-    '/api/viewports/create',
-    '/api/viewports/delete',
-    '/api/auth/change-password',
+# Login is required for every state-changing request to the API (any method
+# other than GET/HEAD/OPTIONS) -- default-deny, so a new or renamed endpoint is
+# protected without anyone remembering to list it here. (An allow-list of
+# protected paths used to live here; it had drifted, e.g. '/api/evaluation/run'
+# while the real route is run-large-area, leaving evaluation runs, training,
+# map creation, cancel and clear-shapefiles open to anonymous users.)
+#
+# These are the only API writes demo mode allows without logging in:
+ANONYMOUS_WRITE_ENDPOINTS = {
+    '/api/viewports/switch',              # browse another viewport (per-session)
+    '/api/viewports/embedding-coverage',  # read-only query, sent as POST for its body
+    '/api/postcard/generate',             # public demo, rate-limited per IP
+}
+
+# Reads that still require login:
+LOGIN_REQUIRED_READS = {
     '/api/downloads/embeddings',
     '/api/downloads/process',
-    '/api/evaluation/upload-shapefile',
-    '/api/evaluation/run',
-    '/api/share/submit',
-    '/api/enrol/create-user',
-    '/api/enrol/disable-user',
 }
+
+_SAFE_METHODS = {'GET', 'HEAD', 'OPTIONS'}
 
 
 def _is_public_path(path):
@@ -59,18 +67,17 @@ def _is_public_path(path):
     return path in PUBLIC_PATHS
 
 
-def _is_write_endpoint(path):
-    """Check if the request path is a write/destructive endpoint requiring login."""
-    if path in WRITE_ENDPOINTS:
-        return True
-    # Match /api/viewports/<name>/cancel-processing
-    if path.startswith('/api/viewports/') and path.endswith('/cancel-processing'):
-        return True
-    if path.startswith('/api/viewports/') and path.endswith('/add-years'):
-        return True
-    if path.startswith('/api/evaluation/download-model/'):
-        return True
-    return False
+def _is_write_endpoint(path, method='POST'):
+    """Does this request need a logged-in user?"""
+    if path.startswith('/api/evaluation/'):
+        # tee-compute keeps one global state shared by everyone (uploaded
+        # ground truth, trained models, generated maps, the cancel flag), so
+        # even its reads are only for logged-in users; health is the probe
+        # the panel uses to show whether a compute server is attached.
+        return path != '/api/evaluation/health'
+    if method not in _SAFE_METHODS:
+        return path.startswith('/api/') and path not in ANONYMOUS_WRITE_ENDPOINTS
+    return path in LOGIN_REQUIRED_READS
 
 
 class TileShortcircuitMiddleware:
@@ -119,7 +126,7 @@ class DemoModeMiddleware:
             return self.get_response(request)  # logged in
 
         # Not authenticated - block write endpoints, allow reads (demo mode)
-        if _is_write_endpoint(request.path):
+        if _is_write_endpoint(request.path, request.method):
             if request.path.startswith('/api/'):
                 return JsonResponse({'error': 'Authentication required'}, status=401)
             else:
