@@ -109,6 +109,11 @@ cmd_revoke_enroller() {
     docker exec "$CONTAINER" python3 manage.py tee_setenroller "$username" --revoke
 }
 
+cmd_email() {
+    # Prints a BCC-ready address list; TEE itself sends no mail.
+    docker exec "$CONTAINER" python3 manage.py tee_emailusers
+}
+
 cmd_update() {
     echo "Pulling $IMAGE..."
     docker pull "$IMAGE"
@@ -163,8 +168,9 @@ while true; do
     echo "  4) Set quota"
     echo "  5) Grant enroller"
     echo "  6) Revoke enroller"
-    echo "  7) Update container"
-    echo "  8) Exit"
+    echo "  7) Email users (list addresses)"
+    echo "  8) Update container"
+    echo "  9) Exit"
     echo ""
     read -rp "Choice: " choice
 
@@ -175,8 +181,9 @@ while true; do
         4) cmd_quota ;;
         5) cmd_grant_enroller ;;
         6) cmd_revoke_enroller ;;
-        7) cmd_update ;;
-        8) exit 0 ;;
+        7) cmd_email ;;
+        8) cmd_update ;;
+        9) exit 0 ;;
         *) echo "Invalid choice" ;;
     esac
 done
