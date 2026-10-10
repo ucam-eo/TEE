@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 
 from django.contrib.auth.models import User
 from django.http import JsonResponse
@@ -11,6 +12,23 @@ from api.models import UserProfile
 logger = logging.getLogger(__name__)
 
 DEFAULT_QUOTA_MB = 2048
+
+_EMAIL = re.compile(r'[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}')
+
+
+def _email_login(username):
+    """An email address used as the login -> its lower-cased form, else None.
+
+    Logins match exactly, so lower-casing at creation means people can type
+    their address the way they usually do. Raises ValueError for something
+    with an @ that isn't a plausible address.
+    """
+    if '@' not in username:
+        return None
+    email = username.lower()
+    if len(email) > 150 or not _EMAIL.fullmatch(email):
+        raise ValueError(f'"{username}" is not a valid email address')
+    return email
 
 
 def _is_enroller(user):
@@ -55,10 +73,21 @@ def create_enrolled_user(request):
 
     if not username:
         return JsonResponse({'error': 'Username is required'}, status=400)
-    if len(username) > 64:
+    try:
+        email_login = _email_login(username)
+    except ValueError as e:
+        return JsonResponse({'error': str(e)}, status=400)
+    if email_login:
+        # The address is both login and email. One account per address: also
+        # refuse if another account already has it as its email.
+        username = email = email_login
+        if (User.objects.filter(username__iexact=username).exists()
+                or User.objects.filter(email__iexact=username).exists()):
+            return JsonResponse({'error': f'An account already exists for {username}'}, status=409)
+    elif len(username) > 64:
         return JsonResponse({'error': 'Username must be 64 characters or fewer'}, status=400)
-    if not username.isalnum() and not all(c.isalnum() or c in '_-' for c in username):
-        return JsonResponse({'error': 'Username must be alphanumeric (with _ or -)'}, status=400)
+    elif not username.isalnum() and not all(c.isalnum() or c in '_-' for c in username):
+        return JsonResponse({'error': 'Username must be alphanumeric (with _ or -), or an email address'}, status=400)
     if not password or len(password) < 6:
         return JsonResponse({'error': 'Password must be at least 6 characters'}, status=400)
 
