@@ -7,11 +7,11 @@ import re
 from django.contrib.auth.models import User
 from django.http import JsonResponse
 
+from api.helpers import NEW_ACCOUNT_QUOTA_MB
 from api.models import UserProfile
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_QUOTA_MB = 2048
 
 _EMAIL = re.compile(r'[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}')
 
@@ -69,7 +69,7 @@ def create_enrolled_user(request):
     username = body.get('username', '').strip()
     email = body.get('email', '').strip()
     password = body.get('password', '')
-    quota_mb = int(body.get('quota_mb', DEFAULT_QUOTA_MB))
+    quota_mb = int(body.get('quota_mb', NEW_ACCOUNT_QUOTA_MB))
 
     if not username:
         return JsonResponse({'error': 'Username is required'}, status=400)

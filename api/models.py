@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
-    quota_mb = models.IntegerField(default=2048)
+    quota_mb = models.IntegerField(default=1024)  # api.helpers.NEW_ACCOUNT_QUOTA_MB
     can_enrol = models.BooleanField(default=False)
     created_by = models.ForeignKey(User, null=True, blank=True,
                                    on_delete=models.SET_NULL,

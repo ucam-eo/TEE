@@ -700,7 +700,7 @@ Create a new user account.
 
 ```json
 // Request
-{ "username": "bob", "email": "bob@cam.ac.uk", "password": "secret", "quota_mb": 2048 }
+{ "username": "bob", "email": "bob@cam.ac.uk", "password": "secret", "quota_mb": 1024 }
 
 // Response 200
 { "success": true, "username": "bob" }
@@ -1252,7 +1252,8 @@ from api.helpers import (
     VENV_PYTHON,        # Path to venv Python
     PROJECT_ROOT,       # Project root Path
     MIN_YEAR, MAX_YEAR, # 2018, 2025
-    DEFAULT_QUOTA_MB,   # 2048
+    NEW_ACCOUNT_QUOTA_MB, # 1024: quota for new accounts
+    DEFAULT_QUOTA_MB,   # 2048: assumed for old accounts with no quota record
 
     parse_json_body,               # Parse request JSON → (dict, None) | (None, JsonResponse)
     check_viewport_owner,          # Auth check → (True, None) | (False, 403 response)

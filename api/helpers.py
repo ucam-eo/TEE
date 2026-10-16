@@ -33,7 +33,13 @@ logger.debug(f"Using Python: {VENV_PYTHON}")
 MIN_YEAR = 2017
 MAX_YEAR = 2025
 
-# Per-user disk quota default (2 GB); overridable in passwd file
+# Disk quota given to every newly created account (1 GB). Change an
+# individual account with `manage.py tee_setquota` / manage.sh "Set quota".
+NEW_ACCOUNT_QUOTA_MB = 1024
+
+# Quota assumed for an account that has no quota record at all -- only old
+# accounts from before quota records existed. Kept at the 2 GB those accounts
+# have always had, so lowering the new-account quota doesn't shrink them.
 DEFAULT_QUOTA_MB = 2048
 
 

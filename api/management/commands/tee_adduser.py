@@ -6,6 +6,7 @@ import getpass
 from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth.models import User
 
+from api.helpers import NEW_ACCOUNT_QUOTA_MB
 from api.models import UserProfile
 
 
@@ -16,7 +17,8 @@ class Command(BaseCommand):
         parser.add_argument('username', type=str)
         parser.add_argument('--admin', action='store_true', help='Make user a superuser/staff')
         parser.add_argument('--email', type=str, default='', help='User email address')
-        parser.add_argument('--quota', type=int, default=2048, help='Disk quota in MB (default 2048)')
+        parser.add_argument('--quota', type=int, default=NEW_ACCOUNT_QUOTA_MB,
+                            help=f'Disk quota in MB (default {NEW_ACCOUNT_QUOTA_MB})')
 
     def handle(self, *args, **options):
         username = options['username']
