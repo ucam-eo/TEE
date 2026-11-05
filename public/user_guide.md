@@ -831,7 +831,7 @@ That imbalance is also why the **Macro F1 / Weighted F1** selector above the cha
 
 A second, much smaller sample — [download gothenburg.zip](/sample-data/gothenburg.zip) (0.5 MB) — covers a city instead of farmland.
 
-**What's in it:** 7,483 polygons in 5 land-cover classes, labelling about 81 % of a 5 km × 5 km viewport in central Gothenburg, Sweden (11.925°E–12.009°E, 57.685°N–57.730°N). The labels started as a draft from OpenStreetMap (buildings, roads buffered to their width, water, woods, football pitches) and were then corrected by hand in TEE's [manual labelling](#manual-labelling) mode. The polygons follow the pixel edges of a TEE viewport grid at those bounds; pixels without a polygon are unlabelled, not a "background" class.
+**What's in it:** 7,483 polygons in 5 land-cover classes, labelling about 81 % of a 5 km × 5 km viewport in central Gothenburg, Sweden (11.925°E–12.009°E, 57.685°N–57.730°N). The labels were drawn by hand in TEE's [manual labelling](#manual-labelling) mode over the satellite basemap and checked by eye. The polygons follow the pixel edges of a TEE viewport grid at those bounds; pixels without a polygon are unlabelled, not a "background" class.
 
 **Field and year:** use field **`name`** (or `class_id`, the same classes as numbers 1–5) and year **2024**, the embedding year the labels were made with.
 
@@ -847,9 +847,9 @@ FOOTBALL FIELD is tiny next to the other classes, so read macro F1 and the per-c
 
 **As manual labels:** the same zip can be loaded with **Import** in the labelling toolbar (ESRI Shapefile). On a viewport with the bounds above, each class comes in as its own label colour — useful for comparing auto-label clusters with a ground truth.
 
-**Caveat:** part of FOREST was first proposed by TEE's k-means auto-label and then checked and corrected by hand, so that class is not fully independent of the embeddings.
+**Where FOREST comes from:** part of FOREST started as a cluster of TEE's k-means auto-label that was promoted to a label, then checked by eye and corrected by hand like the rest; 13,162 of its 49,832 pixels come only from those polygons. Worth knowing if you score methods built on the same embeddings.
 
-**Licence:** contains information from OpenStreetMap, © OpenStreetMap contributors, available under the [Open Database License (ODbL) 1.0](https://www.openstreetmap.org/copyright). As a database derived from OpenStreetMap, `gothenburg.zip` is available under the ODbL 1.0 as well. It was made by the TESSERA Clusterings student project at Chalmers University of Technology (DAT300/DIT616, 2026); the `README.txt` inside the zip describes how.
+**Made by** Christopher Kröss, Alice Piacentini, Isabel Reguera and Elias Svensson (TESSERA Clusterings project, Chalmers University of Technology, DAT300/DIT616, autumn 2026), as the ground truth for scoring TEE's auto-label clustering. The `README.txt` inside the zip describes how it was made.
 
 ### Evaluation Method: Learning Curve or K-Fold
 
