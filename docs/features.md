@@ -230,6 +230,13 @@ chosen by the user:
   worked example including a spatial train/test split and [how to compare
   against the TESSERA
   paper](../public/user_guide.md#comparing-against-the-tessera-paper).
+- A second, small sample: `gothenburg.zip` (`/sample-data/gothenburg.zip`) —
+  urban land cover in a 5 km × 5 km viewport of central Gothenburg (7,483
+  polygons, 5 classes: buildings, street, forest, river, football field),
+  made from an OpenStreetMap draft corrected by hand in TEE. Use field
+  `name` and year **2024**; the same zip also imports as manual labels
+  (Labels → Import). Contains OpenStreetMap data (ODbL) — see the [User
+  Guide](../public/user_guide.md#worked-example-gothenburgzip).
 
 ### Streaming evaluation
 
