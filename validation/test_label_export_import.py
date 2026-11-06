@@ -191,6 +191,16 @@ class TestRoundTrip:
             assert body.count("saveManualLabelsToStorage()") == 1, importer
             assert body.count("renderManualLabelsList()") == 1, importer
 
+    def test_polygon_vertices_are_not_rounded(self, js):
+        """Polygons are rasterised from their fractional pixel coordinates.
+        Rounding the vertices to whole pixels first moved them by up to half
+        a pixel, so an exported pixel set did not come back as the same pixels."""
+        assert "Math.round((v[1] - gt.c) / gt.a)" not in js
+        assert "Math.round((ll.lng - gt.c) / gt.a)" not in js
+        body = function_source(js, "rasterizePolygon")
+        assert "Math.floor(minPx)" in body and "Math.ceil(maxPx)" in body
+        assert "Math.floor(minPy)" in body and "Math.ceil(maxPy)" in body
+
     def test_round_trip_behaviour(self):
         """validation/test_label_import_roundtrip.mjs runs the import / export
         functions on polygons whose pixel counts can be checked by hand; this

@@ -15,7 +15,10 @@
  *  - every imported label saved the whole label store and re-rendered the
  *    list (addManualLabel), so import time grew quadratically;
  *  - the JSON (full) export left out the pixels of promoted auto-label
- *    clusters (pixel_coords), so they came back as a threshold search.
+ *    clusters (pixel_coords), so they came back as a threshold search;
+ *  - polygon vertices were rounded to whole pixels before rasterising, so
+ *    the exported polygons of a pixel set (vertices on the midpoints of
+ *    pixel edges) came back with pixels lost and gained along the outline.
  *
  * The geometry is checked on a 12 x 10 pixel grid with shapes whose pixel
  * counts can be verified by hand: a 6 x 6 square (36 px) with a 2 x 2 hole
@@ -102,8 +105,9 @@ const signedArea = (ring) => {
 };
 // pixels a polygon label covers, with the rule the viewer uses (rebuildClassOverlay)
 function labelPixels(api, label) {
-    const pixVerts = label.vertices.map(v => [Math.round((v[1] - gt.c) / gt.a), Math.round((v[0] - gt.f) / gt.e)]);
-    return api.rasterizePolygon(pixVerts, api.polygonHolesToPixels(label, gt)).map(m => `${m.px},${m.py}`).sort();
+    const g = window.localVectors.metadata.geotransform;
+    const pixVerts = label.vertices.map(v => [(v[1] - g.c) / g.a, (v[0] - g.f) / g.e]);
+    return api.rasterizePolygon(pixVerts, api.polygonHolesToPixels(label, g)).map(m => `${m.px},${m.py}`).sort();
 }
 
 const OUTER = square(1, 2, 7, 8);        // 6 x 6 = 36 px
@@ -295,6 +299,42 @@ const OTHER = square(8, 2, 11, 5);       // 3 x 3 =  9 px, beside OUTER
     const old = makeApp().api;
     old.importLabelsJSON([{ ...cluster }]);
     ok(!('pixel_coords' in old.labels()[0]), 'nor from a file that does not say which grid it is from');
+}
+
+// --- 9. vertices are not rounded to whole pixels -------------------------
+{
+    // d3-contour (smooth off) draws a pixel set through the midpoints of the
+    // pixel edges: one pixel becomes a diamond around its centre, a block a
+    // rectangle with cut corners. Rounded to pixel corners those collapse.
+    const lonlat = (ring) => ring.map(([x, y]) => [x, 10 - y]);           // pixel -> lon/lat on this grid
+    const diamond = (px, py) => [[px + 0.5, py], [px + 1, py + 0.5], [px + 0.5, py + 1], [px, py + 0.5], [px + 0.5, py]];
+    const block = [[3.5, 2], [4.5, 2], [5, 2.5], [5, 3.5], [4.5, 4], [3.5, 4], [3, 3.5], [3, 2.5], [3.5, 2]];   // pixels 3..4 x 2..3
+    const { api } = makeApp();
+    api.importGeoJSON(collection(feature('Polygon', [lonlat(diamond(7, 6))]), feature('Polygon', [lonlat(block)])));
+    eq(labelPixels(api, api.labels()[0]), ['7,6'], 'the contour of one pixel covers exactly that pixel');
+    eq(labelPixels(api, api.labels()[1]), ['3,2', '3,3', '4,2', '4,3'], 'the contour of a 2 x 2 block covers exactly its 4 pixels');
+    eq(api.labels().map(l => l.pixelCount), [1, 4], 'and the import counts them the same way');
+
+    // A drawn polygon: pixel centres inside the outline as drawn. Under the
+    // edge from (4.4, 0) to (0, 4.4) lie the centres with x + y <= 3: 10 pixels
+    // (rounding the corners to 4 leaves 6 and puts 4 more exactly on the edge).
+    const tri = makeApp().api;
+    tri.importGeoJSON(collection(feature('Polygon', [lonlat([[0, 0], [4.4, 0], [0, 4.4], [0, 0]])])));
+    eq(tri.labels()[0].pixelCount, 10, 'triangle with a diagonal edge covers the 10 pixels whose centre is inside');
+
+    // Same on a real-world geotransform, where (lon - c) / a is only almost
+    // x.5: every single-pixel contour must still give exactly its own pixel.
+    const saved = window.localVectors.metadata.geotransform;
+    const real = { a: 0.00012735369878844578, c: 11.925, e: -0.00012735369878844578, f: 57.7297 };
+    window.localVectors.metadata.geotransform = real;
+    const noisy = makeApp().api;
+    const cells = [];
+    for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) cells.push([px, py]);
+    noisy.importGeoJSON(collection(...cells.map(([px, py]) =>
+        feature('Polygon', [diamond(px, py).map(([x, y]) => [real.c + x * real.a, real.f + y * real.e])]))));
+    const wrong = noisy.labels().filter((l, i) => JSON.stringify(labelPixels(noisy, l)) !== JSON.stringify([`${cells[i][0]},${cells[i][1]}`]));
+    eq(wrong.length, 0, `all ${cells.length} single-pixel contours on a real geotransform give their own pixel`);
+    window.localVectors.metadata.geotransform = saved;
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
