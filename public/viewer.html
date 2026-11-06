@@ -1352,6 +1352,12 @@
                             <button id="seg-k-plus" style="padding: 2px 7px; background: #555; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 13px; font-weight: 700; line-height: 1;" disabled title="More clusters">+</button>
                             <span style="font-size: 12px; color: #333; font-weight: 600;">seed</span>
                             <input type="number" id="seg-seed-input" value="42" min="0" step="1" style="width: 52px; padding: 2px 4px; border: 1px solid #aaa; border-radius: 3px; font-size: 12px; text-align: center; color: #333; background: #fff;" disabled title="Random seed for clustering — same seed + k + year gives the same clusters. Change it for a different partition.">
+                            <select id="seg-method-select" style="padding: 2px 4px; border: 1px solid #aaa; border-radius: 3px; font-size: 12px; color: #333; background: #fff;" disabled title="Clustering method. k-means: one k-means run on a sample (fastest, depends on the seed). Stable: over-cluster into 32 clusters, merge them to k and refine (much less dependent on the seed). Stable + smooth: then let neighbouring pixels vote, which removes isolated pixels. Stable + Gaussian: smooth the embeddings over 10 m before clustering instead.">
+                                <option value="kmeans">k-means</option>
+                                <option value="stable">Stable</option>
+                                <option value="smooth">Stable + smooth</option>
+                                <option value="gauss">Stable + Gaussian</option>
+                            </select>
                             <button id="seg-run-btn" style="padding: 4px 8px; background: #38a169; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" disabled title="Run auto-labelling">Go</button>
                             <button id="seg-clear-btn" style="display:none; padding: 4px 8px; background: #e53e3e; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;" title="Clear auto-label results">Clear</button>
                         </div>

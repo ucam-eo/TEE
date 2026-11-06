@@ -179,6 +179,7 @@ const dependencyRegistry = [
             document.getElementById('seg-k-minus').disabled = false;
             document.getElementById('seg-k-plus').disabled = false;
             document.getElementById('seg-seed-input').disabled = false;
+            { const mEl = document.getElementById('seg-method-select'); if (mEl) mEl.disabled = false; }
             document.getElementById('seg-controls').style.opacity = '1';
         },
         onNotReady: () => {
@@ -194,6 +195,7 @@ const dependencyRegistry = [
             document.getElementById('seg-k-minus').disabled = true;
             document.getElementById('seg-k-plus').disabled = true;
             document.getElementById('seg-seed-input').disabled = true;
+            { const mEl = document.getElementById('seg-method-select'); if (mEl) mEl.disabled = true; }
             document.getElementById('seg-controls').style.opacity = '0.4';
         },
         satisfied: false

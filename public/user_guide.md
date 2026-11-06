@@ -342,13 +342,13 @@ Once a cluster is promoted, its row in the **Labels** column gets a few small ic
 | 🗑️ | **Delete** the label |
 | 👁 (below the row) | **Toggle visibility** on the map — greys out to 🙈 when hidden |
 
-![K-means controls: adjust k, then click Go](images/ui_seg_controls.png)
+![Auto-label controls: k, seed and method, then click Go](images/ui_seg_controls.png)
 
 | Step | What to do |
 |------|------------|
 | 1 | In Panel 6, set **k** (the number of clusters) using the slider — start with 5–10 |
-| 2 | Optionally set the **seed** (default 42) — see below |
-| 3 | Click **Go** — TEE runs K-means and colours each cluster on the map |
+| 2 | Optionally set the **seed** (default 42) and the **method** (default k-means) — see below |
+| 3 | Click **Go** — TEE runs the clustering and colours each cluster on the map |
 | 4 | Review the cluster list: each entry shows a colour swatch, pixel count, and percentage of the viewport |
 | 5 | Name the clusters you want to keep, then click the **Promote** arrow (↗) next to each one. Or click **Promote All** to promote everything at once. |
 
@@ -357,6 +357,21 @@ Once a cluster is promoted, its row in the **Labels** column gets a few small ic
 ### The clustering seed
 
 K-means starts from a random pick of initial cluster centres (K-means++) and, on a large viewport, runs on a random subsample of the pixels — so two runs with the same **k** could previously land on slightly different clusters. The **seed** box (default **42**) fixes both of those random draws: **the same seed + the same k + the same year's embeddings gives you the same clusters every time.** Change the seed if you want to try a different partition of the same data — for example when a cluster mixes two habitat types and you want to see whether another starting point separates them.
+
+### The clustering method
+
+The dropdown next to the seed chooses how the clusters are computed. **k-means** (the default) is the clustering described above and gives exactly the same clusters as before. The other three take longer but depend much less on the seed:
+
+| Method | What it does |
+|--------|--------------|
+| **k-means** | One K-means run on a sample of the pixels. Fastest. |
+| **Stable** | K-means with 32 clusters, then the two most similar clusters are merged (Ward's criterion) again and again until *k* are left, and the *k* centres are refined. |
+| **Stable + smooth** | *Stable*, then each pixel may switch to the cluster that most of its 8 neighbours belong to, unless its own embedding clearly says otherwise (a Markov random field). Removes isolated pixels inside fields. |
+| **Stable + Gaussian** | Blurs the embeddings over about 10 m, then runs *Stable*. An alternative to smoothing. |
+
+On a viewport whose source data has gaps (pixels without an embedding), both smoothing methods use only the pixels that have data: a pixel next to a gap is judged by its remaining neighbours, and the blur averages over the pixels with data only. If the smoothing cannot run at all, the cluster list says so and shows the clusters of *Stable*.
+
+Measured on a 5 × 5 km Gothenburg viewport (k = 5, seeds 1–100): with k-means, 21.6 % of the pixels change cluster between two seeds, with *Stable* 1.8 %. On an Austrian crop tile (k = 17, 20 seeds), *Stable + smooth* lowers the share of neighbouring pixels inside one field that fall into different clusters from 22.6 % to 13.0 %. On that viewport a run takes about 0.8–1.1 s in Chrome (k = 5–17) instead of 0.3–0.7 s.
 
 ### Suggested Workflow
 
