@@ -5,7 +5,8 @@ from api.views.tiles import get_tile, get_bounds, tile_health
 
 urlpatterns = [
     path('', serve_index),
-    path('sample-data/austria.zip', serve_sample_data),
+    path('sample-data/austria.zip', serve_sample_data, {'name': 'austria.zip'}),
+    path('sample-data/gothenburg.zip', serve_sample_data, {'name': 'gothenburg.zip'}),
     path('health', include('api.urls_health')),
     path('api/', include('api.urls')),
     path('admin/', admin.site.urls),

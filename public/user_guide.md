@@ -78,6 +78,8 @@ Viewport Manager from then on.
 > **Try it:** TEE ships `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). [Download it](/sample-data/austria.zip), upload it, select field **"HabUK"**, year **2022**, and click Run. See [Worked Example: austria.zip](#worked-example-austria-zip) for a full walkthrough, including a spatial train/test split and how to compare your numbers against the TESSERA paper.
 >
 > **Use 2022, not a later year.** These labels are the 2022 INVEKOS declarations, and crops rotate every season — pairing them with a different year's embeddings asks the classifier to predict what was growing in a field two years earlier. It fails badly: weighted F1 drops from ~0.78 (2022) to ~0.30 (2024) on an otherwise identical run.
+>
+> **Smaller and urban:** `gothenburg.zip` — land cover in central Gothenburg (7,483 polygons, 5 classes). [Download it](/sample-data/gothenburg.zip), select field **"name"** and year **2024**. See [Worked Example: gothenburg.zip](#worked-example-gothenburg-zip).
 
 ### Path 4: Just want a fun image?
 
@@ -824,6 +826,30 @@ That imbalance is also why the **Macro F1 / Weighted F1** selector above the cha
 2. Select **Train area (blue)** and draw a rectangle over the **western half** of the red outlines (up to about 16.7°E)
 3. Select **Test area (yellow)** and draw a rectangle over the **eastern half** (from about 16.7°E onward), covering the full north–south extent
 4. Run the evaluation — compare the resulting accuracy against a run with no spatial split (random split) on the same data. Expect the spatial-split numbers to be somewhat lower — that's the honest estimate; a big gap between the two indicates the random split was overly optimistic due to autocorrelation
+
+### Worked Example: gothenburg.zip
+
+A second, much smaller sample — [download gothenburg.zip](/sample-data/gothenburg.zip) (0.5 MB) — covers a city instead of farmland.
+
+**What's in it:** 7,483 polygons in 5 land-cover classes, labelling about 81 % of a 5 km × 5 km viewport in central Gothenburg, Sweden (11.925°E–12.009°E, 57.685°N–57.730°N). The labels were drawn by hand in TEE's [manual labelling](#manual-labelling) mode over the satellite basemap and checked by eye. The polygons follow the pixel edges of a TEE viewport grid at those bounds; pixels without a polygon are unlabelled, not a "background" class.
+
+**Field and year:** use field **`name`** (or `class_id`, the same classes as numbers 1–5) and year **2024**, the embedding year the labels were made with.
+
+| Class (`name`) | Polygons | Labelled pixels |
+|----------------|----------|-----------------|
+| STREET | 2,766 | 66,903 |
+| BUILDINGS | 2,742 | 54,392 |
+| FOREST | 1,869 | 49,832 |
+| RIVER | 85 | 16,561 |
+| FOOTBALL FIELD | 21 | 1,015 |
+
+FOOTBALL FIELD is tiny next to the other classes, so read macro F1 and the per-class results, not only the overall score.
+
+**As manual labels:** the same zip can be loaded with **Import** in the labelling toolbar (ESRI Shapefile). On a viewport with the bounds above, each class comes in as its own label colour — useful for comparing auto-label clusters with a ground truth.
+
+**Where FOREST comes from:** part of FOREST started as a cluster of TEE's k-means auto-label that was promoted to a label, then checked by eye and corrected by hand like the rest; 13,162 of its 49,832 pixels come only from those polygons. Worth knowing if you score methods built on the same embeddings.
+
+**Made by** Christopher Kröss, Alice Piacentini, Isabel Reguera and Elias Svensson (TESSERA Clusterings project, Chalmers University of Technology, DAT300/DIT616, autumn 2026), as the ground truth for scoring TEE's auto-label clustering. The `README.txt` inside the zip describes how it was made.
 
 ### Evaluation Method: Learning Curve or K-Fold
 
