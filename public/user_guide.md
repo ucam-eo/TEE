@@ -75,7 +75,7 @@ Viewport Manager from then on.
 3. Choose a class field (the column in your shapefile that contains the habitat names), select a year, and tick the classifiers you want to test
 4. Click **Run Evaluation** — TEE will train each classifier and show you learning curves and a confusion matrix so you can see how well the embeddings distinguish your habitat classes
 
-> **Try it:** TEE ships `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). [Download it](/sample-data/austria.zip), upload it, select field **"HabUK"**, year **2022**, and click Run. See [Worked Example: austria.zip](#worked-example-austriazip) for a full walkthrough, including a spatial train/test split and how to compare your numbers against the TESSERA paper.
+> **Try it:** TEE ships `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). [Download it](/sample-data/austria.zip), upload it, select field **"HabUK"**, year **2022**, and click Run. See [Worked Example: austria.zip](#worked-example-austria-zip) for a full walkthrough, including a spatial train/test split and how to compare your numbers against the TESSERA paper.
 >
 > **Use 2022, not a later year.** These labels are the 2022 INVEKOS declarations, and crops rotate every season — pairing them with a different year's embeddings asks the classifier to predict what was growing in a field two years earlier. It fails badly: weighted F1 drops from ~0.78 (2022) to ~0.30 (2024) on an otherwise identical run.
 
@@ -890,7 +890,7 @@ Tick **Group by field (no leakage)**, next to the evaluation method, to fix this
 
 - **Off by default.** This is a real change to what your score means, and it usually goes down — so it's your choice to opt in, not a silent change to numbers you've already recorded.
 - **Classification only** — not yet available for regression.
-- **Ignored when a test set is already fixed** some other way — a [Spatial Train/Test Split](#spatial-train-test-split-optional), different [train/test years](#traintest-years-optional), or a [separate test file](#separate-test-file-optional) all already guarantee no field crosses the split, so Group by Field has nothing to add there (a status message in the progress log says so if you tick it anyway).
+- **Ignored when a test set is already fixed** some other way — a [Spatial Train/Test Split](#spatial-train-test-split-optional), different [train/test years](#train-test-years-optional), or a [separate test file](#separate-test-file-optional) all already guarantee no field crosses the split, so Group by Field has nothing to add there (a status message in the progress log says so if you tick it anyway).
 - **Not available right after a config upload that hits the result cache** — re-run the evaluation once to regenerate it, then the option works normally.
 
 If your F1/R² drops noticeably when you turn this on, that's the more honest number, not a bug — it means the un-grouped score was benefiting from the model recognizing fields it had already partly seen.
