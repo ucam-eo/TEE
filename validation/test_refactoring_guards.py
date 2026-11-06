@@ -696,7 +696,10 @@ class TestLargeAreaEvaluation:
     def test_run_large_area_sends_task_override(self, all_script_text):
         i = all_script_text.find("evalUrl('run-large-area')")
         assert i != -1, "expected a fetch to evalUrl('run-large-area')"
-        block = all_script_text[i:i + 900]
+        # The whole fetch call (up to its closing "});"), not a fixed slice:
+        # the request body keeps growing as options are added.
+        end = all_script_text.find("});", i)
+        block = all_script_text[i:end if end != -1 else None]
         assert "task: getTaskOverride()" in block, (
             "run-large-area POST body must send `task: getTaskOverride()` so a "
             "forced classification/regression reaches the compute server"

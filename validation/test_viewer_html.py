@@ -573,8 +573,10 @@ class TestLabelSharing:
 # ────────────────────────────────────────────
 
 class TestLargeAreaValidation:
-    def test_year_select_exists(self, html):
-        assert 'val-year-select' in html
+    def test_year_selects_exist(self, html):
+        # One year select became separate training and test year selects.
+        assert 'id="val-train-year-select"' in html
+        assert 'id="val-test-year-select"' in html
 
     def test_upload_config_button_exists(self, html):
         assert 'val-upload-config' in html
@@ -599,10 +601,6 @@ class TestLargeAreaValidation:
 
     def test_load_results_file_function(self, script_text):
         assert 'function loadResultsFile' in script_text
-
-    def test_year_select_exists(self, html):
-        assert 'val-year-select' in html
-
 
 class TestHTMLStructure:
     def test_starts_with_doctype(self, html):
