@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include, re_path
 from api.views.config import serve_index, serve_static, serve_sample_data
-from api.views.tiles import get_tile, get_bounds, tile_health
+from api.views.tiles import get_tile, get_bounds, tile_health, export_geotiff
 
 urlpatterns = [
     path('', serve_index),
@@ -11,6 +11,7 @@ urlpatterns = [
     path('api/', include('api.urls')),
     path('admin/', admin.site.urls),
     path('tiles/health', tile_health),
+    path('tiles/<str:viewport>/<str:map_id>/export.tif', export_geotiff),
     path('tiles/<str:viewport>/<str:map_id>/<int:z>/<int:x>/<int:y>.png', get_tile),
     path('bounds/<str:viewport>/<str:map_id>', get_bounds),
     re_path(r'^(?P<path>.+)$', serve_static),
