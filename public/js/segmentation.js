@@ -12,6 +12,7 @@ let segLabels = [];          // [{id, color, name, count}, ...]
 let segRunning = false;      // prevent concurrent runs
 let segVectors = null;       // vectors used for current segmentation (may differ from localVectors)
 let segVectorsKey = null;    // `${viewport}/${year}` segVectors was loaded for (memo across k-changes)
+let segNote = null;          // note shown above the cluster list for the last run, or null
 
 Object.defineProperty(window, 'segAssignments', {
     get: () => segAssignments,
@@ -48,6 +49,10 @@ Object.defineProperty(window, 'segSeed', {
     set: (v) => { segSeed = v; },
     configurable: true,
 });
+Object.defineProperty(window, 'segNote', {
+    get: () => segNote,
+    configurable: true,
+});
 
 // ── Seeded PRNG ──
 
@@ -80,7 +85,8 @@ if (typeof window !== 'undefined') {
 //                  refine the k merged centroids with Lloyd on opts.refineIdx
 //   opts.fullIters Lloyd iterations over all N after the fit
 //   opts.beta      MRF (Potts) smoothing of the labels with ICM on the 8-neighbourhood
-// The grid steps need opts.gridW / opts.gridH (vectors in row-major order).
+// The grid steps need opts.gridW / opts.gridH, and opts.gridIndex (cell -> vector, -1 = no data)
+// unless every cell holds a vector in row-major order. The reply says whether they ran (smoothed).
 const segWorkerBlob = new Blob([`
     ${mulberry32.toString()}
 
@@ -273,7 +279,10 @@ const segWorkerBlob = new Blob([`
 
     // Separable Gaussian filter of the embedding grid, in place. sx / sy = sigma in pixels along
     // x / y, kernel cut at 3 sigma, edges replicated. Uses one row and one column as buffer.
-    function gaussFilter(embeddings, W, H, dim, sx, sy) {
+    // cellIdx maps grid cell y * W + x to its vector, -1 for a cell without data; null when
+    // every cell holds a vector in row-major order. Cells without data are left out of each
+    // pass and the remaining weights renormalised; they get no value themselves.
+    function gaussFilter(embeddings, W, H, dim, sx, sy, cellIdx = null) {
         const kernel = (sigma) => {
             const r = Math.max(1, Math.ceil(3 * sigma));
             const w = new Float64Array(2 * r + 1);
@@ -284,32 +293,56 @@ const segWorkerBlob = new Blob([`
         };
         const wx = kernel(sx), rx = (wx.length - 1) / 2;
         const wy = kernel(sy), ry = (wy.length - 1) / 2;
+        // On a dense grid no weight is ever skipped, so the arithmetic is exactly the plain filter.
         const row = new Float32Array(W * dim);
         for (let y = 0; y < H; y++) {
             row.fill(0);
             for (let x = 0; x < W; x++) {
+                if (cellIdx && cellIdx[y * W + x] < 0) continue;
                 const o = x * dim;
+                let wsum = 0, skipped = false;
                 for (let j = -rx; j <= rx; j++) {
                     const xx = x + j < 0 ? 0 : (x + j >= W ? W - 1 : x + j);
-                    const base = (y * W + xx) * dim, w = wx[j + rx];
+                    const v = cellIdx ? cellIdx[y * W + xx] : y * W + xx;
+                    const w = wx[j + rx];
+                    if (v < 0) { skipped = true; continue; }
+                    const base = v * dim;
+                    wsum += w;
                     for (let d = 0; d < dim; d++) row[o + d] += w * embeddings[base + d];
                 }
+                if (skipped) for (let d = 0; d < dim; d++) row[o + d] /= wsum;
             }
-            embeddings.set(row, y * W * dim);
+            if (!cellIdx) {
+                embeddings.set(row, y * W * dim);
+            } else {
+                for (let x = 0; x < W; x++) {
+                    const v = cellIdx[y * W + x];
+                    if (v >= 0) embeddings.set(row.subarray(x * dim, (x + 1) * dim), v * dim);
+                }
+            }
         }
         const col = new Float32Array(H * dim);
         for (let x = 0; x < W; x++) {
             col.fill(0);
             for (let y = 0; y < H; y++) {
+                if (cellIdx && cellIdx[y * W + x] < 0) continue;
                 const o = y * dim;
+                let wsum = 0, skipped = false;
                 for (let j = -ry; j <= ry; j++) {
                     const yy = y + j < 0 ? 0 : (y + j >= H ? H - 1 : y + j);
-                    const base = (yy * W + x) * dim, w = wy[j + ry];
+                    const v = cellIdx ? cellIdx[yy * W + x] : yy * W + x;
+                    const w = wy[j + ry];
+                    if (v < 0) { skipped = true; continue; }
+                    const base = v * dim;
+                    wsum += w;
                     for (let d = 0; d < dim; d++) col[o + d] += w * embeddings[base + d];
                 }
+                if (skipped) for (let d = 0; d < dim; d++) col[o + d] /= wsum;
             }
             for (let y = 0; y < H; y++) {
-                const base = (y * W + x) * dim, o = y * dim;
+                const v = cellIdx ? cellIdx[y * W + x] : y * W + x;
+                if (v < 0) continue;
+                const base = v * dim, o = y * dim;
                 for (let d = 0; d < dim; d++) embeddings[base + d] = col[o + d];
             }
         }
@@ -320,8 +353,11 @@ const segWorkerBlob = new Blob([`
     // where D are the squared distances to the centroids and s is their mean over all pixels at
     // the nearest centroid, so that beta does not depend on the scale of the embeddings.
     // All pixels are updated at once from the previous labels; at most iters sweeps.
-    function icmSmooth(D, labels, W, H, k, beta, iters) {
-        const N = W * H;
+    // labels / D are per vector; cellIdx maps grid cells to vectors as in gaussFilter (null =
+    // dense, row-major). Only neighbours with data count, so a pixel next to a gap is judged by
+    // fewer votes and an isolated pixel keeps its nearest centroid.
+    function icmSmooth(D, labels, W, H, k, beta, iters, cellIdx = null) {
+        const N = labels.length;
         let s = 0;
         for (let i = 0; i < N; i++) s += D[i * k + labels[i]];
         s = s / N || 1;
@@ -333,13 +369,16 @@ const segWorkerBlob = new Blob([`
                 const y0 = y > 0 ? y - 1 : 0, y1 = y < H - 1 ? y + 1 : H - 1;
                 for (let x = 0; x < W; x++) {
                     const x0 = x > 0 ? x - 1 : 0, x1 = x < W - 1 ? x + 1 : W - 1;
-                    const i = y * W + x;
+                    const i = cellIdx ? cellIdx[y * W + x] : y * W + x;
+                    if (i < 0) continue;
                     same.fill(0);
                     let nb = 0;
                     for (let yy = y0; yy <= y1; yy++) {
                         for (let xx = x0; xx <= x1; xx++) {
                             if (yy === y && xx === x) continue;
-                            same[cur[yy * W + xx]]++;
+                            const j = cellIdx ? cellIdx[yy * W + xx] : yy * W + xx;
+                            if (j < 0) continue;
+                            same[cur[j]]++;
                             nb++;
                         }
                     }
@@ -365,10 +404,15 @@ const segWorkerBlob = new Blob([`
         const embeddings = new Float32Array(e.data.vectors);
         const sampleIdx = e.data.sampleIdx ? new Uint32Array(e.data.sampleIdx) : null;
         const assignments = new Int32Array(N);
-        const onGrid = opts.gridW > 0 && opts.gridW * opts.gridH === N;
+        // Grid for the smoothing steps: dense and row-major (no gridIndex, W * H === N) or
+        // gridIndex mapping every cell to its vector, -1 for a cell without data.
+        const cellIdx = opts.gridIndex ? new Int32Array(opts.gridIndex) : null;
+        const onGrid = opts.gridW > 0 &&
+            (cellIdx ? cellIdx.length === opts.gridW * opts.gridH : opts.gridW * opts.gridH === N);
+        const smoothed = onGrid && (!!opts.sigma || opts.beta > 0);
 
         if (opts.sigma && onGrid) {
-            gaussFilter(embeddings, opts.gridW, opts.gridH, dim, opts.sigma[0], opts.sigma[1]);
+            gaussFilter(embeddings, opts.gridW, opts.gridH, dim, opts.sigma[0], opts.sigma[1], cellIdx);
         }
 
         let centroids;
@@ -412,7 +456,7 @@ const segWorkerBlob = new Blob([`
         }
 
         if (D) {
-            icmSmooth(D, assignments, opts.gridW, opts.gridH, k, opts.beta, 5);
+            icmSmooth(D, assignments, opts.gridW, opts.gridH, k, opts.beta, 5, cellIdx);
             // Representative pixel and radius of every cluster for the smoothed labels.
             nearestDist.fill(Infinity);
             maxDist.fill(0);
@@ -428,7 +472,8 @@ const segWorkerBlob = new Blob([`
             assignments: assignments.buffer,
             centroids: centroids.buffer,
             nearestIdx: nearestIdx.buffer,
-            maxDist: maxDist.buffer
+            maxDist: maxDist.buffer,
+            smoothed
         }, [assignments.buffer, centroids.buffer, nearestIdx.buffer, maxDist.buffer]);
     };
 `], {type: 'application/javascript'});
@@ -495,7 +540,9 @@ function pixelSizeMetres(gt, gridH) {
 }
 
 // Worker options and fitting-sample size for one run. `grid` is segVectors.gridLookup
-// ({w, h}, vectors in row-major order) or null; the grid steps are skipped without it.
+// ({w, h, index}): index === null means every cell holds a vector, in row-major order;
+// otherwise index maps each cell to its vector, -1 where the source data has a gap, and a copy
+// goes to the worker. The grid steps are skipped without a grid (the run reports smoothed: false).
 function buildSegOptions(method, k, N, seed, grid, gt) {
     const m = SEG_METHODS[method] || SEG_METHODS.kmeans;
     const opts = {};
@@ -508,9 +555,17 @@ function buildSegOptions(method, k, N, seed, grid, gt) {
         sampleSize = Math.min(Math.max(5000, m.K0 * 300), N);
     }
     if (m.fullIters) opts.fullIters = m.fullIters;
-    if (grid && grid.w * grid.h === N && (m.sigmaM || m.beta)) {
+    const dense = !!grid && grid.w > 0 && grid.index === null;
+    const gapped = !!grid && grid.w > 0 && ArrayBuffer.isView(grid.index) &&
+        grid.index.length === grid.w * grid.h;
+    if ((dense || gapped) && (m.sigmaM || m.beta)) {
         opts.gridW = grid.w;
         opts.gridH = grid.h;
+        if (gapped) {
+            const index = Int32Array.from(grid.index);
+            opts.gridIndex = index.buffer;
+            transfer.push(index.buffer);
+        }
         if (m.beta) opts.beta = m.beta;
         if (m.sigmaM && gt) {
             const [mx, my] = pixelSizeMetres(gt, grid.h);
@@ -518,6 +573,15 @@ function buildSegOptions(method, k, N, seed, grid, gt) {
         }
     }
     return { opts, sampleSize, transfer };
+}
+
+// Note for the cluster list when a method's smoothing step could not run (no pixel grid for
+// these vectors), so that the user knows the clusters are those of plain 'stable'. Gaps in
+// the source data do not cause this: the smoothing then uses only the pixels with data.
+function segSmoothingNote(method, smoothed) {
+    const m = SEG_METHODS[method];
+    if (!m || !(m.sigmaM || m.beta) || smoothed) return null;
+    return 'Ran as Stable: the smoothing step needs the pixel grid of the viewport, which is not available for these vectors.';
 }
 
 // ── K-means Execution ──
@@ -550,6 +614,7 @@ async function runKMeans(k, seed, method) {
     }
     segOverlay = null;
     segLabels = [];
+    segNote = null;
     showSegmentationPanel(); // clears both floating popup and panel 6
 
     // Always segment the year shown in panel 3
@@ -638,6 +703,7 @@ async function runKMeans(k, seed, method) {
             const centroids = new Float32Array(e.data.centroids);
             const nearestIdxArr = new Int32Array(e.data.nearestIdx);
             const maxDistArr = new Float64Array(e.data.maxDist);
+            segNote = segSmoothingNote(method, e.data.smoothed);
 
             const counts = new Int32Array(k);
             for (let i = 0; i < N; i++) counts[segAssignments[i]]++;
@@ -768,6 +834,7 @@ function clearSegmentation() {
     segAssignments = null;
     segVectors = null;
     segLabels = [];
+    segNote = null;
     document.getElementById('seg-clear-btn').style.display = 'none';
     document.getElementById('seg-k-input').value = 5;
     showSegmentationPanel(); // clears both floating popup and panel 6
@@ -783,6 +850,13 @@ function renderSegListInto(container) {
         return;
     }
     container.innerHTML = '';
+    if (segNote) {
+        const note = document.createElement('div');
+        note.className = 'seg-note';
+        note.style.cssText = 'margin: 0 0 8px; padding: 6px 8px; border-radius: 4px; background: #fff7e0; color: #7a5a00; font-size: 11px;';
+        note.textContent = segNote;
+        container.appendChild(note);
+    }
     const hasSchema = !!window.activeSchema;
     for (const cl of segLabels) {
         const pct = total > 0 ? ((cl.count / total) * 100).toFixed(1) : '0.0';

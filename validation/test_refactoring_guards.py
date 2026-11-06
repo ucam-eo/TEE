@@ -1640,6 +1640,23 @@ class TestSegmentationMethods:
         for value in re.findall(r'<option value="([^"]+)"', select):
             assert re.search(rf"\n    {value}: \{{", src), f"SEG_METHODS has no entry for option '{value}'"
 
+    def test_dense_grid_is_index_null(self):
+        """The smoothing steps take a grid as dense only when gridLookup.index is
+        null, which also guarantees row-major order; a grid with gaps sends its
+        index instead. Comparing pixel counts is not enough (review of PR #31)."""
+        src = (JS_DIR / "segmentation.js").read_text()
+        body = src[src.index("function buildSegOptions("):src.index("function segSmoothingNote(")]
+        assert "grid.index === null" in body
+        assert "opts.gridIndex" in body
+        assert "grid.w * grid.h === N" not in body
+
+    def test_smoothing_fallback_is_shown(self):
+        """If a smoothing method cannot run, the cluster list says that the run
+        used Stable instead of falling back silently."""
+        src = (JS_DIR / "segmentation.js").read_text()
+        assert "segNote = segSmoothingNote(method, e.data.smoothed)" in src
+        assert "note.textContent = segNote" in src
+
     def test_mjs_behaviour(self):
         result = subprocess.run(
             ["node", str(ROOT / "validation" / "test_segmentation_methods.mjs")],

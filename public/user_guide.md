@@ -342,7 +342,7 @@ Once a cluster is promoted, its row in the **Labels** column gets a few small ic
 | 🗑️ | **Delete** the label |
 | 👁 (below the row) | **Toggle visibility** on the map — greys out to 🙈 when hidden |
 
-![K-means controls: adjust k, then click Go](images/ui_seg_controls.png)
+![Auto-label controls: k, seed and method, then click Go](images/ui_seg_controls.png)
 
 | Step | What to do |
 |------|------------|
@@ -368,6 +368,8 @@ The dropdown next to the seed chooses how the clusters are computed. **k-means**
 | **Stable** | K-means with 32 clusters, then the two most similar clusters are merged (Ward's criterion) again and again until *k* are left, and the *k* centres are refined. |
 | **Stable + smooth** | *Stable*, then each pixel may switch to the cluster that most of its 8 neighbours belong to, unless its own embedding clearly says otherwise (a Markov random field). Removes isolated pixels inside fields. |
 | **Stable + Gaussian** | Blurs the embeddings over about 10 m, then runs *Stable*. An alternative to smoothing. |
+
+On a viewport whose source data has gaps (pixels without an embedding), both smoothing methods use only the pixels that have data: a pixel next to a gap is judged by its remaining neighbours, and the blur averages over the pixels with data only. If the smoothing cannot run at all, the cluster list says so and shows the clusters of *Stable*.
 
 Measured on a 5 × 5 km Gothenburg viewport (k = 5, seeds 1–100): with k-means, 21.6 % of the pixels change cluster between two seeds, with *Stable* 1.8 %. On an Austrian crop tile (k = 17, 20 seeds), *Stable + smooth* lowers the share of neighbouring pixels inside one field that fall into different clusters from 22.6 % to 13.0 %. On that viewport a run takes about 0.8–1.1 s in Chrome (k = 5–17) instead of 0.3–0.7 s.
 

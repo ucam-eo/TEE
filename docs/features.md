@@ -119,7 +119,11 @@ adds three optional pipelines in the same worker: *Stable* (over-cluster into 32
 Ward merge to k, Lloyd refinement), *Stable + smooth* (then MRF/Potts smoothing of
 the labels with ICM, β = 0.25) and *Stable + Gaussian* (Gaussian filter of the
 embeddings, σ = 10 m, before *Stable*). *k-means* stays the default and gives
-bit-identical results.
+bit-identical results. The two smoothing steps work on viewports with gaps in the
+source data: `gridLookup.index` (−1 = no data) goes to the worker, the MRF counts
+only neighbours with data and the filter renormalises its weights over them; a
+grid without gaps (`index === null`) gives exactly the earlier results. If no grid
+is available, the cluster list notes that the run used *Stable*.
 
 ### Polygon search modes
 

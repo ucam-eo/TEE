@@ -14,6 +14,9 @@
  *   - each building block on an input small enough to verify by hand
  *   - the "Stable" pipeline end to end on well-separated groups
  *   - buildSegOptions(): sample sizes and the metre -> pixel conversion
+ *   - grids with gaps (gridLookup.index, -1 = no data): the Gaussian filter
+ *     renormalises over pixels with data, the MRF counts only neighbours with
+ *     data, and on a grid without gaps both give exactly the old output
  *
  * Run:  node validation/test_segmentation_methods.mjs
  */
@@ -41,8 +44,8 @@ function extract(name) {
 const methodsSrc = src.match(/const SEG_METHODS = \{[\s\S]*?\n\};/)[0];
 const api = new Function(
     extract('mulberry32') + '\n' + extract('buildSample') + '\n' + methodsSrc + '\n' +
-    extract('pixelSizeMetres') + '\n' + extract('buildSegOptions') + '\n' +
-    'return { mulberry32, buildSample, SEG_METHODS, pixelSizeMetres, buildSegOptions };'
+    extract('pixelSizeMetres') + '\n' + extract('buildSegOptions') + '\n' + extract('segSmoothingNote') + '\n' +
+    'return { mulberry32, buildSample, SEG_METHODS, pixelSizeMetres, buildSegOptions, segSmoothingNote };'
 )();
 
 // The worker blob, with mulberry32 spliced in as the browser does it.
@@ -99,7 +102,7 @@ function samePartition(a, b) {
     const { emb } = mixture(12000, 8, 7, 3, 123);
     ok(sha(runWorker(emb, 12000, 8, 6, 42).raw.assignments) === '3fe135762760', 'k-means, seed 42: same assignments as before');
     ok(sha(runWorker(emb, 12000, 8, 6, 7).raw.assignments) === '100d3fbfde15', 'k-means, seed 7: same assignments as before');
-    const { opts, sampleSize } = api.buildSegOptions('kmeans', 6, 12000, 42, { w: 120, h: 100 }, null);
+    const { opts, sampleSize } = api.buildSegOptions('kmeans', 6, 12000, 42, { w: 120, h: 100, index: null }, null);
     ok(Object.keys(opts).length === 0 && sampleSize === 5000, 'k-means sends no options and keeps the sample rule');
 }
 
@@ -206,7 +209,7 @@ function samePartition(a, b) {
     }
     const errors = (lab) => { let e = 0; for (let i = 0; i < N; i++) e += lab[i] !== truth[i]; return Math.min(e, N - e); };
     const gt = { a: 0.0001, c: 11.9, e: -0.0001, f: 57.7 };
-    const grid = { w: W, h: H };
+    const grid = { w: W, h: H, index: null };   // a gridLookup without gaps
     const plain = errors(runWorker(emb, N, dim, 2, 42, 'stable', grid, gt).lab);
     const mrf = runWorker(emb, N, dim, 2, 42, 'smooth', grid, gt);
     const pre = errors(runWorker(emb, N, dim, 2, 42, 'gauss', grid, gt).lab);
@@ -216,8 +219,21 @@ function samePartition(a, b) {
     ok(Array.from(mrf.nearestIdx).every((ni, c) => mrf.lab[ni] === c), 'MRF: representative pixel belongs to its (smoothed) cluster');
     const stableCent = runWorker(emb, N, dim, 2, 42, 'stable', grid, gt).cent;
     ok(mrf.cent.join() === stableCent.join(), 'MRF changes labels only: same centroids as stable');
-    ok(runWorker(emb, N, dim, 2, 42, 'smooth', null, gt).lab.join() === runWorker(emb, N, dim, 2, 42, 'stable', null, gt).lab.join(),
+    // Outputs recorded before the gap handling was added (PR #31 head 0f112a3): on a grid
+    // without gaps the filter and the MRF still do exactly the same arithmetic.
+    ok(sha(mrf.raw.assignments) === '475fa60a9549' && sha(mrf.raw.centroids) === 'e491ea455ce4',
+        'no gaps: Stable + smooth gives exactly the output from before the gap handling');
+    const gaussRun = runWorker(emb, N, dim, 2, 42, 'gauss', grid, gt).raw;
+    ok(sha(gaussRun.assignments) === 'ddb6eb555920' && sha(gaussRun.centroids) === '57d2efee3543',
+        'no gaps: Stable + Gaussian gives exactly the output from before the gap handling');
+    ok(mrf.raw.smoothed === true && gaussRun.smoothed === true, 'the worker reports that the smoothing ran');
+    const noGrid = runWorker(emb, N, dim, 2, 42, 'smooth', null, gt);
+    ok(noGrid.lab.join() === runWorker(emb, N, dim, 2, 42, 'stable', null, gt).lab.join(),
         'no grid -> smooth falls back to stable');
+    ok(noGrid.raw.smoothed === false && /Ran as Stable/.test(api.segSmoothingNote('smooth', noGrid.raw.smoothed)),
+        'no grid -> the worker says so and the cluster list gets a note');
+    ok(api.segSmoothingNote('smooth', true) === null && api.segSmoothingNote('stable', false) === null &&
+        api.segSmoothingNote('kmeans', false) === null, 'no note when the smoothing ran or was not asked for');
     // metre -> pixel conversion at Gothenburg: a pixel of 0.000117 degrees is 6.96 m x 12.93 m
     const [mx, my] = api.pixelSizeMetres({ a: 0.00011696237616832214, e: -0.00011696237616832214, f: 57.73132766836905 }, 385);
     ok(near(mx, 6.96, 0.02) && near(my, 12.93, 0.02), `pixel size at Gothenburg (${mx.toFixed(2)} m x ${my.toFixed(2)} m)`);
@@ -226,6 +242,153 @@ function samePartition(a, b) {
     ok(!api.buildSegOptions('gauss', 5, N, 42, null, gt).opts.sigma, 'no grid -> no filter');
     const s = api.buildSegOptions('smooth', 5, N, 42, grid, gt).opts;
     ok(s.beta === 0.25 && s.gridW === W && !s.sigma, 'smooth sends beta and the grid, no filter');
+}
+
+// --- grids with gaps (gridLookup.index, -1 = no data) -----------------
+{
+    // A grid of W x H cells holding the vectors of the cells with mask = 1, in the given order.
+    // Returns the cell -> vector index (-1 = gap) and the vector -> cell list.
+    function gappedGrid(W, H, mask, order) {
+        const cells = [];
+        for (let c = 0; c < W * H; c++) if (mask[c]) cells.push(c);
+        const vecCell = order ? order.map((i) => cells[i]) : cells;
+        const index = new Int32Array(W * H).fill(-1);
+        vecCell.forEach((c, v) => { index[c] = v; });
+        return { index, vecCell };
+    }
+    const kernel = (sigma) => {
+        const r = Math.max(1, Math.ceil(3 * sigma)), w = [];
+        let z = 0;
+        for (let j = -r; j <= r; j++) { w.push(Math.exp(-j * j / (2 * sigma * sigma))); z += w[w.length - 1]; }
+        return w.map((v) => v / z);
+    };
+
+    // Gaussian filter, one row with gaps: each pixel with data becomes the weighted mean of the
+    // pixels with data in its window (edges replicated), weights renormalised.
+    {
+        const W = 9, vals = [0, 1, 4, 9, 16, 25, 36, 49, 64], mask = [1, 1, 0, 1, 1, 1, 0, 0, 1];
+        const { index, vecCell } = gappedGrid(W, 1, mask);
+        const img = new Float32Array(vecCell.map((c) => vals[c]));
+        fn.gaussFilter(img, W, 1, 1, 1.0, 0.5, index);
+        const w = kernel(1.0), r = (w.length - 1) / 2;
+        let worst = 0;
+        vecCell.forEach((c, v) => {
+            let num = 0, den = 0;
+            for (let j = -r; j <= r; j++) {
+                const xx = Math.min(W - 1, Math.max(0, c + j));
+                if (mask[xx]) { num += w[j + r] * vals[xx]; den += w[j + r]; }
+            }
+            worst = Math.max(worst, Math.abs(img[v] - num / den));
+        });
+        ok(worst < 1e-4, `gaps: weighted mean over the pixels with data, renormalised (max error ${worst.toExponential(1)})`);
+    }
+    {
+        // constant image with 30 % gaps and a hole stays constant; vector order does not matter
+        const W = 23, H = 17, dim = 3, rnd = api.mulberry32(3);
+        const mask = Array.from({ length: W * H }, (_, c) => (rnd() > 0.3 && !(c % W > 8 && c % W < 14 && c / W > 5 && c / W < 11)) ? 1 : 0);
+        const n = mask.reduce((a, b) => a + b, 0);
+        const order = Array.from({ length: n }, (_, i) => i);
+        for (let i = n - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+        const { index } = gappedGrid(W, H, mask, order);
+        const flat = new Float32Array(n * dim).fill(4);
+        fn.gaussFilter(flat, W, H, dim, 1.5, 0.8, index);
+        ok(flat.every((v) => near(v, 4, 1e-5)), 'gaps: a constant image stays constant next to gaps and holes');
+        // same values in row-major order vs shuffled order: identical per cell
+        const rowMajor = gappedGrid(W, H, mask), shuffled = gappedGrid(W, H, mask, order);
+        const val = (c, d) => Math.sin(c * 0.37 + d);
+        const a = new Float32Array(n * dim), b = new Float32Array(n * dim);
+        rowMajor.vecCell.forEach((c, v) => { for (let d = 0; d < dim; d++) a[v * dim + d] = val(c, d); });
+        shuffled.vecCell.forEach((c, v) => { for (let d = 0; d < dim; d++) b[v * dim + d] = val(c, d); });
+        fn.gaussFilter(a, W, H, dim, 1.2, 0.9, rowMajor.index);
+        fn.gaussFilter(b, W, H, dim, 1.2, 0.9, shuffled.index);
+        let same = true;
+        shuffled.vecCell.forEach((c, v) => {
+            const u = rowMajor.index[c];
+            for (let d = 0; d < dim; d++) same = same && a[u * dim + d] === b[v * dim + d];
+        });
+        ok(same, 'gaps: the result per cell does not depend on the order of the vectors');
+        // a full grid given through an identity index is exactly the dense filter
+        const full = new Float32Array(W * H * dim).map((_, i) => Math.cos(i * 0.11));
+        const viaIndex = full.slice();
+        fn.gaussFilter(full, W, H, dim, 1.2, 0.9);
+        fn.gaussFilter(viaIndex, W, H, dim, 1.2, 0.9, Int32Array.from({ length: W * H }, (_, c) => c));
+        ok(full.join() === viaIndex.join(), 'an index without gaps gives exactly the dense filter');
+    }
+
+    // MRF: only neighbours with data vote. Same 7 x 7 set-up as above; at beta = 0.04 the pixel
+    // flips with its 8 neighbours (8 * 0.04 = 0.32 > 0.2) but not when 4 of them are gaps
+    // (4 * 0.04 = 0.16 < 0.2).
+    {
+        const W = 7, H = 7, k = 2, p = 3 * W + 5;
+        const build = (mask) => {
+            const { index, vecCell } = gappedGrid(W, H, mask);
+            const D = new Float32Array(vecCell.length * k), lab = new Int32Array(vecCell.length);
+            vecCell.forEach((cell, v) => {
+                const c = cell % W < 3 ? 0 : 1;
+                D[v * k + c] = 1; D[v * k + 1 - c] = 3; lab[v] = c;
+            });
+            const vp = index[p];
+            D[vp * k] = 1.0; D[vp * k + 1] = 1.2; lab[vp] = 0;
+            return { index, D, lab, vp };
+        };
+        const full = build(new Array(W * H).fill(1));
+        const l1 = new Int32Array(full.lab); fn.icmSmooth(full.D, l1, W, H, k, 0.04, 5);
+        const l2 = new Int32Array(full.lab); fn.icmSmooth(full.D, l2, W, H, k, 0.04, 5, full.index);
+        ok(l1[full.vp] === 1 && l1.join() === l2.join(), 'MRF, no gaps: 8 neighbours outvote the pixel; an identity index changes nothing');
+        const mask = new Array(W * H).fill(1);
+        for (const c of [2 * W + 4, 2 * W + 5, 2 * W + 6, 3 * W + 4]) mask[c] = 0;
+        const gap = build(mask);
+        const l3 = new Int32Array(gap.lab); fn.icmSmooth(gap.D, l3, W, H, k, 0.04, 5, gap.index);
+        ok(l3[gap.vp] === 0, 'MRF, gaps: with 4 of its 8 neighbours missing the same beta no longer flips the pixel');
+        const lone = new Array(W * H).fill(1);
+        for (const c of [2 * W + 4, 2 * W + 5, 2 * W + 6, 3 * W + 4, 3 * W + 6, 4 * W + 4, 4 * W + 5, 4 * W + 6]) lone[c] = 0;
+        const iso = build(lone);
+        const l4 = new Int32Array(iso.lab); fn.icmSmooth(iso.D, l4, W, H, k, 10, 5, iso.index);
+        ok(l4[iso.vp] === 0, 'MRF, gaps: a pixel without neighbours keeps its nearest centroid, whatever beta');
+    }
+
+    // End to end on the noisy two-halves grid of above with 25 % of the cells missing and the
+    // vectors shuffled: both smoothers still work, through gridLookup.index.
+    {
+        const W = 40, H = 30, dim = 4, rnd = api.mulberry32(9);
+        const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+        const mask = Array.from({ length: W * H }, () => (rnd() > 0.25 ? 1 : 0));
+        const n = mask.reduce((a, b) => a + b, 0);
+        const order = Array.from({ length: n }, (_, i) => i);
+        for (let i = n - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+        const { index, vecCell } = gappedGrid(W, H, mask, order);
+        const emb = new Float32Array(n * dim), truth = new Int32Array(n);
+        vecCell.forEach((c, v) => {
+            truth[v] = c % W < W / 2 ? 0 : 1;
+            for (let d = 0; d < dim; d++) emb[v * dim + d] = (truth[v] ? 1 : -1) + 1.2 * gauss();
+        });
+        const errors = (lab) => { let e = 0; for (let i = 0; i < n; i++) e += lab[i] !== truth[i]; return Math.min(e, n - e); };
+        const gt = { a: 0.0001, c: 11.9, e: -0.0001, f: 57.7 };
+        const grid = { w: W, h: H, index };
+        const plain = errors(runWorker(emb, n, dim, 2, 42, 'stable', grid, gt).lab);
+        const mrf = runWorker(emb, n, dim, 2, 42, 'smooth', grid, gt);
+        const pre = runWorker(emb, n, dim, 2, 42, 'gauss', grid, gt);
+        ok(plain > 15, `gaps: noise makes the unsmoothed clustering mislabel pixels (${plain} of ${n})`);
+        ok(errors(mrf.lab) < plain / 2 && mrf.raw.smoothed === true, `gaps: the MRF still removes most of them (${errors(mrf.lab)} of ${plain} left)`);
+        ok(errors(pre.lab) < plain / 3 && pre.raw.smoothed === true, `gaps: the Gaussian filter still removes most of them (${errors(pre.lab)} of ${plain} left)`);
+        ok(api.segSmoothingNote('smooth', mrf.raw.smoothed) === null, 'gaps: no "Ran as Stable" note');
+
+        // buildSegOptions: the dense test is index === null, not a count comparison
+        const g = api.buildSegOptions('smooth', 2, n, 42, grid, gt);
+        const sent = new Int32Array(g.opts.gridIndex);
+        ok(g.opts.gridW === W && g.opts.gridH === H && sent.length === W * H && sent.join() === index.join(),
+            'a grid with gaps sends its cell -> vector index');
+        ok(g.opts.gridIndex !== index.buffer && g.transfer.includes(g.opts.gridIndex),
+            'the index goes to the worker as a transferred copy (the viewer keeps its own)');
+        ok(api.buildSegOptions('smooth', 2, W * H, 42, { w: W, h: H, index: null }, gt).opts.gridIndex === undefined,
+            'a grid without gaps (index === null) sends no index');
+        const perm = gappedGrid(W, H, new Array(W * H).fill(1), Array.from({ length: W * H }, (_, i) => (i * 7) % (W * H)));
+        ok(new Int32Array(api.buildSegOptions('smooth', 2, W * H, 42, { w: W, h: H, index: perm.index }, gt).opts.gridIndex).join() === perm.index.join(),
+            'every cell filled but not in row-major order: the index is used, counts alone are not trusted');
+        ok(api.buildSegOptions('smooth', 2, n, 42, { w: W, h: H }, gt).opts.gridW === undefined &&
+            api.buildSegOptions('smooth', 2, n, 42, { w: W, h: H, index: new Int32Array(5) }, gt).opts.gridW === undefined,
+            'a grid without a usable index is not used');
+    }
 }
 
 // --- no unseeded randomness in the new code ---------------------------
