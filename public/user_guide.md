@@ -29,7 +29,7 @@ With TEE you can:
 
 - [Quick Start](#quick-start)
 - [The Viewport Manager](#the-viewport-manager)
-- [The Viewer](#the-viewer)
+- [The Viewer](#the-viewer) — modes, years, [exporting maps as GeoTIFF](#exporting-maps-geotiff)
 - [Similarity Search](#similarity-search)
 - [Labels](#labels) — exporting, sharing, importing
 - [Classification Schemas](#classification-schemas) — UKHab, EUNIS, HOTW
@@ -158,12 +158,23 @@ Use the **year dropdown** above the embedding panels to change which year's sate
 
 ### Exporting Maps (GeoTIFF)
 
-To make your own maps (in QGIS, ArcGIS, etc.) rather than taking screenshots, use the **⤓ GeoTIFF** buttons in the panel headers:
+You can download the embedding maps and the change heatmap as GeoTIFF files, to make your own maps in QGIS, ArcGIS or similar instead of taking screenshots. Every export covers the **whole viewport** (not just the part on screen), at the full 10 m resolution, and is georeferenced in WGS 84 (EPSG:4326), so the files line up with each other and with any other GIS layer.
 
-- **Tessera Embeddings** panels (Explore and Change Detection modes): downloads that year's embedding map at full 10 m resolution as an RGB GeoTIFF.
-- **Change Heatmap** panel (Change Detection mode): choose **Map image (as shown)** for a ready-made picture matching the on-screen colours (purple = little change, yellow = most change; gaps are transparent), or **Change values (for GIS analysis)** for the amount of change at each pixel as a number (the distance between the two years' embeddings, stored as 32-bit floats), which you can restyle, threshold, or analyse yourself (gaps are no-data).
+**Embedding maps** (Explore and Change Detection modes)
 
-All exports cover the whole viewport, not just the visible area, and are georeferenced in WGS 84 (EPSG:4326). The file's metadata records the viewport, year(s), and — for the coloured heatmap — the colour scale used.
+1. Pick the year in the panel's **year dropdown**.
+2. Click **⤓ GeoTIFF** in the **Tessera Embeddings** panel header. In Change Detection mode, each of the two embedding panels has its own button, for its own year.
+3. You get `<viewport>_<year>_embeddings.tif`: an RGB image of that year's embeddings, coloured as on screen.
+
+**Change heatmap** (Change Detection mode)
+
+1. Set two **different** years in the two embedding panels and wait for the Change Heatmap to appear. A viewport with only one year shows *"Add another year for this location"*: use **+ Year** next to the viewport in the Viewport Manager, then come back.
+2. Open the **⤓ GeoTIFF** menu in the **Change Heatmap** panel header and choose:
+   - **Map image (as shown)**: a ready-made picture, coloured as on screen (purple = little change, yellow = most change). Pixels with no data in either year are transparent. Best for dropping straight into a report or map layout.
+   - **Change values (for GIS analysis)**: the amount of change at each pixel as a number (the distance between the two years' embeddings; 0 = no change, larger = more change). Pixels with no data are marked as no-data. Best when you want your own colours, a threshold such as "only pixels above X", or statistics.
+3. You get `<viewport>_<year1>-<year2>_change_heatmap.tif` or `..._change_distance.tif`.
+
+**Opening the files in QGIS:** drag the `.tif` into the Layers panel. The embedding map and the coloured heatmap display as they look in TEE. For the change values, open *Layer Properties → Symbology*, choose *Singleband pseudocolor* and a colour ramp (e.g. Viridis), and set the min/max to taste. The on-screen heatmap tops out at 1.5× the median change, which is a good starting maximum. Each file's metadata (*Layer Properties → Information*) records the viewport, the year(s) and, for the coloured heatmap, the colour scale used.
 
 ### Satellite Imagery Source
 
