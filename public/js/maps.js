@@ -822,6 +822,8 @@ function setPanelLayout(mode) {
     const select = document.getElementById('panel-layout-select');
     const waitMsg = document.getElementById('heatmap-waiting-message');
     const sameMsg = document.getElementById('heatmap-same-year-message');
+    const singleMsg = document.getElementById('heatmap-single-year-message');
+    if (singleMsg && mode !== 'change-detection') singleMsg.style.display = 'none';
 
     // Remove old mode class, add new one (on both container and body for toolbar CSS)
     container.classList.remove('mode-explore', 'mode-change-detection', 'mode-labelling', 'mode-validation');

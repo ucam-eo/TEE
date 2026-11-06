@@ -221,6 +221,14 @@ const dependencyRegistry = [
         satisfied: false
     },
     {
+        // Single-year viewport: tell the user to add a year (loadHeatmap shows
+        // the message). Without this the page-load "waiting" message stuck.
+        id: 'panel5-single-year',
+        test: (s) => s.has_pyramids && s.years_available.length < 2,
+        onReady: () => window.loadHeatmap(),
+        satisfied: false
+    },
+    {
         id: 'panel5-heatmap',
         test: (s) => s.has_vectors && s.years_available.length >= 2,
         onReady: () => {

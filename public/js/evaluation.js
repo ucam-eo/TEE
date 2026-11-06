@@ -3678,6 +3678,8 @@ window.generateConfig = generateConfig;
 window.loadConfigFile = loadConfigFile;
 window.loadResultsFile = loadResultsFile;
 window.toggleBboxDraw = toggleBboxDraw;
+// Called from the year selects' inline onchange (viewer.html).
+window.checkYearCoverageValidity = checkYearCoverageValidity;
 window.clearAllBboxes = clearAllBboxes;
 Object.defineProperty(window, 'lastEvalData', {
     get: () => lastEvalData,

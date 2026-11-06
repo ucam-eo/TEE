@@ -515,8 +515,8 @@ function rebuildClassOverlay(className) {
         for (const label of classLabels) {
             if (!label.visible || label.type !== 'polygon' || !label.vertices) continue;
             const pixVerts = label.vertices.map(v => [
-                Math.round((v[1] - gt.c) / gt.a),
-                Math.round((v[0] - gt.f) / gt.e)
+                (v[1] - gt.c) / gt.a,
+                (v[0] - gt.f) / gt.e
             ]);
             const polyMatches = rasterizePolygon(pixVerts, polygonHolesToPixels(label, gt));
             label.pixelCount = polyMatches.length;
@@ -1086,8 +1086,8 @@ function computeManualClassification() {
         if (label.type !== 'polygon' || !label.vertices) continue;
         const classIdx = classNames.indexOf(label.name);
         const pixVerts = label.vertices.map(v => [
-            Math.round((v[1] - gt.c) / gt.a),
-            Math.round((v[0] - gt.f) / gt.e)
+            (v[1] - gt.c) / gt.a,
+            (v[0] - gt.f) / gt.e
         ]);
         const matches = rasterizePolygon(pixVerts, polygonHolesToPixels(label, gt));
         for (const m of matches) {
@@ -1319,10 +1319,10 @@ function handlePolygonComplete(latLngs) {
     if (!currentManualLabel || !window.localVectors) return;
 
     const gt = window.localVectors.metadata.geotransform;
-    // Convert lat/lng vertices to pixel coords
+    // Convert lat/lng vertices to (fractional) pixel coords
     const pixelVertices = latLngs.map(ll => {
-        const px = Math.round((ll.lng - gt.c) / gt.a);
-        const py = Math.round((ll.lat - gt.f) / gt.e);
+        const px = (ll.lng - gt.c) / gt.a;
+        const py = (ll.lat - gt.f) / gt.e;
         return [px, py];
     });
 
@@ -1402,11 +1402,17 @@ function pointInPolygon(px, py, polygon) {
 // any; a polygon drawn in the viewer is a single ring.
 function polygonHolesToPixels(label, gt) {
     return (label.holes || []).map(ring => ring.map(v => [
-        Math.round((v[1] - gt.c) / gt.a),
-        Math.round((v[0] - gt.f) / gt.e)
+        (v[1] - gt.c) / gt.a,
+        (v[0] - gt.f) / gt.e
     ]));
 }
 
+// Pixels whose centre lies inside the polygon. Vertices are fractional pixel
+// coordinates (lon/lat through the geotransform) and must not be rounded to
+// whole pixels first: that moves every vertex by up to half a pixel, and the
+// vertices of exported pixel sets (d3-contour, on the midpoints of pixel
+// edges) to one of two corners, so that a re-imported cluster loses and
+// gains pixels along its whole outline.
 function rasterizePolygon(pixelVertices, holes = []) {
     if (!window.localVectors || !pixelVertices || pixelVertices.length < 3) return [];
 
@@ -1421,10 +1427,10 @@ function rasterizePolygon(pixelVertices, holes = []) {
 
     // Clamp to grid bounds
     const grid = window.localVectors.gridLookup;
-    minPx = Math.max(minPx, grid.minX);
-    maxPx = Math.min(maxPx, grid.minX + grid.w - 1);
-    minPy = Math.max(minPy, grid.minY);
-    maxPy = Math.min(maxPy, grid.minY + grid.h - 1);
+    minPx = Math.max(Math.floor(minPx), grid.minX);
+    maxPx = Math.min(Math.ceil(maxPx), grid.minX + grid.w - 1);
+    minPy = Math.max(Math.floor(minPy), grid.minY);
+    maxPy = Math.min(Math.ceil(maxPy), grid.minY + grid.h - 1);
 
     const gt = window.localVectors.metadata.geotransform;
     const matches = [];
@@ -2055,7 +2061,7 @@ function importGeoJSON(geojson) {
         if (holes.length > 0) entry.holes = holes;
         pushManualLabel(entry);
         if (gt && grid) {
-            const pixVerts = geoVertices.map(v => [Math.round((v[1] - gt.c) / gt.a), Math.round((v[0] - gt.f) / gt.e)]);
+            const pixVerts = geoVertices.map(v => [(v[1] - gt.c) / gt.a, (v[0] - gt.f) / gt.e]);
             const matches = rasterizePolygon(pixVerts, polygonHolesToPixels(entry, gt));
             const lbl = manualLabels[manualLabels.length - 1];
             lbl.matchCount = matches.length;

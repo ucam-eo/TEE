@@ -54,6 +54,7 @@ const factory = new Function(
         extract('getEvalMode'),
         extract('getKfoldK'),
         extract('getSeed'),
+        extract('_resultCellHTML'),
         extract('appendFoldResultRow'),
         extract('renderKfoldClassificationTable'),
     ].join('\n\n') +

@@ -43,6 +43,7 @@ deprecated/
 # Shapefiles (private ground-truth data)
 *.zip
 !austria.zip
+!gothenburg.zip
 cumbria_naddle.zip
 Cumbria_naddle/
 manual-labels-Eddington.zip

@@ -696,7 +696,10 @@ class TestLargeAreaEvaluation:
     def test_run_large_area_sends_task_override(self, all_script_text):
         i = all_script_text.find("evalUrl('run-large-area')")
         assert i != -1, "expected a fetch to evalUrl('run-large-area')"
-        block = all_script_text[i:i + 900]
+        # The whole fetch call (up to its closing "});"), not a fixed slice:
+        # the request body keeps growing as options are added.
+        end = all_script_text.find("});", i)
+        block = all_script_text[i:end if end != -1 else None]
         assert "task: getTaskOverride()" in block, (
             "run-large-area POST body must send `task: getTaskOverride()` so a "
             "forced classification/regression reaches the compute server"
@@ -1588,7 +1591,31 @@ class TestSegmentationSeed:
 
 
 # ──────────────────────────────────────────────────
-# 30. Auto-label clustering methods
+# 32. Change heatmap draws its own grid (no row banding)
+#     Behaviour: validation/test_heatmap_canvas.mjs.
+# ──────────────────────────────────────────────────
+
+class TestHeatmapCanvas:
+    def test_mjs_behaviour(self):
+        result = subprocess.run(
+            ["node", str(ROOT / "validation" / "test_heatmap_canvas.mjs")],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, (
+            "validation/test_heatmap_canvas.mjs failed:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )
+
+    def test_heatmap_does_not_size_pixels_from_local_vectors(self, all_script_text):
+        i = all_script_text.find("class HeatmapCanvasLayer")
+        body = all_script_text[i:all_script_text.find("\n}\n", i)]
+        assert "calculatePixelBounds" not in body, (
+            "HeatmapCanvasLayer must draw from its own grid, not per-pixel "
+            "rectangles sized from window.localVectors (row banding)"
+        )
+
+# ──────────────────────────────────────────────────
+# 33. Auto-label clustering methods
 #     segmentation.js: #seg-method-select picks an entry of SEG_METHODS
 #     (kmeans / stable / smooth / gauss) that buildSegOptions() turns into
 #     worker options. 'kmeans' is the default and leaves the worker output

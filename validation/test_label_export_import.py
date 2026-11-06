@@ -101,24 +101,19 @@ class TestImportGrouping:
         assert "pointGroups" in js
         assert "pointGroups.set(name" in js or "pointGroups.has(name)" in js
 
-    def test_import_multi_point_creates_pixel_coords(self, js):
-        """Multiple points with same name create a single label with pixel_coords."""
-        # The import builds pixel_coords array from grouped points
-        assert "pixel_coords.push(px, py)" in js
-
-    def test_import_computes_centroid_embedding(self, js):
-        """Import computes centroid embedding from grouped pixel embeddings."""
-        # Centroid averaging
-        assert "centroid[d] /= validCount" in js
-
-    def test_import_computes_threshold(self, js):
-        """Import computes max L2 distance from centroid as threshold."""
-        assert "maxDistSq" in js
-        assert "Math.sqrt(maxDistSq)" in js
-
-    def test_import_single_point_stays_point(self, js):
-        """A name with only one point is imported as a simple point label."""
-        assert "group.points.length === 1" in js
+    def test_import_each_point_is_its_own_label(self, js):
+        """Every imported point becomes its own point label, like a hand-placed
+        pin, so the similarity slider works for multi-point classes. (Points of
+        one class used to be merged into a single frozen centroid label with a
+        pixel_coords snapshot, which disabled the slider -- changed 8260689.)"""
+        body = function_source(js, "importGeoJSON")
+        loop = body[body.index("for (const [name, group] of pointGroups)"):]
+        loop = loop[:loop.index("// Import polygon features")]
+        assert "for (const { lon, lat } of group.points)" in loop
+        assert "type: 'point'" in loop
+        assert "pushManualLabel(entry)" in loop
+        assert "pixel_coords" not in loop
+        assert "centroid" not in loop
 
     def test_import_handles_polygons(self, js):
         """Polygon features are still imported and rasterized."""
@@ -195,6 +190,16 @@ class TestRoundTrip:
             assert "pushManualLabel(entry)" in body, importer
             assert body.count("saveManualLabelsToStorage()") == 1, importer
             assert body.count("renderManualLabelsList()") == 1, importer
+
+    def test_polygon_vertices_are_not_rounded(self, js):
+        """Polygons are rasterised from their fractional pixel coordinates.
+        Rounding the vertices to whole pixels first moved them by up to half
+        a pixel, so an exported pixel set did not come back as the same pixels."""
+        assert "Math.round((v[1] - gt.c) / gt.a)" not in js
+        assert "Math.round((ll.lng - gt.c) / gt.a)" not in js
+        body = function_source(js, "rasterizePolygon")
+        assert "Math.floor(minPx)" in body and "Math.ceil(maxPx)" in body
+        assert "Math.floor(minPy)" in body and "Math.ceil(maxPy)" in body
 
     def test_round_trip_behaviour(self):
         """validation/test_label_import_roundtrip.mjs runs the import / export

@@ -6,6 +6,7 @@ import hashlib
 import logging
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 from django.http import HttpResponse, JsonResponse
 
@@ -109,6 +110,71 @@ def get_tile(request, viewport, map_id, z, x, y):
     except Exception as e:
         logger.error("Error serving tile: %s", e)
         return HttpResponse(f"Error: {e}", status=500)
+
+
+def export_geotiff(request, viewport, map_id):
+    """Download a year's embedding visualisation as a georeferenced GeoTIFF.
+
+    Full resolution (pyramid level 0), RGB, in the pyramid's own CRS
+    (EPSG:4326) -- for making maps in QGIS/ArcGIS instead of screen grabs.
+    """
+    try:
+        validate_viewport_name(viewport)
+    except ValueError:
+        return HttpResponse("Invalid viewport name", status=400)
+    if map_id not in _VALID_MAP_IDS:
+        return HttpResponse("Invalid map_id", status=400)
+
+    year_dir = PYRAMIDS_BASE_DIR / viewport / map_id
+    png_path = year_dir / 'level_0.png'
+    meta_path = year_dir / 'pyramid_meta.json'
+    if not png_path.exists() or not meta_path.exists():
+        return HttpResponse("No embeddings for this viewport/year", status=404)
+
+    try:
+        tif_bytes = render_geotiff(png_path, meta_path, viewport, map_id)
+    except Exception as e:
+        logger.error("GeoTIFF export failed for %s/%s: %s", viewport, map_id, e)
+        return HttpResponse(f"Export failed: {e}", status=500)
+
+    resp = HttpResponse(tif_bytes, content_type='image/tiff')
+    resp['Content-Disposition'] = (
+        f'attachment; filename="{viewport}_{map_id}_embeddings.tif"')
+    return resp
+
+
+def render_geotiff(png_path, meta_path, viewport, map_id):
+    """Encode a pyramid level-0 PNG as DEFLATE-compressed GeoTIFF bytes."""
+    import rasterio
+    from rasterio.io import MemoryFile
+    from affine import Affine
+
+    with open(meta_path) as f:
+        meta = json.load(f)
+    level = meta['levels'][0]
+    t = level['transform']
+    with Image.open(png_path) as img:
+        rgb = np.asarray(img.convert('RGB'))  # (H, W, 3)
+
+    profile = {
+        'driver': 'GTiff',
+        'width': rgb.shape[1],
+        'height': rgb.shape[0],
+        'count': 3,
+        'dtype': 'uint8',
+        'crs': meta.get('crs', 'EPSG:4326'),
+        'transform': Affine(t['a'], t['b'], t['c'], t['d'], t['e'], t['f']),
+        'compress': 'deflate',
+        'photometric': 'RGB',
+    }
+    with MemoryFile() as mem:
+        with mem.open(**profile) as dst:
+            dst.write(np.transpose(rgb, (2, 0, 1)))
+            dst.update_tags(
+                viewport=viewport, year=map_id,
+                description='Tessera embedding visualisation: embedding dimensions '
+                            '0/1/2 as R/G/B, 2-98 percentile stretch')
+        return mem.read()
 
 
 def get_bounds(request, viewport, map_id):

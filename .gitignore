@@ -52,7 +52,7 @@ tessera_metadata.json
 Cumbria_naddle/
 cumbria_naddle.zip
 manual-labels-Eddington.zip
-# austria.zip is public example data — tracked in git
+# austria.zip and gothenburg.zip are public example data — tracked in git
 
 # Private planning files
 docs/plan_*.md

@@ -42,17 +42,25 @@ def serve_index(request):
     return FileResponse(index_file.open('rb'), content_type='text/html')
 
 
-def serve_sample_data(request):
-    """Serve the bundled austria.zip sample ground-truth shapefile for evaluation.
+# Sample ground-truth shapefiles bundled at the repo/image root (not public/).
+SAMPLE_DATA_FILES = ('austria.zip', 'gothenburg.zip')
 
-    Lives at the repo/image root (not public/) — see the "Try it" callout on
-    the Validation tab and the Validation section of the user guide.
+
+def serve_sample_data(request, name='austria.zip'):
+    """Serve a bundled sample ground-truth shapefile for evaluation.
+
+    austria.zip: Austrian INVEKOS crop fields; gothenburg.zip: Gothenburg urban
+    land cover. Both live at the repo/image root (not public/) -- see the
+    "Try it" callout on the Validation tab and the Validation section of the
+    user guide.
     """
-    file_path = APP_DIR / 'austria.zip'
+    if name not in SAMPLE_DATA_FILES:
+        raise Http404
+    file_path = APP_DIR / name
     if not file_path.exists():
         raise Http404
     response = FileResponse(file_path.open('rb'), content_type='application/zip')
-    response['Content-Disposition'] = 'attachment; filename="austria.zip"'
+    response['Content-Disposition'] = f'attachment; filename="{name}"'
     return response
 
 
