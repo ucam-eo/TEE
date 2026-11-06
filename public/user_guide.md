@@ -36,7 +36,7 @@ With TEE you can:
 - [Manual Labelling](#manual-labelling) — pins, polygons, similarity expansion
 - [Auto-Labelling (K-Means Clustering)](#auto-labelling-k-means-clustering)
 - [Compute Server Setup](#compute-server-setup) — deployment modes, GPU server, troubleshooting
-- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, spatial k-fold, group by field, area-stratified split, train/test years, separate test file, task type, random seed, PNG/CSV export, worked example, Create Map + preview + projections, CLI
+- [Validation (Evaluating Classifiers)](#validation-evaluating-classifiers) — learning curves, k-fold cross-validation, confusion matrix, spatial splits, spatial k-fold, group by field, area-stratified split, train/test years, separate test file, task type, random seed, PNG/CSV export, worked examples (austria.zip, gothenburg.zip), Create Map + preview + projections, CLI
 - [Postcard](#postcard) — a fun, no-account image generator
 - [Data Privacy](#data-privacy)
 - [Reference](#reference) — mouse controls, keyboard shortcuts, tips
@@ -75,11 +75,14 @@ Viewport Manager from then on.
 3. Choose a class field (the column in your shapefile that contains the habitat names), select a year, and tick the classifiers you want to test
 4. Click **Run Evaluation** — TEE will train each classifier and show you learning curves and a confusion matrix so you can see how well the embeddings distinguish your habitat classes
 
-> **Try it:** TEE ships `austria.zip` — Austrian INVEKOS crop field data (42,789 polygons, 17 crop classes). [Download it](/sample-data/austria.zip), upload it, select field **"HabUK"**, year **2022**, and click Run. See [Worked Example: austria.zip](#worked-example-austria-zip) for a full walkthrough, including a spatial train/test split and how to compare your numbers against the TESSERA paper.
+> **Try it with a sample.** TEE ships two ground-truth datasets, so you can run a full evaluation without a shapefile of your own:
 >
-> **Use 2022, not a later year.** These labels are the 2022 INVEKOS declarations, and crops rotate every season — pairing them with a different year's embeddings asks the classifier to predict what was growing in a field two years earlier. It fails badly: weighted F1 drops from ~0.78 (2022) to ~0.30 (2024) on an otherwise identical run.
+> - **Farmland: `austria.zip`** — Austrian INVEKOS crop fields (42,789 polygons, 17 crop classes). Many classes over a large area, and comparable with the TESSERA paper. [Download it](/sample-data/austria.zip), select field **"HabUK"**, year **2022**. See [Worked Example: austria.zip](#worked-example-austria-zip), including a spatial train/test split and how to compare your numbers against the paper.
+> - **City: `gothenburg.zip`** (contributed by TEE users) — hand-drawn urban land cover in central Gothenburg (7,483 polygons, 5 classes). Small and quick to run. [Download it](/sample-data/gothenburg.zip), select field **"name"**, year **2024**. See [Worked Example: gothenburg.zip](#worked-example-gothenburg-zip).
 >
-> **Smaller and urban:** `gothenburg.zip` — land cover in central Gothenburg (7,483 polygons, 5 classes). [Download it](/sample-data/gothenburg.zip), select field **"name"** and year **2024**. See [Worked Example: gothenburg.zip](#worked-example-gothenburg-zip).
+> **Use 2022 for Austria, not a later year.** These labels are the 2022 INVEKOS declarations, and crops rotate every season — pairing them with a different year's embeddings asks the classifier to predict what was growing in a field two years earlier. It fails badly: weighted F1 drops from ~0.78 (2022) to ~0.30 (2024) on an otherwise identical run.
+>
+> Have a ground truth you could share? Contributions are welcome: open a pull request at https://github.com/ucam-eo/TEE.
 
 ### Path 4: Just want a fun image?
 
@@ -849,7 +852,7 @@ That imbalance is also why the **Macro F1 / Weighted F1** selector above the cha
 
 ### Worked Example: gothenburg.zip
 
-A second, much smaller sample — [download gothenburg.zip](/sample-data/gothenburg.zip) (0.5 MB) — covers a city instead of farmland.
+A second, much smaller sample — [download gothenburg.zip](/sample-data/gothenburg.zip) (0.5 MB) — covers a city instead of farmland. It was contributed by TEE users at Chalmers University of Technology (see **Made by** below).
 
 **What's in it:** 7,483 polygons in 5 land-cover classes, labelling about 81 % of a 5 km × 5 km viewport in central Gothenburg, Sweden (11.925°E–12.009°E, 57.685°N–57.730°N). The labels were drawn by hand in TEE's [manual labelling](#manual-labelling) mode over the satellite basemap and checked by eye. The polygons follow the pixel edges of a TEE viewport grid at those bounds; pixels without a polygon are unlabelled, not a "background" class.
 
