@@ -512,110 +512,110 @@ class UMAPScene {
 // ── HeatmapCanvasLayer (Leaflet canvas overlay for distance heatmap) ──
 
 class HeatmapCanvasLayer extends L.Layer {
-    constructor(distances, stats = null) {
+    // grid: {width, height, values (Float32Array, NaN = no data), geotransform}
+    // -- the heatmap's own pixel grid. It is painted once into an offscreen
+    // image and stretched onto the map on every move, so pixels tile exactly.
+    // (Drawing one rectangle per pixel sized from window.localVectors left a
+    // gap under every row whenever that wasn't loaded -- e.g. opening Change
+    // Detection directly -- because the fallback assumed 10 m pixels.)
+    constructor(distances, stats = null, grid = null) {
         super();
-        this.distances = distances;  // [{lat, lon, distance}, ...]
+        this.distances = distances;  // [{lat, lon, distance}, ...] (pixel lookups)
+        this.grid = grid;
         this._canvas = null;
         this._ctx = null;
+        this._image = null;
+        this._onMapChange = () => this._redraw();
 
         // Use percentile-based normalization for better color distribution
         if (stats && stats.max_distance > 0) {
             const median = stats.median_distance || stats.mean_distance;
             this.maxDistance = median * 1.5;
-
-            console.log('Heatmap distance scale:', {
-                actual_max: stats.max_distance.toFixed(3),
-                median: median.toFixed(3),
-                scale_to: this.maxDistance.toFixed(3)
-            });
         } else {
-            // Fallback: calculate maxDistance locally
             let maxDist = 0;
             for (let i = 0; i < distances.length; i++) {
-                if (distances[i].distance > maxDist) {
-                    maxDist = distances[i].distance;
-                }
+                if (distances[i].distance > maxDist) maxDist = distances[i].distance;
             }
             this.maxDistance = maxDist > 0 ? maxDist : 1;
-        }
-
-        // Sample and log distance values for debugging
-        if (distances && distances.length > 0) {
-            const sampleDistances = distances.slice(0, 5).map(d => d.distance.toFixed(3));
         }
     }
 
     onAdd(map) {
         this._map = map;
 
-        // Create canvas
         this._canvas = document.createElement('canvas');
         this._canvas.style.position = 'absolute';
         this._canvas.style.top = '0';
         this._canvas.style.left = '0';
-        this._canvas.style.opacity = '1.0';
         this._canvas.style.pointerEvents = 'none';
 
         // Insert at START of container so Leaflet panes render on top
         const container = map.getContainer();
         container.insertBefore(this._canvas, container.firstChild);
-
         this._ctx = this._canvas.getContext('2d');
 
-        map.on('move zoom resize', () => this._redraw());
+        map.on('move zoom resize', this._onMapChange);
         this._redraw();
     }
 
     onRemove(map) {
-        map.off('move zoom resize', () => this._redraw());
+        map.off('move zoom resize', this._onMapChange);
         if (this._canvas && this._canvas.parentNode) {
             this._canvas.parentNode.removeChild(this._canvas);
         }
     }
 
+    // The whole grid as a W x H image, one image pixel per grid pixel.
+    _buildImage() {
+        const { width: W, height: H, values } = this.grid;
+        const img = document.createElement('canvas');
+        img.width = W;
+        img.height = H;
+        const ctx = img.getContext('2d');
+        const data = ctx.createImageData(W, H);
+        const px = data.data;
+        for (let i = 0; i < values.length; i++) {
+            const v = values[i];
+            if (Number.isNaN(v)) continue;  // transparent: no data
+            const [r, g, b] = this.colorRGB(v / this.maxDistance);
+            px[i * 4] = r; px[i * 4 + 1] = g; px[i * 4 + 2] = b; px[i * 4 + 3] = 255;
+        }
+        ctx.putImageData(data, 0, 0);
+        return img;
+    }
+
     _redraw() {
-        if (!this._map || !this._canvas || !this._ctx) return;
+        if (!this._map || !this._canvas || !this._ctx || !this.grid) return;
 
         const size = this._map.getSize();
-
         this._canvas.width = size.x;
         this._canvas.height = size.y;
         this._canvas.style.width = size.x + 'px';
         this._canvas.style.height = size.y + 'px';
-
-        this._ctx.imageSmoothingEnabled = true;
         this._ctx.clearRect(0, 0, size.x, size.y);
 
-        let pixelsDrawn = 0;
-        const colors = new Set();
-
-        for (const d of this.distances) {
-            const bounds = window.calculatePixelBounds(d.lat, d.lon);
-            const sw = this._map.latLngToContainerPoint(bounds[0]);
-            const ne = this._map.latLngToContainerPoint(bounds[1]);
-
-            const x = Math.floor(sw.x);
-            const width = Math.ceil(ne.x - sw.x) + 1;
-            const y = Math.floor(ne.y);
-            const height = Math.ceil(sw.y - ne.y) + 1;
-
-            if (x + width < 0 || x > size.x || y + height < 0 || y > size.y) {
-                continue;
+        if (!this._image) this._image = this._buildImage();
+        const { width: W, height: H, geotransform: gt } = this.grid;
+        const map = this._map;
+        // Grid x edges (gt.c is the left edge of column 0)
+        const x0 = Math.round(map.latLngToContainerPoint([gt.f, gt.c]).x);
+        const x1 = Math.round(map.latLngToContainerPoint([gt.f, gt.c + W * gt.a]).x);
+        // Rows go in strips, each placed by its own projected edges: the map is
+        // Web Mercator, so north-south scale varies with latitude and a single
+        // stretched image would drift on a large viewport. Edges are rounded
+        // to whole screen pixels and shared between strips, so they never
+        // leave a seam.
+        const yAt = (row) => Math.round(map.latLngToContainerPoint([gt.f + row * gt.e, gt.c]).y);
+        const STRIP = 32;
+        this._ctx.imageSmoothingEnabled = false;  // crisp pixels when zoomed in
+        let yTop = yAt(0);
+        for (let r = 0; r < H; r += STRIP) {
+            const rows = Math.min(STRIP, H - r);
+            const yBot = yAt(r + rows);
+            if (yBot > 0 && yTop < size.y && yBot > yTop) {
+                this._ctx.drawImage(this._image, 0, r, W, rows, x0, yTop, x1 - x0, yBot - yTop);
             }
-
-            const normalized = d.distance / this.maxDistance;
-            const color = this.getHeatmapColor(normalized);
-            colors.add(color);
-
-            this._ctx.fillStyle = color;
-            this._ctx.fillRect(x, y, width, height);
-            pixelsDrawn++;
-        }
-
-        if (pixelsDrawn > 0) {
-            if (colors.size > 0) {
-                const colorArray = Array.from(colors).slice(0, 5);
-            }
+            yTop = yBot;
         }
     }
 
@@ -650,19 +650,6 @@ class HeatmapCanvasLayer extends L.Layer {
             Math.floor(lower[1] * (1 - fraction) + upper[1] * fraction),
             Math.floor(lower[2] * (1 - fraction) + upper[2] * fraction),
         ];
-    }
-
-    updateDistances(newDistances) {
-        this.distances = newDistances;
-
-        let maxDist = 0;
-        for (let i = 0; i < newDistances.length; i++) {
-            if (newDistances[i].distance > maxDist) {
-                maxDist = newDistances[i].distance;
-            }
-        }
-        this.maxDistance = maxDist > 0 ? maxDist : 1;
-        this._redraw();
     }
 }
 
@@ -1183,11 +1170,8 @@ async function loadHeatmap() {
             window.maps.panel5.removeLayer(heatmapCanvasLayer);
         }
 
-        // Create new heatmap layer
-        heatmapCanvasLayer = new HeatmapCanvasLayer(distances, stats);
-        heatmapCanvasLayer.addTo(window.maps.panel5);
-
-        // Full pixel grid for GeoTIFF export (NaN = gap in either year)
+        // Full pixel grid: drawn as one image, and used for GeoTIFF export
+        // (NaN = gap in either year)
         const gridW = data1.metadata.clipped_width || data1.metadata.mosaic_width;
         const gridH = data1.metadata.clipped_height || data1.metadata.mosaic_height;
         const gridValues = new Float32Array(gridW * gridH).fill(NaN);
@@ -1195,11 +1179,14 @@ async function loadHeatmap() {
             const px = coords[pairs1[i] * 2], py = coords[pairs1[i] * 2 + 1];
             if (px < gridW && py < gridH) gridValues[py * gridW + px] = rawDists[i];
         }
-        heatmapCanvasLayer.exportGrid = {
+        const grid = {
             width: gridW, height: gridH, values: gridValues, geotransform: gt,
             viewport: window.currentViewportName,
             year1: window.currentEmbeddingYear, year2: currentEmbeddingYear2,
         };
+        heatmapCanvasLayer = new HeatmapCanvasLayer(distances, stats, grid);
+        heatmapCanvasLayer.exportGrid = grid;
+        heatmapCanvasLayer.addTo(window.maps.panel5);
 
         // Update cache key
         _heatmapCacheKey = cacheKey;

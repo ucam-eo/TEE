@@ -1588,3 +1588,28 @@ class TestSegmentationSeed:
             "validation/test_segmentation_seed.mjs failed:\n"
             f"{result.stdout}\n{result.stderr}"
         )
+
+
+# ──────────────────────────────────────────────────
+# 32. Change heatmap draws its own grid (no row banding)
+#     Behaviour: validation/test_heatmap_canvas.mjs.
+# ──────────────────────────────────────────────────
+
+class TestHeatmapCanvas:
+    def test_mjs_behaviour(self):
+        result = subprocess.run(
+            ["node", str(ROOT / "validation" / "test_heatmap_canvas.mjs")],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, (
+            "validation/test_heatmap_canvas.mjs failed:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )
+
+    def test_heatmap_does_not_size_pixels_from_local_vectors(self, all_script_text):
+        i = all_script_text.find("class HeatmapCanvasLayer")
+        body = all_script_text[i:all_script_text.find("\n}\n", i)]
+        assert "calculatePixelBounds" not in body, (
+            "HeatmapCanvasLayer must draw from its own grid, not per-pixel "
+            "rectangles sized from window.localVectors (row banding)"
+        )
