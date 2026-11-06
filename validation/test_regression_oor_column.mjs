@@ -55,7 +55,7 @@ function renderRegressionScatter() { /* needs Chart.js; irrelevant here */ }
 
 const factory = new Function(
     'valScatterChart', 'getVariantColor', 'getVariantLabel', 'renderRegressionScatter',
-    `${extract('renderRegressionResults')}\nreturn renderRegressionResults;`
+    `${extract('_resultCellHTML')}\n${extract('renderRegressionResults')}\nreturn renderRegressionResults;`
 );
 const renderRegressionResults = factory(valScatterChart, getVariantColor, getVariantLabel, renderRegressionScatter);
 

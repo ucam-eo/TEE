@@ -77,7 +77,7 @@ let rows = api.learningCurveCsvRows({
     },
     training_pcts: [1, 10],
 });
-ok(rows[0].join(',') === 'training_pct,model,mean_f1,std_f1,mean_f1w,std_f1w', 'lc header');
+ok(rows[0].join(',') === 'training_pct,model,mean_f1,std_f1,mean_f1w,std_f1w,failed', 'lc header');
 ok(rows.length === 3, 'lc: header + 2 points');
 ok(rows[1][0] === '1.000' && rows[1][1] === 'rf' && rows[1][2] === 0.5, 'lc first point row');
 ok(rows[2][0] === '10.000' && rows[2][2] === 0.8, 'lc second point uses _x');
@@ -93,11 +93,11 @@ rows = api.learningCurveCsvRows({
     ],
     aggregate: { rf_reg: { mean_r2: 0.71, std_r2: 0.01, mean_rmse: 1.15, std_rmse: 0.05, mean_mae: 0.875, std_mae: 0.025 } },
 });
-ok(rows[0].join(',') === 'fold,model,r2,rmse,mae', 'kfold fold header');
+ok(rows[0].join(',') === 'fold,model,r2,rmse,mae,failed', 'kfold fold header');
 ok(rows[1][0] === 1 && rows[1][2] === 0.7, 'kfold fold 1 row');
 const summaryIdx = rows.findIndex(r => r[0] === 'summary');
 ok(summaryIdx > 0, 'kfold has a summary block');
-ok(rows[summaryIdx].join(',') === 'summary,model,mean_r2,std_r2,mean_rmse,std_rmse,mean_mae,std_mae', 'kfold summary header');
+ok(rows[summaryIdx].join(',') === 'summary,model,mean_r2,std_r2,mean_rmse,std_rmse,mean_mae,std_mae,failed', 'kfold summary header');
 ok(rows[summaryIdx + 1][0] === 'mean±std' && rows[summaryIdx + 1][2] === 0.71, 'kfold aggregate row');
 
 // --- regressionCsv: scatter present ---------------------------

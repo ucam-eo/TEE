@@ -97,6 +97,10 @@ const factory = new Function(
         extract('getSeed'),
         extract('getEvalMode'),
         extract('getKfoldK'),
+        extract('optionalLimitInput'),
+        extract('getGroupByField'),
+        extract('getSpatialKfold'),
+        extract('getAreaStratifiedSplit'),
         extract('generateConfig'),
         extract('applyConfig'),
     ].join('\n\n') +
