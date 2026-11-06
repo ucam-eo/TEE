@@ -156,6 +156,15 @@ TEE has four modes: **Explore**, **Change Detection**, **Labelling**, and **Vali
 
 Use the **year dropdown** above the embedding panels to change which year's satellite data you're viewing. In Change Detection mode, Year 1 and Year 2 can be set independently to compare any two years.
 
+### Exporting Maps (GeoTIFF)
+
+To make your own maps (in QGIS, ArcGIS, etc.) rather than taking screenshots, use the **⤓ GeoTIFF** buttons in the panel headers:
+
+- **Tessera Embeddings** panels (Explore and Change Detection modes): downloads that year's embedding map at full 10 m resolution as an RGB GeoTIFF.
+- **Change Heatmap** panel (Change Detection mode): choose **Map image (as shown)** for a ready-made picture matching the on-screen colours (purple = little change, yellow = most change; gaps are transparent), or **Change values (for GIS analysis)** for the amount of change at each pixel as a number (the distance between the two years' embeddings, stored as 32-bit floats), which you can restyle, threshold, or analyse yourself (gaps are no-data).
+
+All exports cover the whole viewport, not just the visible area, and are georeferenced in WGS 84 (EPSG:4326). The file's metadata records the viewport, year(s), and — for the coloured heatmap — the colour scale used.
+
 ### Satellite Imagery Source
 
 Use the **satellite source dropdown** in Panel 2 to switch between different imagery providers (Esri World Imagery, Google). The acquisition date of the currently displayed imagery is shown below the dropdown when available — this is useful for understanding what the satellite saw on a specific date.

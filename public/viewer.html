@@ -559,6 +559,34 @@
             white-space: nowrap;
         }
 
+        /* Map export (GeoTIFF) buttons -- Explore + Change Detection only */
+        /* Year selector + export button: one right-aligned group that wraps as a unit */
+        .panel-header-controls {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+            margin-left: auto;
+        }
+        .panel-header-controls select,
+        .panel-header-controls .map-export-btn { margin-left: 0 !important; }
+        .map-export-btn {
+            display: none;
+            margin-left: 6px;
+            padding: 3px 8px;
+            background: rgba(255,255,255,0.12);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.35);
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .map-export-btn:hover { background: rgba(255,255,255,0.25); }
+        .map-export-btn option { background: #333; color: #fff; }
+        body.mode-explore .export-map-mode,
+        body.mode-change-detection .export-map-mode,
+        body.mode-change-detection .export-cd-only { display: inline-block; }
+
         .panel-header select {
             flex-shrink: 0;
         }
@@ -1151,9 +1179,12 @@
         <div class="panel">
             <div class="panel-header" style="justify-content: space-between;">
                 <span id="panel3-title">Tessera Embeddings</span>
-                <select id="embedding-year-selector" style="display: none; margin-left: 10px; padding: 4px 8px; border: 1px solid #555; border-radius: 3px; background: #333; color: #fff; font-size: 13px;">
-                    <option value="2024">2024</option>
-                </select>
+                <span class="panel-header-controls">
+                    <select id="embedding-year-selector" style="display: none; margin-left: 10px; padding: 4px 8px; border: 1px solid #555; border-radius: 3px; background: #333; color: #fff; font-size: 13px;">
+                        <option value="2024">2024</option>
+                    </select>
+                    <button class="map-export-btn export-map-mode" onclick="exportEmbeddingMap('embedding')" title="Download this year's embedding map as a full-resolution GeoTIFF (EPSG:4326) for QGIS/ArcGIS">&#x2913; GeoTIFF</button>
+                </span>
             </div>
             <div id="map-embedding" class="map"></div>
             <div id="coords-display" style="position: absolute; bottom: 10px; left: 10px; background: rgba(0, 0, 0, 0.8); color: #00ff00; padding: 10px 15px; border-radius: 4px; font-family: monospace; font-size: 12px; font-weight: bold; pointer-events: none; display: none; z-index: 500; border: 1px solid #00ff00;">
@@ -1213,12 +1244,22 @@
         <div class="panel">
             <div class="panel-header" style="background: #805AD5; color: white; padding: 8px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;">
                 <span id="panel5-title">Change Heatmap</span>
+                <select id="heatmap-export-select" class="map-export-btn export-cd-only" style="margin-left: auto;" onchange="if (this.value) exportChangeHeatmap(this.value); this.value='';" title="Download the change heatmap as a full-resolution GeoTIFF for GIS software.&#10;• Map image (as shown): a ready-made picture, coloured as on screen (purple = little change, yellow = most).&#10;• Change values (for GIS analysis): the amount of change per pixel as numbers, to style, threshold or analyse yourself.">
+                    <option value="">&#x2913; GeoTIFF</option>
+                    <option value="colour" title="A ready-made picture of the heatmap, coloured as on screen (purple = little change, yellow = most). Gaps are transparent.">Map image (as shown)</option>
+                    <option value="values" title="The amount of change per pixel as numbers, for choosing your own colours, thresholds or statistics in QGIS/ArcGIS. Gaps are no-data.">Change values (for GIS analysis)</option>
+                </select>
                 <button id="manual-classify-btn" style="display: none; margin-left: auto; padding: 3px 10px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer;" onclick="triggerManualClassification()" title="Run pixel classification">Classify</button>
             </div>
             <div id="map-panel5" class="map"></div>
             <!-- Message when years are the same -->
             <div id="heatmap-same-year-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 20px 30px; border-radius: 8px; font-size: 14px; z-index: 1000; white-space: nowrap; display: none;">
                 Select different years in panels 3 and 6
+            </div>
+            <div id="heatmap-single-year-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 20px 30px; border-radius: 8px; font-size: 14px; line-height: 1.5; z-index: 1000; max-width: 80%; text-align: center; display: none;">
+                <strong>Add another year for this location.</strong><br>
+                Change detection compares two years, but this viewport only has one.
+                Use <strong>+ Year</strong> next to it in the Viewport Manager, then come back here.
             </div>
             <div id="heatmap-waiting-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 20px 30px; border-radius: 8px; font-size: 14px; z-index: 1000; white-space: nowrap; display: none;">
                 Waiting for embedding extraction...
@@ -1244,9 +1285,12 @@
         <div class="panel">
             <div class="panel-header" style="background: #2C5282; color: white; padding: 8px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
                 <span id="panel6-header-text">Tessera Embeddings</span>
-                <select id="embedding-year-selector-2" style="display: none; margin-left: 10px; padding: 4px 8px; border: 1px solid #555; border-radius: 3px; background: #333; color: #fff; font-size: 13px;">
-                    <option value="2024">2024</option>
-                </select>
+                <span class="panel-header-controls">
+                    <select id="embedding-year-selector-2" style="display: none; margin-left: 10px; padding: 4px 8px; border: 1px solid #555; border-radius: 3px; background: #333; color: #fff; font-size: 13px;">
+                        <option value="2024">2024</option>
+                    </select>
+                    <button class="map-export-btn export-cd-only" onclick="exportEmbeddingMap('embedding2')" title="Download this year's embedding map as a full-resolution GeoTIFF (EPSG:4326) for QGIS/ArcGIS">&#x2913; GeoTIFF</button>
+                </span>
             </div>
             <div id="map-embedding2" class="map"></div>
             <!-- Confusion Matrix (shown only in validation mode) -->
@@ -1547,6 +1591,7 @@
     <script type="module" src="js/labels.js"></script>
     <script type="module" src="js/maps.js"></script>
     <script type="module" src="js/app.js"></script>
+    <script type="module" src="js/geotiff_export.js"></script>
     <script src="js/mailto.js"></script>
     <script>
     async function openFeedback() {

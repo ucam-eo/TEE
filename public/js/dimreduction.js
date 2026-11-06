@@ -620,7 +620,12 @@ class HeatmapCanvasLayer extends L.Layer {
     }
 
     getHeatmapColor(value) {
-        // Viridis colormap - perceptually uniform
+        const [r, g, b] = this.colorRGB(value);
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    // Viridis colormap (perceptually uniform) -> [r, g, b]; also used by map export.
+    colorRGB(value) {
         const viridis = [
             [68, 1, 84],      // 0.00: dark purple
             [72, 40, 120],    // 0.17
@@ -640,11 +645,11 @@ class HeatmapCanvasLayer extends L.Layer {
         const lower = viridis[Math.min(lowerIdx, viridis.length - 1)];
         const upper = viridis[Math.min(upperIdx, viridis.length - 1)];
 
-        const r = Math.floor(lower[0] * (1 - fraction) + upper[0] * fraction);
-        const g = Math.floor(lower[1] * (1 - fraction) + upper[1] * fraction);
-        const b = Math.floor(lower[2] * (1 - fraction) + upper[2] * fraction);
-
-        return `rgb(${r}, ${g}, ${b})`;
+        return [
+            Math.floor(lower[0] * (1 - fraction) + upper[0] * fraction),
+            Math.floor(lower[1] * (1 - fraction) + upper[1] * fraction),
+            Math.floor(lower[2] * (1 - fraction) + upper[2] * fraction),
+        ];
     }
 
     updateDistances(newDistances) {
@@ -1050,8 +1055,23 @@ async function loadHeatmap() {
     if (sel1 && sel1.value) window.currentEmbeddingYear = sel1.value;
     if (sel2 && sel2.value) currentEmbeddingYear2 = sel2.value;
 
+    // Guard: need at least two years. Only judged once the server status
+    // has arrived (has_pyramids), so a fresh page doesn't flash this message.
+    const singleMsg = document.getElementById('heatmap-single-year-message');
+    const status = window.viewportStatus;
+    const singleYear = (status.has_pyramids || status.has_vectors) && status.years_available.length < 2;
+    if (singleMsg) singleMsg.style.display = singleYear ? 'block' : 'none';
+    if (singleYear) {
+        waitMsg.style.display = 'none';
+        sameMsg.style.display = 'none';
+        if (heatmapCanvasLayer && window.maps.panel5 && window.maps.panel5.hasLayer(heatmapCanvasLayer)) {
+            window.maps.panel5.removeLayer(heatmapCanvasLayer);
+        }
+        return;
+    }
+
     // Guard: need vector data for both years
-    if (!window.viewportStatus.has_vectors) {
+    if (!status.has_vectors) {
         waitMsg.style.display = 'block';
         sameMsg.style.display = 'none';
         return;
@@ -1166,6 +1186,20 @@ async function loadHeatmap() {
         // Create new heatmap layer
         heatmapCanvasLayer = new HeatmapCanvasLayer(distances, stats);
         heatmapCanvasLayer.addTo(window.maps.panel5);
+
+        // Full pixel grid for GeoTIFF export (NaN = gap in either year)
+        const gridW = data1.metadata.clipped_width || data1.metadata.mosaic_width;
+        const gridH = data1.metadata.clipped_height || data1.metadata.mosaic_height;
+        const gridValues = new Float32Array(gridW * gridH).fill(NaN);
+        for (let i = 0; i < numVectors; i++) {
+            const px = coords[pairs1[i] * 2], py = coords[pairs1[i] * 2 + 1];
+            if (px < gridW && py < gridH) gridValues[py * gridW + px] = rawDists[i];
+        }
+        heatmapCanvasLayer.exportGrid = {
+            width: gridW, height: gridH, values: gridValues, geotransform: gt,
+            viewport: window.currentViewportName,
+            year1: window.currentEmbeddingYear, year2: currentEmbeddingYear2,
+        };
 
         // Update cache key
         _heatmapCacheKey = cacheKey;
