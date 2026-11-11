@@ -6,6 +6,8 @@
 //   image as a GeoTIFF (/tiles/<viewport>/<year>/export.tif).
 // - Change heatmap (panel 5): computed in the browser, so it is encoded here,
 //   either as coloured RGBA (as seen on screen) or as raw float32 distances.
+// - Labelling classification (panel 5): encoded in labels.js with this encoder,
+//   as a class-number raster with a colour table.
 //
 // All TEE grids are EPSG:4326 with a north-up geotransform {a, c, e, f}.
 
@@ -30,6 +32,8 @@ async function deflate(bytes) {
  * @param {number} o.bands                  samples per pixel (1, 3 or 4)
  * @param {object} o.geotransform           {a, c, e, f} (EPSG:4326, north-up)
  * @param {string} [o.nodata]               GDAL nodata value, e.g. 'nan'
+ * @param {number[][]} [o.colormap]         [[r, g, b], ...] (0-255) for values 0, 1, ...:
+ *                                          makes a 1-band uint8 palette image
  * @param {object} [o.metadata]             key/value tags (GDAL_METADATA)
  */
 async function encodeGeoTiff(o) {
@@ -54,7 +58,7 @@ async function encodeGeoTiff(o) {
         [257, TYPE.LONG, [height]],
         [258, TYPE.SHORT, perBand(bytesPerSample * 8)],
         [259, TYPE.SHORT, [useDeflate ? 8 : 1]],
-        [262, TYPE.SHORT, [bands >= 3 ? 2 : 1]],          // RGB / MinIsBlack
+        [262, TYPE.SHORT, [o.colormap ? 3 : (bands >= 3 ? 2 : 1)]],  // Palette / RGB / MinIsBlack
         [273, TYPE.LONG, new Array(strips.length).fill(0)], // patched below
         [277, TYPE.SHORT, [bands]],
         [278, TYPE.LONG, [rowsPerStrip]],
@@ -78,6 +82,15 @@ async function encodeGeoTiff(o) {
         tags.push([42112, TYPE.ASCII, `<GDALMetadata>${items}</GDALMetadata>`]);
     }
     if (o.nodata !== undefined) tags.push([42113, TYPE.ASCII, String(o.nodata)]);
+    if (o.colormap) {
+        // TIFF ColorMap: 256 reds, then 256 greens, then 256 blues, 16-bit each.
+        const cmap = new Array(3 * 256).fill(0);
+        o.colormap.forEach(([r, g, b], i) => {
+            cmap[i] = r * 257; cmap[256 + i] = g * 257; cmap[512 + i] = b * 257;
+        });
+        tags.push([320, TYPE.SHORT, cmap]);
+    }
+    tags.sort((x, y) => x[0] - y[0]);  // TIFF requires ascending tag order
 
     // Layout: header | IFD | out-of-line tag values | strips
     const ifdSize = 2 + tags.length * 12 + 4;
@@ -190,5 +203,6 @@ async function exportChangeHeatmap(kind) {
 }
 
 window.encodeGeoTiff = encodeGeoTiff;
+window.downloadBlob = downloadBlob;
 window.exportEmbeddingMap = exportEmbeddingMap;
 window.exportChangeHeatmap = exportChangeHeatmap;

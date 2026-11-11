@@ -1614,7 +1614,8 @@ function exportManualLabels() {
             <input type="checkbox" ${_exportClassifiedPixels ? 'checked' : ''} onchange="window._setExportClassifiedPixels(this.checked)" style="margin:0;">
             Classified pixels (not points)
         </label>
-        <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="document.getElementById('labelling-export-menu').style.display='none'; exportMapAsJPG()" title="Save current map view as image">Map (JPG)</button>
+        <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer; border-top: 1px solid #444;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="document.getElementById('labelling-export-menu').style.display='none'; exportClassificationGeoTiff()" title="The classification map as a georeferenced GeoTIFF, pixel for pixel as shown in TEE, for QGIS / ArcGIS. One band of class numbers (0 = unclassified) with the class colours built in.">Map (GeoTIFF)</button>
+        <button style="display: block; width: 100%; padding: 8px 12px; background: none; border: none; color: #ccc; font-size: 12px; text-align: left; cursor: pointer;" onmouseover="this.style.background='#444'" onmouseout="this.style.background='none'" onclick="document.getElementById('labelling-export-menu').style.display='none'; exportMapAsJPG()" title="Save current map view as image">Map (JPG)</button>
     `;
     btn.parentElement.style.position = 'relative';
     btn.parentElement.appendChild(menu);
@@ -1665,6 +1666,67 @@ async function doExportManualLabels(format) {
         await exportManualLabelsKML();
     }
 }
+
+// The classification map (panel 5) as a GeoTIFF: one uint8 band on the
+// viewport's own pixel grid, 0 = unclassified (nodata), 1..n = classes in
+// the order of classificationRaster().classNames, with the class colours as
+// a TIFF colour table so GIS software shows it as it looks in TEE.
+function classificationRaster() {
+    const cls = computeManualClassification();
+    if (!cls) return null;
+    const { classNames, classColorMap, assignments, N } = cls;
+    const coords = window.localVectors.coords;
+    const gt = window.localVectors.metadata.geotransform;
+
+    let minPx = Infinity, maxPx = -Infinity, minPy = Infinity, maxPy = -Infinity;
+    for (let i = 0; i < N; i++) {
+        const px = coords[i * 2], py = coords[i * 2 + 1];
+        if (px < minPx) minPx = px;
+        if (px > maxPx) maxPx = px;
+        if (py < minPy) minPy = py;
+        if (py > maxPy) maxPy = py;
+    }
+    const width = maxPx - minPx + 1, height = maxPy - minPy + 1;
+    const data = new Uint8Array(width * height);
+    let classified = 0;
+    for (let i = 0; i < N; i++) {
+        if (assignments[i] < 0) continue;
+        data[(coords[i * 2 + 1] - minPy) * width + (coords[i * 2] - minPx)] = assignments[i] + 1;
+        classified++;
+    }
+    const hex = (h) => [1, 3, 5].map(o => parseInt(h.slice(o, o + 2), 16));
+    return {
+        width, height, data, classified, classNames,
+        colormap: [[0, 0, 0], ...classNames.map(n => hex(classColorMap[n]))],
+        colours: classNames.map(n => classColorMap[n]),
+        // Same bounds as the on-screen overlay (renderManualClassification).
+        geotransform: { a: gt.a, c: gt.c + minPx * gt.a, e: gt.e, f: gt.f + minPy * gt.e },
+    };
+}
+
+async function exportClassificationGeoTiff() {
+    const r = classificationRaster();
+    if (!r || r.classified === 0) {
+        alert('No classification map to export yet. Draw polygons, or set a similarity threshold on your classes, so that pixels are classified.');
+        return;
+    }
+    const vp = window.currentViewportName || 'viewport';
+    const year = window.currentEmbeddingYear || '';
+    const metadata = {
+        viewport: vp, year,
+        description: 'TEE labelling classification: 0 = unclassified, 1..n = classes (see class_N)',
+    };
+    r.classNames.forEach((name, i) => {
+        const code = (manualLabels.find(l => l.name === name) || {}).code;
+        metadata[`class_${i + 1}`] = `${name}${code ? ` [${code}]` : ''} ${r.colours[i]}`;
+    });
+    const bytes = await window.encodeGeoTiff({
+        width: r.width, height: r.height, data: r.data, bands: 1,
+        geotransform: r.geotransform, nodata: '0', colormap: r.colormap, metadata,
+    });
+    window.downloadBlob(bytes, `${vp}_${year}_classification.tif`);
+}
+window.exportClassificationGeoTiff = exportClassificationGeoTiff;
 
 // When "Classified pixels" is ticked in the export menu, the vector
 // formats (GeoJSON / Shapefile / KML) export the full nearest-centroid
