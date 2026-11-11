@@ -167,6 +167,7 @@ an entry sets the active label's code, name and colour.
 | **ESRI Shapefile (ZIP)** | Manual labelling | GIS-compatible polygons |
 | **CSV (points)** | Manual labelling | One row per label (name, code, type, lat, lon, pixel count) — for GEE/ArcGIS point import or a spreadsheet |
 | **KML** | Manual labelling | One styled Placemark per label (Point or Polygon, matching label colour) — export-only |
+| **Map (GeoTIFF)** | Manual labelling | Classification map as a georeferenced uint8 raster on the viewport grid (0 = unclassified/nodata, 1..n = classes, colour table, class names in metadata) |
 | **Map (JPG)** | Explore / auto-label | Screenshot of satellite view with overlays |
 
 Export button turns red when there are unsaved changes.

@@ -1022,18 +1022,24 @@ function setPanelLayout(mode) {
         }
     }, 350);
 
-    localStorage.setItem('panelMode', mode);
+    // Validation is entered only via ?mode=validation, never remembered:
+    // restoring it when a viewport is opened normally would lock the mode
+    // menu (disabled in Validation) with no way back to the other modes.
+    if (mode !== 'validation') localStorage.setItem('panelMode', mode);
     window.evaluateDependencies();
 }
 
 // Restore panel mode preference on load
 function restorePanelMode() {
     const validModes = ['explore', 'change-detection', 'labelling', 'validation'];
-    // Check URL parameter first (e.g., ?mode=validation)
+    // Check URL parameter first (e.g., ?mode=validation). A saved mode is
+    // never 'validation' (see setPanelLayout) -- also ignore one saved by
+    // older versions, which locked users into Validation.
+    const savedModes = ['explore', 'change-detection', 'labelling'];
     const urlMode = new URLSearchParams(window.location.search).get('mode');
     const saved = localStorage.getItem('panelMode');
     const mode = (urlMode && validModes.includes(urlMode)) ? urlMode
-               : (validModes.includes(saved) ? saved : 'explore');
+               : (savedModes.includes(saved) ? saved : 'explore');
     setPanelLayout(mode);
 }
 // Custom tile layer that uses canvas with imageSmoothingEnabled = false
