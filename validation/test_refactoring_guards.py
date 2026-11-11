@@ -11,6 +11,7 @@ The tests are static — they parse HTML and Python files without running
 the app or needing a browser.
 """
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -1666,3 +1667,38 @@ class TestSegmentationMethods:
             "validation/test_segmentation_methods.mjs failed:\n"
             f"{result.stdout}\n{result.stderr}"
         )
+
+
+# ──────────────────────────────────────────────────
+# 34. Validation mode is never remembered as the last panel mode.
+#     It disables the mode menu, so restoring it when a viewport is
+#     opened normally left users stuck with no way back to Labelling etc.
+# ──────────────────────────────────────────────────
+
+class TestValidationModeNotRestored:
+    def _restore(self, url_mode, saved):
+        src = (ROOT / "public" / "js" / "maps.js").read_text()
+        a = src.index("function restorePanelMode()")
+        b = src.index("\n}\n", a) + 2
+        js = (
+            "let chosen; const setPanelLayout = m => { chosen = m; };\n"
+            f"const window = {{ location: {{ search: {json.dumps('?mode=' + url_mode if url_mode else '')} }} }};\n"
+            f"const localStorage = {{ getItem: () => {json.dumps(saved)} }};\n"
+            + src[a:b] + "\nrestorePanelMode(); console.log(chosen);"
+        )
+        r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=30)
+        assert r.returncode == 0, r.stderr
+        return r.stdout.strip()
+
+    def test_saved_validation_is_ignored(self):
+        assert self._restore(None, "validation") == "explore"
+
+    def test_saved_labelling_is_restored(self):
+        assert self._restore(None, "labelling") == "labelling"
+
+    def test_url_validation_still_works(self):
+        assert self._restore("validation", "labelling") == "validation"
+
+    def test_validation_is_not_saved(self):
+        src = (ROOT / "public" / "js" / "maps.js").read_text()
+        assert "if (mode !== 'validation') localStorage.setItem('panelMode', mode);" in src
