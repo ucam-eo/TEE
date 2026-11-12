@@ -800,6 +800,27 @@ function _isZeroRowWarning(message) {
     return typeof message === 'string' && message.includes('no test samples for');
 }
 
+// "Group by field ignored — ...", "Spatial k-fold ignored — ...": a split
+// setting the user asked for that this run did NOT use. These arrive just
+// before 'start' and were overwritten within moments, so a run could quietly
+// use a different split than its config says (Louis Driver / Moustafa
+// Eweda, 2026-11-12). Kept, like the zero-row warnings, under the Done line
+// and in the exported results.
+function _isIgnoredSettingWarning(message) {
+    return typeof message === 'string' && / ignored \u2014 /.test(message);
+}
+
+// Which train/test split the server says it actually applied this run,
+// from the flags on its 'start' event (not from the request, which may
+// have asked for something it could not honour).
+function _appliedSplit(ev) {
+    for (const k of ['area_stratified_split', 'spatial_split', 'year_split', 'file_split',
+                     'spatial_kfold', 'group_by_field']) {
+        if (ev[k]) return k;
+    }
+    return 'random';
+}
+
 function handleStreamEvent(ev) {
     const status = document.getElementById('val-status');
     const metric = document.getElementById('val-metric-select').value;
@@ -826,7 +847,8 @@ function handleStreamEvent(ev) {
         // state (tessera-eval v1.7.2+ carries task on it directly), so set
         // it here too rather than trusting event-ordering alone.
         if (ev.task) currentLargeAreaTask = ev.task;
-        _runWarnings = [];
+        // _runWarnings is cleared when the run is launched, not here: the
+        // server's "... ignored" warnings arrive *before* 'start'.
         updateTaskDetectedLabel();
         // Same cache-hit-skips-field_start issue as above -- redo the
         // metric-selector visibility here too rather than trusting it was
@@ -851,6 +873,10 @@ function handleStreamEvent(ev) {
             confusion_matrix_labels: ev.confusion_matrix_labels,
             confusion_matrices: null,
             models_available: [],
+            // Provenance for the exported results: the split the server
+            // actually used, and any setting it had to ignore.
+            split_applied: _appliedSplit(ev),
+            warnings: _runWarnings,
         };
         ev.classifiers.forEach(name => {
             // _x: the actual "% of labelled pixels used for training" value
@@ -1081,7 +1107,8 @@ function handleStreamEvent(ev) {
         // Keep-alive, ignore
 
     } else if (ev.event === 'status') {
-        if (_isZeroRowWarning(ev.message) && !_runWarnings.includes(ev.message)) {
+        if ((_isZeroRowWarning(ev.message) || _isIgnoredSettingWarning(ev.message))
+                && !_runWarnings.includes(ev.message)) {
             _runWarnings.push(ev.message);
         }
         status.dataset.updated = '1';
@@ -2480,6 +2507,7 @@ async function runLargeAreaEvaluation() {
 
     lastChartData = null;
     currentLargeAreaTask = null;
+    _runWarnings = [];
     if (valChart) { valChart.destroy(); valChart = null; }
     hideFinishButtons();
     // Reset panel content (visibility controlled by PANEL_LAYOUT, not here)
@@ -2985,6 +3013,7 @@ function loadResultsFile() {
         const lines = e.target.result.split('\n').filter(l => l.trim());
         lastChartData = null;
         currentLargeAreaTask = null;
+        _runWarnings = [];
         if (valChart) { valChart.destroy(); valChart = null; }
 
         for (const line of lines) {
