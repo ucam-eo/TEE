@@ -1702,3 +1702,56 @@ class TestValidationModeNotRestored:
     def test_validation_is_not_saved(self):
         src = (ROOT / "public" / "js" / "maps.js").read_text()
         assert "if (mode !== 'validation') localStorage.setItem('panelMode', mode);" in src
+
+
+# ──────────────────────────────────────────────────
+# 35. A split setting the server ignored (e.g. Group by field on a cached
+#     sample) stays visible and is recorded in the exported results.
+#     Reported 2026-11-12: runs said group_by_field in their config but
+#     silently used a random split.
+# ──────────────────────────────────────────────────
+class TestIgnoredSplitWarnings:
+    SRC = (ROOT / "public" / "js" / "evaluation.js").read_text()
+
+    def _fn(self, name):
+        a = self.SRC.index(f"function {name}(")
+        b = self.SRC.index("\n}\n", a) + 2
+        return self.SRC[a:b]
+
+    def _node(self, body):
+        js = self._fn("_isIgnoredSettingWarning") + self._fn("_appliedSplit") + body
+        r = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=30)
+        assert r.returncode == 0, r.stderr
+        return json.loads(r.stdout)
+
+    def test_server_ignored_messages_are_caught(self):
+        msgs = [
+            "Group by field ignored — no polygon IDs were recorded for these labels, "
+            "so this run used a random split.",
+            "Group by field ignored — Spatial k-fold is active for this run.",
+            "Spatial k-fold ignored — only 3 distinct spatial blocks",
+            "Pct 10%: training rf (repeat 1/5)...",
+        ]
+        out = self._node(
+            f"console.log(JSON.stringify({json.dumps(msgs)}.map(_isIgnoredSettingWarning)))"
+        )
+        assert out == [True, True, True, False]
+
+    def test_applied_split_comes_from_start_event(self):
+        out = self._node(
+            "console.log(JSON.stringify([_appliedSplit({group_by_field: true}),"
+            " _appliedSplit({}), _appliedSplit({spatial_kfold: true}),"
+            " _appliedSplit({area_stratified_split: true, group_by_field: true})]))"
+        )
+        assert out == ["group_by_field", "random", "spatial_kfold", "area_stratified_split"]
+
+    def test_start_event_does_not_wipe_earlier_warnings(self):
+        # The server sends "... ignored" before 'start'; clearing on 'start'
+        # threw them away. Clearing happens at run launch instead.
+        a = self.SRC.index("if (ev.event === 'start') {")
+        b = self.SRC.index("ev.classifiers.forEach", a)
+        assert "_runWarnings = []" not in self.SRC[a:b]
+        assert "split_applied: _appliedSplit(ev)" in self.SRC[a:b]
+        assert "warnings: _runWarnings" in self.SRC[a:b]
+        launch = self._fn("runLargeAreaEvaluation")
+        assert "_runWarnings = [];" in launch
